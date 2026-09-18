@@ -1,0 +1,1580 @@
+18:02:15 --> 18:02:17
+Marcel Khoury: Hey, Daniel.
+
+18:02:19 --> 18:02:21
+Danial Khan: Hi, guys.
+
+18:02:20 --> 18:02:22
+Marcel Khoury: Hi Daniel, how are you?
+
+18:02:22 --> 18:02:25
+Danial Khan: I'm well, thank you. How are you guys doing?
+
+18:02:24 --> 18:02:26
+Marcel Khoury: Good, good, good.
+
+18:02:26 --> 18:02:28
+Marcel Khoury: Um…
+
+18:02:29 --> 18:02:35
+Marcel Khoury: I don't know if Rawad told you anything about what we're going to do.
+
+18:02:35 --> 18:02:37
+Marcel Khoury: But the point of this is.
+
+18:02:35 --> 18:02:36
+Danial Khan: Yes.
+
+18:02:43 --> 18:02:45
+Danial Khan: I'm sorry.
+
+18:02:43 --> 18:02:44
+Marcel Khoury: Did you?
+
+18:02:45 --> 18:02:47
+Danial Khan: Were you saying something?
+
+18:02:47 --> 18:03:00
+Marcel Khoury: Yeah, I was saying, I don't know if Rawat already filled you in on what the point of this meeting is, what we're going to be talking about, and what I'm trying to achieve. If not, I can give you a quick background and summary before I show you some stuff.
+
+18:03:00 --> 18:03:10
+Danial Khan: Uh, yeah, of course, I… I do know, uh, uh, an overview, what, uh, what you're wanting to do. Basically, it's, uh…
+
+18:03:10 --> 18:03:22
+Danial Khan: It's an outreach, uh, automated system, which is gonna send out, um, proposals to these clients. Uh, but currently you're doing it from an Excel sheet, I think, and you want to automate that.
+
+18:03:20 --> 18:03:21
+Marcel Khoury: It's…
+
+18:03:21 --> 18:03:25
+Marcel Khoury: Yeah, it's actually a lot more than that.
+
+18:03:24 --> 18:03:26
+Danial Khan: Okay, okay.
+
+18:03:25 --> 18:03:31
+Marcel Khoury: And I want to see how much we can get creative, and how much we can actually achieve with this. Um…
+
+18:03:31 --> 18:03:36
+Marcel Khoury: So to give you a bit of background, let me share my screen.
+
+18:03:36 --> 18:03:38
+Danial Khan: Yes.
+
+18:03:39 --> 18:03:42
+Marcel Khoury: I'm just going to share. Okay.
+
+18:03:43 --> 18:03:48
+Marcel Khoury: I'm gonna… so there's a startup now, and they're currently…
+
+18:03:50 --> 18:04:08
+Marcel Khoury: I'm gonna show you what they do. So I work in construction. Okay? And I work specifically in the pre-construction industry. So what I do is I get the drawings from the architects. When I get those drawings, I I send them out to subcontractors so that they can price them up for me.
+
+18:03:55 --> 18:03:56
+Danial Khan: Okay.
+
+18:04:08 --> 18:04:25
+Marcel Khoury: And and they give me pricing. And then I for like. So let's say, there's concrete on the job. I send it to 3 concrete sub sub 3 concrete people. They they send me their pricing. I see which one is the most competitive, and I award based off of that.
+
+18:04:09 --> 18:04:10
+Danial Khan: All right.
+
+18:04:25 --> 18:04:27
+Marcel Khoury: But the problem is.
+
+18:04:27 --> 18:04:44
+Marcel Khoury: I I need to compare apples to apples when I reach out to them. I need to be able to to tell them. I need to be able to show them to to come to make sure that they are pricing up the same things. So in order for me able for for me to be able to to do that. What I do is I.
+
+18:04:32 --> 18:04:33
+Danial Khan: No.
+
+18:04:44 --> 18:04:46
+Marcel Khoury: I, uh…
+
+18:04:47 --> 18:04:50
+Marcel Khoury: What's happening here? Why is this not loading in?
+
+18:04:57 --> 18:04:59
+Marcel Khoury: It's weird.
+
+18:05:03 --> 18:05:05
+Marcel Khoury: You should be logging in.
+
+18:05:05 --> 18:05:07
+Marcel Khoury: Let me try it on this one.
+
+18:05:15 --> 18:05:18
+Marcel Khoury: Maybe because I'm in Lebanon.
+
+18:05:20 --> 18:05:22
+Danial Khan: Yeah, um…
+
+18:05:24 --> 18:05:26
+Marcel Khoury: Yeah, maybe.
+
+18:05:24 --> 18:05:29
+Danial Khan: Is this… is this what you're using to, um, compare the…
+
+18:05:28 --> 18:05:34
+Marcel Khoury: So this is something. This is, I write scopes. I this helps me write the scope sheets.
+
+18:05:34 --> 18:05:35
+Danial Khan: Okay.
+
+18:05:34 --> 18:05:38
+Marcel Khoury: So that I make sure… have you heard of this software before?
+
+18:05:38 --> 18:05:44
+Danial Khan: Uh, I've… I've not. I'll… I'll have to see what this is. This is the first time I'm seeing it.
+
+18:05:42 --> 18:05:43
+Marcel Khoury: Okay.
+
+18:05:43 --> 18:05:49
+Marcel Khoury: So, Wire AI is basically a software, and I wish I could sign in.
+
+18:05:52 --> 18:05:54
+Marcel Khoury: One moment.
+
+18:06:11 --> 18:06:15
+Marcel Khoury: I don't know where it goes. I don't know what to do with it.
+
+18:06:15 --> 18:06:17
+Marcel Khoury: Mmm…
+
+18:06:18 --> 18:06:19
+Marcel Khoury: That's funny.
+
+18:06:19 --> 18:06:21
+Marcel Khoury: This is not my email.
+
+18:06:22 --> 18:06:24
+Danial Khan: That's fine.
+
+18:06:37 --> 18:06:49
+Marcel Khoury: Perfect. They work. Okay. So I go, I create a project. When I create a project, the first thing I do is I go to documents, and I upload the documents.
+
+18:06:40 --> 18:06:42
+Danial Khan: Right.
+
+18:06:49 --> 18:06:55
+Marcel Khoury: What are these documents? Can you see my screen as I scroll through different tabs? Okay.
+
+18:06:52 --> 18:06:54
+Danial Khan: Yes, I can.
+
+18:06:55 --> 18:06:56
+Marcel Khoury: Umm.
+
+18:06:56 --> 18:06:58
+Marcel Khoury: So…
+
+18:06:59 --> 18:07:04
+Marcel Khoury: What are the different documents? These are the documents I upload.
+
+18:07:04 --> 18:07:09
+Marcel Khoury: Basically, it's construction documents. Okay?
+
+18:07:08 --> 18:07:10
+Danial Khan: Okay. Yes.
+
+18:07:09 --> 18:07:14
+Marcel Khoury: They're the whole full art, full construction documents of the job.
+
+18:07:15 --> 18:07:16
+Danial Khan: All right.
+
+18:07:16 --> 18:07:28
+Marcel Khoury: They're split into architecturals, uh, sub-structural, civil, landscaping drawings, uh, civil is everything. I don't know if you have any idea of what construction drawings look like.
+
+18:07:28 --> 18:07:32
+Marcel Khoury: Do you have any idea or no background whatsoever?
+
+18:07:32 --> 18:07:38
+Danial Khan: I have a very vague idea. I don't know anything in detail about this.
+
+18:07:36 --> 18:07:51
+Marcel Khoury: Okay. so so in construction drawings, there's usually a mechanical electrical plumbing fire protection, which is the sprinklers. Then there's civil, which is everything from the outside going into the building, the water line, the sewage line.
+
+18:07:38 --> 18:07:40
+Danial Khan: Yep.
+
+18:07:51 --> 18:07:56
+Marcel Khoury: the fire line. Then there is the.
+
+18:07:54 --> 18:07:56
+Danial Khan: Okay, blueprints, basically.
+
+18:07:56 --> 18:07:59
+Marcel Khoury: Yeah, 100%. So blueprints.
+
+18:07:58 --> 18:08:00
+Danial Khan: Okay, yeah.
+
+18:07:59 --> 18:08:01
+Marcel Khoury: These are all the blueprints, okay?
+
+18:08:01 --> 18:08:03
+Danial Khan: Okay, yeah.
+
+18:08:01 --> 18:08:13
+Marcel Khoury: So what I do is, step one in my work is I get those blueprints. When I get them, I go through every single page, and they're usually, like, a thousand pages, thousand-something pages.
+
+18:08:12 --> 18:08:14
+Danial Khan: Okay.
+
+18:08:13 --> 18:08:28
+Marcel Khoury: Um, even more, they're like for 5, 000 pages. I go through every single page and I divide, divide up the, the, I, I was talking to you about concrete. I want to make sure that all my concrete guys that I send, that I send the drawings to price.
+
+18:08:24 --> 18:08:26
+Danial Khan: Yes.
+
+18:08:28 --> 18:08:31
+Marcel Khoury: the same way so that I can compare their numbers apples to apples.
+
+18:08:31 --> 18:08:33
+Danial Khan: No.
+
+18:08:31 --> 18:08:38
+Marcel Khoury: And so that I don't miss anything. So I make sure that when I give my budget to the client, I'm not missing.
+
+18:08:39 --> 18:08:47
+Marcel Khoury: This part, this concrete here, no one decided to do it. I need to make sure they're pricing everything the same. So what I do is, I go and I write something called a scope sheet.
+
+18:08:47 --> 18:08:50
+Marcel Khoury: That scope sheet is usually…
+
+18:08:50 --> 18:08:52
+Marcel Khoury: I write it by Excel.
+
+18:08:52 --> 18:08:54
+Danial Khan: Okay. Yeah.
+
+18:08:53 --> 18:08:54
+Marcel Khoury: with me.
+
+18:08:55 --> 18:08:59
+Marcel Khoury: I used to write it by excel, and it looks something.
+
+18:09:03 --> 18:09:06
+Marcel Khoury: It looks something like this.
+
+18:09:08 --> 18:09:10
+Marcel Khoury: For concrete, since we're talking about concrete.
+
+18:09:11 --> 18:09:13
+Danial Khan: Okay, yeah.
+
+18:09:13 --> 18:09:21
+Marcel Khoury: I'll cast in place concrete, blah blah blah. Advice on spoil quantities. It's it's very detailed stuff.
+
+18:09:21 --> 18:09:23
+Danial Khan: All right, now.
+
+18:09:21 --> 18:09:25
+Marcel Khoury: Where do I get all this information? From the drawings.
+
+18:09:25 --> 18:09:43
+Marcel Khoury: I divided. I do this for concrete. I do this for demolition. I do this for masonry. I do this for structural steel. I do this for the for the wood on the job. I do this for the waterproofing. I do this for the any any metal panels on the job for the roofing system.
+
+18:09:43 --> 18:10:02
+Marcel Khoury: for the doors, for the glass, for the flooring, for the paint, for the signage, for the toilet accessories, for the equipment, the kitchen equipment, the athletic equipment, if there are any, for the furnishings, like all the tables, the chairs, everything. I do it for every single one of them.
+
+18:09:51 --> 18:09:53
+Danial Khan: Hmm.
+
+18:10:02 --> 18:10:05
+Marcel Khoury: Can you imagine how long that takes?
+
+18:10:03 --> 18:10:04
+Danial Khan: Okay.
+
+18:10:05 --> 18:10:13
+Danial Khan: Yeah, this is too much work. I think doing this manually, it's going to take months for you, I think.
+
+18:10:07 --> 18:10:09
+Marcel Khoury: Too much sugar.
+
+18:10:10 --> 18:10:16
+Marcel Khoury: Right? Exactly. So if there's an AI that can read those drawings.
+
+18:10:16 --> 18:10:17
+Danial Khan: Yeah.
+
+18:10:17 --> 18:10:21
+Marcel Khoury: And directly spit out the scope of work.
+
+18:10:22 --> 18:10:24
+Marcel Khoury: That would be amazing.
+
+18:10:22 --> 18:10:24
+Danial Khan: Hmm, I…
+
+18:10:24 --> 18:10:37
+Danial Khan: I think this is definitely possible. I'll just have to look into APIs and find APIs that are able to extract construction data from blueprints.
+
+18:10:36 --> 18:10:38
+Marcel Khoury: Okay.
+
+18:10:37 --> 18:10:42
+Danial Khan: And I think the rest of it is…
+
+18:10:40 --> 18:10:41
+Marcel Khoury: So…
+
+18:10:42 --> 18:10:43
+Danial Khan: Yes.
+
+18:10:42 --> 18:10:47
+Marcel Khoury: Remember the company we started, I started to talk to you about, that we're currently using?
+
+18:10:47 --> 18:10:50
+Marcel Khoury: That's where they reached.
+
+18:10:50 --> 18:10:54
+Marcel Khoury: I uploaded those drawings. I go to wire scopes.
+
+18:10:50 --> 18:10:51
+Danial Khan: Okay.
+
+18:10:54 --> 18:10:55
+Danial Khan: Yes.
+
+18:10:54 --> 18:10:56
+Marcel Khoury: Let's go packages.
+
+18:10:56 --> 18:10:57
+Marcel Khoury: Look at them.
+
+18:10:57 --> 18:11:01
+Marcel Khoury: This is all the AI. It wrote all of this.
+
+18:11:01 --> 18:11:03
+Danial Khan: Okay.
+
+18:11:03 --> 18:11:13
+Marcel Khoury: You're seeing those numbers next to everything, right? O2 demolition, O3 concrete, O4 masonry, right?
+
+18:11:08 --> 18:11:10
+Danial Khan: Yeah.
+
+18:11:12 --> 18:11:14
+Danial Khan: Yes.
+
+18:11:13 --> 18:11:17
+Marcel Khoury: This numbering here is universal in construction.
+
+18:11:17 --> 18:11:19
+Danial Khan: Okay.
+
+18:11:18 --> 18:11:24
+Marcel Khoury: So that's that's an Api that we can easily get. That's not something hard. It's a universal universal thing.
+
+18:11:24 --> 18:11:35
+Marcel Khoury: So they, they… so this software, what I do is, I upload the drawings. After 2 hours, it gives me the scope for every, for every trade.
+
+18:11:25 --> 18:11:26
+Danial Khan: All right.
+
+18:11:31 --> 18:11:32
+Danial Khan: Yeah.
+
+18:11:35 --> 18:11:41
+Marcel Khoury: And then I go inside. Yeah, I go inside, and I make sure.
+
+18:11:40 --> 18:11:41
+Danial Khan: Yep.
+
+18:11:41 --> 18:11:56
+Marcel Khoury: that that's how I want them. I go. IQAQC, basically the AI, because it it always makes mistakes. Or maybe it's not like the way I want to do it. So I just change a few here and there, and then, once once everything is good.
+
+18:11:50 --> 18:11:51
+Danial Khan: No.
+
+18:11:56 --> 18:12:00
+Marcel Khoury: I click OK, OK, and I accept them.
+
+18:12:00 --> 18:12:01
+Marcel Khoury: All right.
+
+18:12:01 --> 18:12:02
+Danial Khan: Okay, yeah.
+
+18:12:01 --> 18:12:06
+Marcel Khoury: And then, when I accept the whole thing, I hit on export.
+
+18:12:08 --> 18:12:12
+Marcel Khoury: Uh, bit form, download as an Excel sheet, yup.
+
+18:12:12 --> 18:12:14
+Marcel Khoury: Continue.
+
+18:12:14 --> 18:12:17
+Marcel Khoury: It's preparing it. It's gonna show me what it looks like.
+
+18:12:17 --> 18:12:24
+Marcel Khoury: See? The company did it in a way so that it looks like my, like my, like my sheet.
+
+18:12:19 --> 18:12:21
+Danial Khan: Okay…
+
+18:12:25 --> 18:12:32
+Danial Khan: Okay, so this app is basically creating these Excel sheets that you use later on to read.
+
+18:12:25 --> 18:12:26
+Marcel Khoury: I, I…
+
+18:12:31 --> 18:12:39
+Marcel Khoury: So, initially in my life, for the past 4 or 5 years, I used to create those Excel sheets, and I had a template.
+
+18:12:39 --> 18:12:40
+Danial Khan: Okay.
+
+18:12:39 --> 18:12:52
+Marcel Khoury: I shared my template with them, the starters, the founders of this company, and they made it so that when I hit export, it goes on my template, so that it looks the same.
+
+18:12:44 --> 18:12:45
+Danial Khan: Okay.
+
+18:12:52 --> 18:12:55
+Danial Khan: Okay, so I think the…
+
+18:12:55 --> 18:13:02
+Danial Khan: Putting data together part, I think this app is already doing that very well.
+
+18:13:00 --> 18:13:03
+Marcel Khoury: It is. Well, it's possible to do it.
+
+18:13:02 --> 18:13:05
+Danial Khan: Yeah, so.
+
+18:13:03 --> 18:13:10
+Marcel Khoury: Now there's a lot more I want to do. This is just the beginning, but this is the hardest part, I think.
+
+18:13:06 --> 18:13:07
+Danial Khan: Oh, okay.
+
+18:13:09 --> 18:13:18
+Danial Khan: Yeah, I think so as well. But for now, from what I've gathered so far, is that…
+
+18:13:18 --> 18:13:25
+Danial Khan: You want me to extract data first from these different drawings, blueprints and documents.
+
+18:13:23 --> 18:13:25
+Marcel Khoury: Uh-huh.
+
+18:13:25 --> 18:13:29
+Danial Khan: Um, and uh, then…
+
+18:13:29 --> 18:13:35
+Danial Khan: Basically, show them in a list like this, with these universal codes.
+
+18:13:34 --> 18:13:36
+Marcel Khoury: And the school.
+
+18:13:35 --> 18:13:36
+Danial Khan: on…
+
+18:13:36 --> 18:13:51
+Danial Khan: Yeah, and then on the right, it creates these scopes. Is this just notes or is each individual one of them Excel sheet of their own or is this just basic notes?
+
+18:13:52 --> 18:13:54
+Marcel Khoury: What do you mean, Excel sheets?
+
+18:13:54 --> 18:14:03
+Danial Khan: Uh, like, when you press on export, is it, uh… is it exporting single line item, or is it for the whole…
+
+18:13:59 --> 18:14:07
+Marcel Khoury: It's for it's for it's it's exporting the single call a single. It's this is called a trade. It's exporting one trade.
+
+18:14:05 --> 18:14:07
+Danial Khan: Okay.
+
+18:14:08 --> 18:14:09
+Marcel Khoury: So this…
+
+18:14:09 --> 18:14:11
+Marcel Khoury: is only for demolition.
+
+18:14:12 --> 18:14:14
+Marcel Khoury: This Excel sheet would only be…
+
+18:14:13 --> 18:14:16
+Danial Khan: Oh, okay, okay.
+
+18:14:14 --> 18:14:17
+Marcel Khoury: For demolition.
+
+18:14:18 --> 18:14:20
+Danial Khan: Okay, that makes sense.
+
+18:14:19 --> 18:14:21
+Marcel Khoury: Okay.
+
+18:14:20 --> 18:14:30
+Danial Khan: Yeah. Would it be possible for me to get access to this app so I could understand the whole architecture and how everything works in there?
+
+18:14:21 --> 18:14:22
+Marcel Khoury: Look.
+
+18:14:26 --> 18:14:27
+Marcel Khoury: Okay.
+
+18:14:29 --> 18:14:37
+Marcel Khoury: So that's the problem. I don't think I can, and they might notice they're they're AI freaks. And and I have an NDA with them. I need to be very careful.
+
+18:14:34 --> 18:14:36
+Danial Khan: Okay.
+
+18:14:38 --> 18:14:40
+Danial Khan: Okay, okay.
+
+18:14:39 --> 18:14:51
+Marcel Khoury: But what I can do for you is I can. I have a video that I screen recorded. I can go through everything and talk through that video. I already did it. I'll just share it with you.
+
+18:14:43 --> 18:14:45
+Danial Khan: You know.
+
+18:14:50 --> 18:14:58
+Danial Khan: I am recording this meeting, actually, so I think I'll just use this meeting. That is fine.
+
+18:14:53 --> 18:14:54
+Marcel Khoury: Okay.
+
+18:14:54 --> 18:14:55
+Marcel Khoury: Okay.
+
+18:14:57 --> 18:14:58
+Marcel Khoury: Okay.
+
+18:14:58 --> 18:14:59
+Danial Khan: Yep. Yep.
+
+18:14:58 --> 18:15:00
+Marcel Khoury: So…
+
+18:15:00 --> 18:15:04
+Marcel Khoury: You see how they created all this from the drawings?
+
+18:15:03 --> 18:15:05
+Danial Khan: Yes.
+
+18:15:05 --> 18:15:07
+Marcel Khoury: Alright, that's step one.
+
+18:15:07 --> 18:15:11
+Marcel Khoury: Step two is finding problems in the drawings.
+
+18:15:11 --> 18:15:16
+Marcel Khoury: That's called wire check. They have it also. Those are the only two things they have.
+
+18:15:12 --> 18:15:13
+Danial Khan: Okay.
+
+18:15:16 --> 18:15:18
+Marcel Khoury: I have a lot more I wanna add.
+
+18:15:19 --> 18:15:20
+Danial Khan: Okay.
+
+18:15:19 --> 18:15:23
+Marcel Khoury: But before I take you to step two, let me show you something.
+
+18:15:23 --> 18:15:24
+Danial Khan: Yes.
+
+18:15:24 --> 18:15:29
+Marcel Khoury: So in the scopes that we were just talking about, scope packages.
+
+18:15:29 --> 18:15:33
+Marcel Khoury: they have something very nice. Like, if you go to demolition.
+
+18:15:33 --> 18:15:40
+Marcel Khoury: It says here, demolish existing concrete slab. If you were wondering where is that on the drawings.
+
+18:15:33 --> 18:15:35
+Danial Khan: Yes.
+
+18:15:41 --> 18:15:43
+Marcel Khoury: You can press.
+
+18:15:44 --> 18:15:53
+Marcel Khoury: It references the drawings and it takes me to, it highlights and takes me to the location of where it says in the drawings. Do you see it?
+
+18:15:53 --> 18:15:55
+Danial Khan: Okay, yeah, yeah.
+
+18:15:53 --> 18:16:02
+Marcel Khoury: No, D15. That's it. No, D15 is what is saying demolish existing slab, for example.
+
+18:16:01 --> 18:16:03
+Danial Khan: Okay.
+
+18:16:02 --> 18:16:05
+Marcel Khoury: Alright? So it… it makes me…
+
+18:16:03 --> 18:16:11
+Danial Khan: Yeah, that's what I was asking earlier, that what were these scopes on the right side? That makes sense that these are…
+
+18:16:09 --> 18:16:15
+Marcel Khoury: Oh, yeah, yeah, that's what it is. It's the references. References, 100%, 100%.
+
+18:16:11 --> 18:16:14
+Danial Khan: These are just references. Okay, okay.
+
+18:16:14 --> 18:16:17
+Danial Khan: All right, that makes sense.
+
+18:16:15 --> 18:16:21
+Marcel Khoury: It references the drawings. So in construction, there's drawings, and there's a project manual.
+
+18:16:21 --> 18:16:22
+Danial Khan: Yeah.
+
+18:16:21 --> 18:16:27
+Marcel Khoury: specifications. It's called specifications. A project manual is like a catalog.
+
+18:16:27 --> 18:16:32
+Marcel Khoury: And the drawings, they show you what needs to be done.
+
+18:16:32 --> 18:16:35
+Marcel Khoury: in the catalog. They tell you how it needs to be done.
+
+18:16:35 --> 18:16:54
+Marcel Khoury: Like, for demolition, maybe you're not allowed to throw it… throw… throw it, uh… throw it all in the… just in the… in the dumpster. You need to maybe recycle, or whatever. For concrete, it tells you, uh, where the core concrete needs to be sourced from. What type… what's the type of concrete?
+
+18:16:54 --> 18:17:05
+Marcel Khoury: For flooring, it tells you what type of flooring, who's the manufacturer that sells that type of flooring. It gives you more details. That's the specifications book. It's like a catalog.
+
+18:17:05 --> 18:17:07
+Marcel Khoury: for every for every trade.
+
+18:17:05 --> 18:17:06
+Danial Khan: Okay.
+
+18:17:09 --> 18:17:11
+Danial Khan: Okay, okay.
+
+18:17:10 --> 18:17:12
+Marcel Khoury: All right.
+
+18:17:12 --> 18:17:13
+Danial Khan: Yes.
+
+18:17:13 --> 18:17:18
+Marcel Khoury: So, overview of that is this. Then, step two is…
+
+18:17:19 --> 18:17:26
+Marcel Khoury: Step 2 is wire check. They call it wire check. I want to call the company structure, I think.
+
+18:17:26 --> 18:17:27
+Danial Khan: Okay.
+
+18:17:26 --> 18:17:28
+Marcel Khoury: Uh…
+
+18:17:28 --> 18:17:31
+Marcel Khoury: Doesn't matter now regarding the name, but.
+
+18:17:31 --> 18:17:37
+Marcel Khoury: So for issues, it tells you what the issues are. The AI detects issues.
+
+18:17:37 --> 18:17:48
+Marcel Khoury: Like, it says here, the basis of design for decorative poles includes KCP, barber, and insert manufacturing product without specifying the actual product. This prevents accurate pricing and procurement.
+
+18:17:49 --> 18:18:06
+Marcel Khoury: So it's saying that the drawings say there's something. There's a decorative pull for the cabinets, but it doesn't say who the manufacturer is. So maybe my subcontractors will will price the cheapest option. But maybe that's not what the architects are. The client wants. So we need to make sure we we get the get the information for that.
+
+18:17:54 --> 18:17:55
+Danial Khan: No.
+
+18:18:06 --> 18:18:14
+Marcel Khoury: So the AI is able to actually get issues as well. That's another aspect of their software, which is very important, honestly.
+
+18:18:14 --> 18:18:22
+Danial Khan: Okay, yeah, this is possible too. I think this is easier as well compared to stuff we've seen so far.
+
+18:18:19 --> 18:18:20
+Marcel Khoury: Okay.
+
+18:18:21 --> 18:18:22
+Marcel Khoury: Okay.
+
+18:18:22 --> 18:18:24
+Marcel Khoury: So those are the only 2 things they do.
+
+18:18:24 --> 18:18:33
+Marcel Khoury: Now, I'm going to take you to what I do from day to day, because I want to create a software that does things end to end, the whole thing.
+
+18:18:24 --> 18:18:26
+Danial Khan: Okay.
+
+18:18:32 --> 18:18:34
+Danial Khan: Okay.
+
+18:18:34 --> 18:18:35
+Marcel Khoury: All right.
+
+18:18:35 --> 18:18:36
+Danial Khan: Yes.
+
+18:18:36 --> 18:18:38
+Marcel Khoury: I wrote this, and I'll share it with you.
+
+18:18:38 --> 18:18:40
+Danial Khan: Okay.
+
+18:18:38 --> 18:18:43
+Marcel Khoury: This explains the pre-construction process step by step, okay?
+
+18:18:43 --> 18:18:45
+Danial Khan: Okay.
+
+18:18:45 --> 18:18:55
+Marcel Khoury: So, for C… uh, this is CMAR, and hard bid is the type of, uh, type of contract. So, there are 3 types of contracts that we go in with the clients. There's design-build.
+
+18:18:54 --> 18:18:56
+Danial Khan: Okay.
+
+18:18:55 --> 18:19:11
+Marcel Khoury: In a design-build contract, I'm the general contractor. The general contractor hires the architect under them, and we develop, we help, we guide them in developing the drawings to make sure everything is in budget. That is something that cannot be replaced by AI.
+
+18:19:10 --> 18:19:12
+Danial Khan: Hmm.
+
+18:19:11 --> 18:19:26
+Marcel Khoury: But for CMAR and hard bit type projects, the client goes and hires the architect. When he hires the architect, what happens is the client, the architect develops the drawings, and then they come to us for pricing. And this is where I want to start, when they come to us for pricing.
+
+18:19:26 --> 18:19:30
+Marcel Khoury: When the drawings are complete, they come to us for pricing, okay?
+
+18:19:26 --> 18:19:27
+Danial Khan: Okay.
+
+18:19:29 --> 18:19:31
+Danial Khan: Yeah, okay.
+
+18:19:30 --> 18:19:36
+Marcel Khoury: So, step one, receive project drawings and specifications from architect client.
+
+18:19:36 --> 18:19:51
+Marcel Khoury: Bid captain, which is me or whoever is leading the project, review specifics and drawing in a general manner to determine the divisions applicable to the project. The divisions are, remember I told you that there are many divisions.
+
+18:19:51 --> 18:19:55
+Marcel Khoury: The different trades, demolition, masonry, concrete.
+
+18:19:51 --> 18:19:52
+Danial Khan: Yeah.
+
+18:19:55 --> 18:20:08
+Marcel Khoury: The due date of the budget to the client would already be negotiated, blah blah blah. I will write a kickoff meeting and send it. This is a template of what the kickoff meeting looks like, and I would like to automate this as well.
+
+18:20:08 --> 18:20:19
+Marcel Khoury: I explain what the project is. I say important deadlines. Rfis are basically requests for information. So remember that wire check that I showed you where it comes up with problems.
+
+18:20:09 --> 18:20:11
+Danial Khan: Okay.
+
+18:20:18 --> 18:20:20
+Danial Khan: Yeah.
+
+18:20:19 --> 18:20:27
+Marcel Khoury: Usually our subcontractors as well. They send us. They have a deadline where they send us questions if they notice any problems with the drawings.
+
+18:20:27 --> 18:20:29
+Danial Khan: Okay, okay.
+
+18:20:28 --> 18:20:31
+Marcel Khoury: Alright, um…
+
+18:20:29 --> 18:20:31
+Danial Khan: Yeah.
+
+18:20:31 --> 18:20:35
+Marcel Khoury: Expected construction start, blah, blah, blah.
+
+18:20:35 --> 18:20:52
+Marcel Khoury: who's gonna be handling which? Because usually I'm if I'm the bit captain. The way we do things in the company is, I'm I'm I'm the captain because I'm a manager. So I have a team under me, and I divide the trades among them. Division 2 and 32 2 is is demolition. 32 is.
+
+18:20:52 --> 18:21:08
+Marcel Khoury: everything site, concrete and site asphalt. So a guy called Safi from my company will handle them. Vibe Vijay is another. He's a he's a he's a colleague of mine as well. He will do division 3, division, 5, division, 10, division, 11, and and.
+
+18:20:59 --> 18:21:00
+Danial Khan: Okay.
+
+18:21:08 --> 18:21:15
+Marcel Khoury: And so on. So I just divide the trades amongst them. And then I tell them how I set up the job folder.
+
+18:21:15 --> 18:21:30
+Marcel Khoury: and and the bit sheet location. I'll share everything with you in terms of bit sheet, and maybe we need to have a deeper, a deeper call regarding. I just wanted to understand if you're capable of doing this before I waste waste time on on talking about the way we do things.
+
+18:21:15 --> 18:21:17
+Danial Khan: Okay.
+
+18:21:25 --> 18:21:26
+Danial Khan: Okay.
+
+18:21:30 --> 18:21:32
+Danial Khan: No.
+
+18:21:31 --> 18:21:35
+Marcel Khoury: Drawing flip. This is all in the meeting.
+
+18:21:36 --> 18:21:58
+Marcel Khoury: so note on division leaders. The bid captain assigns divisions to estimators. We typically divide the divisions between 6 estimators get assigned a project by bid captain. The estimators write the scopes. They reach out to subs. They do the leveling. They write the exhibit A, which is the contract.
+
+18:21:58 --> 18:21:59
+Marcel Khoury: Oh.
+
+18:21:59 --> 18:22:17
+Marcel Khoury: They attend scope review meetings, and they do takeoffs if they have the chance. Takeoffs is basically when you want to know the quantity of something. Like, let's say for the flooring, for the gym area, you don't know how big it is, you go on the drawings, you can go… look, the drawings are usually.
+
+18:22:17 --> 18:22:19
+Marcel Khoury: Drawings are always scalable.
+
+18:22:19 --> 18:22:21
+Danial Khan: Okay, yeah.
+
+18:22:20 --> 18:22:22
+Marcel Khoury: So… so I can…
+
+18:22:23 --> 18:22:27
+Marcel Khoury: If I go to the architectural furniture plan, whatever, for now.
+
+18:22:27 --> 18:22:28
+Marcel Khoury: Look.
+
+18:22:29 --> 18:22:33
+Marcel Khoury: 1 over 8 inch is 1 foot. So I can go on here…
+
+18:22:35 --> 18:22:38
+Marcel Khoury: It's already scaled.
+
+18:22:38 --> 18:22:41
+Marcel Khoury: I take an area measurement.
+
+18:22:41 --> 18:22:43
+Marcel Khoury: That's called a takeoff.
+
+18:22:44 --> 18:22:46
+Marcel Khoury: I do this.
+
+18:22:44 --> 18:22:45
+Danial Khan: Okay.
+
+18:22:46 --> 18:22:47
+Marcel Khoury: this…
+
+18:22:47 --> 18:22:49
+Marcel Khoury: Let's say whatever for now.
+
+18:22:49 --> 18:22:55
+Marcel Khoury: It tells me, okay, your gym is, this is gymnasium, is 4,200 square feet.
+
+18:22:55 --> 18:22:57
+Marcel Khoury: Okay.
+
+18:22:56 --> 18:22:58
+Danial Khan: Okay, yeah.
+
+18:22:57 --> 18:23:02
+Marcel Khoury: So that's another thing I want the AI to be able to do is to be able to do takeoffs.
+
+18:23:02 --> 18:23:04
+Danial Khan: Okay, on.
+
+18:23:04 --> 18:23:11
+Danial Khan: But this takeoff feature, is this in the same app?
+
+18:23:10 --> 18:23:12
+Marcel Khoury: No.
+
+18:23:11 --> 18:23:12
+Danial Khan: The app you just showed me.
+
+18:23:12 --> 18:23:17
+Marcel Khoury: The app I just showed you. They only have writing scopes and and the contracts.
+
+18:23:17 --> 18:23:19
+Danial Khan: Okay, okay.
+
+18:23:17 --> 18:23:23
+Marcel Khoury: And the wire check, sorry, the RFIs. They don't have any other features.
+
+18:23:24 --> 18:23:27
+Marcel Khoury: I want to create a platform that does everything end-to-end.
+
+18:23:24 --> 18:23:26
+Danial Khan: Okay.
+
+18:23:27 --> 18:23:35
+Marcel Khoury: Including the other things in the… Yeah. Okay. Yeah, including their things. Okay. Their things are very important. Okay. And they're the hardest.
+
+18:23:32 --> 18:23:33
+Danial Khan: Take off.
+
+18:23:35 --> 18:23:37
+Marcel Khoury: Oh.
+
+18:23:36 --> 18:23:38
+Danial Khan: Okay, yep.
+
+18:23:39 --> 18:23:47
+Marcel Khoury: This is me explaining step 4, how I sent the how I send the contracts blah blah blah.
+
+18:23:48 --> 18:23:53
+Marcel Khoury: I wrote everything in step-by-step process. I'll share this with you, you can go through it and go.
+
+18:23:51 --> 18:23:57
+Danial Khan: This is in detail. Yeah, this would be good. This would be really good.
+
+18:23:54 --> 18:23:56
+Marcel Khoury: Yes.
+
+18:23:56 --> 18:24:09
+Marcel Khoury: But yeah, this… because I was… honestly, I was working with another team before, and we were making some advancement, but he was my friend, he got very busy, so he didn't have the time to continue with me. So I need someone new to be able to continue pushing this forward.
+
+18:23:59 --> 18:24:01
+Danial Khan: No.
+
+18:24:10 --> 18:24:15
+Danial Khan: Okay, it's a work in progress that I have to continue?
+
+18:24:10 --> 18:24:11
+Marcel Khoury: So…
+
+18:24:14 --> 18:24:18
+Marcel Khoury: They did not make that much advancement.
+
+18:24:17 --> 18:24:21
+Danial Khan: Okay, okay, so you want me to start on my own?
+
+18:24:19 --> 18:24:26
+Marcel Khoury: But they did make a bit. And if you want, I can try and get you the software and show you where they got to.
+
+18:24:26 --> 18:24:35
+Danial Khan: I think if I get a ground to start from, that would be even better, because I think this is…
+
+18:24:35 --> 18:24:38
+Danial Khan: Quite a lot of work, and uh…
+
+18:24:38 --> 18:24:45
+Danial Khan: If I… if they've built something already, I think it's gonna save you time as well, and I'm gonna deliver to you earlier.
+
+18:24:41 --> 18:24:43
+Marcel Khoury: Okay.
+
+18:24:43 --> 18:24:44
+Marcel Khoury: Okay.
+
+18:24:45 --> 18:24:55
+Marcel Khoury: So this is, uh, continuing, scenario 2, this is the design-build project. This is where the GC teams up with a design partner, architect, and they, and they hire them under them.
+
+18:24:55 --> 18:24:57
+Marcel Khoury: And this is the steps for it.
+
+18:24:57 --> 18:25:14
+Marcel Khoury: Now, then I explain the subcontracting world. From the subcontractor's side, he gets the drawings, he writes their own scopes to understand what they need to price up, they reach out to their vendors for unit pricing, they conduct their own quantity takeoffs, they put their cost, overhead, profit, and they lump it into a proposal, and they send it back to me.
+
+18:25:14 --> 18:25:29
+Marcel Khoury: So what I'd like the software to do is not only to catch the general contractors, I want it to have a subcontractor side as well. So that, because for every one general contractor, you have 70 subcontractors. So there's a larger market there.
+
+18:25:17 --> 18:25:18
+Danial Khan: Yep.
+
+18:25:29 --> 18:25:42
+Marcel Khoury: And no one's doing anything for subcontractors yet. So if there's a platform where that can help them easily price stuff up, that would be very helpful. And since we're doing all that, it should be able to directly translate to them.
+
+18:25:39 --> 18:25:41
+Danial Khan: No.
+
+18:25:44 --> 18:25:45
+Danial Khan: Okay.
+
+18:25:44 --> 18:26:02
+Marcel Khoury: And these are, this is ideas I put for where, for what I think we can add to the software, auto leveling tool, generate extract matrix, blah, blah, blah, all that good stuff. This is stuff that I want to be able to add into the software as we grow it.
+
+18:26:02 --> 18:26:11
+Marcel Khoury: But for step one now, I think a good starting point is is being able to upload drawings and have it read the scopes.
+
+18:26:03 --> 18:26:05
+Danial Khan: Yeah, yeah.
+
+18:26:12 --> 18:26:14
+Marcel Khoury: And as we move forward.
+
+18:26:13 --> 18:26:14
+Danial Khan: Mm-hmm. Yep.
+
+18:26:14 --> 18:26:21
+Marcel Khoury: we'll we'll add stock to it. But for step one, because that's going to be the hardest part is that, and maybe takeoffs as well.
+
+18:26:21 --> 18:26:31
+Danial Khan: Okay, okay. Do we, uh, Rawat, do we want this to be a web app, or do we want this to be something that we run locally on our system?
+
+18:26:29 --> 18:26:47
+Marcel Khoury: So what? And if and you can do it as in as a website. Yeah. And you have your login credentials and everything, and you can. And you can also add it to your phone as a application. And yeah, yeah, and and either. And what and the other one you can do it as a.
+
+18:26:47 --> 18:26:51
+Marcel Khoury: As an as an application. No, no, no, a web app, web app.
+
+18:26:47 --> 18:26:49
+Danial Khan: As…
+
+18:26:51 --> 18:26:58
+Danial Khan: A web app? Okay, okay, that makes sense. And are we… are we still gonna want to have, um…
+
+18:26:52 --> 18:26:55
+Marcel Khoury: Bye bye. Of course, William.
+
+18:26:58 --> 18:27:05
+Danial Khan: a sheet at the end of the day, uh, like you're creating a sheet right now. Do we still want that? Um…
+
+18:27:05 --> 18:27:06
+Marcel Khoury: For export?
+
+18:27:05 --> 18:27:08
+Danial Khan: Yes, for export.
+
+18:27:07 --> 18:27:13
+Marcel Khoury: Of course. So look what happens cause. The next step is, I told you. Now we just want to write scopes.
+
+18:27:09 --> 18:27:11
+Danial Khan: Okay.
+
+18:27:13 --> 18:27:19
+Marcel Khoury: So step one is our our software did this. It wrote these scopes. Okay.
+
+18:27:13 --> 18:27:14
+Danial Khan: Yes.
+
+18:27:19 --> 18:27:20
+Danial Khan: Okay.
+
+18:27:19 --> 18:27:21
+Marcel Khoury: Step 2 is, I want…
+
+18:27:21 --> 18:27:27
+Marcel Khoury: Our subcontractors to be able to go onto that software and submit their numbers.
+
+18:27:27 --> 18:27:31
+Marcel Khoury: Look, these are their numbers here.
+
+18:27:31 --> 18:27:33
+Danial Khan: Okay.
+
+18:27:32 --> 18:27:36
+Marcel Khoury: This is my budget. This is their number.
+
+18:27:34 --> 18:27:36
+Danial Khan: Yep.
+
+18:27:36 --> 18:27:43
+Marcel Khoury: See, my budget matches the lowest subs number. This is all I did manually, and I'm still doing manually.
+
+18:27:43 --> 18:27:53
+Marcel Khoury: And I have to do it for 70 trades, 80 trades. Takes me a long time. So I'd rather have the… when the soft… when the subs go onto that web… for that… that web… web app.
+
+18:27:43 --> 18:27:45
+Danial Khan: Uh, I…
+
+18:27:46 --> 18:27:48
+Danial Khan: Okay, so…
+
+18:27:48 --> 18:27:49
+Danial Khan: Yeah.
+
+18:27:53 --> 18:27:54
+Danial Khan: Yeah.
+
+18:27:53 --> 18:27:57
+Marcel Khoury: Upload their numbers, the AI automatically levels.
+
+18:27:57 --> 18:28:04
+Marcel Khoury: and tells me which one is the lowest number per the trade. And if the sub is missing something.
+
+18:28:04 --> 18:28:05
+Danial Khan: Yes.
+
+18:28:04 --> 18:28:20
+Marcel Khoury: Then the AI, with time, it starts to learn. It's missing this. It has a takeoff. It knows the quantities. It suggests a unit price. You say accept, or you increase… I would say accept or increase unit price, and it plugs it in there directly, and it…
+
+18:28:13 --> 18:28:14
+Danial Khan: Mmhm.
+
+18:28:20 --> 18:28:23
+Marcel Khoury: Multiple levels.
+
+18:28:23 --> 18:28:38
+Danial Khan: Okay. Are these… this… yes, that… that does, actually. Are these… these subs, uh, your own… are these people working for you, or are these part of your company, or are these people that you send out, uh, requests to, and then they… they reply?
+
+18:28:24 --> 18:28:26
+Marcel Khoury: Does that make sense?
+
+18:28:36 --> 18:28:42
+Marcel Khoury: No, no, no. Different requests to bid. There are different companies.
+
+18:28:40 --> 18:28:42
+Danial Khan: Okay.
+
+18:28:42 --> 18:28:54
+Danial Khan: And the… these details that you've written under MCA, Build Budget, LA, Harvard, and Alcoa, these, um, these all you're entering on your own, all of these details.
+
+18:28:42 --> 18:28:43
+Marcel Khoury: Yeah. Okay.
+
+18:28:53 --> 18:29:00
+Marcel Khoury: Yeah, everything is manually. Even here, look, I put Y, it means yes, next to every scope item.
+
+18:28:58 --> 18:29:00
+Danial Khan: Okay.
+
+18:29:00 --> 18:29:02
+Marcel Khoury: Everything I'm putting manually.
+
+18:29:02 --> 18:29:09
+Danial Khan: Yeah, I think the easiest part of this whole project would be creating sheets at the end, so…
+
+18:29:07 --> 18:29:22
+Marcel Khoury: Yeah, I was going to say this, if you want, Marcel, Daniel can start with this part because it's the easiest part. If this is something that you want urgently, Daniel can start with this part because this is the easiest part, I think.
+
+18:29:09 --> 18:29:10
+Danial Khan: Uh, shh…
+
+18:29:11 --> 18:29:13
+Danial Khan: This.
+
+18:29:21 --> 18:29:22
+Danial Khan: Yep.
+
+18:29:22 --> 18:29:25
+Marcel Khoury: Yeah, I don't mind.
+
+18:29:23 --> 18:29:38
+Danial Khan: because we can use NA10 for this one. We, um… I don't think I'll even have to work this much for a sheet, especially. This, um… yeah, for a sheet, I think this… within a week, we would be able to have something that…
+
+18:29:26 --> 18:29:28
+Marcel Khoury: Yeah, that's it.
+
+18:29:30 --> 18:29:31
+Marcel Khoury: But…
+
+18:29:31 --> 18:29:32
+Marcel Khoury: Yep.
+
+18:29:35 --> 18:29:36
+Marcel Khoury: Hello.
+
+18:29:36 --> 18:29:41
+Marcel Khoury: Daniel, I have a I have a shared drive. Okay.
+
+18:29:40 --> 18:29:42
+Danial Khan: Uh, okay.
+
+18:29:41 --> 18:29:43
+Marcel Khoury: It has…
+
+18:29:43 --> 18:29:47
+Marcel Khoury: By the way, this is what the subproposal looks like.
+
+18:29:47 --> 18:29:50
+Marcel Khoury: Let me see if I have one open. I do.
+
+18:29:50 --> 18:29:52
+Marcel Khoury: This is what it looks like.
+
+18:29:52 --> 18:29:56
+Marcel Khoury: They usually send it like this. Okay.
+
+18:29:53 --> 18:29:54
+Danial Khan: Okay.
+
+18:29:55 --> 18:29:57
+Danial Khan: Yep.
+
+18:29:56 --> 18:29:58
+Marcel Khoury: And…
+
+18:29:58 --> 18:30:05
+Marcel Khoury: What we would do is, if they can go and and submit their number on the software, then.
+
+18:30:05 --> 18:30:10
+Marcel Khoury: then they would put they would click, check, check, check, check, check, then it would. It would probably auto level.
+
+18:30:11 --> 18:30:19
+Danial Khan: That's what my next question was going to be. How do they send these to you? Do they email it to you? Do they send it…
+
+18:30:17 --> 18:30:19
+Marcel Khoury: Email it. Email it.
+
+18:30:19 --> 18:30:21
+Danial Khan: Okay, okay.
+
+18:30:19 --> 18:30:21
+Marcel Khoury: Email.
+
+18:30:22 --> 18:30:26
+Marcel Khoury: Email. So what's mean is, but.
+
+18:30:23 --> 18:30:25
+Danial Khan: So, if we have…
+
+18:30:26 --> 18:30:34
+Marcel Khoury: Instead of doing it by email, they do it on the software. On the software. They submit their number there, and they fill out the scope sheet.
+
+18:30:34 --> 18:30:36
+Marcel Khoury: And, uh…
+
+18:30:34 --> 18:30:43
+Danial Khan: But I… I think that would be just a suggestion. I think it would be too much work for your, um… your…
+
+18:30:43 --> 18:30:58
+Danial Khan: your clients or your customers that they will have to use a separate app just to get back to you. I think they can still send you an email, and uh… we recently did something similar for another project that I was working on with Rawat.
+
+18:30:56 --> 18:31:09
+Marcel Khoury: But don't you think, Danielle, if you do it by email, if it catches the subcontractor's email, it might not be consistent. They have to put a referral code or anything, and it's…
+
+18:30:58 --> 18:30:59
+Danial Khan: We could…
+
+18:31:09 --> 18:31:12
+Marcel Khoury: I don't think it will be accurate.
+
+18:31:12 --> 18:31:14
+Marcel Khoury: Correct me if I'm wrong.
+
+18:31:14 --> 18:31:30
+Danial Khan: Okay, um, that, that is, that is a possibility, but I think, um, with, with, especially with companies, when we're working with companies, they all use their own company emails, so most of the time, the emails are always.
+
+18:31:30 --> 18:31:35
+Danial Khan: Uh, same, or they, uh, they have the company name in there.
+
+18:31:34 --> 18:31:36
+Marcel Khoury: Yeah, mm-hmm.
+
+18:31:35 --> 18:31:37
+Danial Khan: Or, in the subject…
+
+18:31:37 --> 18:31:45
+Danial Khan: But if you think that's not reliable and we have these very random, so yeah, I can have some.
+
+18:31:43 --> 18:31:45
+Marcel Khoury: Maybe, because…
+
+18:31:45 --> 18:31:49
+Marcel Khoury: Subs are lazy. They don't like to learn new software.
+
+18:31:49 --> 18:31:51
+Danial Khan: No.
+
+18:31:50 --> 18:31:54
+Marcel Khoury: They're all so they prefer sending everything by email.
+
+18:31:54 --> 18:31:55
+Danial Khan: Okay.
+
+18:31:55 --> 18:32:10
+Marcel Khoury: So maybe it's a good idea, actually. Yeah, or maybe, Diana, we can do just like we did with the procurement. We can do a special domain for this type of thing, where the inbox of this email is strictly only the stuff that needs to be picked up.
+
+18:32:10 --> 18:32:12
+Danial Khan: Yeah.
+
+18:32:13 --> 18:32:15
+Danial Khan: Okay.
+
+18:32:16 --> 18:32:17
+Marcel Khoury: No.
+
+18:32:18 --> 18:32:22
+Danial Khan: Yes, I think that is possible, yes.
+
+18:32:19 --> 18:32:20
+Marcel Khoury: So.
+
+18:32:21 --> 18:32:32
+Marcel Khoury: So, this I have on a shared drive. It has everything in it, okay? It has the write-up that I just showed you.
+
+18:32:29 --> 18:32:30
+Danial Khan: Okay.
+
+18:32:32 --> 18:32:34
+Danial Khan: No.
+
+18:32:32 --> 18:32:36
+Marcel Khoury: It has the… it has…
+
+18:32:36 --> 18:32:39
+Marcel Khoury: A sample project drawing.
+
+18:32:39 --> 18:32:43
+Marcel Khoury: And scopes, what they need to look like.
+
+18:32:44 --> 18:32:45
+Danial Khan: Okay.
+
+18:32:45 --> 18:32:49
+Marcel Khoury: I PDF them from the Excel sheet. Those are handwritten.
+
+18:32:51 --> 18:32:52
+Danial Khan: Okay.
+
+18:32:52 --> 18:32:53
+Marcel Khoury: Okay.
+
+18:32:53 --> 18:32:54
+Danial Khan: No.
+
+18:32:54 --> 18:32:56
+Marcel Khoury: It has…
+
+18:32:57 --> 18:33:00
+Marcel Khoury: It has, uh… what is that?
+
+18:33:00 --> 18:33:02
+Marcel Khoury: I forgot about that.
+
+18:33:02 --> 18:33:06
+Marcel Khoury: It has the templates, which is basically…
+
+18:33:06 --> 18:33:16
+Marcel Khoury: the the excel sheet I was just showing you. I have a template of it on where I level, where I compare apples to apples, has my budget template.
+
+18:33:13 --> 18:33:15
+Danial Khan: No.
+
+18:33:16 --> 18:33:20
+Marcel Khoury: And I have all the CSI numbers in here, so that you know what they are.
+
+18:33:21 --> 18:33:22
+Danial Khan: Okay.
+
+18:33:24 --> 18:33:27
+Marcel Khoury: Look at them. Remember I told you it's universal?
+
+18:33:27 --> 18:33:29
+Danial Khan: Oh, yeah.
+
+18:33:28 --> 18:33:30
+Marcel Khoury: There they are.
+
+18:33:29 --> 18:33:31
+Danial Khan: Codes for them. Okay.
+
+18:33:31 --> 18:33:33
+Marcel Khoury: They're all the all the codes are here.
+
+18:33:39 --> 18:33:41
+Danial Khan: Hmm, okay.
+
+18:33:41 --> 18:33:43
+Marcel Khoury: Oh, what else?
+
+18:33:43 --> 18:33:48
+Marcel Khoury: It has the contract. So that's another thing I really wanna wanna fix.
+
+18:33:49 --> 18:33:53
+Marcel Khoury: Every time I want to send out the contract to a subcontractor.
+
+18:33:53 --> 18:34:04
+Marcel Khoury: I need to put the trade name here, which is, let's say, demolition. The AI can easily fill that out, and I need to put the trade name here again. I need to put the owner name, and the project name, and all that, which is fine.
+
+18:33:53 --> 18:33:55
+Danial Khan: Yes.
+
+18:34:04 --> 18:34:05
+Marcel Khoury: Section 1.
+
+18:34:05 --> 18:34:06
+Danial Khan: Yeah.
+
+18:34:05 --> 18:34:16
+Marcel Khoury: Section 2, they're all the same for the same project, for the projects. The only thing that changes in the contract is Section 3. And Section 3 is what? It's the scope.
+
+18:34:16 --> 18:34:18
+Marcel Khoury: It's usually the scope.
+
+18:34:18 --> 18:34:33
+Marcel Khoury: but written in contract language, so that that scope that I showed you here, that I that all cast in place, concrete blah blah blah is. It's written in the con. It's copy pasted into Section 3. But the only difference is, it's written in a contract language type of way.
+
+18:34:33 --> 18:34:36
+Danial Khan: Summarized, okay, yeah.
+
+18:34:35 --> 18:34:43
+Marcel Khoury: So, instead of me having to manually do that, I'd like an option where I just click export, contract, and award.
+
+18:34:43 --> 18:34:45
+Marcel Khoury: Directly.
+
+18:34:43 --> 18:34:50
+Danial Khan: Yeah, we can have a template for a contract in it, we just replace it every time with different…
+
+18:34:47 --> 18:34:48
+Marcel Khoury: Yeah.
+
+18:34:49 --> 18:34:51
+Marcel Khoury: Yeah.
+
+18:34:50 --> 18:34:51
+Danial Khan: Okay.
+
+18:34:51 --> 18:34:54
+Marcel Khoury: There's a lot. Look, it's…
+
+18:34:54 --> 18:35:08
+Marcel Khoury: it's… it's a construction industry, so one, it's very outdated. It's an old man industry, so we need something very user-friendly, because it's an old man industry. And three, uh…
+
+18:35:03 --> 18:35:05
+Danial Khan: Okay.
+
+18:35:05 --> 18:35:07
+Danial Khan: Yeah.
+
+18:35:08 --> 18:35:23
+Marcel Khoury: There's no software that does everything end to end. And honestly, I spend weeks and months on stuff that in my head can be done in minutes. And if if there's a proper AI that can actually do all of that. So what I showed you now is just like the tip of the iceberg.
+
+18:35:20 --> 18:35:21
+Danial Khan: No.
+
+18:35:23 --> 18:35:42
+Marcel Khoury: once we go into the details, there's a lot more that we can add, but I… what I showed you is the most complicated parts of it, and if you think the most complicated parts are something you can do, then all the rest I'm not worried about. As we… as we start from… we can start from a place, and then we can keep on adding, and have weekly meetings, bi-weekly meetings, whatever you think we need.
+
+18:35:33 --> 18:35:34
+Danial Khan: Yes.
+
+18:35:42 --> 18:35:44
+Marcel Khoury: to grow this company.
+
+18:35:45 --> 18:36:00
+Danial Khan: Yeah, I think that that is the best approach here. That I should start with with what you just showed me right now, especially from the the sheets and that AI software that you showed me that you're currently using to extract.
+
+18:35:48 --> 18:35:50
+Marcel Khoury: Mmhm.
+
+18:35:59 --> 18:36:00
+Marcel Khoury: Yep.
+
+18:36:00 --> 18:36:11
+Danial Khan: Uh, data from Blueprints and, uh, put it into notes and, uh, have references to it, and then let you be able to create a export file from it.
+
+18:36:03 --> 18:36:04
+Marcel Khoury: Yeah.
+
+18:36:10 --> 18:36:11
+Marcel Khoury: Mm-hmm.
+
+18:36:11 --> 18:36:20
+Danial Khan: I think these things, I can definitely do them. Yes. So it's a good start.
+
+18:36:20 --> 18:36:29
+Danial Khan: Yeah, I'll just need some time to understand all these terminologies about construction and.
+
+18:36:29 --> 18:36:33
+Danial Khan: These different, uh, drawings and, uh…
+
+18:36:33 --> 18:36:37
+Danial Khan: These different files, what… what file goes where.
+
+18:36:36 --> 18:36:39
+Marcel Khoury: I'll share them with you.
+
+18:36:38 --> 18:36:50
+Danial Khan: So, it's going to take a bit of the time in the start. It might be a bit slow in the start, but as we progress, I think, yeah, I'll pick up the pace.
+
+18:36:42 --> 18:36:43
+Marcel Khoury: So.
+
+18:36:48 --> 18:36:50
+Marcel Khoury: are understood.
+
+18:36:50 --> 18:36:53
+Marcel Khoury: Do you want to set up a weekly meeting?
+
+18:36:53 --> 18:36:57
+Danial Khan: That sounds good to me. That would be perfect.
+
+18:36:56 --> 18:37:09
+Marcel Khoury: I think I think we should. I'll give you one week. I'll share this with you right now. I'll give you one week to do your own research and dabble and come back to me next week with questions, or whatever it is, and we can. We can start. We can start building on it.
+
+18:36:59 --> 18:37:00
+Danial Khan: Okay.
+
+18:37:00 --> 18:37:02
+Danial Khan: No.
+
+18:37:10 --> 18:37:19
+Danial Khan: Okay, yeah, that sounds good. I think within the next week, when we meet, I'll have the…
+
+18:37:19 --> 18:37:30
+Danial Khan: Sorry, the sheet ready for you. The application where it's going to fill sheets for you. Because I think that part of it is pretty basic.
+
+18:37:23 --> 18:37:25
+Marcel Khoury: Yep.
+
+18:37:27 --> 18:37:28
+Marcel Khoury: Okay.
+
+18:37:30 --> 18:37:34
+Marcel Khoury: And if you understood what I told you, if you want to have a front end.
+
+18:37:34 --> 18:38:00
+Marcel Khoury: of what the website should look like. Very, very, very basic, or something you could. You can do that as well, because I think that's the best way I could explain to you when you, when you build the front end of something, I can give you feedback before you go into the like, the the software part of it, just what it's gonna look like. And I'll tell you, hey? This should go from here, this click here, this, that add this tool, this tool, and then we'll just keep building on. We'll we'll dive deep into every section and build on it.
+
+18:37:37 --> 18:37:39
+Danial Khan: Oh, yeah.
+
+18:37:42 --> 18:37:43
+Danial Khan: I'll…
+
+18:37:48 --> 18:37:49
+Danial Khan: Yes.
+
+18:37:51 --> 18:37:53
+Danial Khan: Yep.
+
+18:38:01 --> 18:38:11
+Danial Khan: Okay, okay. I'll create a demo for you, and then whatever you think we want to change, we'll go with that.
+
+18:38:05 --> 18:38:06
+Marcel Khoury: Okay.
+
+18:38:08 --> 18:38:09
+Marcel Khoury: Okay.
+
+18:38:09 --> 18:38:11
+Marcel Khoury: Okay. Awesome.
+
+18:38:11 --> 18:38:12
+Danial Khan: Yes.
+
+18:38:11 --> 18:38:17
+Marcel Khoury: Uh, what's… you have his email? Yeah. Okay, I'll share the…
+
+18:38:19 --> 18:38:21
+Marcel Khoury: I'll share the…
+
+18:38:24 --> 18:38:27
+Marcel Khoury: The the thing with you.
+
+18:38:27 --> 18:38:29
+Danial Khan: Okay.
+
+18:38:28 --> 18:38:32
+Marcel Khoury: The photo, alright. Then the same email on the group.
+
+18:38:30 --> 18:38:32
+Danial Khan: That sounds good.
+
+18:38:32 --> 18:38:34
+Danial Khan: I'll send my email right now.
+
+18:38:34 --> 18:38:35
+Marcel Khoury: Good. All right.
+
+18:38:35 --> 18:38:36
+Marcel Khoury: All right, Daniel.
+
+18:38:37 --> 18:38:42
+Danial Khan: Okay, guys, thank you. Thank you for your time. Have a good day, guys. Bye.
+
+18:38:38 --> 18:38:43
+Marcel Khoury: Thank you. Thank you. Thank you. You too, Daniel. Thank you. Bye-bye.
