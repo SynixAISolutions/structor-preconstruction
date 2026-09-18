@@ -27,3 +27,4 @@ export function exportRows(name: string, rows: (string | number)[][]) {
     .join("\r\n");
   downloadText(name, csv, "text/csv");
 }
+export const dateLabel = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
