@@ -3,9 +3,10 @@
 import { X, ArrowUpRight, Download, Search, Sparkles } from "lucide-react";
 import { ReactNode, useEffect } from "react";
 
-export type Screen = "overview" | "projects" | "information" | "documents" | "scopes" | "takeoffs" | "packages" | "bidders" | "portal" | "leveling" | "budget" | "allowances" | "contracts" | "schedule" | "drawings" | "revisions" | "checks" | "specs" | "messages" | "turnover" | "settings" | "model";
-export type ViewProps = { navigate: (screen: Screen) => void; notify: (message: string) => void; projectName: string };
-export const usd = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
+// The navigation contract, formatting and CSV export live in lib/ (functionality side).
+// They are re-exported here so existing UI imports keep working unchanged.
+export type { Screen, ViewProps } from "../../lib/screens";
+export { usd, downloadText, exportRows } from "../../lib/format";
 export function Badge({ children, tone = "neutral" }: { children: ReactNode; tone?: string }) { return <span className={`ui-badge ${tone}`}>{children}</span>; }
 export function Button({ children, onClick, variant = "secondary", disabled, type = "button" }: { children: ReactNode; onClick?: () => void; variant?: string; disabled?: boolean; type?: "button" | "submit" | "reset" }) { return <button type={type} className={`ui-btn ${variant}`} onClick={onClick} disabled={disabled}>{children}</button>; }
 export function PageHeader({ eyebrow, title, description, actions }: { eyebrow?: string; title: string; description?: string; actions?: ReactNode }) { return <div className="ui-page-header"><div>{eyebrow && <div className="ui-eyebrow">{eyebrow}</div>}<h1>{title}</h1>{description && <p>{description}</p>}</div><div className="ui-header-actions">{actions}</div></div>; }
@@ -20,6 +21,4 @@ export function Modal({ title, subtitle, onClose, children, wide = false }: { ti
 }
 export function PreviewNote({ children = "Sample workspace · Generated suggestions are ready for your review." }: { children?: ReactNode }) { return <div className="ui-preview-note"><Sparkles size={15}/>{children}</div>; }
 export function Source({ children, onClick }: { children: ReactNode; onClick?: () => void }) { return <button className="ui-source" onClick={onClick}>{children}<ArrowUpRight size={12}/></button>; }
-export function downloadText(name: string, content: string, type = "text/plain") { const url = URL.createObjectURL(new Blob([content], { type })); const a = document.createElement("a"); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
-export function exportRows(name: string, rows: (string | number)[][]) { downloadText(name, rows.map(row => row.map(v => { const text = String(v); return `"${(/^[=+@-]/.test(text) ? "'" : "") + text.replaceAll('"', '""')}"`; }).join(",")).join("\r\n"), "text/csv"); }
 export function ExportButton({ onClick }: { onClick: () => void }) { return <Button onClick={onClick}><Download size={16}/>Export CSV</Button>; }

@@ -3,16 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowDownToLine, ArrowRight, Check, CheckCheck, ChevronDown, ChevronRight, CircleCheck, CloudUpload, File, FileSpreadsheet, FileText, Folder, GitCompareArrows, Layers, Maximize2, Plus, Ruler, SearchCheck, ShieldCheck, Sparkles, TriangleAlert, X, ZoomIn, ZoomOut } from "lucide-react";
 import { Badge, Button, Empty, ExportButton, Modal, PageHeader, Panel, PreviewNote, Screen, SearchBox, Source, Stats, Tabs, ViewProps, exportRows, usd } from "./shared";
+import { useLocalDraft } from "../../lib/use-local-draft";
 import "./intelligence.css";
 
 // Local UI drafts only; sample suggestions are never derived from uploaded files.
-function useLocalDraft<T>(key: string, initial: T) {
-  const [value, setValue] = useState<T>(initial);
-  const [ready, setReady] = useState(false);
-  useEffect(() => { try { const saved = localStorage.getItem(`structor-ui-${key}`); if (saved) setValue(JSON.parse(saved) as T); } catch { /* A fresh draft remains usable when storage is unavailable. */ } setReady(true); }, [key]);
-  useEffect(() => { if (ready) { try { localStorage.setItem(`structor-ui-${key}`, JSON.stringify(value)); } catch { /* Keep the current session editable when storage is full. */ } } }, [key, ready, value]);
-  return [value, setValue] as const;
-}
 
 const trades = ["02 · Existing conditions", "03 · Concrete", "04 · Masonry", "05 · Metals", "07 · Thermal & moisture", "08 · Openings", "09 · Finishes", "22 · Plumbing", "23 · HVAC", "26 · Electrical"];
 const displayDate = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });

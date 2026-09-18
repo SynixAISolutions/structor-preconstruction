@@ -20,9 +20,18 @@ const { manualGuides, manualGroups, glossary, searchManual, manualMarkdown } = l
   assert.equal(id, "./manual-pages", "The manual must use the extensionless local page-guide import");
   return pages;
 });
-const screenType = read("app/ui/shared.tsx").match(/export type Screen\s*=\s*([^;]+);/);
+const screenType = read("lib/screens.ts").match(/export type Screen\s*=\s*([^;]+);/);
 assert(screenType, "Screen type was not found");
 const screens = [...screenType[1].matchAll(/"([^"]+)"/g)].map(match => match[1]);
+const { ALL_SCREENS } = load("lib/screens.ts");
+const iconMap = read("app/page.tsx").match(/const ICONS: Record<string, typeof Box> = \{([^}]+)\}/);
+assert(iconMap, "The page.tsx ICONS map was not found");
+const iconNames = new Set(iconMap[1].split(",").map(name => name.trim()).filter(Boolean));
+assert.equal(ALL_SCREENS.length, screens.length, "Every Screen id must appear once in the navigation groups");
+for (const screen of ALL_SCREENS) {
+  assert(screens.includes(screen.id), `${screen.id}: navigation lists a screen that is not in the Screen type`);
+  assert(iconNames.has(screen.icon), `${screen.id}: icon ${screen.icon} is missing from the page.tsx ICONS map`);
+}
 const ids = manualGuides.map(guide => guide.id);
 const guideIds = new Set(ids);
 const unique = (values, message) => assert.equal(new Set(values).size, values.length, message);
