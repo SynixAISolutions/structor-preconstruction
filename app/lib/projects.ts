@@ -6,7 +6,7 @@
 // programs and year. `null` means "not recorded" — used for records saved before these
 // fields existed, never for a newly created project (the form requires them).
 
-export type WorkType = "renovation" | "addition" | "both";
+export type WorkType = "new" | "renovation" | "addition" | "both";
 export type TaxStatus = "taxable" | "non-taxable";
 export type TeamMember = { name: string; role: string };
 
@@ -21,7 +21,7 @@ export type ProjectCard = {
 
 /** The full project record. Every stored or created project has this shape. */
 export type Project = ProjectCard & {
-  /** Total building area. Always renovationSquareFeet + additionSquareFeet once workType is known. */
+  /** Total building area. For renovation/addition/both it equals renovationSquareFeet + additionSquareFeet; new construction has no split. */
   squareFeet: number;
   workType: WorkType | null;
   renovationSquareFeet: number;
@@ -40,6 +40,7 @@ export const PROJECTS_STORAGE_KEY = "structor-ui-projects";
 export const PROJECT_TABS = ["All projects", "Preconstruction", "Design development", "Bidding"];
 export const PROJECT_TYPES = ["Community & recreation", "Education", "Commercial", "Mixed-use", "Residential", "Healthcare", "Civic", "Industrial"];
 export const WORK_TYPES: { value: WorkType; label: string }[] = [
+  { value: "new", label: "New construction" },
   { value: "renovation", label: "Renovation" },
   { value: "addition", label: "Addition" },
   { value: "both", label: "Renovation and addition" },
@@ -75,7 +76,7 @@ export const sampleProjectRecords: Project[] = [
 /** @deprecated Card-typed view of the same records, for existing markup. Use sampleProjectRecords. */
 export const sampleProjects: ProjectCard[] = sampleProjectRecords;
 
-const isWorkType = (v: unknown): v is WorkType => v === "renovation" || v === "addition" || v === "both";
+const isWorkType = (v: unknown): v is WorkType => v === "new" || v === "renovation" || v === "addition" || v === "both";
 const isTaxStatus = (v: unknown): v is TaxStatus => v === "taxable" || v === "non-taxable";
 const text = (v: unknown) => typeof v === "string" ? v : "";
 const count = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.round(v) : 0;
@@ -100,7 +101,7 @@ export function normalizeProject(raw: Record<string, unknown>): Project {
   };
 }
 
-/** Keeps total = renovation + addition. For a single work type the whole area belongs to it. */
+/** Keeps total = renovation + addition. For a single work type the whole area belongs to it; new construction has no split. */
 function areaSplit(workType: WorkType | null, total: number, renovation: number, addition: number) {
   if (workType === "both") return { squareFeet: renovation + addition, renovationSquareFeet: renovation, additionSquareFeet: addition };
   if (workType === "renovation") return { squareFeet: total, renovationSquareFeet: total, additionSquareFeet: 0 };
@@ -146,7 +147,7 @@ export function parseProjectForm(form: FormData, existing?: Project): { project?
 
   const workTypeRaw = get(f.workType);
   const workType = isWorkType(workTypeRaw) ? workTypeRaw : null;
-  if (!workType) errors.workType = "Choose renovation, addition, or both.";
+  if (!workType) errors.workType = "Choose new construction, renovation, addition, or both.";
 
   const positive = (field: ProjectFormField, message: string) => {
     const v = num(PROJECT_FORM_FIELDS[field]);

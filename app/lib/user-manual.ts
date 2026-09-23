@@ -74,11 +74,11 @@ const workspaceGuides: ManualGuide[] = [
       "Click a project card to select it and open its Project information page.",
       "Choose New project or Your next project. Enter a name, location, type, internal project value, and brief description, then choose Create project.",
       "Review the new record using Edit information. Size, architect, and dates begin with sample defaults and must be updated for your actual project.",
-      "Return to All projects to switch records. Keep exports of important work; a project card does not create a separate saved bid workbook for that project.",
+      "Return to All projects to switch projects. Each project keeps its own files, scopes, takeoffs, budget, bid leveling workbook, and other saved screen data; the subcontractor directory is shared by every project. Keep exports of important work.",
     ],
     terms: [{ name: "Design development", meaning: "A stage where the design is being refined before final construction details are complete." }, { name: "Bidding", meaning: "The stage when companies are being asked to submit prices." }],
-    example: "Create a school modernization project to demonstrate its project brief and dates. This does not replace the Jelleff model or automatically populate fresh school-specific scopes and costs.",
-    reality: "Project records are saved in this browser. The optional RFP file input is a selection preview: it does not parse or store the RFP. Changing projects updates project context but does not switch all sample datasets or the single saved bid-leveling workbook.",
+    example: "Create a school modernization project to demonstrate its project brief and dates. A new project starts with empty lists and an unchecked to-do list. It does not generate scopes or costs from its documents, and the 3D model remains the Jelleff reconstruction.",
+    reality: "Project records are saved in this browser. The optional RFP file input is a selection preview: it does not parse or store the RFP. The Jelleff Recreation Center project holds the sample content; other projects hold only what is entered for them. Bid leveling shows labelled demo data until a workbook is imported for the project.",
     related: ["information", "saving", "documents"],
   },
   {
@@ -166,7 +166,7 @@ const workspaceGuides: ManualGuide[] = [
     purpose: "Know what stays, what resets, and what to download. This is a local prototype, not yet a shared cloud record system. A toast saying a preview was saved is not the same as a permanent server backup.",
     steps: [
       "Project records save to this browser’s local storage. Bid leveling saves its current workspace and imported source workbook in browser storage. Keep the same browser profile and site address; localhost and 127.0.0.1 are different storage locations.",
-      "Most document-register, scope, takeoff, and commercial preview edits also save locally when browser storage is available. These datasets are shared across the preview rather than stored separately for each selected project. They do not synchronize across computers, users, or modules. Unsaved forms and actual uploaded-file previews can be lost on navigation; save entered fields and retain the original files.",
+      "Most document-register, scope, takeoff, and commercial preview edits also save locally when browser storage is available. They are stored separately for each project; the subcontractor directory is shared across projects. They do not synchronize across computers, users, or modules. Unsaved forms and actual uploaded-file previews can be lost on navigation; save entered fields and retain the original files.",
       "In Bid leveling, wait for a successful saved status, then use Export Excel for supported mapped workbook work. No Excel export is available without a supported source workbook; new unmapped scope rows also prevent a safe export. Read export warnings: unapproved changed adjustments are omitted, and formulas need recalculation in desktop Excel. A successful export does not mean every bid has finished review.",
       "Use Backup JSON before importing another workbook, loading demo data, or clearing browser storage. JSON is a data backup, not an Excel sheet; there is no JSON restore button in this interface. Keep the original workbook and downloaded exports as well.",
       "CSV exports elsewhere are simple tables for spreadsheet software. Contract and turnover downloads are text drafts or checklists. They are not a signed agreement, a delivered message, or a complete copy of all uploaded source files.",

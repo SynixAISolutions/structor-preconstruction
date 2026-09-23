@@ -3,6 +3,8 @@ import { normalizeProject, parseProjectForm, projectFromForm, sampleProjectRecor
 import { dateLabel, displayDate } from "../lib/format.ts";
 import { initialDrawings, initialSpecSections, initialSpecs } from "../lib/data/preconstruction.ts";
 import { CSI_DIVISIONS, csiDivision } from "../lib/csi.ts";
+import { initialChecklist, initialCosts } from "../lib/data/commercial.ts";
+import { SAMPLE_PROJECT_ID, draftStorageKey, getActiveProjectId, projectScopedKey, startingDraft } from "../lib/project-scope.ts";
 
 const form = (fields) => {
   const f = new FormData();
@@ -31,6 +33,10 @@ assert.deepEqual([single.project.squareFeet, single.project.renovationSquareFeet
 assert.deepEqual(single.project.certifications, ["CBE", "First Source"], "Certifications are trimmed and de-duplicated");
 assert.deepEqual(single.project.team, [{ name: "Marcel Khoury", role: "Project manager" }, { name: "Rawad", role: "Estimator" }], "Team rows keep name/role pairing and drop blank names");
 assert.equal(single.project.size, "42,500 SF");
+
+// New construction: a ground-up building has area but no renovation/addition split.
+const ground = parseProjectForm(form({ ...valid, workType: "new" })).project;
+assert.deepEqual([ground.workType, ground.squareFeet, ground.renovationSquareFeet, ground.additionSquareFeet], ["new", 42500, 0, 0]);
 
 // "Both": total is the sum of the two areas; the separate total field is ignored.
 const both = parseProjectForm(form({ ...valid, workType: "both", squareFeet: "1", renovationSquareFeet: "30000", additionSquareFeet: "12,500" }));
@@ -67,6 +73,23 @@ for (const bad of ["", "2026-13-45", "soon"]) {
 }
 assert.equal(displayDate("2026-10-02"), "Oct 2, 2026");
 
+// Project scope: each project keeps its own drafts; the sample keeps its original keys.
+assert.equal(getActiveProjectId(), SAMPLE_PROJECT_ID, "Outside the browser the sample project is open");
+assert.equal(draftStorageKey(SAMPLE_PROJECT_ID, "budget"), "structor-ui-budget", "Sample drafts keep their pre-scoping keys");
+assert.equal(draftStorageKey("p2", "budget"), "structor-ui-p2:budget");
+assert.equal(draftStorageKey("p2", "directory"), "structor-ui-directory", "The subcontractor directory is organization-wide");
+assert.equal(draftStorageKey("p2", "portal-profile"), "structor-ui-portal-profile");
+assert.equal(startingDraft(SAMPLE_PROJECT_ID, "budget", initialCosts), initialCosts, "The sample project starts from the sample data");
+assert.deepEqual(startingDraft("p2", "budget", initialCosts), [], "A new project must not start with Jelleff's budget");
+assert.deepEqual([startingDraft("p2", "contract-price", 498000), startingDraft("p2", "contract-bidder", "Capital Demolition"), startingDraft("p2", "contract-created", true)], [0, "", false]);
+assert.deepEqual(startingDraft("p2", "nested", { price: "9", answers: [1], meta: { ok: true } }), { price: "", answers: [], meta: { ok: false } });
+const todo = startingDraft("p2", "turnover", initialChecklist);
+assert(initialChecklist.some(item => item.done), "Fixture: the sample to-do has completed steps");
+assert.deepEqual(todo.map(item => item.id), initialChecklist.map(item => item.id), "A new project gets the same to-do steps");
+assert(todo.every(item => item.done === false), "…with nothing marked done");
+assert.equal(startingDraft("p2", "directory", initialCosts), initialCosts, "Organization-wide drafts are the same for every project");
+assert.deepEqual([projectScopedKey("active", SAMPLE_PROJECT_ID), projectScopedKey("active", "p2")], ["active", "active:p2"], "Bid-leveling workspace is stored per project");
+
 // Registers: drawing sheet numbers and spec section numbers are unique; every spec section
 // is a real MasterFormat number; every submittal requirement points at a listed section.
 const uniq = (values, message) => assert.equal(new Set(values).size, values.length, message);
@@ -83,4 +106,4 @@ assert.equal(csiDivision("096519"), "09");
 for (const bad of ["", "9 65 19", "15 10 00", "Division 09"]) assert.equal(csiDivision(bad), undefined, `${bad}: must not parse as a section`);
 assert.equal(Object.keys(CSI_DIVISIONS).length, 35, "MasterFormat has 35 divisions in use");
 
-console.log(`Records checked: ${sampleProjectRecords.length} sample projects, form validation, area split, legacy upgrade, blank dates; ${initialDrawings.length} drawings, ${initialSpecSections.length} spec sections.`);
+console.log(`Records checked: ${sampleProjectRecords.length} sample projects, form validation, area split, legacy upgrade, blank dates, project scope; ${initialDrawings.length} drawings, ${initialSpecSections.length} spec sections.`);
