@@ -10,6 +10,7 @@ import { ProjectForm, ProjectInformation } from "./ui/project-record";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, SearchBox, Tabs, usd, type Screen } from "./ui/shared";
 import { DEFAULT_SCREEN, SCREEN_GROUPS, isScreen, screenGroup, screenLabel, searchScreens } from "../lib/screens";
 import { PROJECT_TABS, filterProjects, loadProjects, sampleProjectRecords, saveProjects, squareFeetLabel, type Project } from "../lib/projects";
+import { selectProject, useActiveProject } from "../lib/project-scope";
 import "./ui/product.css";
 import dynamic from "next/dynamic";
 const ModelStudio = dynamic(() => import("./ui/model-studio"), { ssr: false, loading: () => <div className="ui-empty">Opening model studio…</div> });
@@ -21,7 +22,7 @@ function NavIcon({name,size,id}:{name:string;size:number;id?:Screen}){const Icon
 function BuildingModel({small=false}:{small?:boolean}) { return <div className={`model-stage ${small?"small":""}`} aria-label="Illustrative 3D building model" role="img"><div className="model-orbit"><div className="model-ground"><div className="model-grid"/><div className="model-walkway"/><div className="model-building main"><i className="roof"/><i className="front"/><i className="side"/><i className="window-line"/></div><div className="model-building wing"><i className="roof"/><i className="front"/><i className="side"/></div><div className="model-building tower"><i className="roof"/><i className="front"/><i className="side"/></div><div className="model-tree t1"/><div className="model-tree t2"/><div className="model-tree t3"/><div className="model-tree t4"/><div className="model-outline"/></div></div><span className="model-caption"><span/>CONCEPT MODEL <span className="model-coordinate">38.917° N / 77.068° W</span></span></div>; }
 
 export default function StructorApp(){
- const [screen,setScreen]=useState<Screen>(DEFAULT_SCREEN); const [menuOpen,setMenuOpen]=useState(false); const [searchOpen,setSearchOpen]=useState(false); const [search,setSearch]=useState(""); const [helpOpen,setHelpOpen]=useState(false); const [notifications,setNotifications]=useState(false); const [toast,setToast]=useState(""); const [projects,setProjects]=useState<Project[]>(sampleProjectRecords); const [activeId,setActiveId]=useState("jelleff"); const [newProject,setNewProject]=useState(false); const [ready,setReady]=useState(false); const [reduced,setReduced]=useState(false); const scrollRef=useRef<HTMLDivElement>(null);
+ const [screen,setScreen]=useState<Screen>(DEFAULT_SCREEN); const [menuOpen,setMenuOpen]=useState(false); const [searchOpen,setSearchOpen]=useState(false); const [search,setSearch]=useState(""); const [helpOpen,setHelpOpen]=useState(false); const [notifications,setNotifications]=useState(false); const [toast,setToast]=useState(""); const [projects,setProjects]=useState<Project[]>(sampleProjectRecords); const activeId=useActiveProject(); const [newProject,setNewProject]=useState(false); const [ready,setReady]=useState(false); const [reduced,setReduced]=useState(false); const scrollRef=useRef<HTMLDivElement>(null);
  const project=projects.find(p=>p.id===activeId)||projects[0];
  const notify=useCallback((message:string)=>setToast(message),[]);
  const navigate=useCallback((next:Screen)=>{setScreen(next);setMenuOpen(false);setSearchOpen(false); window.location.hash=next;scrollRef.current?.scrollTo({top:0});},[]);
@@ -30,7 +31,7 @@ export default function StructorApp(){
  useEffect(()=>{if(!toast)return;const id=setTimeout(()=>setToast(""),4500);return()=>clearTimeout(id);},[toast]);
  useEffect(()=>{const handler=(e:KeyboardEvent)=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();setSearchOpen(v=>!v);}};window.addEventListener("keydown",handler);return()=>window.removeEventListener("keydown",handler);},[]);
  const props={navigate,notify,projectName:project.name};
- function createProject(p:Project){setProjects(v=>[...v,p]);setActiveId(p.id);setNewProject(false);navigate("information");notify("Project draft created.");}
+ function createProject(p:Project){setProjects(v=>[...v,p]);selectProject(p.id);setNewProject(false);navigate("information");notify("Project draft created.");}
  return <div className={`product-app ${reduced?"motion-off":""}`}>
   {menuOpen&&<button className="mobile-scrim" aria-label="Close navigation" onClick={()=>setMenuOpen(false)}/>}
   <aside className={`product-sidebar ${menuOpen?"is-open":""}`}>
@@ -46,7 +47,7 @@ export default function StructorApp(){
     <div className="page-enter" key={screen}>
      {screen==="overview"&&<Overview project={project} navigate={navigate} onNew={()=>setNewProject(true)}/>}
      {screen==="model"&&<ModelStudio/>}
-     {screen==="projects"&&<Projects projects={projects} onNew={()=>setNewProject(true)} onOpen={p=>{setActiveId(p.id);navigate("information");}}/>}
+     {screen==="projects"&&<Projects projects={projects} onNew={()=>setNewProject(true)} onOpen={p=>{selectProject(p.id);navigate("information");}}/>}
      {screen==="information"&&<ProjectInformation project={project} cover={<BuildingModel/>} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Project information saved locally.");}} navigate={navigate}/>}
       {['documents','scopes','takeoffs','specs','checks','drawings','specifications','revisions'].includes(screen)&&<IntelligenceView {...props} screen={screen}/>}
      {['packages','bidders','portal','budget','allowances','contracts','schedule','messages','turnover'].includes(screen)&&<CommercialView {...props} screen={screen}/>}
