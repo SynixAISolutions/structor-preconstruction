@@ -57,6 +57,26 @@ for (const guide of manualGuides) {
   for (const related of guide.related) assert(related === "glossary" || guideIds.has(related), `${guide.id}: broken related link ${related}`);
 }
 for (const group of manualGroups) assert(manualGuides.some(guide => guide.group === group), `${group}: empty manual group`);
+
+// Navigation contract — Marcel's 20 September structure.
+const { SCREEN_GROUPS, DEFAULT_SCREEN, screenGroup, searchScreens } = load("lib/screens.ts");
+assert(screens.includes(DEFAULT_SCREEN), `DEFAULT_SCREEN ${DEFAULT_SCREEN} is not a screen`);
+unique(SCREEN_GROUPS.map(group => group.label), "Navigation group labels must be unique");
+assert.deepEqual(SCREEN_GROUPS.filter(group => group.scope === "project").map(group => group.label), ["PRECONSTRUCTION", "OPERATIONS"], "Exactly two project groups: Preconstruction, then Operations");
+for (const group of SCREEN_GROUPS) {
+  assert(["global", "project"].includes(group.scope), `${group.label}: unknown scope ${group.scope}`);
+  const runs = group.items.map(item => item.section ?? "").filter((section, i, all) => section && section !== all[i - 1]);
+  unique(runs, `${group.label}: items in one section must be adjacent`);
+}
+for (const [former, id] of [["spec matrix", "specs"], ["drawing register", "drawings"], ["bidder directory", "bidders"], ["project turnover", "turnover"], ["conversations", "messages"], ["documents", "documents"]]) {
+  assert(searchScreens(former).some(screen => screen.id === id), `Quick find must still reach ${id} by its former name "${former}"`);
+}
+// The manual follows the navigation: same group, and each title starts with the nav label.
+for (const screen of ALL_SCREENS) {
+  const guide = manualGuides.find(g => g.id === screen.id);
+  assert(guide.title.startsWith(screen.label), `${screen.id}: manual title "${guide.title}" must start with nav label "${screen.label}"`);
+  assert.equal(guide.group.toUpperCase(), screenGroup(screen.id)?.label ?? "WORKSPACE", `${screen.id}: manual group must match its navigation group`);
+}
 assert(glossary.length, "The glossary must contain terms");
 // Glossary names are the entries' identities; the data does not define a separate id.
 unique(glossary.map(term => term.name.trim().toLowerCase()), "Glossary term identities must be unique");
