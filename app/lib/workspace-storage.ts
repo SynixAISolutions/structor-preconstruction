@@ -1,9 +1,13 @@
+import { projectScopedKey } from "./project-scope";
+
 const DATABASE_NAME = "structor-workspace";
 const DATABASE_VERSION = 1;
 const WORKSPACE_STORE = "workspaces";
 const FILE_STORE = "files";
-const ACTIVE_WORKSPACE_KEY = "active";
-const ACTIVE_WORKBOOK_KEY = "active-workbook";
+// One saved bid-leveling workspace per project: "active" for the Jelleff sample (its
+// original key), "active:<projectId>" for any other project. Keys are fixed per call.
+const workspaceKeys = () => ({ workspace: projectScopedKey("active"), workbook: projectScopedKey("active-workbook") });
+type WorkspaceKeys = ReturnType<typeof workspaceKeys>;
 
 export const WORKSPACE_SCHEMA_VERSION = 1;
 
@@ -39,15 +43,15 @@ export class WorkspaceStorageError extends Error {
 }
 
 type StoredWorkspace = {
-  key: typeof ACTIVE_WORKSPACE_KEY;
+  key: string;
   schemaVersion: number;
   savedAt: string;
   state: WorkspaceState<unknown, unknown, unknown>;
-  workbookKey?: typeof ACTIVE_WORKBOOK_KEY;
+  workbookKey?: string;
 };
 
 type StoredWorkbook = {
-  key: typeof ACTIVE_WORKBOOK_KEY;
+  key: string;
   schemaVersion: number;
   bytes: ArrayBuffer;
 };
@@ -150,8 +154,8 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function validateWorkspaceRecord(value: unknown): asserts value is StoredWorkspace {
-  if (!isObject(value) || value.key !== ACTIVE_WORKSPACE_KEY || typeof value.schemaVersion !== "number") {
+function validateWorkspaceRecord(value: unknown, keys: WorkspaceKeys): asserts value is StoredWorkspace {
+  if (!isObject(value) || value.key !== keys.workspace || typeof value.schemaVersion !== "number") {
     throw storageError("STORAGE_CORRUPT");
   }
   if (value.schemaVersion !== WORKSPACE_SCHEMA_VERSION) throw storageError("STORAGE_VERSION_UNSUPPORTED");
@@ -159,11 +163,11 @@ function validateWorkspaceRecord(value: unknown): asserts value is StoredWorkspa
   if (!isObject(state) || !isObject(state.project) || !Array.isArray(state.items) || !Array.isArray(state.bidders) || typeof value.savedAt !== "string") {
     throw storageError("STORAGE_CORRUPT");
   }
-  if (value.workbookKey !== undefined && value.workbookKey !== ACTIVE_WORKBOOK_KEY) throw storageError("STORAGE_CORRUPT");
+  if (value.workbookKey !== undefined && value.workbookKey !== keys.workbook) throw storageError("STORAGE_CORRUPT");
 }
 
-function validateWorkbookRecord(value: unknown): asserts value is StoredWorkbook {
-  if (!isObject(value) || value.key !== ACTIVE_WORKBOOK_KEY || typeof value.schemaVersion !== "number") {
+function validateWorkbookRecord(value: unknown, keys: WorkspaceKeys): asserts value is StoredWorkbook {
+  if (!isObject(value) || value.key !== keys.workbook || typeof value.schemaVersion !== "number") {
     throw storageError("STORAGE_CORRUPT");
   }
   if (value.schemaVersion !== WORKSPACE_SCHEMA_VERSION) throw storageError("STORAGE_VERSION_UNSUPPORTED");
@@ -184,17 +188,18 @@ function rejectCredentialFields(value: unknown, seen = new Set<object>()) {
 }
 
 export async function loadWorkspace<Project, Item, Bidder>(): Promise<LoadedWorkspace<Project, Item, Bidder> | null> {
+  const keys = workspaceKeys();
   try {
     const database = await openDatabase();
     const transaction = database.transaction([WORKSPACE_STORE, FILE_STORE], "readonly");
     return await runTransaction(transaction, async () => {
-      const record: unknown = await requestResult(transaction.objectStore(WORKSPACE_STORE).get(ACTIVE_WORKSPACE_KEY));
+      const record: unknown = await requestResult(transaction.objectStore(WORKSPACE_STORE).get(keys.workspace));
       if (record === undefined) return null;
-      validateWorkspaceRecord(record);
+      validateWorkspaceRecord(record, keys);
       let originalWorkbook: ArrayBuffer | undefined;
       if (record.workbookKey) {
         const workbook: unknown = await requestResult(transaction.objectStore(FILE_STORE).get(record.workbookKey));
-        validateWorkbookRecord(workbook);
+        validateWorkbookRecord(workbook, keys);
         originalWorkbook = workbook.bytes.slice(0);
       }
       return {
@@ -225,29 +230,30 @@ export async function saveWorkspace<Project, Item, Bidder>(
     throw storageError("STORAGE_SAVE_FAILED", new TypeError("originalWorkbook must be an ArrayBuffer."));
   }
 
+  const keys = workspaceKeys();
   try {
     const database = await openDatabase();
     const transaction = database.transaction([WORKSPACE_STORE, FILE_STORE], "readwrite");
     return await runTransaction(transaction, async () => {
       const workspaceStore = transaction.objectStore(WORKSPACE_STORE);
-      const current: unknown = await requestResult(workspaceStore.get(ACTIVE_WORKSPACE_KEY));
-      if (current !== undefined) validateWorkspaceRecord(current);
+      const current: unknown = await requestResult(workspaceStore.get(keys.workspace));
+      if (current !== undefined) validateWorkspaceRecord(current, keys);
 
       const savedAt = new Date().toISOString();
       const workbookKey = originalWorkbook !== undefined
-        ? ACTIVE_WORKBOOK_KEY
+        ? keys.workbook
         : (current as StoredWorkspace | undefined)?.workbookKey;
 
       if (originalWorkbook !== undefined) {
         await requestResult(transaction.objectStore(FILE_STORE).put({
-          key: ACTIVE_WORKBOOK_KEY,
+          key: keys.workbook,
           schemaVersion: WORKSPACE_SCHEMA_VERSION,
           bytes: originalWorkbook.slice(0),
         } satisfies StoredWorkbook));
       }
 
       await requestResult(workspaceStore.put({
-        key: ACTIVE_WORKSPACE_KEY,
+        key: keys.workspace,
         schemaVersion: WORKSPACE_SCHEMA_VERSION,
         savedAt,
         state: persistedState,
@@ -261,12 +267,13 @@ export async function saveWorkspace<Project, Item, Bidder>(
 }
 
 export async function clearWorkspace(): Promise<void> {
+  const keys = workspaceKeys();
   try {
     const database = await openDatabase();
     const transaction = database.transaction([WORKSPACE_STORE, FILE_STORE], "readwrite");
     await runTransaction(transaction, async () => {
-      transaction.objectStore(WORKSPACE_STORE).delete(ACTIVE_WORKSPACE_KEY);
-      transaction.objectStore(FILE_STORE).delete(ACTIVE_WORKBOOK_KEY);
+      transaction.objectStore(WORKSPACE_STORE).delete(keys.workspace);
+      transaction.objectStore(FILE_STORE).delete(keys.workbook);
     });
   } catch (error) {
     throw mapStorageError(error, "STORAGE_CLEAR_FAILED");
