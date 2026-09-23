@@ -38,12 +38,12 @@ const workspaceGuides: ManualGuide[] = [
     purpose: "The basic chain is documents → scope → bids → comparison → budget → award → turnover. Each stage answers a different question. The intended workflow below explains how the screens fit together; automatic transfer between all of them is not implemented.",
     steps: [
       "Understand the job. In Project information, record the building, dates, and planning value. Documents holds the reference files: drawings show layout; specifications describe materials and quality; an RFP describes what the client is asking for.",
-      "Work out what must be included. Use Scopes & bid forms to list each trade’s requirements. The Spec matrix organizes written requirements. Quantity takeoffs records how much work there is. Drawing register, Revision comparison, and Structor Check help organize drawing changes and questions.",
-      "Ask companies to price the same job. Bid packages groups a trade’s documents, scope, owner, and deadline. Bidder directory is the contact list. The Subcontractor portal shows the trade partner’s response experience. These invitation and portal flows are previews.",
+      "Work out what must be included. Use Scopes & bid forms to list each trade’s requirements. Submittal packages (currently the spec matrix) organizes written requirements. Quantity takeoffs records how much work there is. List of drawings, Revision comparison, and Structor Check help organize drawing changes and questions.",
+      "Ask companies to price the same job. Bid packages groups a trade’s documents, scope, owner, and deadline. Subcontractor directory is the company contact list. The Subcontractor portal shows the trade partner’s response experience. These invitation and portal flows are previews.",
       "Collect and review offers. A bid contains a price plus inclusions, exclusions, and qualifications. The configured Gmail Proposal inbox can list emails and attachments. You still read the proposal and enter or verify its answers manually.",
       "Compare like for like in Bid leveling. Start from the supported Excel template or the demo, check each bidder’s Y/N/P answers, add notes and justified adjustments, and resolve exceptions. Only fully eligible reviewed bids appear in the reviewed ranking.",
       "Plan the overall cost. Budget summary shows the intended cost-center rollup and trade breakdown. Allowances reserves money for undefined work. These screens currently use their own preview values rather than automatically reading the live bid-leveling results.",
-      "Prepare the award and handover. Contracts & exhibits describes what the selected company will deliver. Project schedule records milestones. Conversations holds clarifications, and Project turnover checks that the delivery team gets the right records. These are draft/preview tools, not executed contracts or delivered communications.",
+      "Prepare the award and handover. Contracts & exhibits describes what the selected company will deliver. Project schedule records milestones. Messages holds clarifications, and Preconstruction to-do checks that the delivery team gets the right records. These are draft/preview tools, not executed contracts or delivered communications.",
       "Keep a copy. Export reviewed mapped work to Excel from Bid leveling, and download a JSON backup before replacing or resetting the active workspace. Other screens provide their own CSV or draft downloads where offered.",
     ],
     terms: [{ name: "Scope vs price", meaning: "Scope is what is included. Price is what it costs. The cheapest price is not necessarily the cheapest complete offer." }, { name: "Human review", meaning: "An estimator checks the source and makes the decision; a generated or prefilled value is not proof." }],
@@ -52,7 +52,7 @@ const workspaceGuides: ManualGuide[] = [
     related: ["documents", "scopes", "packages", "leveling", "budget", "turnover"],
   },
   {
-    id: "overview", group: "Workspace", title: "Overview",
+    id: "overview", group: "Preconstruction", title: "Overview",
     purpose: "Your starting page gives an at-a-glance picture of the selected project and shortcuts to the next task. It is a dashboard, not the place where scope answers or bidder prices are entered.",
     steps: [
       "Read the large project card for the selected project name, location, type, and estimated value. Open project takes you to Project information.",
@@ -74,15 +74,15 @@ const workspaceGuides: ManualGuide[] = [
       "Click a project card to select it and open its Project information page.",
       "Choose New project or Your next project. Enter a name, location, type, internal project value, and brief description, then choose Create project.",
       "Review the new record using Edit information. Size, architect, and dates begin with sample defaults and must be updated for your actual project.",
-      "Return to All projects to switch records. Keep exports of important work; a project card does not create a separate saved bid workbook for that project.",
+      "Return to All projects to switch projects. Each project keeps its own files, scopes, takeoffs, budget, bid leveling workbook, and other saved screen data; the subcontractor directory is shared by every project. Keep exports of important work.",
     ],
     terms: [{ name: "Design development", meaning: "A stage where the design is being refined before final construction details are complete." }, { name: "Bidding", meaning: "The stage when companies are being asked to submit prices." }],
-    example: "Create a school modernization project to demonstrate its project brief and dates. This does not replace the Jelleff model or automatically populate fresh school-specific scopes and costs.",
-    reality: "Project records are saved in this browser. The optional RFP file input is a selection preview: it does not parse or store the RFP. Changing projects updates project context but does not switch all sample datasets or the single saved bid-leveling workbook.",
+    example: "Create a school modernization project to demonstrate its project brief and dates. A new project starts with empty lists and an unchecked to-do list. It does not generate scopes or costs from its documents, and the 3D model remains the Jelleff reconstruction.",
+    reality: "Project records are saved in this browser. The optional RFP file input is a selection preview: it does not parse or store the RFP. The Jelleff Recreation Center project holds the sample content; other projects hold only what is entered for them. Bid leveling shows labelled demo data until a workbook is imported for the project.",
     related: ["information", "saving", "documents"],
   },
   {
-    id: "information", group: "Workspace", title: "Project information",
+    id: "information", group: "Preconstruction", title: "Project information",
     purpose: "The project’s cover sheet: what is being built, where it is, the design contact, key dates, and internal planning value. Use it to get oriented before reviewing any trade.",
     steps: [
       "Read the project brief, architect, project size, and dates. Bid deadline is when prices are due; Pre-bid RFI deadline is when clarification questions should be submitted.",
@@ -97,7 +97,7 @@ const workspaceGuides: ManualGuide[] = [
     related: ["projects", "schedule", "settings"],
   },
   {
-    id: "model", group: "Workspace", title: "3D model studio",
+    id: "model", group: "Preconstruction", title: "3D model studio",
     purpose: "Explore a prepared first-floor reconstruction of Jelleff Recreation Center. Rotate the building, select walls or floor zones, and compare the model with the supplied blueprint sheets. This helps explain space and material evidence visually.",
     steps: [
       "In 3D model, drag to rotate, use the mouse wheel or pinch to zoom, and right-drag to pan. The viewer also provides zoom, home/reset, and top-view controls. Focus the canvas and use arrow keys to move the view.",
@@ -113,7 +113,7 @@ const workspaceGuides: ManualGuide[] = [
     related: ["documents", "drawings", "specs", "takeoffs"],
   },
   {
-    id: "leveling", group: "Bid & award", title: "Bid leveling",
+    id: "leveling", group: "Preconstruction", title: "Bid leveling",
     purpose: "Compare companies against the same checklist of work. Each scope row has a response, note, and adjustment for each bidder. A low price is only comparable after you have checked what it includes.",
     steps: [
       "For real workbook work, choose Import Excel and select a supported .xlsx trade template. Read the import preview and warnings before Import this trade. This replaces the active workspace; download a backup first. Arbitrary Excel layouts and PDFs are not supported imports.",
@@ -127,7 +127,7 @@ const workspaceGuides: ManualGuide[] = [
     ],
     terms: [{ name: "Y / N / P / N/A", meaning: "Yes, No, Partial, and Not applicable. There is no L response in this app; leveled describes a reviewed comparison, not a scope answer." }, { name: "Bond rate", meaning: "The percentage applied to base bid plus adjustments in this calculation. Verify the appropriate rate; do not assume the demo’s rate applies to every trade." }, { name: "Rank-ready", meaning: "A bidder has a valid price, valid costs, an allowed workbook level status, and no open required review checks." }],
     example: "A bidder excludes anchors: mark N, describe the omission, enter a supported adjustment, approve that amount, and resolve the scope gap after review. Other unresolved rows still prevent that bidder from appearing as the reviewed low.",
-    reality: "This comparison, manual bidder editing, supported Excel import/export, and browser saving work now. It is one locally saved trade workspace, separate from the Bidder directory and sample Budget summary. Emails and PDFs do not automatically fill its rows. Check exports and source documents before using the figures commercially.",
+    reality: "This comparison, manual bidder editing, supported Excel import/export, and browser saving work now. It is one locally saved trade workspace, separate from the Subcontractor directory and sample Budget summary. Emails and PDFs do not automatically fill its rows. Check exports and source documents before using the figures commercially.",
     related: ["gmail", "saving", "bidders", "budget", "glossary"],
   },
   {
@@ -141,7 +141,7 @@ const workspaceGuides: ManualGuide[] = [
       "In Appearance, turn on Reduce animation if movement is distracting. The interface also respects the device’s reduced-motion preference.",
     ],
     terms: [{ name: "Role", meaning: "A person’s intended responsibilities and access in a future shared workspace." }, { name: "Connection", meaning: "An authorized link to another service. Seeing a service logo does not mean it is connected." }],
-    example: "For a calmer walkthrough, enable Reduce animation. To inspect incoming proposals, use the Gmail connection route, not Conversations, which is a separate draft interface.",
+    example: "For a calmer walkthrough, enable Reduce animation. To inspect incoming proposals, use the Gmail connection route, not Messages, which is a separate draft interface.",
     reality: "Workspace preferences and roles are UI previews, not durable organization settings or enforced account permissions. Reduce animation lasts for the current app session. Gmail needs server configuration and account authorization; the other connection cards are not live integrations.",
     related: ["gmail", "saving", "messages"],
   },
@@ -166,12 +166,12 @@ const workspaceGuides: ManualGuide[] = [
     purpose: "Know what stays, what resets, and what to download. This is a local prototype, not yet a shared cloud record system. A toast saying a preview was saved is not the same as a permanent server backup.",
     steps: [
       "Project records save to this browser’s local storage. Bid leveling saves its current workspace and imported source workbook in browser storage. Keep the same browser profile and site address; localhost and 127.0.0.1 are different storage locations.",
-      "Most document-register, scope, takeoff, and commercial preview edits also save locally when browser storage is available. These datasets are shared across the preview rather than stored separately for each selected project. They do not synchronize across computers, users, or modules. Unsaved forms and actual uploaded-file previews can be lost on navigation; save entered fields and retain the original files.",
+      "Most document-register, scope, takeoff, and commercial preview edits also save locally when browser storage is available. They are stored separately for each project; the subcontractor directory is shared across projects. They do not synchronize across computers, users, or modules. Unsaved forms and actual uploaded-file previews can be lost on navigation; save entered fields and retain the original files.",
       "In Bid leveling, wait for a successful saved status, then use Export Excel for supported mapped workbook work. No Excel export is available without a supported source workbook; new unmapped scope rows also prevent a safe export. Read export warnings: unapproved changed adjustments are omitted, and formulas need recalculation in desktop Excel. A successful export does not mean every bid has finished review.",
       "Use Backup JSON before importing another workbook, loading demo data, or clearing browser storage. JSON is a data backup, not an Excel sheet; there is no JSON restore button in this interface. Keep the original workbook and downloaded exports as well.",
       "CSV exports elsewhere are simple tables for spreadsheet software. Contract and turnover downloads are text drafts or checklists. They are not a signed agreement, a delivered message, or a complete copy of all uploaded source files.",
       "If rows seem missing, clear search and exception filters. If no reviewed low appears, check missing price, intentional $0 confirmation, NO level status, unknown responses, unresolved N/P/N/A, and unapproved adjustments.",
-      "If a page appears not to update another page, it may be an independent preview. The Bidder directory does not automatically create bidder columns in Bid leveling, and Budget summary does not automatically receive its live winning price.",
+      "If a page appears not to update another page, it may be an independent preview. The Subcontractor directory does not automatically create bidder columns in Bid leveling, and Budget summary does not automatically receive its live winning price.",
       "Use Download manual here for a portable Markdown text copy. It contains the instructions, not your project’s private data. You can read it in any text editor and share it as a usage guide.",
     ],
     terms: [{ name: "Local storage", meaning: "Information kept in this browser on this device. Clearing site data or using another profile can make it unavailable." }, { name: "XLSX / CSV / JSON", meaning: "XLSX is an Excel workbook; CSV is a plain table; JSON is structured data. These formats serve different purposes." }, { name: "PDF upload", meaning: "Currently a document preview/registration action, not automatic creation of a scope sheet or 3D model." }],
@@ -182,7 +182,7 @@ const workspaceGuides: ManualGuide[] = [
 ];
 
 export const manualGuides: ManualGuide[] = [...workspaceGuides, ...pageGuides];
-export const manualGroups = ["Start here", "Workspace", "Preconstruction", "Bid & award", "Coordination", "Reference"];
+export const manualGroups = ["Start here", "Workspace", "Preconstruction", "Operations", "Reference"];
 export const glossary = [
   { name: "Addendum", meaning: "An official clarification or revision to the bid documents. Confirm which version each bidder priced." },
   { name: "Alternate", meaning: "A separately priced option that can be accepted or rejected. Do not silently add it to the base scope." },

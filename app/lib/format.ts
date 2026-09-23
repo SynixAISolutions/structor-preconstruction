@@ -4,9 +4,11 @@
 export const usd = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 
-/** Renders a yyyy-mm-dd string at local noon so the date never slips a day across time zones. */
+const localNoon = (date: string) => { const d = new Date(`${date}T12:00:00`); return /^\d{4}-\d{2}-\d{2}$/.test(date) && !isNaN(d.getTime()) ? d : null; };
+
+/** Renders a yyyy-mm-dd string at local noon so the date never slips a day across time zones. Blank or invalid → "Not set". */
 export const displayDate = (date: string) =>
-  new Date(`${date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  localNoon(date)?.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) ?? "Not set";
 
 export function downloadText(name: string, content: string, type = "text/plain") {
   const url = URL.createObjectURL(new Blob([content], { type }));
@@ -27,4 +29,4 @@ export function exportRows(name: string, rows: (string | number)[][]) {
     .join("\r\n");
   downloadText(name, csv, "text/csv");
 }
-export const dateLabel = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+export const dateLabel = (value: string) => localNoon(value)?.toLocaleDateString("en-US", { month: "short", day: "numeric" }) ?? "Not set";

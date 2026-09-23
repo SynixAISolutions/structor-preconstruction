@@ -2,7 +2,7 @@ export const pageGuides = [
   {
     id: "documents",
     group: "Preconstruction",
-    title: "Documents · document library",
+    title: "Project files · document library",
     purpose: "Organize document details by category and inspect a PDF you select from your computer. Use this as the starting point for checking original project requirements.",
     steps: [
       "Select All files or a folder such as Drawings or Specifications. Search documents matches names and categories.",
@@ -64,8 +64,8 @@ export const pageGuides = [
   },
   {
     id: "specs",
-    group: "Preconstruction",
-    title: "Spec matrix · specifications",
+    group: "Operations",
+    title: "Submittal packages · spec matrix",
     purpose: "Keep product requirements, named manufacturers, and required review documents in one table. Check each entry against the project manual before using it in a scope.",
     steps: [
       "Choose All requirements or Needs review. Search by product, section number, title, or manufacturer to narrow the list.",
@@ -108,7 +108,7 @@ export const pageGuides = [
   {
     id: "drawings",
     group: "Preconstruction",
-    title: "Drawing register",
+    title: "List of drawings · drawing register",
     purpose: "Maintain a list of drawing numbers, titles, revisions, and receipt dates. The register helps identify the intended active drawing set and produces a list for exhibits.",
     steps: [
       "Use Search drawing number or title and the Drawing discipline filter to find a sheet.",
@@ -125,6 +125,25 @@ export const pageGuides = [
     example: "When A-101 Rev 03 arrives, edit A-101, enter the new revision and dates, and confirm its status before exporting the list.",
     reality: "Register edits save locally. Added rows do not upload drawing files. Previews are sample illustrations, and the Latest revision card remains the fixed Rev 02 example even after you edit the register.",
     related: ["documents", "revisions", "contracts"],
+  },
+  {
+    id: "specifications",
+    group: "Preconstruction",
+    title: "List of specifications",
+    purpose: "The written counterpart of the drawing list: every section of the project manual with its MasterFormat number, title, issue date, date received, revision, and status. Use it to confirm which specification sections exist and which issue is current before relying on them.",
+    steps: [
+      "Read the section number first. Its first two digits are the CSI division, for example 09 for Finishes or 23 for HVAC.",
+      "Check the revision and issue date against the latest project manual you received. Treat any section that is not current as a reason to ask before pricing it.",
+      "Use the page range to find the section in the project manual itself. The list is an index; the manual is the requirement.",
+      "Open Submittal packages to see what an awarded subcontractor must submit for a section.",
+    ],
+    terms: [
+      { name: "Section number", meaning: "The six-digit MasterFormat number that identifies a specification section, such as 03 30 00 Cast-in-place concrete." },
+      { name: "Project manual", meaning: "The bound set of written specifications and contract requirements issued with the drawings." },
+    ],
+    example: "Before sending the concrete package, confirm that 03 30 00 is current and at the same revision the bidders will price.",
+    reality: "The sections shown are sample rows for the Jelleff project. Uploading a project manual does not yet create or update this list.",
+    related: ["drawings", "specs", "documents"],
   },
   {
     id: "revisions",
@@ -149,7 +168,7 @@ export const pageGuides = [
   },
   {
     id: "packages",
-    group: "Bid & award",
+    group: "Preconstruction",
     title: "Bid packages",
     purpose: "Organize trade packages, assign a lead estimator, and record a due date and stage. Use the invitation form to record prospective recipients in the local preview.",
     steps: [
@@ -170,8 +189,8 @@ export const pageGuides = [
   },
   {
     id: "bidders",
-    group: "Bid & award",
-    title: "Bidder directory",
+    group: "Workspace",
+    title: "Subcontractor directory",
     purpose: "Keep a working list of trade partners and contact details. Record your own qualification decision so the directory is easier to review before preparing invitations.",
     steps: [
       "Search company, contact, or location, and use Filter bidders by trade to narrow the cards.",
@@ -192,7 +211,7 @@ export const pageGuides = [
   },
   {
     id: "portal",
-    group: "Coordination",
+    group: "Preconstruction",
     title: "Subcontractor portal",
     purpose: "Try the bidder's side of a demolition invitation: review the package, confirm scope coverage, enter a price, and record questions.",
     steps: [
@@ -213,7 +232,7 @@ export const pageGuides = [
   },
   {
     id: "budget",
-    group: "Bid & award",
+    group: "Preconstruction",
     title: "Budget summary",
     purpose: "Compare a budget allowance for each trade with its current expected cost. Review costs within the owner's separate funding areas.",
     steps: [
@@ -235,7 +254,7 @@ export const pageGuides = [
   },
   {
     id: "allowances",
-    group: "Bid & award",
+    group: "Preconstruction",
     title: "Allowances register",
     purpose: "Record amounts held for work or selections that are not fully defined. Keep the source, responsible owner, and coverage decision visible while reviewing the estimate.",
     steps: [
@@ -257,7 +276,7 @@ export const pageGuides = [
   },
   {
     id: "contracts",
-    group: "Bid & award",
+    group: "Preconstruction",
     title: "Contracts & exhibits",
     purpose: "Prepare a text draft of a scope exhibit or subcontract outline for further review. Check the selected partner, proposed amount, and scope narrative before downloading.",
     steps: [
@@ -278,7 +297,7 @@ export const pageGuides = [
   },
   {
     id: "schedule",
-    group: "Coordination",
+    group: "Operations",
     title: "Project schedule",
     purpose: "Build a first planning timeline with milestones, owners, and manually entered progress. Use it to discuss proposed dates before developing a confirmed construction programme.",
     steps: [
@@ -299,15 +318,15 @@ export const pageGuides = [
   },
   {
     id: "messages",
-    group: "Coordination",
-    title: "Conversations",
+    group: "Preconstruction",
+    title: "Messages · conversations",
     purpose: "Explore trade-based conversations and keep draft replies beside the sample question they address. Use clear wording to record the scope decision that needs confirmation.",
     steps: [
       "Search conversations by trade or company, then select Demolition, Concrete, or Structural steel from the conversation list.",
       "Read the contact's sample message and the linked trade-package context. View package opens Bid packages for a separate review.",
       "Type in the reply box, then choose Save draft. The reply appears in the conversation with a Local draft badge and the time it was saved.",
       "Save your wording before choosing another conversation: switching conversations clears unsaved text in the reply box.",
-      "Choose Inbox connection to open Settings and inspect the available connection setup. Return to Conversations to continue working with the saved drafts.",
+      "Choose Inbox connection to open Settings and inspect the available connection setup. Return to Messages to continue working with the saved drafts.",
     ],
     terms: [
       { name: "Scope clarification", meaning: "A question about what a trade package includes, excludes, or requires." },
@@ -320,14 +339,14 @@ export const pageGuides = [
   },
   {
     id: "turnover",
-    group: "Coordination",
-    title: "Project turnover",
+    group: "Preconstruction",
+    title: "Preconstruction to-do · turnover checklist",
     purpose: "Track the materials that should be reviewed before handing preconstruction information to the delivery team. Use the checklist to identify remaining work and prepare a simple handoff record.",
     steps: [
       "Enter the intended recipient or team under Prepared for. This text appears in the exported checklist.",
       "Read the eight Handoff package items across Commercial, Technical, and Planning. Each description explains the material to review.",
       "Choose Review beside an item to open its related workspace, such as Project budget, Drawing register, or Master schedule.",
-      "Return to Project turnover and check the box once the material has been reviewed. Clear it if further work is needed.",
+      "Return to Preconstruction to-do and check the box once the material has been reviewed. Clear it if further work is needed.",
       "Choose Export handoff checklist to download a TXT record of the recipient, completion count, item descriptions, and READY or OPEN statuses.",
     ],
     terms: [
@@ -341,7 +360,7 @@ export const pageGuides = [
   },
 ] satisfies {
   id: string;
-  group: "Preconstruction" | "Bid & award" | "Coordination";
+  group: "Workspace" | "Preconstruction" | "Operations";
   title: string;
   purpose: string;
   steps: string[];
