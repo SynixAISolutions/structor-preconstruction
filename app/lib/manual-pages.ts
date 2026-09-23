@@ -127,6 +127,25 @@ export const pageGuides = [
     related: ["documents", "revisions", "contracts"],
   },
   {
+    id: "specifications",
+    group: "Preconstruction",
+    title: "List of specifications",
+    purpose: "The written counterpart of the drawing list: every section of the project manual with its MasterFormat number, title, issue date, date received, revision, and status. Use it to confirm which specification sections exist and which issue is current before relying on them.",
+    steps: [
+      "Read the section number first. Its first two digits are the CSI division, for example 09 for Finishes or 23 for HVAC.",
+      "Check the revision and issue date against the latest project manual you received. Treat any section that is not current as a reason to ask before pricing it.",
+      "Use the page range to find the section in the project manual itself. The list is an index; the manual is the requirement.",
+      "Open Submittal packages to see what an awarded subcontractor must submit for a section.",
+    ],
+    terms: [
+      { name: "Section number", meaning: "The six-digit MasterFormat number that identifies a specification section, such as 03 30 00 Cast-in-place concrete." },
+      { name: "Project manual", meaning: "The bound set of written specifications and contract requirements issued with the drawings." },
+    ],
+    example: "Before sending the concrete package, confirm that 03 30 00 is current and at the same revision the bidders will price.",
+    reality: "The sections shown are sample rows for the Jelleff project. Uploading a project manual does not yet create or update this list.",
+    related: ["drawings", "specs", "documents"],
+  },
+  {
     id: "revisions",
     group: "Preconstruction",
     title: "Revision comparison",

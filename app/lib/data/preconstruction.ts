@@ -84,7 +84,28 @@ export const initialDrawings: Drawing[] = [
   { id: "E-101", title: "Lighting & power plan", discipline: "Electrical", date: "2026-09-06", received: "2026-09-07", revision: "01", status: "Current" },
 ];
 
-export type DrawingChange = { id: string; title: string; detail: string; division: string; impact: string; reviewed: boolean; kind: string };
+/**
+ * List of specifications: one row per project-manual section, the written counterpart of
+ * the drawing list. `id` is the MasterFormat section number (csiDivision(id) gives its
+ * division). Submittal packages (initialSpecs) reference these by `section`. Sample rows.
+ */
+export type SpecSection = { id: string; title: string; date: string; received: string; revision: string; status: string; pages: string };
+export const initialSpecSections: SpecSection[] = [
+  { id: "01 10 00", title: "Summary", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current", pages: "pp. 12–18" },
+  { id: "01 33 00", title: "Submittal procedures", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current", pages: "pp. 41–49" },
+  { id: "02 41 19", title: "Selective demolition", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current", pages: "pp. 102–109" },
+  { id: "03 30 00", title: "Cast-in-place concrete", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current", pages: "pp. 126–141" },
+  { id: "04 22 00", title: "Concrete unit masonry", date: "2026-08-21", received: "2026-08-22", revision: "01", status: "Current", pages: "pp. 164–175" },
+  { id: "05 12 00", title: "Structural steel framing", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current", pages: "pp. 188–199" },
+  { id: "07 54 23", title: "Thermoplastic-polyolefin (TPO) roofing", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current", pages: "pp. 248–259" },
+  { id: "08 11 13", title: "Hollow metal doors and frames", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current", pages: "pp. 292–301" },
+  { id: "09 29 00", title: "Gypsum board", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current", pages: "pp. 346–355" },
+  { id: "09 65 19", title: "Resilient tile flooring", date: "2026-08-21", received: "2026-08-22", revision: "01", status: "Current", pages: "pp. 368–373" },
+  { id: "23 73 13", title: "Modular indoor central-station air-handling units", date: "2026-09-06", received: "2026-09-07", revision: "01", status: "Current", pages: "pp. 564–577" },
+  { id: "26 51 00", title: "Interior lighting", date: "2026-09-06", received: "2026-09-07", revision: "01", status: "Current", pages: "pp. 702–711" },
+];
+
+export type DrawingChange ={ id: string; title: string; detail: string; division: string; impact: string; reviewed: boolean; kind: string };
 export const initialChanges: DrawingChange[] = [
   { id: "01", title: "Community room partition added", detail: "A new partition divides the east community room into two smaller spaces. Review wall, finish, and door scope.", division: "09 · Finishes", impact: "+84 SF wall area", reviewed: false, kind: "Added" },
   { id: "02", title: "Lobby opening relocated", detail: "The opening in the south lobby wall moves 4 feet east. Coordinate framing, egress, and adjacent millwork.", division: "08 · Openings", impact: "1 opening affected", reviewed: false, kind: "Modified" },

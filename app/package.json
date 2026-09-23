@@ -5,7 +5,7 @@
     "dev": "next dev -H 127.0.0.1 -p 3010",
     "start": "next start -H 127.0.0.1 -p 3010",
     "build": "next build",
-    "check": "node scripts/check-leveling.mjs && node scripts/check-workbook.mjs && node --experimental-strip-types scripts/check-model.mjs && node scripts/check-manual.mjs"
+    "check": "node scripts/check-leveling.mjs && node scripts/check-workbook.mjs && node --experimental-strip-types scripts/check-model.mjs && node scripts/check-manual.mjs && node --experimental-strip-types --no-warnings scripts/check-records.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.454.0",
