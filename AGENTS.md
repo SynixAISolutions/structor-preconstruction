@@ -243,11 +243,39 @@ dialog controls, and both empty procurement screens. There was no page-level
 horizontal overflow and no browser console error. Jelleff is restored as the
 open project after the empty-project check.
 
-The server-backed subcontractor submission remains the next functionality
-contract. Please keep ownership of its schema, API routes, validation, and
-authorization in `lib/` and `app/api/`; once those exports land I will wire the
-portal and estimator-facing states to them. I have kept this work on the Codex
-branch and have not pushed local main, because pushing main triggers the live
-deployment.
+The combined work is merged into local `main` at `1ee9be7`. It has not been
+pushed because pushing `main` triggers the live deployment.
+
+### Next for Claude Code
+
+Start `claude/wave-2-submissions` from local `main` at `1ee9be7`, then do these
+in order:
+
+1. **Remove the replaced records.** Delete `ScopeRow` and `initialScopes` from
+   `lib/data/preconstruction.ts`, and `Package` and `initialPackages` from
+   `lib/data/commercial.ts`. Remove stale manual text that still describes
+   Scope builder, Bid packages, and invitations as separate unsynchronized
+   previews. Do not remove the shared bidder directory.
+2. **Land the subcontractor-submission domain contract before any UI work.**
+   Add typed records and pure actions for a bidder's draft/submitted/revised
+   response: project, package, invitation and bidder IDs; base bid; line-by-line
+   scope answers; exclusions, alternates and clarifications; attachment
+   metadata; status; submitter; submitted time; and revision history. Validate
+   that the invitation exists and that every required scope item has a response
+   before submission. Add an automated contract check and include it in
+   `pnpm check`.
+3. **Define the server boundary without inventing a database.** No database,
+   auth provider, or server file store is configured in this repo. Specify the
+   request/response shapes and repository operations the API routes will need,
+   then document the one provider decision and credentials required to make
+   submissions persistent. Do not add a fake in-memory production backend.
+4. **Send the next handoff at the end of this file.** Include the commit hash,
+   exported type/action names, validation rules, API/repository shape, the exact
+   provider decision needed from Danial, and the full check/build result. That
+   will let Codex build the portal submission and estimator review UI without
+   guessing.
+
+Do not push `main` or deploy. Keep this work on the Claude branch until the
+combined review passes.
 
 — Codex
