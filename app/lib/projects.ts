@@ -10,17 +10,11 @@ export type WorkType = "new" | "renovation" | "addition" | "both";
 export type TaxStatus = "taxable" | "non-taxable";
 export type TeamMember = { name: string; role: string };
 
-/** The fields the current screens read. Unchanged, so existing markup keeps compiling. */
-export type ProjectCard = {
+/** A project record. Every stored or created project has this shape. */
+export type Project = {
   id: string; name: string; location: string; type: string; status: string;
   value: number; architect: string; description: string;
   due: string; rfi: string; start: string; finish: string;
-  /** @deprecated Display string; use squareFeetLabel(project.squareFeet). Derived, never edit it directly. */
-  size: string;
-};
-
-/** The full project record. Every stored or created project has this shape. */
-export type Project = ProjectCard & {
   /** Total building area. For renovation/addition/both it equals renovationSquareFeet + additionSquareFeet; new construction has no split. */
   squareFeet: number;
   workType: WorkType | null;
@@ -65,16 +59,14 @@ export type ProjectFormErrors = Partial<Record<ProjectFormField, string>>;
 
 export const squareFeetLabel = (squareFeet: number): string => squareFeet > 0 ? `${squareFeet.toLocaleString("en-US")} SF` : "Not recorded";
 
-const sample = (p: Omit<Project, "size" | "renovationSquareFeet" | "additionSquareFeet" | "workType" | "taxStatus" | "certifications" | "team" | "rfpFileName" | "createdAt">): Project =>
-  ({ ...p, workType: null, renovationSquareFeet: 0, additionSquareFeet: 0, taxStatus: null, certifications: [], team: [], rfpFileName: "", createdAt: "2026-09-01", size: squareFeetLabel(p.squareFeet) });
+const sample = (p: Omit<Project, "renovationSquareFeet" | "additionSquareFeet" | "workType" | "taxStatus" | "certifications" | "team" | "rfpFileName" | "createdAt">): Project =>
+  ({ ...p, workType: null, renovationSquareFeet: 0, additionSquareFeet: 0, taxStatus: null, certifications: [], team: [], rfpFileName: "", createdAt: "2026-09-01" });
 
 export const sampleProjectRecords: Project[] = [
   sample({ id: "jelleff", name: "Jelleff Recreation Center", location: "Washington, DC", type: "Community & recreation", status: "Preconstruction", value: 18400000, squareFeet: 42500, architect: "Project design team", description: "Modernization of the existing recreation center, a new community addition, and improvements to the surrounding site. A coordinated approach to scopes, trade procurement, and cost planning.", due: "2026-10-02", rfi: "2026-09-25", start: "2027-01-11", finish: "2028-04-28" }),
   sample({ id: "whittier", name: "Whittier Campus", location: "Washington, DC", type: "Education", status: "Design development", value: 26800000, squareFeet: 68200, architect: "Campus design team", description: "A school modernization, classroom addition, and associated site work.", due: "2026-11-06", rfi: "2026-10-23", start: "2027-03-01", finish: "2028-08-18" }),
   sample({ id: "riverside", name: "Riverside Commons", location: "Arlington, VA", type: "Mixed-use", status: "Bidding", value: 12300000, squareFeet: 31800, architect: "Project architect", description: "A mixed-use community space with new retail and public gathering areas.", due: "2026-10-16", rfi: "2026-10-02", start: "2027-02-01", finish: "2028-02-25" }),
 ];
-/** @deprecated Card-typed view of the same records, for existing markup. Use sampleProjectRecords. */
-export const sampleProjects: ProjectCard[] = sampleProjectRecords;
 
 const isWorkType = (v: unknown): v is WorkType => v === "new" || v === "renovation" || v === "addition" || v === "both";
 const isTaxStatus = (v: unknown): v is TaxStatus => v === "taxable" || v === "non-taxable";
@@ -83,6 +75,7 @@ const count = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v >
 
 /** Brings any stored record — including ones saved before the 20 Sep fields — to the current shape. */
 export function normalizeProject(raw: Record<string, unknown>): Project {
+  // Records saved before squareFeet existed held the area as display text in `size`, e.g. "42,500 SF".
   const legacyArea = Number(text(raw.size).replace(/[^\d.]/g, "")) || 0;
   const squareFeet = count(raw.squareFeet) || count(legacyArea);
   const workType = isWorkType(raw.workType) ? raw.workType : null;
@@ -97,7 +90,6 @@ export function normalizeProject(raw: Record<string, unknown>): Project {
     certifications: Array.isArray(raw.certifications) ? raw.certifications.filter((c): c is string => typeof c === "string" && !!c.trim()) : [],
     team: Array.isArray(raw.team) ? raw.team.filter((m): m is TeamMember => !!m && typeof m.name === "string" && typeof m.role === "string") : [],
     rfpFileName: text(raw.rfpFileName), createdAt: text(raw.createdAt),
-    size: squareFeetLabel(split.squareFeet),
   };
 }
 
@@ -118,7 +110,7 @@ export function loadProjects(): Project[] | null {
   return null;
 }
 
-export function saveProjects(projects: ProjectCard[]): void {
+export function saveProjects(projects: Project[]): void {
   try {
     localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects));
   } catch { /* Keep the session editable when storage is full. */ }
@@ -190,25 +182,11 @@ export function parseProjectForm(form: FormData, existing?: Project): { project?
       createdAt: existing?.createdAt ?? new Date().toISOString().slice(0, 10),
       name, location, type, value, description: get(f.description), architect: get(f.architect),
       ...dates, ...split, workType, taxStatus, certifications, team, rfpFileName,
-      size: squareFeetLabel(split.squareFeet),
     },
   };
 }
 
-/**
- * @deprecated The old five-field create form. Replaced by parseProjectForm; kept until the
- * form moves over, then removed. Fields the old form does not collect stay "not recorded".
- */
-export function projectFromForm(form: FormData): Project {
-  return normalizeProject({
-    ...sampleProjectRecords[0], workType: null, // old behaviour: unset fields borrow the sample's dates, size and architect
-    id: crypto.randomUUID(), status: "Preconstruction", createdAt: new Date().toISOString().slice(0, 10),
-    name: String(form.get("name") ?? "").trim(), location: String(form.get("location") ?? ""), type: String(form.get("type") ?? ""),
-    value: Number(form.get("value")) || 0, description: String(form.get("description") ?? ""),
-  });
-}
-
-export function filterProjects<T extends ProjectCard>(projects: T[], query: string, tab: string): T[] {
+export function filterProjects(projects: Project[], query: string, tab: string): Project[] {
   const q = query.trim().toLowerCase();
   return projects.filter(p =>
     p.name.toLowerCase().includes(q) && (tab === PROJECT_TABS[0] || p.status === tab));
