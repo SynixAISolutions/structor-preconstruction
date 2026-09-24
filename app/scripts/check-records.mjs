@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { normalizeProject, parseProjectForm, projectFromForm, sampleProjectRecords, squareFeetLabel } from "../lib/projects.ts";
+import { normalizeProject, parseProjectForm, sampleProjectRecords, squareFeetLabel } from "../lib/projects.ts";
 import { dateLabel, displayDate } from "../lib/format.ts";
 import { initialDrawings, initialSpecSections, initialSpecs } from "../lib/data/preconstruction.ts";
 import { CSI_DIVISIONS, csiDivision } from "../lib/csi.ts";
@@ -15,7 +15,8 @@ const valid = { name: "Jelleff Recreation Center", location: "Washington, DC", t
 
 // Samples satisfy the record invariants.
 for (const p of sampleProjectRecords) {
-  assert(p.squareFeet > 0 && p.size === squareFeetLabel(p.squareFeet), `${p.id}: size must derive from squareFeet`);
+  assert(p.squareFeet > 0 && squareFeetLabel(p.squareFeet).endsWith(" SF"), `${p.id}: sample must record its area`);
+  assert(!("size" in p), `${p.id}: the legacy size string is gone; area lives in squareFeet`);
   assert.equal(p.workType, null, `${p.id}: sample work type is not known and must stay "not recorded"`);
 }
 
@@ -32,7 +33,8 @@ assert.equal(single.project.value, 18400000);
 assert.deepEqual([single.project.squareFeet, single.project.renovationSquareFeet, single.project.additionSquareFeet], [42500, 42500, 0]);
 assert.deepEqual(single.project.certifications, ["CBE", "First Source"], "Certifications are trimmed and de-duplicated");
 assert.deepEqual(single.project.team, [{ name: "Marcel Khoury", role: "Project manager" }, { name: "Rawad", role: "Estimator" }], "Team rows keep name/role pairing and drop blank names");
-assert.equal(single.project.size, "42,500 SF");
+assert.equal(squareFeetLabel(single.project.squareFeet), "42,500 SF");
+assert(!("size" in legacy), "Migration drops the legacy size string");
 
 // New construction: a ground-up building has area but no renovation/addition split.
 const ground = parseProjectForm(form({ ...valid, workType: "new" })).project;
@@ -61,10 +63,6 @@ assert(parseProjectForm(form({ ...valid, due: "October" })).errors.due);
 // Editing keeps identity, status and creation date.
 const edited = parseProjectForm(form({ ...valid, name: "Renamed" }), single.project).project;
 assert.deepEqual([edited.id, edited.status, edited.createdAt, edited.name], [single.project.id, single.project.status, single.project.createdAt, "Renamed"]);
-
-// The deprecated five-field form keeps its old behaviour until the new form replaces it.
-const old = projectFromForm(form({ name: " Old form ", location: "DC", type: "Education", value: "12", description: "d" }));
-assert.deepEqual([old.name, old.value, old.due, old.squareFeet, old.workType], ["Old form", 12, sampleProjectRecords[0].due, 42500, null]);
 
 // Blank or invalid dates never render "Invalid Date".
 for (const bad of ["", "2026-13-45", "soon"]) {
