@@ -1,5 +1,5 @@
-// Sample data and record shapes for the preconstruction screens (documents, scopes,
-// takeoffs, specs, Structor Check, drawings, revisions).
+// Sample data and record shapes for the preconstruction screens (documents, takeoffs,
+// specs, Structor Check, drawings, revisions). Scopes live in lib/procurement.ts.
 //
 // This is illustrative preview content, not data read from drawings or specifications.
 
@@ -16,25 +16,6 @@ export const sampleFiles: LibraryFile[] = [
   { id: "d6", name: "Invitation to bid — Jelleff.pdf", category: "RFP", type: "PDF", size: "1.2 MB", date: "2026-08-28", sample: true, revision: "Original" },
   { id: "d7", name: "Subcontract agreement template.docx", category: "Contracts", type: "DOCX", size: "268 KB", date: "2026-08-28", sample: true, revision: "Template" },
   { id: "d8", name: "02 41 00 — Demolition scope.xlsx", category: "Bid scopes", type: "XLSX", size: "86 KB", date: "2026-09-09", sample: true, revision: "Draft 03" },
-];
-
-export type ScopeRow = { id: string; trade: string; title: string; source: string; detail: string; approved: boolean; origin: string };
-export const initialScopes: ScopeRow[] = [
-  { id: "s1", trade: trades[0], title: "Remove existing interior partitions as indicated on demolition plans.", source: "AD-101 · Note 01", detail: "Include associated wall finishes, studs, blocking, and disposal. Protect structural elements and all items marked to remain.", approved: true, origin: "Drawing" },
-  { id: "s2", trade: trades[0], title: "Remove existing resilient flooring and prepare substrate for new finishes.", source: "AD-101 · Note 04", detail: "Demolish flooring, base, adhesives, and non-structural toppings in designated areas. Confirm substrate preparation with flooring trade.", approved: true, origin: "Drawing" },
-  { id: "s3", trade: trades[0], title: "Provide temporary protection and dust-control partitions.", source: "02 41 19 · §3.2", detail: "Maintain protected access and separate demolition work from occupied areas. Include daily cleaning and debris removal.", approved: false, origin: "Specification" },
-  { id: "s4", trade: trades[0], title: "Remove doors, frames, and hardware within demolition limits.", source: "AD-101 · Note 07", detail: "Salvage items specifically tagged for reuse and coordinate storage with the general contractor.", approved: false, origin: "Drawing" },
-  { id: "s5", trade: trades[0], title: "Disconnect and make safe services before selective demolition.", source: "02 41 19 · §3.1", detail: "Coordinate isolation of mechanical, plumbing, and electrical services with the responsible licensed trade.", approved: false, origin: "Specification" },
-  { id: "s6", trade: trades[1], title: "Provide cast-in-place concrete foundations, slabs, and housekeeping pads.", source: "S-101 · Detail 3", detail: "Include formwork, reinforcing, placement, finishing, curing, testing coordination, and construction joints.", approved: true, origin: "Drawing" },
-  { id: "s7", trade: trades[1], title: "Prepare concrete slab surfaces to the specified floor-flatness tolerance.", source: "03 30 00 · §3.9", detail: "Review floor finish requirements and curing-compound compatibility before placement.", approved: false, origin: "Specification" },
-  { id: "s8", trade: trades[2], title: "Install reinforced CMU partitions including grout and joint reinforcement.", source: "A-501 · Wall Type 4", detail: "Include lintels, ties, control joints, and fire-rated construction where indicated.", approved: false, origin: "Drawing" },
-  { id: "s9", trade: trades[3], title: "Furnish and install miscellaneous steel supports and roof access ladder.", source: "S-501 · Detail 2", detail: "Include field measurements, connections, coatings, anchors, and coordination with adjacent finishes.", approved: false, origin: "Drawing" },
-  { id: "s10", trade: trades[4], title: "Install continuous air barrier at exterior wall assemblies.", source: "07 27 00 · §2.1", detail: "Include transitions, penetrations, tie-ins to roofing and fenestration, and specified adhesion testing.", approved: false, origin: "Specification" },
-  { id: "s11", trade: trades[5], title: "Provide hollow metal doors, frames, and scheduled hardware sets.", source: "A-601 · Door schedule", detail: "Coordinate fire ratings, access control, and electrified hardware requirements.", approved: false, origin: "Drawing" },
-  { id: "s12", trade: trades[6], title: "Install gypsum board wall systems and Level 4 finish.", source: "09 29 00 · §3.6", detail: "Include rated assemblies, backing, corner beads, and joints.", approved: false, origin: "Specification" },
-  { id: "s13", trade: trades[7], title: "Install plumbing fixtures and domestic water connections.", source: "P-101 · Notes", detail: "Confirm fixture schedule, accessible mounting heights, and testing requirements.", approved: false, origin: "Drawing" },
-  { id: "s14", trade: trades[8], title: "Provide supply and return air ductwork, insulation, and air devices.", source: "M-101 · Plan", detail: "Include balancing, vibration isolation, controls coordination, and access panels.", approved: false, origin: "Drawing" },
-  { id: "s15", trade: trades[9], title: "Furnish and install lighting fixtures and associated controls.", source: "E-101 · Lighting plan", detail: "Include fixture support, branch wiring, occupancy controls, and commissioning.", approved: false, origin: "Drawing" },
 ];
 
 export type TakeoffRow = { id: string; division: string; item: string; unit: string; quantity: number; rate: number; source: string; reviewed: boolean };
