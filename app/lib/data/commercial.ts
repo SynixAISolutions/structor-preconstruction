@@ -1,5 +1,6 @@
-// Sample data and record shapes for the bid & award and coordination screens
-// (bidders, packages, portal scope, budget, allowances, schedule, conversations, turnover).
+// Sample data and record shapes for the commercial and operations screens (the
+// organization-wide bidder directory, portal scope, budget, allowances, schedule,
+// conversations, to-do). Trade packages and invitations live in lib/procurement.ts.
 //
 // This is illustrative preview content, not data from a live system of record.
 
@@ -15,16 +16,6 @@ export const initialBidders: Bidder[] = [
   { id: "b4", company: "Metro Mechanical", name: "Alex Rivera", email: "alex@example.com", trade: "Mechanical", location: "Washington, DC", status: "Qualified" },
   { id: "b5", company: "Precision Electric", name: "Taylor Reed", email: "taylor@example.com", trade: "Electrical", location: "Bethesda, MD", status: "Invited" },
   { id: "b6", company: "Greenline Civil", name: "Jordan Davis", email: "jordan@example.com", trade: "Site work", location: "Fairfax, VA", status: "Qualified" },
-];
-
-export type Package = { id: string; code: string; trade: string; estimator: string; due: string; scope: number; invited: number; received: number; status: string };
-export const initialPackages: Package[] = [
-  { id: "p1", code: "02 41 00", trade: "Demolition", estimator: "Safi", due: "2026-10-02", scope: 34, invited: 6, received: 4, status: "Leveling" },
-  { id: "p2", code: "03 30 00", trade: "Concrete", estimator: "Vijay", due: "2026-10-06", scope: 28, invited: 5, received: 2, status: "Bidding" },
-  { id: "p3", code: "05 12 00", trade: "Structural steel", estimator: "Naija", due: "2026-10-08", scope: 22, invited: 4, received: 1, status: "Bidding" },
-  { id: "p4", code: "06 10 00", trade: "Carpentry", estimator: "Safi", due: "2026-10-09", scope: 19, invited: 3, received: 0, status: "Draft" },
-  { id: "p5", code: "23 00 00", trade: "Mechanical", estimator: "Vijay", due: "2026-10-13", scope: 41, invited: 4, received: 0, status: "Draft" },
-  { id: "p6", code: "26 00 00", trade: "Electrical", estimator: "Naija", due: "2026-10-13", scope: 36, invited: 5, received: 0, status: "Draft" },
 ];
 
 export const portalScope=["Site protection and dust control","Selective demolition per demolition plans","Debris removal and disposal","Existing utilities coordination","Include required permits and inspections","Include all addenda through September 8"];
