@@ -228,7 +228,7 @@ export const pageGuides = [
       { name: "Scope responses", meaning: "Answers to every item in the package's currently published bid form." },
     ],
     example: "Act as Capital Demolition, answer the published demolition form, submit a base price, then review that revision from Marcel's estimator view.",
-    reality: "This is a one-browser demo with no login, backend, or email. Invitations, submitter details, answers, revisions, and RFI drafts save locally; submitted revisions reach the estimator review but do not yet enter Bid leveling. Attachment contents are not uploaded.",
+    reality: "This is a one-browser demo with no login, backend, or email. Invitations, submitter details, answers, revisions, and RFI drafts save locally; submitted revisions can be loaded into Bid leveling from its Portal submissions selector, where exceptions stay open until an estimator resolves them. Drafts never enter leveling. Everything stays in this browser, and attachment contents are not uploaded.",
     related: ["packages", "bidders", "leveling"],
   },
   {
