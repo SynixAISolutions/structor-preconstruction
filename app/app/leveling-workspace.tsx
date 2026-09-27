@@ -2,6 +2,7 @@
 
 import {
   ArrowRight,
+  AlertTriangle,
   BookOpen,
   Calculator,
   Check,
@@ -10,6 +11,7 @@ import {
   ClipboardList,
   Download,
   FileSearch,
+  FileText,
   FolderKanban,
   Library,
   Mail,
@@ -26,7 +28,12 @@ import {
   X,
 } from "lucide-react";
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { initialBidders } from "../lib/data/commercial";
+import { buildLevelingImport, type BidProvenance, type LevelingImportIssue } from "../lib/leveling-import";
 import { bidderTotals, rankedBidders, responseNeedsReview } from "../lib/leveling.mjs";
+import { useLocalDraft } from "../lib/use-local-draft";
+import { useSubmissions } from "../lib/use-submissions";
 import { clearWorkspace, loadWorkspace, saveWorkspace } from "../lib/workspace-storage";
 import "./ui/leveling-extras.css";
 
@@ -227,7 +234,11 @@ function bytesToArrayBuffer(bytes: Uint8Array) {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
-export default function BidLevelingPage() {
+export default function BidLevelingPage({ projectName }: { projectName: string }) {
+  const { projectId, procurement, submissions } = useSubmissions();
+  const [directory] = useLocalDraft("directory", initialBidders);
+  const [submissionProvenance, setSubmissionProvenance] = useLocalDraft<Record<string, BidProvenance>>("leveling-submission-provenance", {});
+  const [loadedPackageId, setLoadedPackageId] = useLocalDraft("leveling-submission-package", "");
   const [project, setProject] = useState<Project>(demoProject);
   const [items, setItems] = useState(seedItems);
   const [bidders, setBidders] = useState(seedBidders);
@@ -243,6 +254,9 @@ export default function BidLevelingPage() {
   const [walkthroughOpen, setWalkthroughOpen] = useState(false);
   const [costSuggestionsOpen, setCostSuggestionsOpen] = useState(false);
   const [editingBidderId, setEditingBidderId] = useState<string | "new" | null>(null);
+  const [reviewBidderId, setReviewBidderId] = useState<string | null>(null);
+  const [sourcePackageId, setSourcePackageId] = useState("");
+  const [submissionIssues, setSubmissionIssues] = useState<LevelingImportIssue[]>([]);
   const [mailOpen, setMailOpen] = useState(false);
   const [mailLoading, setMailLoading] = useState(false);
   const [mailNeedsConnection, setMailNeedsConnection] = useState(false);
@@ -251,6 +265,12 @@ export default function BidLevelingPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const workbookRef = useRef<ArrayBuffer | null>(null);
   const saveSequenceRef = useRef(0);
+
+  useEffect(() => {
+    if (sourcePackageId && procurement.packages.some((pkg) => pkg.id === sourcePackageId)) return;
+    const submittedPackage = procurement.packages.find((pkg) => submissions.some((submission) => submission.packageId === pkg.id && submission.revisions.length));
+    setSourcePackageId(submittedPackage?.id ?? procurement.packages.find((pkg) => pkg.published)?.id ?? procurement.packages[0]?.id ?? "");
+  }, [procurement.packages, sourcePackageId, submissions]);
 
   useEffect(() => {
     let active = true;
@@ -323,6 +343,53 @@ export default function BidLevelingPage() {
     return matchesQuery && matchesExceptions;
   });
   const sections = [...new Set(visibleItems.map((item) => item.section))];
+  const submissionCounts = useMemo(() => new Map(procurement.packages.map((pkg) => [
+    pkg.id,
+    submissions.filter((submission) => submission.packageId === pkg.id && submission.revisions.length).length,
+  ])), [procurement.packages, submissions]);
+  const loadedPackage = procurement.packages.find((pkg) => pkg.id === loadedPackageId);
+
+  function loadSubmittedBids(revisions?: Record<string, number>, packageId = sourcePackageId) {
+    if (!packageId) {
+      setSubmissionIssues([{ code: "package-missing", message: "Choose a trade package before loading submitted bids." }]);
+      return;
+    }
+    const result = buildLevelingImport({
+      projectId,
+      projectName,
+      packageId,
+      procurement,
+      submissions,
+      directory,
+      budget: project.name === projectName && !project.isDemo ? project.budget : 0,
+      revisions,
+    });
+    setSubmissionIssues(result.issues);
+    if (!result.items.length || !result.bidders.length) {
+      setMessage(result.issues.map((issue) => issue.message).join(" ") || "No submitted bids are ready for leveling.");
+      return;
+    }
+    workbookRef.current = null;
+    setProject(result.project);
+    setItems(result.items);
+    setBidders(result.bidders.map((bidder) => normalizeImportedBidder(bidder as Bidder)));
+    setSelectedId(result.items[0]?.id ?? "");
+    setSubmissionProvenance(result.provenance);
+    setLoadedPackageId(packageId);
+    setStorageEnabled(true);
+    setStorageReady(true);
+    setSaveState("Saving…");
+    const staleCount = result.issues.filter((issue) => issue.code === "stale-form").length;
+    setMessage(`Loaded ${result.bidders.length} submitted bid${result.bidders.length === 1 ? "" : "s"} for ${result.project.trade}.${staleCount ? ` ${staleCount} older-form bid${staleCount === 1 ? " is" : "s are"} shown but cannot be ranked.` : " Review every exception before ranking."}`);
+  }
+
+  function loadSubmissionRevision(provenance: BidProvenance, revisionNumber: number) {
+    const revisions = Object.fromEntries(Object.values(submissionProvenance).map((item) => [item.submissionId, item.revisionNumber]));
+    revisions[provenance.submissionId] = revisionNumber;
+    setReviewBidderId(null);
+    setSourcePackageId(provenance.packageId);
+    loadSubmittedBids(revisions, provenance.packageId);
+  }
 
   function goToNextException() {
     if (!openItemIds.length) {
@@ -440,6 +507,9 @@ export default function BidLevelingPage() {
       setItems(pendingImport.items);
       setBidders(importedBidders);
       setSelectedId(pendingImport.items[0]?.id ?? "");
+      setSubmissionProvenance({});
+      setLoadedPackageId("");
+      setSubmissionIssues([]);
       setStorageEnabled(true);
       setStorageReady(true);
       setSaveState(`Saved ${new Date(saved.savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`);
@@ -494,6 +564,9 @@ export default function BidLevelingPage() {
       setItems(seedItems);
       setBidders(seedBidders);
       setSelectedId(seedItems[2].id);
+      setSubmissionProvenance({});
+      setLoadedPackageId("");
+      setSubmissionIssues([]);
       setMessage("Demo data reset. Import a workbook before doing real project work.");
       setStorageEnabled(true);
     } catch (error) {
@@ -544,8 +617,15 @@ export default function BidLevelingPage() {
       <section className="workspace">
         <header className="topbar">
           <div><div className="project-title"><h1>{project.name}</h1>{project.isDemo && <span>Demo data</span>}</div><p>{message}<small className={`save-state ${saveState.includes("failed") || saveState.includes("unavailable") ? "error" : ""}`}>{saveState}</small></p></div>
-          <label className="trade-select"><span>Trade</span><select value={project.trade} disabled title="Import another trade workbook to change the active trade"><option>{project.trade}</option></select><ChevronDown /></label>
+          <div className="submission-load-controls">
+            <label className="trade-select"><span>Leveling trade</span><select value={project.trade} disabled title="Load another portal package or import a workbook to change the active trade"><option>{project.trade}</option></select><ChevronDown /></label>
+            <label className="trade-select"><span>Portal submissions</span><select aria-label="Portal submission package" value={sourcePackageId} disabled={!procurement.packages.length} onChange={(event) => setSourcePackageId(event.target.value)}>{!procurement.packages.length && <option value="">No packages</option>}{procurement.packages.map((pkg) => <option key={pkg.id} value={pkg.id}>{pkg.name} · {submissionCounts.get(pkg.id) ?? 0} submitted</option>)}</select><ChevronDown /></label>
+            <button className="button primary submission-load-button" disabled={!sourcePackageId} onClick={() => loadSubmittedBids()}><RefreshCw />{loadedPackageId === sourcePackageId ? "Refresh bids" : "Load bids"}</button>
+          </div>
         </header>
+
+        {loadedPackage && <div className="submission-source-bar"><FileText/><span><strong>Portal submissions loaded</strong><small>{loadedPackage.code} · {loadedPackage.name} · {Object.keys(submissionProvenance).length} bidder revision{Object.keys(submissionProvenance).length === 1 ? "" : "s"} · browser-only demo</small></span><button onClick={() => loadSubmittedBids(undefined, loadedPackage.id)}><RefreshCw/>Refresh from portal</button></div>}
+        {!!submissionIssues.length && <div className="submission-issue-bar" role="status"><AlertTriangle/><div><strong>{submissionIssues.length} submission notice{submissionIssues.length === 1 ? "" : "s"}</strong>{submissionIssues.map((issue, index) => <span key={`${issue.code}-${issue.submissionId ?? index}`}>{issue.message}</span>)}</div><button aria-label="Dismiss submission notices" onClick={() => setSubmissionIssues([])}><X/></button></div>}
 
         <section className="summary" aria-label="Bid summary">
           <div><span>Budget</span><input aria-label="Project budget" type="number" value={project.budget} onChange={(event) => setProject({ ...project, budget: Number(event.target.value) })} /></div>
@@ -576,7 +656,7 @@ export default function BidLevelingPage() {
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th rowSpan={2} className="number-col">#</th><th rowSpan={2} className="scope-col">Scope item</th><th rowSpan={2} className="source-col">Source</th>{bidders.map((bidder) => { const total = totalsByBidder.get(bidder.id); const reviewState = total?.sourceEligibility === "ineligible" ? "not leveled" : total?.eligible ? "reviewed" : "pending"; return <th key={bidder.id} colSpan={3} className="bidder-name"><button className="bidder-heading-button" onClick={() => setEditingBidderId(bidder.id)} aria-label={`Edit ${bidder.name}`}><span>{bidder.name}</span><Pencil /></button><small>{bidder.baseBid == null ? "No price" : `${money.format(bidder.baseBid)} base`} · {reviewState}</small></th>; })}</tr>
+                <tr><th rowSpan={2} className="number-col">#</th><th rowSpan={2} className="scope-col">Scope item</th><th rowSpan={2} className="source-col">Source</th>{bidders.map((bidder) => { const total = totalsByBidder.get(bidder.id); const provenance = submissionProvenance[bidder.id]; const reviewState = total?.sourceEligibility === "ineligible" ? "not leveled" : total?.eligible ? "reviewed" : "pending"; return <th key={bidder.id} colSpan={3} className="bidder-name"><button className="bidder-heading-button" onClick={() => provenance ? setReviewBidderId(bidder.id) : setEditingBidderId(bidder.id)} aria-label={provenance ? `Review ${bidder.name} submission` : `Edit ${bidder.name}`}><span>{bidder.name}</span>{provenance ? <FileText/> : <Pencil/>}</button><small>{bidder.baseBid == null ? "No price" : `${money.format(bidder.baseBid)} base`} · {provenance ? `rev ${provenance.revisionNumber} · ` : ""}{reviewState}</small></th>; })}</tr>
                 <tr>{bidders.flatMap((bidder) => [<th key={`${bidder.id}-status`}>Y/N/P</th>, <th key={`${bidder.id}-note`}>Note</th>, <th key={`${bidder.id}-adj`}>Adjustment</th>])}</tr>
               </thead>
               <tbody>
@@ -601,6 +681,15 @@ export default function BidLevelingPage() {
           </aside>}
         </div>
       </section>
+      {reviewBidderId && submissionProvenance[reviewBidderId] && bidders.find((bidder) => bidder.id === reviewBidderId) && <SubmissionLevelingReview
+        bidder={bidders.find((bidder) => bidder.id === reviewBidderId)!}
+        items={items}
+        provenance={submissionProvenance[reviewBidderId]}
+        revisionNumbers={submissions.find((submission) => submission.id === submissionProvenance[reviewBidderId].submissionId)?.revisions.map((revision) => revision.number) ?? [submissionProvenance[reviewBidderId].revisionNumber]}
+        onRevision={(revision) => loadSubmissionRevision(submissionProvenance[reviewBidderId], revision)}
+        onEdit={() => { setReviewBidderId(null); setEditingBidderId(reviewBidderId); }}
+        onClose={() => setReviewBidderId(null)}
+      />}
       {editingBidderId && <BidderEditor
         key={editingBidderId}
         bidder={editingBidderId === "new" ? undefined : bidders.find((bidder) => bidder.id === editingBidderId)}
@@ -653,6 +742,53 @@ function SectionRows({ section, items, bidders, selectedId, onSelect, onResponse
       })}
     </tr>)}
   </>;
+}
+
+function SubmissionLevelingReview({ bidder, items, provenance, revisionNumbers, onRevision, onEdit, onClose }: {
+  bidder: Bidder;
+  items: ScopeItem[];
+  provenance: BidProvenance;
+  revisionNumbers: number[];
+  onRevision: (revision: number) => void;
+  onEdit: () => void;
+  onClose: () => void;
+}) {
+  const exceptions = items.flatMap((item) => {
+    const answer = bidder.responses[item.id];
+    return answer?.status && answer.status !== "Y" ? [{ item, answer }] : [];
+  });
+  const submitted = new Date(provenance.submittedAt);
+  const submittedLabel = Number.isNaN(submitted.getTime()) ? provenance.submittedAt : submitted.toLocaleString();
+  const modal = <div className="modal-backdrop submission-review-backdrop">
+    <section className="modal submission-review-modal" role="dialog" aria-modal="true" aria-labelledby="submission-review-title">
+      <header><div><span>Portal submission</span><h2 id="submission-review-title">{bidder.name}</h2></div><button aria-label="Close submission review" onClick={onClose}><X/></button></header>
+      <div className="submission-review-body">
+        {provenance.stale && <div className="submission-review-warning"><AlertTriangle/><span><strong>Older bid form</strong><small>This revision answered version {provenance.formVersion}; version {provenance.currentFormVersion} is current. It remains visible but cannot be ranked.</small></span></div>}
+        <div className="submission-review-summary">
+          <div><small>BASE BID</small><strong>{bidder.baseBid == null ? "—" : money.format(bidder.baseBid)}</strong></div>
+          <div><small>REVISION</small><label><select aria-label="Submission revision" value={provenance.revisionNumber} onChange={(event) => onRevision(Number(event.target.value))}>{revisionNumbers.map((number) => <option key={number} value={number}>Revision {number}{number === provenance.revisionNumber ? " · loaded" : ""}</option>)}</select><ChevronDown/></label></div>
+          <div><small>SUBMITTED</small><strong>{submittedLabel}</strong></div>
+          <div><small>SUBMITTER</small><strong>{provenance.submitter.name}</strong><span>{provenance.submitter.email}</span></div>
+        </div>
+        <div className="submission-review-columns">
+          <section><div className="submission-review-heading"><span><strong>Scope exceptions</strong><small>{exceptions.length ? `${exceptions.length} answer${exceptions.length === 1 ? "" : "s"} need estimator review` : "Full scope confirmed"}</small></span></div><div className="submission-exception-list">{exceptions.map(({ item, answer }) => <article key={item.id}><b>{answer.status}</b><span><strong>{item.description}</strong><small>{answer.note || "No bidder note"}</small></span></article>)}{!exceptions.length && <p className="submission-empty-note"><Check/>Every published scope item was answered Y.</p>}</div></section>
+          <aside>
+            <SubmissionReviewList title="Exclusions" values={provenance.exclusions}/>
+            <SubmissionReviewList title="Clarifications" values={provenance.clarifications}/>
+            <div className="submission-review-card"><strong>Alternates</strong>{provenance.alternates.length ? provenance.alternates.map((alternate) => <p key={alternate.id}><span>{alternate.kind === "deduct" ? "Deduct" : "Add"} {money.format(alternate.amount)}</span>{alternate.description}</p>) : <small>None recorded</small>}</div>
+            <div className="submission-review-card"><strong>Attachments</strong>{provenance.attachments.length ? provenance.attachments.map((attachment) => <p key={attachment.id} className="submission-attachment"><Paperclip/><span>{attachment.name}<small>{Math.max(1, Math.ceil(attachment.size / 1024))} KB · metadata only</small></span></p>) : <small>None recorded</small>}</div>
+            {!!provenance.droppedResponses.length && <div className="submission-review-card warning"><strong>Removed scope answers</strong>{provenance.droppedResponses.map((answer) => <p key={answer.scopeItemId}><span>{answer.answer || "Blank"}</span>{answer.scopeItemId}{answer.note ? ` · ${answer.note}` : ""}</p>)}</div>}
+          </aside>
+        </div>
+      </div>
+      <footer className="submission-review-actions"><span>Revision {provenance.revisionNumber} of {provenance.revisionCount} · saved in this browser</span>{!provenance.stale && <button className="button secondary" onClick={onEdit}><Pencil/>Edit leveling settings</button>}<button className="button primary" onClick={onClose}>Review scope grid<ArrowRight/></button></footer>
+    </section>
+  </div>;
+  return typeof document === "undefined" ? null : createPortal(modal, document.body);
+}
+
+function SubmissionReviewList({ title, values }: { title: string; values: string[] }) {
+  return <div className="submission-review-card"><strong>{title}</strong>{values.length ? values.map((value, index) => <p key={`${value}-${index}`}>{value}</p>) : <small>None recorded</small>}</div>;
 }
 
 function BidderEditor({ bidder, onClose, onSave }: {

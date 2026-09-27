@@ -18,4 +18,65 @@
 .cost-evidence small { color: #906327; font-size: 10px; }
 .cost-approval-message { display: flex; align-items: center; gap: 8px; margin: 0; color: #237552; font-size: 12px; }
 .cost-approval-message svg { width: 16px; flex-shrink: 0; }
+.submission-load-controls { display: flex; align-items: flex-end; justify-content: flex-end; gap: 8px; }
+.submission-load-controls .trade-select select { width: 155px; }
+.submission-load-button { flex: none; }
+.submission-source-bar, .submission-issue-bar { display: flex; align-items: center; gap: 10px; margin: 12px 18px 0; padding: 10px 13px; border: 1px solid #dce9e1; border-radius: 8px; background: #f2f8f4; color: #567065; }
+.submission-source-bar > svg, .submission-issue-bar > svg { width: 17px; height: 17px; flex: none; }
+.submission-source-bar > span { flex: 1; min-width: 0; }
+.submission-source-bar strong, .submission-source-bar small, .submission-issue-bar strong, .submission-issue-bar span { display: block; }
+.submission-source-bar strong, .submission-issue-bar strong { font-size: 10px; }
+.submission-source-bar small { margin-top: 3px; color: #829087; font-size: 8px; }
+.submission-source-bar button { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; color: #527869; font: inherit; font-size: 9px; font-weight: 700; cursor: pointer; }
+.submission-source-bar button svg { width: 13px; }
+.submission-issue-bar { align-items: flex-start; border-color: #eed7c7; background: #fff7f1; color: #a36c4f; }
+.submission-issue-bar > div { flex: 1; min-width: 0; }
+.submission-issue-bar span { margin-top: 4px; font-size: 9px; line-height: 1.45; }
+.submission-issue-bar > button { border: 0; background: transparent; color: #a36c4f; cursor: pointer; }
+.submission-issue-bar > button svg { width: 15px; }
+.submission-review-backdrop { z-index: 200; }
+.submission-review-modal { width: min(920px, 100%); }
+.submission-review-body { max-height: calc(100dvh - 180px); overflow: auto; padding: 20px; }
+.submission-review-warning { display: flex; gap: 9px; margin-bottom: 14px; padding: 11px 12px; border: 1px solid #ecd6c4; border-radius: 8px; background: #fff8f1; color: #a86e4c; }
+.submission-review-warning svg { width: 16px; flex: none; }
+.submission-review-warning strong, .submission-review-warning small { display: block; }
+.submission-review-warning strong { font-size: 10px; }
+.submission-review-warning small { margin-top: 3px; font-size: 9px; line-height: 1.45; }
+.submission-review-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; overflow: hidden; border: 1px solid #e3e9e5; border-radius: 9px; background: #e3e9e5; }
+.submission-review-summary > div { min-width: 0; padding: 13px; background: #f9fbf9; }
+.submission-review-summary small, .submission-review-summary strong, .submission-review-summary span { display: block; }
+.submission-review-summary > div > small { color: #96a29c; font-size: 8px; letter-spacing: .05em; }
+.submission-review-summary strong { margin-top: 6px; overflow-wrap: anywhere; color: #40574e; font-size: 11px; }
+.submission-review-summary span { margin-top: 3px; overflow-wrap: anywhere; color: #89978f; font-size: 8px; }
+.submission-review-summary label { position: relative; display: block; margin-top: 5px; }
+.submission-review-summary select { width: 100%; height: 29px; padding: 0 25px 0 8px; appearance: none; border: 1px solid #dbe4de; border-radius: 5px; background: white; color: #40574e; font: inherit; font-size: 9px; }
+.submission-review-summary label svg { position: absolute; top: 8px; right: 7px; width: 12px; pointer-events: none; }
+.submission-review-columns { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(250px, .65fr); gap: 18px; margin-top: 18px; }
+.submission-review-columns > section, .submission-review-card { border: 1px solid #e3e9e5; border-radius: 9px; background: white; }
+.submission-review-heading { padding: 14px 15px; border-bottom: 1px solid #edf1ee; }
+.submission-review-heading strong, .submission-review-heading small { display: block; }
+.submission-review-heading strong { color: #40544b; font-size: 11px; }
+.submission-review-heading small { margin-top: 4px; color: #8d9993; font-size: 8px; }
+.submission-exception-list article { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; padding: 12px 14px; border-bottom: 1px solid #edf1ee; }
+.submission-exception-list article:last-child { border-bottom: 0; }
+.submission-exception-list b { display: grid; place-items: center; align-self: start; min-height: 25px; border-radius: 5px; background: #fff0e6; color: #b96f43; font-size: 9px; }
+.submission-exception-list strong, .submission-exception-list small { display: block; }
+.submission-exception-list strong { color: #52655d; font-size: 9px; line-height: 1.45; }
+.submission-exception-list small { margin-top: 4px; color: #92745f; font-size: 8px; line-height: 1.4; }
+.submission-empty-note { display: flex; align-items: center; gap: 7px; margin: 0; padding: 18px; color: #54806c; font-size: 10px; }
+.submission-empty-note svg { width: 15px; }
+.submission-review-columns > aside { display: flex; flex-direction: column; gap: 9px; }
+.submission-review-card { padding: 12px 13px; }
+.submission-review-card > strong { display: block; color: #52655d; font-size: 9px; }
+.submission-review-card > small { display: block; margin-top: 6px; color: #9aa49f; font-size: 8px; }
+.submission-review-card p { margin: 7px 0 0; color: #76857e; font-size: 8px; line-height: 1.5; }
+.submission-review-card p > span { display: block; margin-bottom: 2px; color: #52655d; font-weight: 700; }
+.submission-review-card.warning { border-color: #ecd6c4; background: #fffaf6; }
+.submission-attachment { display: flex; gap: 6px; align-items: flex-start; }
+.submission-attachment > svg { width: 13px; flex: none; }
+.submission-attachment small { display: block; color: #9ba6a0; font-size: 7px; }
+.submission-review-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid #e5eae7; }
+.submission-review-actions > span { margin-right: auto; color: #8e9994; font-size: 8px; }
 @media (max-width: 520px) { .cost-calculated { align-items: flex-start; flex-direction: column; } .cost-suggestions-modal footer { flex-wrap: wrap; } }
+@media (max-width: 950px) { .submission-load-controls { width: 100%; justify-content: flex-start; flex-wrap: wrap; } .submission-review-columns { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .submission-load-controls .trade-select { flex: 1 1 150px; } .submission-load-controls .trade-select select { width: 100%; } .submission-source-bar { align-items: flex-start; flex-wrap: wrap; } .submission-source-bar button { width: 100%; margin-left: 27px; } .submission-review-summary { grid-template-columns: 1fr 1fr; } .submission-review-actions { align-items: stretch; flex-direction: column; } .submission-review-actions > span { margin: 0 0 3px; } }

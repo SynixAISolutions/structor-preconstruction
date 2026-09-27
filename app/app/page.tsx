@@ -51,7 +51,7 @@ export default function StructorApp(){
      {screen==="information"&&<ProjectInformation project={project} cover={<BuildingModel/>} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Project information saved locally.");}} navigate={navigate}/>}
       {['documents','scopes','takeoffs','specs','checks','drawings','specifications','revisions'].includes(screen)&&<IntelligenceView {...props} screen={screen}/>}
      {['packages','bidders','portal','budget','allowances','contracts','schedule','messages','turnover'].includes(screen)&&<CommercialView {...props} screen={screen}/>}
-     {screen==="leveling"&&<><PageHeader eyebrow="BID & AWARD" title="Bid leveling" description="A complete scope. A comparable price. A confident decision." actions={<Button onClick={()=>navigate("budget")}><Wallet size={16}/>Budget summary<ArrowRight size={16}/></Button>}/><div className="legacy-leveling"><BidLevelingPage/></div></>}
+     {screen==="leveling"&&<><PageHeader eyebrow="BID & AWARD" title="Bid leveling" description="A complete scope. A comparable price. A confident decision." actions={<Button onClick={()=>navigate("budget")}><Wallet size={16}/>Budget summary<ArrowRight size={16}/></Button>}/><div className="legacy-leveling"><BidLevelingPage projectName={project.name}/></div></>}
      {screen==="settings"&&<WorkspaceSettings notify={notify} reduced={reduced} setReduced={setReduced} navigate={navigate}/>}
     </div>
     <footer className="product-footer"><span><span className="footer-dot"/>STRUCTOR WORKSPACE</span><span>From first drawing to final award.</span><button onClick={()=>setHelpOpen(true)}>Learn the terminology <ArrowUpRight size={12}/></button></footer>
