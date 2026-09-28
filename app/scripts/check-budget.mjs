@@ -8,7 +8,7 @@ const {
   totalsByCostCenter, totalsByDivision,
 } = await import("../lib/budget.ts");
 const { sampleBudget } = await import("../lib/data/budget.ts");
-const { initialAllowances, initialBidders, initialCosts } = await import("../lib/data/commercial.ts");
+const { initialBidders } = await import("../lib/data/commercial.ts");
 const { sampleProcurement } = await import("../lib/data/procurement.ts");
 const { approveScope, bidForm, inviteBidder, publishPackage } = await import("../lib/procurement.ts");
 const { openSubmission, setResponse, submitBid, updateDraft } = await import("../lib/submissions.ts");
@@ -22,15 +22,24 @@ const budget = freeze(structuredClone(sampleBudget));
 const line = (s, id) => s.lines.find(l => l.id === id);
 const valid = { costCenter: "Modernization", classification: "direct", csiCode: "09 29 00", description: "Drywall", owner: "Safi", budget: 410000 };
 
-// The sample keeps every value of the earlier previews; new projects start empty.
-for (const cost of initialCosts) {
-  const l = line(budget, cost.id);
-  assert.deepEqual([l.csiCode, l.description, l.costCenter, l.budget, l.forecast, l.status, l.classification], [cost.code, cost.trade, cost.center, cost.budget, cost.forecast, cost.status === "Approved" ? "approved" : "draft", "direct"]);
-}
-for (const old of initialAllowances) {
-  const a = budget.allowances.find(x => x.id === old.id);
-  assert.deepEqual([a.name, a.amount, a.costCenter, a.source, a.owner, a.status], [old.name, old.amount, old.center, old.source, old.owner, old.status === "Included" ? "included" : "review"]);
-}
+// The sample (the values of the earlier Budget summary and Allowances previews); new projects start empty.
+const expectedLines = [
+  ["c1", "Modernization", "02", "Demolition", 520000, 498000, "draft"], ["c2", "Modernization", "03", "Concrete", 780000, 762000, "approved"],
+  ["c3", "Modernization", "05", "Structural steel", 1120000, 1155000, "draft"], ["c4", "Modernization", "23", "Mechanical", 2350000, 2275000, "draft"],
+  ["c5", "Modernization", "26", "Electrical", 1650000, 1590000, "approved"], ["c6", "New addition", "03", "Concrete", 980000, 945000, "draft"],
+  ["c7", "New addition", "05", "Structural steel", 1800000, 1740000, "draft"], ["c8", "New addition", "07", "Roofing & envelope", 1300000, 1280000, "draft"],
+  ["c9", "Site work", "31", "Earthwork", 640000, 622000, "approved"], ["c10", "Site work", "32", "Exterior improvements", 820000, 850000, "draft"],
+  ["c11", "Site work", "33", "Site utilities", 460000, 447000, "draft"],
+];
+assert.deepEqual(budget.lines.filter(l => l.classification === "direct").map(l => [l.id, l.costCenter, l.csiCode, l.description, l.budget, l.forecast, l.status]), expectedLines);
+assert.deepEqual(budget.lines.filter(l => l.classification === "indirect").map(l => [l.id, l.csiCode, /\(sample\)$/.test(l.description)]), [["i1", null, true], ["i2", null, true], ["i3", null, true]], "Indirect lines are labelled placeholders");
+assert(budget.lines.every(l => l.committed === 0 && l.source.kind === "sample" && (l.status === "approved") === (l.approval !== null)));
+assert.deepEqual(budget.allowances.map(a => [a.id, a.name, a.amount, a.costCenter, a.source, a.status, a.owner, a.budgetLineId]), [
+  ["a1", "Public art allowance", 500000, "Site work", "Owner requirements · Public art", "review", "Safi", null],
+  ["a2", "Unforeseen existing conditions", 175000, "Modernization", "General requirements · Existing conditions", "included", "Vijay", null],
+  ["a3", "AV equipment selection", 85000, "Modernization", "Division 27 · Communications", "review", "Naija", null],
+  ["a4", "Landscape establishment", 45000, "Site work", "Division 32 · Exterior improvements", "included", "Safi", "c10"],
+]);
 assert.deepEqual(startingDraft("p2", "budget-state", sampleBudget), { lines: [], allowances: [] });
 
 // Totals (hand-worked): direct 12,420,000 + indirect 1,305,000; forecast 12,164,000 + 1,305,000.

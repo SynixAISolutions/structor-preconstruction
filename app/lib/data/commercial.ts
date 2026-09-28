@@ -1,6 +1,6 @@
 // Sample data and record shapes for the commercial and operations screens (the
-// organization-wide bidder directory, portal scope, budget, allowances, schedule,
-// conversations, to-do). Trade packages and invitations live in lib/procurement.ts.
+// organization-wide bidder directory, portal scope, schedule, conversations, to-do).
+// Trade packages live in lib/procurement.ts; budget and allowances in lib/budget.ts.
 //
 // This is illustrative preview content, not data from a live system of record.
 
@@ -19,14 +19,6 @@ export const initialBidders: Bidder[] = [
 ];
 
 export const portalScope=["Site protection and dust control","Selective demolition per demolition plans","Debris removal and disposal","Existing utilities coordination","Include required permits and inspections","Include all addenda through September 8"];
-
-export type CostRow={id:string;code:string;trade:string;center:string;budget:number;forecast:number;status:string};
-export const initialCosts:CostRow[]=[
-  {id:"c1",code:"02",trade:"Demolition",center:"Modernization",budget:520000,forecast:498000,status:"Provisional"},{id:"c2",code:"03",trade:"Concrete",center:"Modernization",budget:780000,forecast:762000,status:"Approved"},{id:"c3",code:"05",trade:"Structural steel",center:"Modernization",budget:1120000,forecast:1155000,status:"Provisional"},{id:"c4",code:"23",trade:"Mechanical",center:"Modernization",budget:2350000,forecast:2275000,status:"Provisional"},{id:"c5",code:"26",trade:"Electrical",center:"Modernization",budget:1650000,forecast:1590000,status:"Approved"},{id:"c6",code:"03",trade:"Concrete",center:"New addition",budget:980000,forecast:945000,status:"Provisional"},{id:"c7",code:"05",trade:"Structural steel",center:"New addition",budget:1800000,forecast:1740000,status:"Provisional"},{id:"c8",code:"07",trade:"Roofing & envelope",center:"New addition",budget:1300000,forecast:1280000,status:"Provisional"},{id:"c9",code:"31",trade:"Earthwork",center:"Site work",budget:640000,forecast:622000,status:"Approved"},{id:"c10",code:"32",trade:"Exterior improvements",center:"Site work",budget:820000,forecast:850000,status:"Provisional"},{id:"c11",code:"33",trade:"Site utilities",center:"Site work",budget:460000,forecast:447000,status:"Provisional"}
-];
-
-export type Allowance={id:string;name:string;amount:number;center:string;source:string;status:string;owner:string};
-export const initialAllowances:Allowance[]=[{id:"a1",name:"Public art allowance",amount:500000,center:"Site work",source:"Owner requirements · Public art",status:"Review required",owner:"Safi"},{id:"a2",name:"Unforeseen existing conditions",amount:175000,center:"Modernization",source:"General requirements · Existing conditions",status:"Included",owner:"Vijay"},{id:"a3",name:"AV equipment selection",amount:85000,center:"Modernization",source:"Division 27 · Communications",status:"Review required",owner:"Naija"},{id:"a4",name:"Landscape establishment",amount:45000,center:"Site work",source:"Division 32 · Exterior improvements",status:"Included",owner:"Safi"}];
 
 export type Milestone={id:string;name:string;phase:string;start:string;end:string;owner:string;progress:number};
 export const initialMilestones:Milestone[]=[{id:"m1",name:"Design development review",phase:"Design",start:"2026-09-01",end:"2026-09-25",owner:"Safi",progress:80},{id:"m2",name:"Scope packages & bid invitations",phase:"Preconstruction",start:"2026-09-15",end:"2026-10-02",owner:"Vijay",progress:55},{id:"m3",name:"Bid leveling & owner approval",phase:"Preconstruction",start:"2026-10-02",end:"2026-10-23",owner:"Safi",progress:15},{id:"m4",name:"Long-lead procurement",phase:"Procurement",start:"2026-10-19",end:"2026-12-18",owner:"Naija",progress:0},{id:"m5",name:"Mobilization & selective demolition",phase:"Construction",start:"2026-11-02",end:"2026-12-11",owner:"Vijay",progress:0},{id:"m6",name:"Foundations & structure",phase:"Construction",start:"2026-12-07",end:"2027-02-26",owner:"Naija",progress:0},{id:"m7",name:"Enclosure & interior buildout",phase:"Construction",start:"2027-02-01",end:"2027-06-18",owner:"Safi",progress:0},{id:"m8",name:"Commissioning & turnover",phase:"Construction",start:"2027-06-01",end:"2027-07-30",owner:"Vijay",progress:0}];

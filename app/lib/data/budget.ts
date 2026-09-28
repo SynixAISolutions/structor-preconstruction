@@ -1,5 +1,5 @@
 // Jelleff sample budget and allowances. Direct lines and allowances keep the values of the
-// earlier Budget summary and Allowances previews (initialCosts / initialAllowances). The three
+// earlier Budget summary and Allowances previews. The three
 // indirect lines are illustrative placeholders until Marcel's real budget file arrives.
 
 import type { BudgetAllowance, BudgetClass, BudgetLine, BudgetState } from "../budget";
