@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { ArrowRight, Check, FileText, Link2, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import {
   addAllowance, addBudgetLine, applyLevelingValue, approveBudgetLine, budgetTotals,
-  editAllowance, editBudgetLine, levelingCandidates, parseAmount, removeAllowance,
+  costPerSquareFoot, editAllowance, editBudgetLine, levelingCandidates, parseAmount, removeAllowance,
   removeBudgetLine, reopenBudgetLine, totalsByCostCenter, totalsByDivision,
   type BudgetAllowance, type BudgetErrors, type BudgetLine, type LevelingBasis, type LevelingCandidate,
 } from "../../lib/budget";
@@ -18,6 +18,7 @@ const actor = "Marcel Khoury";
 const palette = ["#f47640", "#3e6a81", "#759283", "#c2a276", "#8996b2", "#6f8c72"];
 const basisLabels: Record<LevelingBasis, string> = { base: "Base bid", provisional: "Provisional total", reviewed: "Reviewed total" };
 const allowanceLabels = { review: "Needs review", included: "Included", excluded: "Excluded" } as const;
+const usdPerSquareFoot = (value: number | null) => value === null ? "—" : `${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value)}/SF`;
 
 function FieldError({ error }: { error?: string }) { return error ? <small className="cm-form-error">{error}</small> : null; }
 function amount(value: FormDataEntryValue | null, optional = false) {
@@ -29,17 +30,18 @@ function amount(value: FormDataEntryValue | null, optional = false) {
   return Number.isFinite(numeric) ? numeric : Number.NaN;
 }
 
-function LineForm({ line, errors, onSubmit, onCancel }: { line: BudgetLine | null; errors: BudgetErrors; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
+function LineForm({ line, costCenters, errors, onSubmit, onCancel }: { line: BudgetLine | null; costCenters: string[]; errors: BudgetErrors; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
   return <form onSubmit={onSubmit}>
     <div className="ui-form-grid">
       <label className="ui-field full"><span>Description</span><input name="description" required defaultValue={line?.description ?? ""}/><FieldError error={errors.description}/></label>
-      <label className="ui-field"><span>Cost center</span><input name="costCenter" required defaultValue={line?.costCenter ?? "Modernization"}/><FieldError error={errors.costCenter}/></label>
+      <label className="ui-field"><span>Cost center</span><input name="costCenter" list="budget-cost-centers" required defaultValue={line?.costCenter ?? costCenters[0] ?? "Project-wide"}/><datalist id="budget-cost-centers">{costCenters.map(center => <option key={center} value={center}/>)}</datalist><FieldError error={errors.costCenter}/></label>
       <label className="ui-field"><span>Cost class</span><select name="classification" defaultValue={line?.classification ?? "direct"}><option value="direct">Direct construction</option><option value="indirect">Indirect cost</option></select><FieldError error={errors.classification}/></label>
       <label className="ui-field"><span>CSI division or section</span><input name="csiCode" placeholder="03 or 03 30 00" defaultValue={line?.csiCode ?? ""}/><FieldError error={errors.csiCode}/></label>
       <label className="ui-field"><span>Owner</span><input name="owner" defaultValue={line?.owner ?? ""}/></label>
       <label className="ui-field"><span>Budget · USD</span><input name="budget" inputMode="decimal" required defaultValue={line?.budget ?? ""}/><FieldError error={errors.budget}/></label>
       <label className="ui-field"><span>Forecast · USD</span><input name="forecast" inputMode="decimal" placeholder="Uses budget until entered" defaultValue={line?.forecast ?? ""}/><FieldError error={errors.forecast}/></label>
       <label className="ui-field"><span>Committed · USD</span><input name="committed" inputMode="decimal" required defaultValue={line?.committed ?? 0}/><FieldError error={errors.committed}/></label>
+      <label className="cm-owner-toggle full"><input name="byOwner" type="checkbox" defaultChecked={line?.byOwner ?? false}/><span><strong>Carried by owner</strong><small>Keep this line visible, but exclude it from contractor totals and leveling.</small></span></label>
     </div>
     <FieldError error={errors.line}/>
     <div className="cm-form-footer"><Button onClick={onCancel}>Cancel</Button><Button type="submit" variant="primary">{line ? "Save line" : "Add budget line"}</Button></div>
@@ -49,6 +51,7 @@ function LineForm({ line, errors, onSubmit, onCancel }: { line: BudgetLine | nul
 export function BudgetView({ notify, navigate }: ViewProps) {
   const { state, run } = useBudget();
   const [tab, setTab] = useState("All costs");
+  const [centerFilter, setCenterFilter] = useState("All cost centers");
   const [edit, setEdit] = useState<BudgetLine | "new" | null>(null);
   const [errors, setErrors] = useState<BudgetErrors>({});
   const [levelingLine, setLevelingLine] = useState<BudgetLine | null>(null);
@@ -62,7 +65,15 @@ export function BudgetView({ notify, navigate }: ViewProps) {
   const totals = budgetTotals(state);
   const centers = totalsByCostCenter(state);
   const divisions = totalsByDivision(state);
-  const lines = state.lines.filter(line => tab === "All costs" || (tab === "Direct costs" ? line.classification === "direct" : line.classification === "indirect"));
+  const costCenterNames = centers.map(item => item.costCenter);
+  const selectedCenter = centerFilter === "All cost centers" || costCenterNames.includes(centerFilter) ? centerFilter : "All cost centers";
+  const centerAreas = new Map(centers.map(item => [item.costCenter, item.squareFeet]));
+  const lines = state.lines.filter(line =>
+    (selectedCenter === "All cost centers" || line.costCenter === selectedCenter)
+    && (tab === "All costs" || (tab === "Direct costs" ? line.classification === "direct" : line.classification === "indirect"))
+  );
+  const contractorLines = lines.filter(line => !line.byOwner);
+  const ownerLines = lines.filter(line => line.byOwner);
   const approved = state.lines.filter(line => line.status === "approved").length;
 
   function closeLine() { setEdit(null); setErrors({}); }
@@ -73,7 +84,7 @@ export function BudgetView({ notify, navigate }: ViewProps) {
       description: String(form.get("description") ?? ""), costCenter: String(form.get("costCenter") ?? ""),
       classification: String(form.get("classification")) as BudgetLine["classification"], csiCode: String(form.get("csiCode") ?? ""),
       owner: String(form.get("owner") ?? ""), budget: amount(form.get("budget")) as number,
-      forecast: amount(form.get("forecast"), true), committed: amount(form.get("committed")) as number,
+      forecast: amount(form.get("forecast"), true), committed: amount(form.get("committed")) as number, byOwner: form.get("byOwner") === "on",
     };
     const nextErrors = run(current => edit === "new" ? addBudgetLine(current, input, actor) : editBudgetLine(current, edit!.id, input, actor));
     if (nextErrors) { setErrors(nextErrors); return; }
@@ -109,32 +120,40 @@ export function BudgetView({ notify, navigate }: ViewProps) {
     setLevelingLine(null); setErrors({}); notify(`${basisLabels[basis]} applied to ${levelingLine.description}'s forecast.`);
   }
 
+  function budgetRow(line: BudgetLine) {
+    const forecast = line.forecast ?? line.budget;
+    const variance = line.budget - forecast;
+    const perSquareFoot = costPerSquareFoot(line.budget, centerAreas.get(line.costCenter));
+    return <tr key={line.id}><td><div className="cm-table-primary"><strong>{line.description}</strong><small>{line.classification === "direct" ? line.csiCode ? `CSI ${line.csiCode}` : "Direct · CSI not recorded" : "Indirect cost"}</small>{line.forecastSource && <small className="cm-budget-source"><Link2 size={11}/>{basisLabels[line.forecastSource.basis]} · {line.forecastSource.bidderName}</small>}</div></td><td>{line.costCenter}<small className="cm-cell-note">{line.owner || "No owner"}</small></td><td className="cm-money">{usd(line.budget)}</td><td className="cm-money">{usdPerSquareFoot(perSquareFoot)}</td><td><strong>{usd(forecast)}</strong>{line.forecast === null && <small className="cm-cell-note">Budget baseline</small>}</td><td>{usd(line.committed)}</td><td><span className={variance >= 0 ? "cm-positive" : "cm-negative"}>{usd(variance)}</span></td><td><Badge tone={line.status === "approved" ? "green" : "amber"}>{line.status === "approved" ? "Approved" : "Draft"}</Badge></td><td><div className="cm-budget-actions">{line.classification === "direct" && !line.byOwner && <button className="cm-text-button" onClick={() => void openLeveling(line)}>Use leveled bid</button>}<button className="ui-icon-btn" aria-label={`Edit ${line.description}`} onClick={() => { setEdit(line); setErrors({}); }}><Pencil size={15}/></button></div></td></tr>;
+  }
+
   const totalVariance = totals.totalBudget - totals.totalForecast;
   return <div className="cm-view">
-    <PageHeader eyebrow="COST CONTROL" title="Project budget" description="Review direct and indirect costs, carry allowances once, and update forecasts from leveled bids." actions={<><ExportButton onClick={() => exportRows("project-budget.csv", [["Cost center", "Class", "CSI", "Description", "Owner", "Budget", "Forecast", "Committed", "Variance", "Status"], ...state.lines.map(line => [line.costCenter, line.classification, line.csiCode ?? "", line.description, line.owner, line.budget, line.forecast ?? "", line.committed, line.budget - (line.forecast ?? line.budget), line.status])])}/><Button variant="primary" onClick={() => { setEdit("new"); setErrors({}); }}><Plus size={16}/>Add line</Button></>}/>
-    <PreviewNote>{state.lines.length ? "Browser-only demo · The three indirect lines marked “sample” are placeholders until Marcel’s real budget file arrives." : "Browser-only demo · This project starts with an empty budget and saves additions in this browser."}</PreviewNote>
+    <PageHeader eyebrow="COST CONTROL" title="Project budget" description="Review direct and indirect costs, carry allowances once, and update forecasts from leveled bids." actions={<><ExportButton onClick={() => exportRows("project-budget.csv", [["Cost center", "Class", "CSI", "Description", "Owner", "By owner", "Budget", "Cost / SF", "Forecast", "Committed", "Variance", "Status"], ...state.lines.map(line => [line.costCenter, line.classification, line.csiCode ?? "", line.description, line.owner, line.byOwner ? "Yes" : "No", line.budget, costPerSquareFoot(line.budget, centerAreas.get(line.costCenter)) ?? "", line.forecast ?? "", line.committed, line.budget - (line.forecast ?? line.budget), line.status])])}/><Button variant="primary" onClick={() => { setEdit("new"); setErrors({}); }}><Plus size={16}/>Add line</Button></>}/>
+    <PreviewNote>{state.lines.length ? "Browser-only demo · Owner-carried costs stay visible and are excluded from contractor totals." : "Browser-only demo · This project starts with an empty budget and saves additions in this browser."}</PreviewNote>
     {!state.lines.length && !state.allowances.length ? <Panel><Empty title="This project has no budget yet" description="Add the first direct or indirect cost line to start the cost plan." action={<Button variant="primary" onClick={() => setEdit("new")}><Plus size={16}/>Add budget line</Button>}/></Panel> : <>
       <Stats items={[
         { label: "Total budget", value: usd(totals.totalBudget), detail: `${usd(totals.direct)} direct · ${usd(totals.indirect)} indirect` },
         { label: "Current forecast", value: usd(totals.totalForecast), detail: totals.unforecastLines ? `${totals.unforecastLines} line${totals.unforecastLines === 1 ? " uses" : "s use"} budget until forecasted` : "Every line has a forecast" },
         { label: "Forecast variance", value: usd(totalVariance), detail: totalVariance >= 0 ? "Under the current cost plan" : "Over the current cost plan", tone: totalVariance >= 0 ? "green" : "red" },
-        { label: "Committed", value: usd(totals.committed), detail: `${usd(totals.remaining)} remains uncommitted` },
+        { label: "Committed", value: usd(totals.committed), detail: `${usd(totals.remaining)} remains · ${totals.byOwnerLines} owner-carried line${totals.byOwnerLines === 1 ? "" : "s"} excluded` },
       ]}/>
       <Tabs tabs={["All costs", "Direct costs", "Indirect costs"]} value={tab} onChange={setTab}/>
-      <Panel title={tab} subtitle={`${approved} of ${state.lines.length} lines approved · Editing scope, class, CSI, description, or budget reopens approval.`} action={<Badge tone={approved === state.lines.length ? "green" : "amber"}>{approved} approved</Badge>}>
-        <div className="ui-table-wrap"><table className="ui-table cm-budget-table"><thead><tr><th>Cost line</th><th>Cost center</th><th>Budget</th><th>Forecast</th><th>Committed</th><th>Variance</th><th>Status</th><th/></tr></thead><tbody>{lines.map(line => {
-          const forecast = line.forecast ?? line.budget; const variance = line.budget - forecast;
-          return <tr key={line.id}><td><div className="cm-table-primary"><strong>{line.description}</strong><small>{line.classification === "direct" ? line.csiCode ? `CSI ${line.csiCode}` : "Direct · CSI not recorded" : "Indirect cost"}</small>{line.forecastSource && <small className="cm-budget-source"><Link2 size={11}/>{basisLabels[line.forecastSource.basis]} · {line.forecastSource.bidderName}</small>}</div></td><td>{line.costCenter}<small className="cm-cell-note">{line.owner || "No owner"}</small></td><td className="cm-money">{usd(line.budget)}</td><td><strong>{usd(forecast)}</strong>{line.forecast === null && <small className="cm-cell-note">Budget baseline</small>}</td><td>{usd(line.committed)}</td><td><span className={variance >= 0 ? "cm-positive" : "cm-negative"}>{usd(variance)}</span></td><td><Badge tone={line.status === "approved" ? "green" : "amber"}>{line.status === "approved" ? "Approved" : "Draft"}</Badge></td><td><div className="cm-budget-actions">{line.classification === "direct" && <button className="cm-text-button" onClick={() => void openLeveling(line)}>Use leveled bid</button>}<button className="ui-icon-btn" aria-label={`Edit ${line.description}`} onClick={() => { setEdit(line); setErrors({}); }}><Pencil size={15}/></button></div></td></tr>;
-        })}</tbody></table></div>
-        {!lines.length && <Empty title={`No ${tab.toLowerCase()}`} description="Add a line or choose another cost section."/>}
+      {costCenterNames.length > 1 && <div className="cm-center-tabs"><span>Cost center</span><Tabs tabs={["All cost centers", ...costCenterNames]} value={selectedCenter} onChange={setCenterFilter}/></div>}
+      <Panel title={selectedCenter === "All cost centers" ? tab : `${tab} · ${selectedCenter}`} subtitle={`${approved} of ${state.lines.length} lines approved · Editing scope, class, CSI, description, budget, or owner responsibility reopens approval.`} action={<Badge tone={approved === state.lines.length ? "green" : "amber"}>{approved} approved</Badge>}>
+        <div className="ui-table-wrap"><table className="ui-table cm-budget-table"><thead><tr><th>Cost line</th><th>Cost center</th><th>Budget</th><th>Cost / SF</th><th>Forecast</th><th>Committed</th><th>Variance</th><th>Status</th><th/></tr></thead><tbody>{contractorLines.map(budgetRow)}</tbody></table></div>
+        {!contractorLines.length && <Empty title={`No contractor ${tab.toLowerCase()}`} description="Add a line or choose another cost section or cost center."/>}
       </Panel>
+      {ownerLines.length > 0 && <Panel title="By owner" subtitle="Shown for project visibility and excluded from contractor budget, forecast, committed, and leveling totals." action={<Badge>{ownerLines.length} excluded</Badge>}>
+        <div className="ui-table-wrap"><table className="ui-table cm-budget-table"><thead><tr><th>Cost line</th><th>Cost center</th><th>Budget</th><th>Cost / SF</th><th>Forecast</th><th>Committed</th><th>Variance</th><th>Status</th><th/></tr></thead><tbody>{ownerLines.map(budgetRow)}</tbody></table></div>
+      </Panel>}
       <div className="cm-budget-rollups">
-        <Panel title="Cost centers" subtitle="Budget, forecast, and allowances carried by each funding bucket."><div className="cm-rollup-list">{centers.map(({ costCenter, totals: item }, index) => <div key={costCenter}><span><i style={{ background: palette[index % palette.length] }}/><span><strong>{costCenter}</strong><small>{item.allowancesAdded ? `${usd(item.allowancesAdded)} added allowance` : item.allowancesInLines ? `${usd(item.allowancesInLines)} carried in lines` : "No included allowances"}</small></span></span><span><span><strong>{usd(item.totalForecast)}</strong><small>of {usd(item.totalBudget)}</small></span></span></div>)}</div></Panel>
+        <Panel title="Cost centers" subtitle="Budget, forecast, area, and cost per square foot for each funding bucket."><div className="cm-rollup-list">{centers.map(({ costCenter, squareFeet, totals: item }, index) => { const perSquareFoot = costPerSquareFoot(item.totalBudget, squareFeet); return <div key={costCenter}><span><i style={{ background: palette[index % palette.length] }}/><span><strong>{costCenter}</strong><small>{squareFeet ? `${squareFeet.toLocaleString("en-US")} SF · ${usdPerSquareFoot(perSquareFoot)}` : "Area not recorded"}</small><small>{item.byOwnerLines ? `${item.byOwnerLines} owner-carried line${item.byOwnerLines === 1 ? "" : "s"} excluded` : item.allowancesAdded ? `${usd(item.allowancesAdded)} added allowance` : item.allowancesInLines ? `${usd(item.allowancesInLines)} carried in lines` : "No included allowances"}</small></span></span><span><span><strong>{usd(item.totalForecast)}</strong><small>of {usd(item.totalBudget)}</small></span></span></div>; })}</div></Panel>
         <Panel title="Direct cost by CSI division" subtitle="Forecast share across direct construction work."><div className="cm-distribution">{divisions.map((division, index) => { const percent = totals.direct ? Math.round(division.forecast / totals.direct * 100) : 0; return <div key={division.division}><div><span><i style={{ background: palette[index % palette.length] }}/>{division.division ? `${division.division} · ${division.name}` : division.name}</span><strong>{usd(division.forecast)}</strong></div><div className="cm-distribution-bar"><i style={{ width: `${Math.min(100, percent)}%`, background: palette[index % palette.length] }}/></div></div>; })}<Button onClick={() => navigate("allowances")}>Review allowances<ArrowRight size={15}/></Button></div></Panel>
       </div>
     </>}
     {edit && <Modal title={edit === "new" ? "Add budget line" : `Edit ${edit.description}`} subtitle={edit === "new" ? "Add a direct construction or indirect project cost." : `${edit.costCenter} · ${edit.status}`} onClose={closeLine} wide>
-      <LineForm line={edit === "new" ? null : edit} errors={errors} onSubmit={saveLine} onCancel={closeLine}/>
+      <LineForm line={edit === "new" ? null : edit} costCenters={costCenterNames} errors={errors} onSubmit={saveLine} onCancel={closeLine}/>
       {edit !== "new" && <div className="cm-record-actions"><Button onClick={() => changeApproval(edit)}>{edit.status === "approved" ? <><RotateCcw size={15}/>Reopen approval</> : <><Check size={15}/>Approve line</>}</Button><Button onClick={() => deleteLine(edit)}><Trash2 size={15}/>Remove line</Button></div>}
     </Modal>}
     {levelingLine && <Modal title={`Update ${levelingLine.description} forecast`} subtitle="Choose the bidder and value. Structor never awards or commits a contract from this action." onClose={() => { setLevelingLine(null); setErrors({}); }} wide>
