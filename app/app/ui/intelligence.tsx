@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDownToLine, ArrowRight, BookOpenText, Check, ChevronDown, ChevronRight, CircleCheck, CloudUpload, File, FileSpreadsheet, FileText, Folder, GitCompareArrows, Layers, Maximize2, Plus, Ruler, SearchCheck, ShieldCheck, TriangleAlert, X, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowDownToLine, ArrowRight, BookOpenText, Check, ChevronDown, ChevronRight, CircleCheck, CloudUpload, File, FileSpreadsheet, FileText, Folder, GitCompareArrows, Layers, Maximize2, Plus, Ruler, ShieldCheck, X, ZoomIn, ZoomOut } from "lucide-react";
 import { Badge, Button, Empty, ExportButton, Modal, PageHeader, Panel, PreviewNote, Screen, SearchBox, Source, Stats, Tabs, ViewProps, exportRows, usd } from "./shared";
 import { useLocalDraft } from "../../lib/use-local-draft";
-import { trades, categories, sampleFiles, initialTakeoffs, initialSpecs, initialSpecSections, initialIssues, initialDrawings, initialChanges,
-  type LibraryFile, type TakeoffRow, type SpecItem, type CheckIssue, type Drawing, type DrawingChange } from "../../lib/data/preconstruction";
+import { trades, categories, sampleFiles, initialTakeoffs, initialSpecs, initialSpecSections, initialDrawings, initialChanges,
+  type LibraryFile, type TakeoffRow, type SpecItem, type Drawing, type DrawingChange } from "../../lib/data/preconstruction";
 import { displayDate } from "../../lib/format";
 import { CSI_DIVISIONS, csiDivision } from "../../lib/csi";
 import { screenLabel } from "../../lib/screens";
 import { ProcurementScopesView } from "./procurement";
+import { RfiWorkspace } from "./rfi-ui";
 import "./intelligence.css";
 
 // Local UI drafts only; sample suggestions are never derived from uploaded files.
@@ -121,22 +122,6 @@ function SpecificationsScreen({ projectName, navigate }: ViewProps) {
   </div>;
 }
 
-function ChecksScreen({ projectName, notify }: ViewProps) {
-  const [issues, setIssues] = useLocalDraft("structor-check", initialIssues);
-  const [tab, setTab] = useState("Open issues");
-  const [selectedId, setSelectedId] = useState("SC-001");
-  const [query, setQuery] = useState("");
-  const [rfi, setRfi] = useState<CheckIssue | null>(null);
-  const [scanOpen, setScanOpen] = useState(false);
-  const visible = issues.filter(i => (tab === "All issues" || (tab === "Open issues" ? i.status !== "Resolved" : tab === "RFI drafts" ? !!i.rfi : i.status === "Resolved")) && `${i.id} ${i.title} ${i.trade}`.toLowerCase().includes(query.toLowerCase()));
-  const selected = issues.find(i => i.id === selectedId) || visible[0];
-  return <div className="intel-view"><PageHeader eyebrow={`${projectName} / Quality & coordination`} title="Structor Check" description="Catch missing details and document conflicts before they become site problems." actions={<><ExportButton onClick={() => exportRows("structor-check-issues.csv", [["Issue", "Description", "Type", "Priority", "Trade", "Source", "Status", "RFI"], ...issues.map(i => [i.id, i.title, i.type, i.priority, i.trade, i.source, i.status, i.rfi || ""])])}/><Button variant="primary" onClick={() => setScanOpen(true)}><SearchCheck size={16}/>Review project</Button></>}/><Stats items={[{ label: "Open issues", value: issues.filter(i => i.status !== "Resolved").length, detail: "Awaiting review", tone: "orange" }, { label: "High priority", value: issues.filter(i => i.priority === "High" && i.status !== "Resolved").length, detail: "Potential scope or cost impact" }, { label: "RFI drafts", value: issues.filter(i => i.rfi).length, detail: "Questions ready to review" }, { label: "Resolved", value: issues.filter(i => i.status === "Resolved").length, detail: "Closed by the project team", tone: "green" }]}/>
-    <div className="intel-check-layout"><Panel><Tabs tabs={["Open issues", "RFI drafts", "Resolved", "All issues"]} value={tab} onChange={setTab}/><div className="ui-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search coordination issues…"/></div><div className="intel-issue-list">{visible.map(i => <button key={i.id} className={`intel-issue ${i.id === selected?.id ? "active" : ""}`} onClick={() => setSelectedId(i.id)}><span className={`intel-issue-icon ${i.status === "Resolved" ? "resolved" : i.priority.toLowerCase()}`}>{i.status === "Resolved" ? <Check size={17}/> : <TriangleAlert size={17}/>}</span><span className="intel-issue-content"><span className="intel-issue-top"><small>{i.id} · {i.type}</small><Badge tone={i.priority === "High" ? "red" : "orange"}>{i.priority}</Badge></span><strong>{i.title}</strong><span className="intel-issue-bottom"><span>{i.trade}</span><span>{i.rfi || i.source}</span></span></span><ChevronRight size={16}/></button>)}</div>{!visible.length && <Empty title={tab === "RFI drafts" ? "No RFI drafts yet" : "No issues in this view"} description={tab === "RFI drafts" ? "Select an open issue and create a request for information." : "Change filters to see other coordination items."}/>}</Panel><div className="intel-issue-detail">{selected && <><Panel title={selected.id} subtitle="Issue details" action={<Badge tone={selected.status === "Resolved" ? "green" : "orange"}>{selected.status}</Badge>}><div className="intel-detail-body"><h2>{selected.title}</h2><p>{selected.detail}</p><div className="intel-reference-pair"><div><span>Drawing reference</span><strong><FileText size={14}/>{selected.source}</strong></div><div><span>Cross-reference</span><strong><Layers size={14}/>{selected.crossReference}</strong></div></div>{selected.rfi && <div className="intel-rfi-saved"><Badge tone="blue">{selected.rfi}</Badge><strong>RFI draft created</strong><p>{selected.question}</p><small>{selected.assignee || "Unassigned"} · Due {selected.due ? displayDate(selected.due) : "not set"}</small></div>}<div className="intel-issue-actions"><Button onClick={() => setRfi({ ...selected, question: selected.question || selected.detail, assignee: selected.assignee || "Architect", due: selected.due || "2026-09-22" })}><Plus size={15}/>{selected.rfi ? "Edit RFI draft" : "Create RFI"}</Button><Button variant={selected.status === "Resolved" ? "secondary" : "primary"} onClick={() => { setIssues(previous => previous.map(i => i.id === selected.id ? { ...i, status: i.status === "Resolved" ? "Open" : "Resolved" } : i)); notify(selected.status === "Resolved" ? "Issue reopened." : "Issue marked resolved."); }}><Check size={15}/>{selected.status === "Resolved" ? "Reopen issue" : "Mark resolved"}</Button></div></div></Panel><PlanPanel title="Source context" sheet={selected.source.split(" · ")[0]}/></>}</div></div><PreviewNote>Sample coordination findings · Create local RFI drafts and track review decisions.</PreviewNote>
-    {rfi && <Modal title={rfi.rfi ? "Edit RFI draft" : "Create request for information"} subtitle={`Linked issue: ${rfi.id}`} onClose={() => setRfi(null)}><form onSubmit={e => { e.preventDefault(); const number = rfi.rfi || `RFI-${String(issues.filter(i => i.rfi).length + 1).padStart(3, "0")}`; setIssues(previous => previous.map(i => i.id === rfi.id ? { ...rfi, rfi: number, status: rfi.status === "Resolved" ? "Resolved" : "RFI drafted" } : i)); setRfi(null); notify(`${number} saved as a local draft.`); }}><label className="ui-field">Subject<input value={rfi.title} onChange={e => setRfi({ ...rfi, title: e.target.value })} required/></label><label className="ui-field">Question<textarea rows={5} required value={rfi.question || ""} onChange={e => setRfi({ ...rfi, question: e.target.value })}/></label><div className="ui-form-grid"><label className="ui-field">Responsible party<input value={rfi.assignee || ""} onChange={e => setRfi({ ...rfi, assignee: e.target.value })}/></label><label className="ui-field">Response due<input type="date" value={rfi.due || ""} onChange={e => setRfi({ ...rfi, due: e.target.value })}/></label></div><div className="intel-inline-note"><FileText size={15}/>{rfi.source} + {rfi.crossReference}</div><div className="intel-dialog-actions"><Button onClick={() => setRfi(null)}>Cancel</Button><Button type="submit" variant="primary">Save RFI draft</Button></div></form></Modal>}
-    {scanOpen && <Modal title="Project review" subtitle="Review drawings and specifications together." onClose={() => setScanOpen(false)}><div className="intel-ai-card"><SearchCheck size={30}/><h3>Coordination review workspace</h3><p>Explore prepared examples of missing details, inconsistent requirements, and trade coordination conflicts.</p></div><div className="intel-check-options">{["Missing drawing information", "Drawing-to-specification conflicts", "Cross-trade coordination", "Incomplete schedules and details"].map(t => <div key={t}><CircleCheck size={17}/>{t}</div>)}</div><PreviewNote>Automatic document analysis is not connected. These findings are sample review items.</PreviewNote><div className="intel-dialog-actions"><Button variant="primary" onClick={() => { setTab("All issues"); setScanOpen(false); notify("Showing all sample project review findings."); }}>View review findings<ArrowRight size={16}/></Button></div></Modal>}
-  </div>;
-}
-
 function DrawingsScreen({ projectName, notify, navigate }: ViewProps) {
   const [rows, setRows] = useLocalDraft("drawing-register", initialDrawings);
   const [query, setQuery] = useState("");
@@ -177,7 +162,7 @@ export function IntelligenceView(props: ViewProps & { screen: Screen }) {
     case "takeoffs": return <TakeoffsScreen {...props}/>;
     case "specs": return <SpecsScreen {...props}/>;
     case "specifications": return <SpecificationsScreen {...props}/>;
-    case "checks": return <ChecksScreen {...props}/>;
+    case "checks": return <RfiWorkspace {...props}/>;
     case "drawings": return <DrawingsScreen {...props}/>;
     case "revisions": return <RevisionsScreen {...props}/>;
     default: return null;
