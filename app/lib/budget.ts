@@ -7,7 +7,8 @@
 // never picks one: applyLevelingValue makes the caller choose base, provisional or reviewed.
 //
 // Money is summed in cents. Variance = budget − forecast: negative means over budget (the
-// Budget summary convention). A line with no forecast yet counts at its budget.
+// Budget summary convention). A line with no forecast yet counts at its budget. Lines carried
+// BY THE OWNER (design fee, permits, …) are listed but never counted in the contractor's totals.
 // An allowance linked to a budget line is already inside that line's budget, so it is never
 // added to the totals a second time.
 
@@ -31,7 +32,7 @@ export type BudgetLine = {
   id: string;
   costCenter: string;
   classification: BudgetClass;
-  /** CSI division ("03") or section ("03 30 00"); null for lines without one (most indirect costs). */
+  /** CSI division ("03"), MasterFormat section ("03 30 00") or 5-digit code ("05500"); null for most indirect costs. */
   csiCode: string | null;
   /** Trade or indirect item, e.g. "Concrete" or "General liability insurance". */
   description: string;
@@ -42,6 +43,8 @@ export type BudgetLine = {
   forecast: number | null;
   /** Contracted value (0 until a subcontract is awarded). */
   committed: number;
+  /** Carried by the owner, not the contractor: shown for completeness, excluded from every total. */
+  byOwner: boolean;
   status: ReviewStatus;
   approval: { by: string; at: string } | null;
   source: LineSource;
@@ -64,11 +67,14 @@ export type BudgetAllowance = {
   updatedAt: string;
 };
 
-export type BudgetState = { lines: BudgetLine[]; allowances: BudgetAllowance[] };
+/** A cost center (Marcel's ECC columns) and its area, for cost per square foot. */
+export type CostCenter = { name: string; squareFeet: number | null };
+
+export type BudgetState = { lines: BudgetLine[]; allowances: BudgetAllowance[]; costCenters: CostCenter[] };
 
 export type BudgetLineInput = {
   costCenter: string; classification: BudgetClass; csiCode?: string | null; description: string; owner?: string;
-  budget: number; forecast?: number | null; committed?: number;
+  budget: number; forecast?: number | null; committed?: number; byOwner?: boolean;
 };
 export type AllowanceInput = { name: string; amount: number; costCenter: string; owner?: string; source?: string; status?: AllowanceStatus; budgetLineId?: string | null };
 
@@ -109,7 +115,8 @@ const amountError = (value: unknown, label: string, allowZero = true): string | 
 const csiError = (code: string | null | undefined): string | undefined => {
   const value = (code ?? "").trim();
   if (!value) return undefined;
-  return (/^\d{2}$/.test(value) && value in CSI_DIVISIONS) || csiDivision(value) ? undefined : "Use a CSI division such as 03 or a section such as 03 30 00.";
+  const division = /^\d{2}$/.test(value) ? value : /^\d{5}$/.test(value) ? value.slice(0, 2) : csiDivision(value);
+  return division && division in CSI_DIVISIONS ? undefined : "Use a CSI division such as 03, a section such as 03 30 00, or a code such as 05500.";
 };
 
 export function validateLineInput(input: BudgetLineInput): BudgetErrors {
@@ -165,6 +172,7 @@ function findAllowance(state: BudgetState, id: string): BudgetAllowance {
 const clean = (input: BudgetLineInput) => ({
   costCenter: input.costCenter.trim(), classification: input.classification, csiCode: input.csiCode?.trim() || null,
   description: input.description.trim(), owner: input.owner?.trim() ?? "", budget: input.budget, forecast: input.forecast ?? null, committed: input.committed ?? 0,
+  byOwner: input.byOwner === true,
 });
 
 // ── Budget lines ────────────────────────────────────────────────────────────
@@ -187,7 +195,7 @@ export function editBudgetLine(state: BudgetState, id: string, patch: Partial<Bu
   const errors = validateLineInput(merged);
   if (Object.keys(errors).length) fail(errors);
   const next = { ...line, ...clean(merged), updatedAt: at };
-  const approvedFieldsChanged = (["costCenter", "classification", "csiCode", "description", "budget"] as const).some(k => next[k] !== line[k]);
+  const approvedFieldsChanged = (["costCenter", "classification", "csiCode", "description", "budget", "byOwner"] as const).some(k => next[k] !== (line[k] ?? false));
   const forecastEdited = "forecast" in patch && next.forecast !== line.forecast;
   if (!approvedFieldsChanged && !forecastEdited && next.owner === line.owner && next.committed === line.committed) return state;
   const updated: BudgetLine = {
@@ -255,8 +263,10 @@ export function removeAllowance(state: BudgetState, id: string): BudgetState {
 // ── Calculations ────────────────────────────────────────────────────────────
 
 export type BudgetTotals = {
-  /** Budget lines only. */
+  /** Budget lines only, excluding lines carried by the owner. */
   budget: number; direct: number; indirect: number;
+  /** Lines carried by the owner: listed, not counted. */
+  byOwnerLines: number;
   /** Lines without a forecast count at their budget; see unforecastLines. */
   forecast: number; committed: number;
   /** budget − committed. */
@@ -275,7 +285,8 @@ export type BudgetTotals = {
 };
 
 export function budgetTotals(state: BudgetState, costCenter?: string): BudgetTotals {
-  const lines = costCenter === undefined ? state.lines : state.lines.filter(l => l.costCenter === costCenter);
+  const inCenter = costCenter === undefined ? state.lines : state.lines.filter(l => l.costCenter === costCenter);
+  const lines = inCenter.filter(l => !l.byOwner);
   const allowances = costCenter === undefined ? state.allowances : state.allowances.filter(a => a.costCenter === costCenter);
   const lineIds = new Set(state.lines.map(l => l.id));
   const budget = sum(lines.map(l => l.budget));
@@ -285,6 +296,7 @@ export function budgetTotals(state: BudgetState, costCenter?: string): BudgetTot
   const added = sum(included.filter(a => !a.budgetLineId || !lineIds.has(a.budgetLineId)).map(a => a.amount));
   return {
     budget, direct: sum(lines.filter(l => l.classification === "direct").map(l => l.budget)), indirect: sum(lines.filter(l => l.classification === "indirect").map(l => l.budget)),
+    byOwnerLines: inCenter.length - lines.length,
     forecast, committed, remaining: dollars(cents(budget) - cents(committed)), variance: dollars(cents(budget) - cents(forecast)),
     unforecastLines: lines.filter(l => l.forecast === null).length,
     allowancesAdded: added,
@@ -296,16 +308,21 @@ export function budgetTotals(state: BudgetState, costCenter?: string): BudgetTot
   };
 }
 
-/** Totals per cost center, in first-seen order (lines, then allowance-only centers). */
-export function totalsByCostCenter(state: BudgetState): { costCenter: string; totals: BudgetTotals }[] {
-  const centers = [...new Set([...state.lines.map(l => l.costCenter), ...state.allowances.map(a => a.costCenter)])];
-  return centers.map(costCenter => ({ costCenter, totals: budgetTotals(state, costCenter) }));
+/** Totals per cost center: declared centers first (state.costCenters order), then any others in first-seen order. */
+export function totalsByCostCenter(state: BudgetState): { costCenter: string; squareFeet: number | null; totals: BudgetTotals }[] {
+  const declared = state.costCenters ?? [];
+  const centers = [...new Set([...declared.map(c => c.name), ...state.lines.map(l => l.costCenter), ...state.allowances.map(a => a.costCenter)])];
+  return centers.map(costCenter => ({ costCenter, squareFeet: declared.find(c => c.name === costCenter)?.squareFeet ?? null, totals: budgetTotals(state, costCenter) }));
 }
+
+/** Cost per square foot, to the cent; null when the area is unknown or zero. Marcel's summary divides by the project's gross area. */
+export const costPerSquareFoot = (amount: number, squareFeet: number | null | undefined): number | null =>
+  squareFeet && squareFeet > 0 ? Math.round((amount / squareFeet) * 100) / 100 : null;
 
 /** Direct lines grouped by CSI division, ascending; lines without a code are grouped last under "". */
 export function totalsByDivision(state: BudgetState): { division: string; name: string; budget: number; forecast: number; committed: number; variance: number; lines: number }[] {
   const groups = new Map<string, BudgetLine[]>();
-  for (const line of state.lines.filter(l => l.classification === "direct")) {
+  for (const line of state.lines.filter(l => l.classification === "direct" && !l.byOwner)) {
     const division = line.csiCode ? line.csiCode.slice(0, 2) : "";
     groups.set(division, [...(groups.get(division) ?? []), line]);
   }
@@ -358,7 +375,7 @@ const BASIS_LABEL: Record<LevelingBasis, string> = { base: "base bid", provision
  */
 export function applyLevelingValue(state: BudgetState, lineId: string, candidate: LevelingCandidate, basis: LevelingBasis, by: string, at = now()): BudgetState {
   const line = findLine(state, lineId);
-  if (line.classification !== "direct") fail({ forecast: "Leveled bids apply to direct construction lines only." });
+  if (line.classification !== "direct" || line.byOwner) fail({ forecast: "Leveled bids apply to direct construction lines only." });
   if (!(basis in BASIS_LABEL)) fail({ forecast: "Choose base bid, provisional total, or reviewed total." });
   if (candidate.stale) fail({ forecast: `${candidate.bidderName} priced an older bid form; ask them to resubmit before using their number.` });
   const value = basis === "base" ? candidate.baseBid : basis === "provisional" ? candidate.provisionalTotal : candidate.reviewedTotal;

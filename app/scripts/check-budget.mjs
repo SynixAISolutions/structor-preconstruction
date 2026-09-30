@@ -5,9 +5,10 @@ register("./ts-resolver.mjs", import.meta.url);
 const {
   BudgetRuleError, addAllowance, addBudgetLine, applyLevelingValue, approveBudgetLine, budgetTotals, editAllowance, editBudgetLine,
   levelingCandidates, linkAllowance, parseAmount, removeAllowance, removeBudgetLine, reopenBudgetLine, setAllowanceStatus,
-  totalsByCostCenter, totalsByDivision,
+  totalsByCostCenter, totalsByDivision, costPerSquareFoot,
 } = await import("../lib/budget.ts");
 const { sampleBudget } = await import("../lib/data/budget.ts");
+const { ruleFixtureBudget } = await import("./fixtures/budget-rules.mjs");
 const { initialBidders } = await import("../lib/data/commercial.ts");
 const { sampleProcurement } = await import("../lib/data/procurement.ts");
 const { approveScope, bidForm, inviteBidder, publishPackage } = await import("../lib/procurement.ts");
@@ -18,29 +19,33 @@ const { startingDraft } = await import("../lib/project-scope.ts");
 const freeze = (v) => { if (v && typeof v === "object") { Object.values(v).forEach(freeze); Object.freeze(v); } return v; };
 const at = "2026-09-27T12:00:00.000Z";
 const fails = (fn, field, pattern) => assert.throws(fn, e => e instanceof BudgetRuleError && pattern.test(e.errors[field] ?? ""), `expected ${field} error ${pattern}`);
-const budget = freeze(structuredClone(sampleBudget));
+// Rule tests run on a frozen fixture (the earlier illustrative budget) so they never move with the real sample.
+const budget = freeze(structuredClone(ruleFixtureBudget));
 const line = (s, id) => s.lines.find(l => l.id === id);
 const valid = { costCenter: "Modernization", classification: "direct", csiCode: "09 29 00", description: "Drywall", owner: "Safi", budget: 410000 };
 
-// The sample (the values of the earlier Budget summary and Allowances previews); new projects start empty.
-const expectedLines = [
-  ["c1", "Modernization", "02", "Demolition", 520000, 498000, "draft"], ["c2", "Modernization", "03", "Concrete", 780000, 762000, "approved"],
-  ["c3", "Modernization", "05", "Structural steel", 1120000, 1155000, "draft"], ["c4", "Modernization", "23", "Mechanical", 2350000, 2275000, "draft"],
-  ["c5", "Modernization", "26", "Electrical", 1650000, 1590000, "approved"], ["c6", "New addition", "03", "Concrete", 980000, 945000, "draft"],
-  ["c7", "New addition", "05", "Structural steel", 1800000, 1740000, "draft"], ["c8", "New addition", "07", "Roofing & envelope", 1300000, 1280000, "draft"],
-  ["c9", "Site work", "31", "Earthwork", 640000, 622000, "approved"], ["c10", "Site work", "32", "Exterior improvements", 820000, 850000, "draft"],
-  ["c11", "Site work", "33", "Site utilities", 460000, 447000, "draft"],
-];
-assert.deepEqual(budget.lines.filter(l => l.classification === "direct").map(l => [l.id, l.costCenter, l.csiCode, l.description, l.budget, l.forecast, l.status]), expectedLines);
-assert.deepEqual(budget.lines.filter(l => l.classification === "indirect").map(l => [l.id, l.csiCode, /\(sample\)$/.test(l.description)]), [["i1", null, true], ["i2", null, true], ["i3", null, true]], "Indirect lines are labelled placeholders");
-assert(budget.lines.every(l => l.committed === 0 && l.source.kind === "sample" && (l.status === "approved") === (l.approval !== null)));
-assert.deepEqual(budget.allowances.map(a => [a.id, a.name, a.amount, a.costCenter, a.source, a.status, a.owner, a.budgetLineId]), [
-  ["a1", "Public art allowance", 500000, "Site work", "Owner requirements · Public art", "review", "Safi", null],
-  ["a2", "Unforeseen existing conditions", 175000, "Modernization", "General requirements · Existing conditions", "included", "Vijay", null],
-  ["a3", "AV equipment selection", 85000, "Modernization", "Division 27 · Communications", "review", "Naija", null],
-  ["a4", "Landscape establishment", 45000, "Site work", "Division 32 · Exterior improvements", "included", "Safi", "c10"],
-]);
-assert.deepEqual(startingDraft("p2", "budget-state", sampleBudget), { lines: [], allowances: [] });
+// Marcel's real Jelleff DD Budget: the normalized sample must reproduce his workbook, to the cent.
+const real = freeze(structuredClone(sampleBudget));
+const rt = budgetTotals(real);
+assert.deepEqual([rt.budget, rt.direct, rt.indirect], [33328991.4, 27337424.94, 5991566.46], "Total cost, total trades cost, and the lines below the trades, as in the DD Budget");
+// Per cost center the workbook sums unrounded cells; ours are rounded to cents, so allow one cent.
+const sheetCenters = [["Renovation (pool)", 2618, 469390.58], ["New construction", 26500, 23643218.16], ["Sitework", 77978, 9216382.66], ["Project-wide", null, 0]];
+totalsByCostCenter(real).forEach((c, i) => {
+  assert.deepEqual([c.costCenter, c.squareFeet], sheetCenters[i].slice(0, 2));
+  assert(Math.abs(Math.round(c.totals.budget * 100) - Math.round(sheetCenters[i][2] * 100)) <= 1, `${c.costCenter}: ${c.totals.budget} vs workbook ${sheetCenters[i][2]}`);
+});
+assert.deepEqual([rt.byOwnerLines, real.lines.filter(l => l.byOwner).every(l => l.budget === 0 && l.classification === "indirect")], [6, true], "By-owner rows are listed at $0");
+assert(real.lines.every(l => l.forecast === null && l.status === "draft" && l.approval === null), "A DD budget has no forecasts or approvals of ours");
+assert(real.lines.filter(l => l.classification === "direct").every(l => /^\d{5}$/.test(l.csiCode)), "Trade lines keep Marcel's 5-digit CSI codes");
+assert.equal(new Set(real.lines.map(l => l.id)).size, real.lines.length);
+assert.equal(costPerSquareFoot(rt.budget, 26500), 1257.7, "Cost per SF on 26,500 gross SF (the sheet shows 1,258)");
+// Allowances: only Public art has its own line (linked, not added again); the rest await review.
+assert.equal(real.allowances.length, 20);
+const art = real.allowances.find(a => a.name === "Public art");
+assert.deepEqual([art.status, art.budgetLineId, line(real, art.budgetLineId).budget], ["included", "nc-public-art-owner-allowance", 100000]);
+assert.deepEqual([rt.allowancesInLines, rt.allowancesAdded, rt.allowancesPending, rt.totalBudget], [100000, 0, 3507071.5, 33328991.4], "Totals still equal the workbook: nothing is double counted");
+assert(real.allowances.filter(a => a !== art).every(a => a.status === "review" && /cost center assumed/.test(a.source)));
+assert.deepEqual(startingDraft("p2", "budget-state-v2", sampleBudget), { costCenters: [], lines: [], allowances: [] });
 
 // Totals (hand-worked): direct 12,420,000 + indirect 1,305,000; forecast 12,164,000 + 1,305,000.
 const t = budgetTotals(budget);
@@ -137,4 +142,14 @@ assert.deepEqual([workbook.packageId, workbook.submissionId, workbook.revisionNu
 // Amount parsing for form inputs.
 assert.deepEqual(["$1,250,000.50", " 420 ", "1.234", "-5", "abc", ""].map(parseAmount), [1250000.5, 420, null, null, null, null]);
 
-console.log(`Budget checked: ${budget.lines.length} lines, ${budget.allowances.length} allowances; totals, cost centers, divisions, validation, allowance links, leveling roll-up through the real engine.`);
+// By-owner lines, 5-digit CSI codes, cost per square foot.
+const withOwner = addBudgetLine(budget, { ...valid, classification: "indirect", csiCode: null, description: "Permits", budget: 180000, byOwner: true }, "Safi", at);
+assert.deepEqual([budgetTotals(withOwner).budget, budgetTotals(withOwner).byOwnerLines], [budgetTotals(budget).budget, 1], "A by-owner line is listed but never counted");
+fails(() => applyLevelingValue(withOwner, withOwner.lines.at(-1).id, capital, "base", "Safi", at), "forecast", /direct construction lines only/);
+assert.equal(line(editBudgetLine(budget, "c2", { byOwner: true }, "Safi", at), "c2").status, "draft", "Moving a line to the owner reopens it");
+assert.equal(addBudgetLine(budget, { ...valid, csiCode: "05500" }, "Safi", at).lines.at(-1).csiCode, "05500");
+fails(() => addBudgetLine(budget, { ...valid, csiCode: "99000" }, "Safi", at), "csiCode", /05500/);
+assert.deepEqual([costPerSquareFoot(1000, 3), costPerSquareFoot(1000, 0), costPerSquareFoot(1000, null)], [333.33, null, null]);
+assert.deepEqual(totalsByCostCenter({ ...budget, costCenters: [{ name: "Site work", squareFeet: 77978 }] }).map(c => c.costCenter).slice(0, 2), ["Site work", "Modernization"], "Declared cost centers come first");
+
+console.log(`Budget checked: real Jelleff DD Budget (${real.lines.length} lines, $${rt.budget.toLocaleString("en-US")}) matches the workbook; rules on the fixture; totals, cost centers, divisions, validation, allowance links, leveling roll-up through the real engine.`);

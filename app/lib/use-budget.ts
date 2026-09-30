@@ -13,10 +13,12 @@ import { useLocalDraft } from "./use-local-draft";
  *   const errors = run(s => addBudgetLine(s, input, userName));
  *   if (errors) showFieldErrors(errors);
  *
- * Stored under "budget-state", separate from the older "budget" / "allowances" preview drafts.
+ * Stored under "budget-state-v2", separate from the older "budget" / "allowances" preview drafts.
  */
 export function useBudget() {
-  const [state, setState] = useLocalDraft<BudgetState>("budget-state", sampleBudget);
+  // "-v2": the Jelleff sample became Marcel's real DD Budget, so browsers that saved the earlier
+  // placeholder budget start from the real one instead of keeping the placeholder.
+  const [state, setState] = useLocalDraft<BudgetState>("budget-state-v2", sampleBudget);
   const latest = useRef(state);
   latest.current = state;
   const run = useCallback((action: (current: BudgetState) => BudgetState): BudgetErrors | null => {

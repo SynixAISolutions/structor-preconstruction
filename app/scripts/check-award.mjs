@@ -4,7 +4,7 @@ import { register } from "node:module";
 register("./ts-resolver.mjs", import.meta.url);
 const A = await import("../lib/award.ts");
 const { levelingCandidates } = await import("../lib/budget.ts");
-const { sampleBudget } = await import("../lib/data/budget.ts");
+const { ruleFixtureBudget: sampleBudget } = await import("./fixtures/budget-rules.mjs");
 const { initialBidders } = await import("../lib/data/commercial.ts");
 const { sampleProcurement } = await import("../lib/data/procurement.ts");
 const { addScope, approveScope, bidForm, inviteBidder, publishPackage, setInvitationStatus } = await import("../lib/procurement.ts");
