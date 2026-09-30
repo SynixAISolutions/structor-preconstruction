@@ -276,6 +276,28 @@ export const pageGuides = [
     related: ["documents", "budget", "leveling"],
   },
   {
+    id: "value-engineering",
+    group: "Preconstruction",
+    title: "Value engineering",
+    purpose: "Close the gap between the estimate and what the owner can spend. Set a target reduction, collect ideas that could save money, get subcontractors to price them, and record which ones the team accepts.",
+    steps: [
+      "Set the target: enter the owner's budget (the target is the estimate minus that budget) or type the reduction you need directly.",
+      "Set the markup factor if general conditions, fee, insurance, bond and contingency apply on top of trade cost. The weighted impact of each idea is its cost impact times this factor.",
+      "Add ideas with a description, heading, CSI code, trade, source reference, and estimated cost impact. A saving is a negative amount.",
+      "Ask one or more subcontractors to price an idea. Record each quote, or their decline, when it comes back.",
+      "Accept or reject each idea. Accepting needs the cost impact you are accepting, from the estimate or a quote. Reopen an idea to change a decision.",
+      "Watch the summary: accepted savings, savings still pending, the gap to the target, and the projected estimate.",
+    ],
+    terms: [
+      { name: "Cost impact", meaning: "The change to trade cost if the idea is adopted. Negative means a saving." },
+      { name: "Weighted cost impact", meaning: "The cost impact including the markups that ride on top of trade cost." },
+      { name: "Target reduction", meaning: "How much the estimate must come down to meet the owner's budget." },
+    ],
+    example: "The estimate is $30 million and the owner has $28 million, so the target is $2 million. An alternative roofing membrane is estimated at -$40,000; with a markup factor of 1.25 its weighted impact is -$50,000.",
+    reality: "Ideas, quotes and decisions save in this browser for the open project. Pricing requests are recorded, not sent. Accepting an idea does not change the budget; AI suggestions are not generated yet.",
+    related: ["budget", "allowances", "packages"],
+  },
+  {
     id: "contracts",
     group: "Preconstruction",
     title: "Contracts & exhibits",
