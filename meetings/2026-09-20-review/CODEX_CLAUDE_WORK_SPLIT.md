@@ -68,22 +68,22 @@ pnpm build
 | Quantity takeoffs | Build trade/division drill-down, item table, source inspector, units, review states, and visual summaries | Model quantities, units, source links, trade grouping, calculations, data import/extraction, approval, and downstream budget links | Claude exposes approved takeoff records; Codex makes them inspectable |
 | Drawing and specification registers | Build separate polished register screens, filters, row details, revision badges, and previews | Parse/store drawing and specification metadata, dates, disciplines, sections, revisions, and project ownership | Claude supplies normalized register records; Codex builds both views |
 | Revision comparison | Improve side-by-side/changes-only UI, overlays, navigation, and mobile presentation | Implement version pairing, detected change records, source references, and affected-scope/quantity links | Claude supplies change geometry/metadata; Codex draws the comparison |
-| Structor Check and RFIs | Build filterable issue table, severity/trade filters, issue editor, package/send dialogs, response timeline, and provenance badges | Unify AI, contractor, subcontractor, and email RFIs; implement state machine, routing, APIs, notifications, responses, permissions, and audit history | Claude defines one RFI record and lifecycle; Codex exposes it consistently |
+| Structor Check and RFIs | Build filterable issue table, severity/trade filters, contractor-review queue, issue editor, package/send dialogs, response timeline, and provenance badges | Unify AI, contractor, subcontractor, and email RFIs; enforce contractor review before packaging/sending; implement state machine, routing, APIs, notifications, responses, permissions, and audit history | Claude prevents an unreviewed issue from being sent; Codex makes the review, package, send, and response boundaries explicit |
 | Budget summary and detailed budget | Build direct/indirect sections, summary cards, detailed tables, import/review UI, variance visuals, and charts | Define budget model, direct/indirect categories, Excel import, links to leveled bids/scopes, forecast/variance calculations, and persistence | Claude supplies authoritative values and mapping errors; Codex presents them |
 | Allowances | Build editable allowance list, origin/evidence display, total cards, and review states | Extract/store allowances, amounts, source citations, approvals, and budget roll-up | Claude exposes allowance records and totals; Codex renders editing/review |
 | Contracts and Exhibit A | Build trade-based award screen, selected-bidder summary, document preview, comment/redline timeline, signature status, and download UI | Implement template configuration, scope-to-document generation, versions, comments, negotiation states, notifications, signatures/integration, and final storage | Claude generates/version-controls documents; Codex provides review and action screens |
 | Submittal packages/log | Convert the current Spec Matrix UI into an Operations workflow with package lists, status filters, submission/review panels, and architect/subcontractor views | Extract submittal requirements, link them to awards/specs, manage routing, versions, approvals, reminders, permissions, and notifications | Claude owns the workflow state; Codex builds role-aware views |
 | Project schedule | Keep and polish the Gantt/timeline, filters, progress editing, legends, and responsive controls | Own milestone data, dependencies, progress logic, persistence, and P6/MS Project import/export | Claude supplies schedule records and import errors; Codex renders the timeline |
 | Preconstruction to-do/progress | Rename and redesign the current Turnover preview as a useful progress/checklist screen | Replace the old data with derived tasks such as scope approvals, missing bid forms, unresolved RFIs, incomplete leveling, and pending awards | Claude derives tasks; Codex shows progress, grouping, and next actions |
-| Drawing Flip | Build the drawing viewer, page navigation, trade-color overlays, scope selection, hover/click interaction, legend, and manual reassignment UI | Produce/store page regions, scope-to-region links, trade classifications, evidence, confidence, and corrected assignments | Claude exposes coordinates and trade IDs; Codex renders overlays and corrections |
+| Drawing Flip | Build a standalone Preconstruction page with the drawing viewer, page navigation, trade-color overlays, scope selection, hover/click interaction, legend, manual reassignment UI, and links back to scopes/bid forms | Produce/store page regions, scope-to-region links, trade classifications, evidence, confidence, and corrected assignments | Claude exposes coordinates and trade IDs; Codex renders the standalone viewer and connected scope navigation |
 | Value Engineering | Build target-savings dashboard, idea cards/table, manual-add UI, pricing-request flow, status, and savings visuals | Generate/store ideas, evidence, estimated savings, approval state, subcontractor pricing requests, responses, and budget effects | Claude owns idea lifecycle and math; Codex provides the decision workspace |
 | Global subcontractor directory | Build global directory, search/filter UI, company profiles, trade chips, project history, and invitation entry points | Define organization/company/contact records, trade classifications, search, deduplication, project history, permissions, and integrations | Claude supplies the canonical company record; Codex never keeps a second local directory |
 | Ratings and prequalification | Build rating summaries/forms, evidence/history presentation, prequalification questionnaire, file checklist, and status UI | Define rating criteria, aggregation, permissions, moderation, disputes, questionnaire schema, document storage, expiry rules, and approval workflow | Requirements must be confirmed before Claude locks the model and Codex finalizes screens |
 | Historical estimating and benchmarking | Build comparable-project results, filters, cost-per-area cards, inflation explanations, division charts, and budget-trend dashboards | Implement comparable-project search, permissions, normalization, inflation data/rules, cost metrics, phase history, and estimate calculations | Claude returns comparisons with reasons; Codex makes them understandable and reviewable |
 | AI assistant | Build chat/help panel, citations, suggested prompts, tool/progress states, and safe confirmation UI | Implement retrieval, project-data access, tool calling, permissions, citations, refusal/uncertainty handling, and cost-data sources | Claude exposes cited answers/actions; Codex distinguishes answers from executable actions |
-| 3D quantities and metadata | Expand the inspector to show area, length, height, thickness, assembly, sources, specifications, and confidence | Extend `lib` model data/types with authoritative geometry-derived quantities and document/spec associations | Codex requests fields; Claude adds them to `lib`; Codex renders them |
+| 3D quantities and metadata | Make every supported object selectable and expand the right-side inspector to show area, length, height, thickness, assembly, sources, specifications, and confidence | Extend `lib` model data/types with authoritative geometry-derived quantities and document/spec associations | Codex requests fields; Claude adds them to `lib`; Codex renders consistent object-level detail |
 | 3D second floor and richer interiors | Build geometry presentation, floor switching, transitions, doors, furnishings, equipment, labels, materials, show/hide controls, and animations | Supply structured element records and source-linked model data; build any processing pipeline that derives them | Claude owns the data contract; Codex owns `model-studio.tsx` and public visual assets |
-| 3D MEP, structural, exterior, and walkthrough modes | Build viewer modes, discipline filters, cutaways, navigation, first-person controls, visual hierarchy, and performance-friendly rendering | Supply system geometry/metadata, discipline classification, clash/change records, source links, and processing/storage | Treat each mode as a separate milestone sharing one viewer contract |
+| 3D interior, MEP, structural, exterior, and walkthrough views | Build distinct discipline screens/views, filters, cutaways, navigation, first-person controls, visual hierarchy, and performance-friendly rendering | Supply system geometry/metadata, discipline classification, clash/change records, source links, and processing/storage | Treat each discipline view as a separate milestone sharing one model and inspector contract; use BuildingConnected only as terminology reference, not as an exact UI taxonomy |
 | Automated regression gate | Perform browser/mobile/accessibility/visual interaction checks and fix UI defects in Codex-owned files | Extend `check-*.mjs` for new screen coverage, data rules, model counts/contracts, imports, and workflows | Both run the whole gate; Claude owns test scripts, Codex owns UI fixes |
 
 ## Codex backlog — what I would do
@@ -118,7 +118,7 @@ pnpm build
 17. Build Drawing Flip overlays and interactions once Claude supplies page coordinates.
 18. Expand the 3D inspector and quantity presentation.
 19. Add second-floor and interior element controls.
-20. Add separately planned interior, MEP, structural, exterior, and walkthrough modes.
+20. Add distinct interior, MEP, structural, exterior, and walkthrough screens/views on the shared model and inspector foundation.
 21. Finish responsive behavior, accessibility, loading/error states, animation, and UI regression checks.
 
 ## Claude backlog — what Claude would do
@@ -174,13 +174,20 @@ Neither Codex nor Claude should invent these answers:
 4. Subcontractor rating criteria, visibility, moderation, and dispute handling.
 5. The real prequalification questionnaire and required documents.
 6. Customer template rules for bid sheets, Exhibit A, and subcontract agreements.
-7. The first 3D expansion milestone and its required accuracy: interiors, second floor, exterior, MEP, structural, or walkthrough.
+7. The first 3D expansion milestone and the source/accuracy standard for it. The separate interior, MEP, structural, and exterior view structure is already confirmed.
 8. Whether historical project data is strictly private to each contractor organization.
 9. Confirmation of the reference products Marcel called “Concentric” and “Join.”
 
 The navigation question is resolved: use two project-level groups, **Preconstruction**
 and **Operations**. Subcontractor Outreach is nested inside Preconstruction. Global
 workspace tools remain outside the project groups.
+
+Other confirmed interpretation from Danial:
+
+- Drawing Flip is a standalone Preconstruction page connected to Scopes & Bid Forms.
+- AI-created and subcontractor-created RFIs must be reviewed by the contractor before they can be packaged and recorded as sent to the architect.
+- The 3D product has distinct interior, MEP, structural, and exterior screens/views, with a detailed right-side inspector for selectable objects.
+- The BuildingConnected CSI list shown in the video is a vocabulary reference, not an exact list or interface to reproduce.
 
 ## Recommended parallel sequence
 
@@ -209,13 +216,13 @@ Approved scope → publish → invite bidder → bidder responds → level bid �
 
 ### Wave 4 — Operations
 
-**Claude:** unified RFIs, submittal routing, schedule import/export, notifications.  
-**Codex:** RFI, submittal, role-specific review, and schedule interfaces.
+**Claude:** unified RFIs with a mandatory contractor-review gate, submittal routing, schedule import/export, notifications.
+**Codex:** RFI review/package/send flow, submittal, role-specific review, and schedule interfaces.
 
 ### Wave 5 — Advanced intelligence and 3D
 
-**Claude:** Drawing Flip coordinates, VE/benchmarking/chat functionality, extended model data.  
-**Codex:** Drawing Flip viewer, VE/benchmark dashboards, chat interface, and 3D modes.
+**Claude:** Drawing Flip coordinates, VE/benchmarking/chat functionality, extended model data.
+**Codex:** standalone Drawing Flip page, VE/benchmark dashboards, chat interface, and distinct 3D discipline views.
 
 ## Definition of done for a shared feature
 

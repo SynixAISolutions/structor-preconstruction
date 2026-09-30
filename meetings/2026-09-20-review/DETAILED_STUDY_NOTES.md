@@ -224,6 +224,8 @@ Important fields and actions:
 
 Subcontractors should also be able to create RFIs from their portal. If an RFI arrives by email, Marcel suggests that a connected inbox could recognize it and add it to the same log. The product therefore needs one RFI register containing AI findings, contractor questions, and subcontractor questions with clear provenance.
 
+Danial confirmed the approval boundary after reviewing the ambiguous on-screen portion: every AI-created or subcontractor-created issue must wait for contractor review. The contractor can edit, combine, and package reviewed issues into an RFI; only a contractor-approved package may be recorded as sent to the architect. The architect's response then returns through the same log and is routed to the relevant subcontractors.
+
 ## Part 9 — Operations, schedule, subcontractor portal, and the “to-do list” (23:31–26:15)
 
 - Rename the current Coordination area to **Operations**.
@@ -247,7 +249,7 @@ The list should include actions such as approving AI-generated scopes and other 
 
 ## Part 10 — Drawing Flip: visual scope review (26:15–28:16)
 
-Marcel proposes a **Drawing Flip** tool within Scopes & Bid Forms.
+Marcel proposes a **Drawing Flip** tool connected to Scopes & Bid Forms. Danial confirmed that it should be its own Preconstruction page rather than an embedded scope panel. Scope and bid-form records should link into the standalone viewer so the estimator can move between the checklist and its drawing evidence.
 
 The tool would:
 
@@ -347,15 +349,17 @@ For each selectable element, show the quantities available from the model and ta
 3. **Structural model** — concrete and steel, showing the structural “bones” of the building.
 4. **Exterior model** — the finished exterior appearance and assemblies.
 
+Danial confirmed that these disciplines should be presented as distinct screens or views within the 3D product area. They can share the same model and inspector contract, but a user should be able to enter the interior, MEP, structural, and exterior experiences separately.
+
 ### Specification depth and walkthrough
 
-When a user hovers or clicks an element, Marcel wants detailed specification data, including niche properties such as insulation R-values when documented.
+When a user hovers or clicks an element, Marcel wants the right-side inspector to identify that object and show its available details, quantities, source references, and specification data, including niche properties such as insulation R-values when documented. This richer object-level detail is the clearest immediate request in the 3D portion of the review.
 
 He also wants a first-person virtual walkthrough similar to a hotel or real-estate tour so owners can experience the building before construction.
 
 ### Practical interpretation
 
-The current model is a successful visual proof of concept. Marcel's requested expansion spans several distinct products: quantity takeoff, material/spec inspection, visualization, MEP clash coordination, structural BIM, and owner presentation. These should be planned as separate milestones even if they share the same viewer.
+The current model is a successful visual proof of concept. Marcel's requested expansion spans several distinct products: quantity takeoff, material/spec inspection, visualization, MEP clash coordination, structural BIM, and owner presentation. These should be planned as separate screens or milestones even if they share the same viewer and object-inspector foundations. The BuildingConnected CSI list Marcel opened around 42:00 was an example of system/trade terminology to draw from; it was not a request to reproduce that exact list or interface.
 
 ## Part 15 — Closing and next inputs (45:23–45:43)
 
@@ -440,6 +444,17 @@ This is a synthesis of Marcel's comments; he changed some groupings while speaki
 - Keep a global subcontractor directory with future ratings and prequalification.
 - Add Drawing Flip and Value Engineering.
 - Expand the 3D studio with quantities, source/spec data, floors, disciplines, systems, and walkthroughs.
+- Keep every AI-created and subcontractor-created RFI internal until the contractor reviews and packages it for the architect.
+- Present Drawing Flip as a standalone Preconstruction page linked to scopes and bid forms.
+- Use distinct 3D discipline views with a detailed right-side inspector for selectable objects.
+
+## Confirmed interpretation from Danial — 30 September 2026
+
+- **Drawing Flip:** a standalone Preconstruction page, with links to and from Scopes & Bid Forms.
+- **RFI approval gate:** AI and subcontractor questions wait for contractor review before they can be packaged and recorded as sent to the architect.
+- **Navigation:** global Workspace plus the two project groups Preconstruction and Operations; Subcontractor Outreach is nested within Preconstruction.
+- **3D organization:** distinct interior, MEP, structural, and exterior screens or views, supported by richer details in the right-side inspector for each selectable object.
+- **BuildingConnected reference:** its CSI trade list was illustrative vocabulary for systems to model, not a required copy of its list, controls, or page design.
 
 ## Items that require clarification
 
@@ -448,10 +463,10 @@ This is a synthesis of Marcel's comments; he changed some groupings while speaki
 3. **Subcontractor ratings:** define the exact rating dimensions, who may rate, moderation, disputes, and visibility.
 4. **Prequalification:** obtain the actual questionnaire and required documents.
 5. **Template rules:** confirm how each customer's Exhibit A, subcontract, bid-leveling, and export templates are configured.
-6. **RFI intake:** decide how AI-created, contractor-created, subcontractor-created, and email-imported RFIs are distinguished.
+6. **RFI provenance and integrations:** define how AI, contractor, subcontractor, and email sources are identified in the shared log, plus the future email and architect-delivery integrations. The contractor-review gate is already settled.
 7. **Historical benchmarking:** define inflation source, comparable-project filters, permissions, and whether data stays company-private.
 8. **AI assistant:** separate product help from project-data questions and market-price estimates.
-9. **3D expectations:** agree on accuracy and source requirements for visualization, takeoff, BIM coordination, structural modeling, and virtual walkthroughs.
+9. **3D fidelity:** agree on the source and accuracy standards for visualization, takeoff, BIM coordination, structural modeling, and virtual walkthroughs, and choose which confirmed discipline view to implement first.
 10. **Reference product names:** confirm “Concentric” and “Join,” as well as the exact features Marcel wants to emulate.
 
 **Resolved navigation decision:** use two project-level groups, **Preconstruction** and
