@@ -61,7 +61,9 @@ const v2 = publishPackage(approveAll(addScope(proc, { packageId: "demolition", t
 fails(() => A.createAward(empty, { ...ctx, procurement: v2 }, { levelingBidderId: capital.levelingBidderId, basis: "reviewed" }, "Safi", at), "candidate", /older bid form/);
 
 // Award Capital at its reviewed total, linked to the Demolition budget line with one allowance.
-let s = freeze(A.createAward(empty, ctx, { levelingBidderId: capital.levelingBidderId, basis: "reviewed", budgetLineId: "c1", allowanceIds: ["a2", "a2"] }, "Safi", at));
+// The sample layout (no customer template) is pinned here; the MCN layout is checked further down.
+const SAMPLE_EXHIBIT = [A.generateSampleExhibit, A.SAMPLE_EXHIBIT_TEMPLATE];
+let s = freeze(A.createAward(empty, ctx, { levelingBidderId: capital.levelingBidderId, basis: "reviewed", budgetLineId: "c1", allowanceIds: ["a2", "a2"] }, "Safi", at, ...SAMPLE_EXHIBIT));
 let award = s.awards[0];
 const id = award.id;
 assert.deepEqual([award.packageId, award.invitationId, award.bidderId, award.submissionId, award.revisionNumber, award.budgetLineId, award.basis, award.amount],
@@ -84,7 +86,7 @@ const cancelled = freeze(A.cancelAward(s, id, "Owner chose to re-bid", "Safi", a
 fails(() => A.cancelAward(s, id, " ", "Safi", at), "reason", /Say why/);
 assert.equal(A.awardStage(cancelled.awards[0]), "cancelled");
 fails(() => A.shareExhibit(cancelled, id, at), "award", /cancelled/);
-const g = A.createAward(cancelled, ctx, { levelingBidderId: green.levelingBidderId, basis: "base" }, "Safi", at).awards[1];
+const g = A.createAward(cancelled, ctx, { levelingBidderId: green.levelingBidderId, basis: "base" }, "Safi", at, ...SAMPLE_EXHIBIT).awards[1];
 const gdoc = A.latestExhibit(g).content;
 assert.deepEqual([g.amount, section(gdoc, "Scope of work").length], [450000, form.length - 1], "The excluded item is not in the scope of work");
 assert.deepEqual(section(gdoc, "Excluded from this subcontract"), [form[1].title, "Hazardous materials abatement"]);
@@ -125,11 +127,11 @@ fails(() => A.reviseExhibit(s, id, edited, "", "Safi", at), "exhibit", /agreed a
 // Subcontract: only after agreement; sub signs, contractor countersigns, then executed.
 fails(() => A.generateSubcontract(s, id, "  ", "Safi", at), "contractorName", /legal name/);
 fails(() => A.sendSubcontract(s, id, at), "subcontract", /Generate the subcontract first/);
-s = freeze(A.generateSubcontract(s, id, "Sample General Contractor LLC", "Safi", at));
+s = freeze(A.generateSubcontract(s, id, "Sample General Contractor LLC", "Safi", at, A.generateSampleSubcontract, A.SAMPLE_SUBCONTRACT_TEMPLATE));
 award = s.awards[0];
 assert.deepEqual([A.awardStage(award), award.subcontract.exhibitRevision, award.subcontract.amount, award.subcontract.template.sample], ["subcontract-draft", 2, 507960, true]);
 assert.deepEqual(section(award.subcontract.content, "Parties"), ["Contractor: Sample General Contractor LLC", "Subcontractor: Capital Demolition", "Project: Jelleff Recreation Center"]);
-s = freeze(A.generateSubcontract(s, id, "Sample GC Inc.", "Safi", at));
+s = freeze(A.generateSubcontract(s, id, "Sample GC Inc.", "Safi", at, A.generateSampleSubcontract, A.SAMPLE_SUBCONTRACT_TEMPLATE));
 assert.equal(s.awards[0].subcontract.contractorName, "Sample GC Inc.", "An unsent draft can be regenerated");
 s = freeze(A.sendSubcontract(s, id, at));
 assert.deepEqual([A.awardStage(s.awards[0]), s.notifications.at(-1).kind], ["signature-pending", "subcontract-sent"]);
@@ -151,6 +153,34 @@ for (const text of ["Subcontract agreement · Demolition", "Exhibit A — Scope 
 fails(() => A.cancelAward(s, id, "too late", "Safi", at), "award", /executed subcontract/);
 assert.deepEqual(s.notifications.map(n => n.kind), ["exhibit-shared", "exhibit-changes-requested", "exhibit-shared", "exhibit-agreed", "exhibit-agreed", "subcontract-sent", "subcontract-signed", "subcontract-countersigned", "subcontract-executed", "subcontract-executed"]);
 assert(A.markAwardNotificationsRead(s, s.notifications.map(n => n.id)).notifications.every(n => n.read));
+
+// The customer (MCN Build) templates are the default: MCN's Exhibit A structure and subcontract, placeholders filled.
+const mcnCtx = { ...ctx, owner: "DC Department of General Services", projectAddress: "3265 S Street NW, Washington, DC 20007", projectStart: "2026-06-01" };
+const mcn = A.createAward(empty, mcnCtx, { levelingBidderId: green.levelingBidderId, basis: "base" }, "Safi", at).awards[0];
+const mdoc = A.latestExhibit(mcn).content;
+assert.deepEqual([A.latestExhibit(mcn).template.id, A.latestExhibit(mcn).template.sample, mdoc.title], ["mcn-exhibit-a", false, "Exhibit A — Scope of Work · 02 41 19 Demolition"]);
+assert.deepEqual(section(mdoc, "Exhibit A — Scope of Work"), ["Demolition", "DC Department of General Services", "Jelleff Recreation Center", "3265 S Street NW, Washington, DC 20007"]);
+const notes = mdoc.sections.find(x => x.heading.startsWith("General notes")).lines;
+assert.deepEqual([notes.length, notes[0].startsWith("1. It is the intent of this bid package"), notes.at(-1).startsWith("32. All work hours")], [32, true, true], "MCN's 32 general notes, numbered");
+const mscope = section(mdoc, "Scope of work");
+assert(mscope[0].startsWith("The scope of work of this Subcontract includes") && mscope.at(-1) === "Provide an ADD ALTERNATE Payment and Performance Bond.");
+assert.equal(mscope.length, 1 + (form.length - 1) + 1, "Intro, the included items (not the N item), the bond alternate");
+assert.deepEqual(section(mdoc, "Scope exclusions"), [form[1].title, "Hazardous materials abatement"]);
+assert.deepEqual(section(mdoc, "Specific notes for scope of work — governing sections").at(-1), "02 41 19 — Demolition");
+assert(section(mdoc, "Phasing & schedule highlights").includes("Project Commencement – 2026-06-01"));
+assert(section(mdoc, "Phasing & schedule highlights").includes("Project Substantial Completion – [finish]"), "A missing value stays visible as [finish]");
+assert(mdoc.sections.some(x => x.heading === "Economic inclusion requirements") && mdoc.sections.at(-1).heading === "- End of Exhibit A -");
+assert.deepEqual(section(mdoc, "Subcontract amount"), ["$450,000, the base bid from bid leveling (bid revision 1, bid form version 1)."]);
+assert.equal(A.latestExhibit(A.createAward(empty, ctx, { levelingBidderId: green.levelingBidderId, basis: "base" }, "Safi", at).awards[0]).content.sections[0].lines[1], "[owner]", "No owner supplied: the gap is shown");
+let m = A.createAward(empty, mcnCtx, { levelingBidderId: capital.levelingBidderId, basis: "reviewed" }, "Safi", at);
+const mid = m.awards[0].id;
+m = A.shareExhibit(m, mid, at);
+m = A.generateSubcontract(A.agreeExhibit(m, mid, "Michael", "subcontractor", at), mid, "MCN Build, Inc.", "Safi", at);
+const msub = m.awards[0].subcontract.content;
+assert.deepEqual([m.awards[0].subcontract.template.id, msub.title, msub.sections[0].heading], ["mcn-subcontract", "Subcontract agreement · Demolition", "MCN Build, Inc."]);
+assert.deepEqual(section(msub, "3.1 Total Subcontract Price"), ["Contractor shall pay Subcontractor for the performance of the Work, subject to additions and deductions by change order, the sum of $507,960."]);
+assert.equal(section(msub, "Exhibits")[0], "Exhibit A: Scope of Work (revision 1)");
+assert.match(section(msub, "Terms")[0], /Articles 1 through 29 of the MCN Build, Inc\. Subcontract Agreement apply in full/);
 
 // Documents: plain text for download, and generators/templates are replaceable.
 assert.equal(A.renderDocumentText({ title: "T", sections: [{ heading: "Scope", lines: ["a", "b"] }] }), "T\n\nSCOPE\n  a\n  b\n");

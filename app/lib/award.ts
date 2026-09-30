@@ -14,10 +14,35 @@
 import type { BudgetState, LevelingBasis, LevelingCandidate } from "./budget";
 import type { DirectoryCompany, Procurement } from "./procurement";
 import type { Alternate, ScopeAnswer, Submission } from "./submissions";
+import { MCN_EXHIBIT_TEMPLATE, MCN_SUBCONTRACT_TEMPLATE } from "./data/templates";
 
 // ── Templates (samples until the customer's own are configured) ─────────────
 
-export type DocumentTemplate = { id: string; name: string; version: string; sample: boolean; notice: string };
+/**
+ * A customer's document template. Without `layout` the built-in sample layout is used. With it,
+ * the document follows the customer's own structure: blocks in order, fixed text with
+ * {placeholders}, and generated parts (scope, exclusions, ...) where the customer puts them.
+ */
+export type DocumentTemplate = { id: string; name: string; version: string; sample: boolean; notice: string; layout?: TemplateLayout };
+
+/** Placeholders a template may use; a missing value shows as "[name]" so reviewers see the gap. */
+export type TemplateField =
+  | "owner" | "project" | "projectAddress" | "trade" | "tradeCode" | "contractor" | "subcontractor" | "subcontractorContact" | "subcontractorEmail"
+  | "amount" | "basis" | "formVersion" | "bidRevision" | "exhibitRevision" | "start" | "finish" | "template";
+
+export type TemplateBlock =
+  /** Fixed text; `numbered` prefixes 1., 2., ... */
+  | { kind: "text"; heading: string; lines: string[]; numbered?: boolean }
+  /** Included scope items (Y and P answers), after an optional intro and before optional fixed lines. */
+  | { kind: "scope"; heading: string; intro?: string; append?: string[] }
+  /** N answers plus the bidder's exclusions. */
+  | { kind: "exclusions"; heading: string }
+  | { kind: "not-applicable"; heading: string }
+  | { kind: "clarifications"; heading: string }
+  | { kind: "alternates"; heading: string }
+  | { kind: "allowances"; heading: string };
+
+export type TemplateLayout = { title: string; blocks: TemplateBlock[] };
 export const SAMPLE_EXHIBIT_TEMPLATE: DocumentTemplate = {
   id: "sample-exhibit-a", name: "Sample Exhibit A", version: "demo-1", sample: true,
   notice: "Sample layout for the demo. It is not the customer's Exhibit A template.",
@@ -64,6 +89,8 @@ export type Subcontract = {
 /** What was awarded, frozen at award time. */
 export type AwardSnapshot = {
   projectName: string; packageName: string; packageCode: string; packageOwner: string; formVersion: number;
+  /** For customer templates; empty when not supplied. */
+  owner?: string; projectAddress?: string; projectStart?: string; projectFinish?: string;
   scope: { id: string; title: string; detail: string; source: string; answer: ScopeAnswer | null; note: string }[];
   exclusions: string[]; alternates: Alternate[]; clarifications: string[];
   allowances: { id: string; name: string; amount: number; source: string; status: string }[];
@@ -98,6 +125,8 @@ export type AwardContext = {
   candidates: LevelingCandidate[];
   budget: BudgetState;
   directory: DirectoryCompany[];
+  /** Optional, for customer templates (owner name, street address, schedule dates). */
+  owner?: string; projectAddress?: string; projectStart?: string; projectFinish?: string;
 };
 
 export type AwardErrors = Partial<Record<"candidate" | "basis" | "budgetLineId" | "allowanceIds" | "award" | "exhibit" | "comment" | "subcontract" | "contractorName" | "signature" | "name" | "email" | "reason", string>>;
@@ -151,34 +180,78 @@ export function awardStage(award: Award): AwardStage {
 
 // ── Sample document generators (replaceable) ────────────────────────────────
 
-export const generateSampleExhibit: ExhibitGenerator = (snapshot, award, template) => {
+const fill = (text: string, values: Partial<Record<TemplateField, string>>) =>
+  text.replace(/\{(\w+)\}/g, (_, key: string) => values[key as TemplateField]?.trim() || `[${key}]`);
+
+const scopeLine = (item: AwardSnapshot["scope"][number], index: number) =>
+  `${index + 1}. ${item.title}${item.detail ? ` ${item.detail}` : ""}${item.source ? ` (${item.source})` : ""}${item.answer === "P" ? ` Partial per bid: ${item.note}` : ""}`;
+const alternateLine = (a: Alternate) => `${a.kind === "add" ? "Add" : "Deduct"} ${usd(a.amount)}: ${a.description}`;
+const allowanceLine = (a: AwardSnapshot["allowances"][number]) => `${a.name}: ${usd(a.amount)}${a.source ? ` (${a.source})` : ""}`;
+const exclusionLines = (snapshot: AwardSnapshot) => [...snapshot.scope.filter(i => i.answer === "N").map(i => `${i.title}${i.note ? ` (${i.note})` : ""}`), ...snapshot.exclusions];
+
+/** Renders a customer layout. Sections that end up with no lines are dropped. */
+function renderLayout(layout: TemplateLayout, values: Partial<Record<TemplateField, string>>, snapshot: AwardSnapshot): DocumentContent {
   const included = snapshot.scope.filter(item => item.answer === "Y" || item.answer === "P");
-  const itemLine = (item: AwardSnapshot["scope"][number], index: number) =>
-    `${index + 1}. ${item.title}${item.detail ? ` ${item.detail}` : ""}${item.source ? ` (${item.source})` : ""}${item.answer === "P" ? ` Partial per bid: ${item.note}` : ""}`;
+  const sections = layout.blocks.map((block): DocumentSection => {
+    const heading = fill(block.heading, values);
+    switch (block.kind) {
+      case "text": return { heading, lines: block.lines.map((l, i) => `${block.numbered ? `${i + 1}. ` : ""}${fill(l, values)}`) };
+      case "scope": return { heading, lines: [...(block.intro ? [fill(block.intro, values)] : []), ...(included.length ? included.map(scopeLine) : ["No scope items were included in the bid."]), ...(block.append ?? []).map(l => fill(l, values))] };
+      case "exclusions": return { heading, lines: exclusionLines(snapshot) };
+      case "not-applicable": return { heading, lines: snapshot.scope.filter(i => i.answer === "N/A").map(i => `${i.title}: ${i.note}`) };
+      case "clarifications": return { heading, lines: snapshot.clarifications };
+      case "alternates": return { heading, lines: snapshot.alternates.map(alternateLine) };
+      case "allowances": return { heading, lines: snapshot.allowances.map(allowanceLine) };
+    }
+  });
+  return { title: fill(layout.title, values), sections: sections.filter(s => s.lines.length) };
+}
+
+function fieldValues(snapshot: AwardSnapshot, award: Pick<Award, "amount" | "basis" | "revisionNumber">, template: DocumentTemplate, extra: Partial<Record<TemplateField, string>> = {}): Partial<Record<TemplateField, string>> {
+  return {
+    owner: snapshot.owner, project: snapshot.projectName, projectAddress: snapshot.projectAddress, trade: snapshot.packageName, tradeCode: snapshot.packageCode,
+    subcontractor: snapshot.company.name, subcontractorContact: snapshot.company.contact, subcontractorEmail: snapshot.company.email,
+    amount: usd(award.amount), basis: BASIS_LABEL[award.basis], formVersion: String(snapshot.formVersion), bidRevision: String(award.revisionNumber),
+    start: snapshot.projectStart, finish: snapshot.projectFinish, template: `${template.name} (${template.version})`, ...extra,
+  };
+}
+
+/** Exhibit A: the customer's layout when the template has one, otherwise the built-in sample layout. */
+export const generateSampleExhibit: ExhibitGenerator = (snapshot, award, template) => {
+  if (template.layout) return renderLayout(template.layout, fieldValues(snapshot, award, template), snapshot);
+  const included = snapshot.scope.filter(item => item.answer === "Y" || item.answer === "P");
   const sections: DocumentSection[] = [
     { heading: "Project and parties", lines: [`Project: ${snapshot.projectName}`, `Trade: ${snapshot.packageCode} · ${snapshot.packageName}`, `Subcontractor: ${snapshot.company.name}`, `Bid form version ${snapshot.formVersion}; bid revision ${award.revisionNumber}.`] },
-    { heading: "Scope of work", lines: included.length ? included.map(itemLine) : ["No scope items were included in the bid."] },
-    { heading: "Excluded from this subcontract", lines: [...snapshot.scope.filter(i => i.answer === "N").map(i => `${i.title}${i.note ? ` (${i.note})` : ""}`), ...snapshot.exclusions] },
+    { heading: "Scope of work", lines: included.length ? included.map(scopeLine) : ["No scope items were included in the bid."] },
+    { heading: "Excluded from this subcontract", lines: exclusionLines(snapshot) },
     { heading: "Not applicable", lines: snapshot.scope.filter(i => i.answer === "N/A").map(i => `${i.title}: ${i.note}`) },
     { heading: "Clarifications", lines: snapshot.clarifications },
-    { heading: "Alternates offered (not included unless accepted in writing)", lines: snapshot.alternates.map(a => `${a.kind === "add" ? "Add" : "Deduct"} ${usd(a.amount)}: ${a.description}`) },
-    { heading: "Allowances", lines: snapshot.allowances.map(a => `${a.name}: ${usd(a.amount)}${a.source ? ` (${a.source})` : ""}`) },
+    { heading: "Alternates offered (not included unless accepted in writing)", lines: snapshot.alternates.map(alternateLine) },
+    { heading: "Allowances", lines: snapshot.allowances.map(allowanceLine) },
     { heading: "Subcontract amount", lines: [`${usd(award.amount)}, the ${BASIS_LABEL[award.basis]} from bid leveling.`] },
     { heading: "Template", lines: [`${template.name} (${template.version}). ${template.notice}`] },
   ];
   return { title: `Exhibit A — Scope of Work · ${snapshot.packageCode} ${snapshot.packageName}`, sections: sections.filter(s => s.lines.length) };
 };
 
-export const generateSampleSubcontract: SubcontractGenerator = (award, exhibit, contractorName, template) => ({
-  title: `Subcontract agreement · ${award.snapshot.packageName}`,
-  sections: [
-    { heading: "Parties", lines: [`Contractor: ${contractorName}`, `Subcontractor: ${award.snapshot.company.name}`, `Project: ${award.snapshot.projectName}`] },
-    { heading: "Work", lines: [`The Subcontractor performs the work described in Exhibit A, revision ${exhibit.number}, which forms part of this agreement.`] },
-    { heading: "Subcontract sum", lines: [usd(award.amount)] },
-    { heading: "Exhibits", lines: [`Exhibit A — ${exhibit.content.title} (revision ${exhibit.number})`] },
-    { heading: "Template", lines: [`${template.name} (${template.version}). ${template.notice}`] },
-  ],
-});
+/** The subcontract: the customer's layout when the template has one, otherwise the built-in sample layout. */
+export const generateSampleSubcontract: SubcontractGenerator = (award, exhibit, contractorName, template) => {
+  if (template.layout) return renderLayout(template.layout, fieldValues(award.snapshot, award, template, { contractor: contractorName, exhibitRevision: String(exhibit.number) }), award.snapshot);
+  return {
+    title: `Subcontract agreement · ${award.snapshot.packageName}`,
+    sections: [
+      { heading: "Parties", lines: [`Contractor: ${contractorName}`, `Subcontractor: ${award.snapshot.company.name}`, `Project: ${award.snapshot.projectName}`] },
+      { heading: "Work", lines: [`The Subcontractor performs the work described in Exhibit A, revision ${exhibit.number}, which forms part of this agreement.`] },
+      { heading: "Subcontract sum", lines: [usd(award.amount)] },
+      { heading: "Exhibits", lines: [`Exhibit A — ${exhibit.content.title} (revision ${exhibit.number})`] },
+      { heading: "Template", lines: [`${template.name} (${template.version}). ${template.notice}`] },
+    ],
+  };
+};
+
+/** The templates documents use unless another is passed: this workspace's customer (MCN Build). */
+export const DEFAULT_EXHIBIT_TEMPLATE: DocumentTemplate = MCN_EXHIBIT_TEMPLATE;
+export const DEFAULT_SUBCONTRACT_TEMPLATE: DocumentTemplate = MCN_SUBCONTRACT_TEMPLATE;
 
 /** Plain text of a document, for download. */
 export const renderDocumentText = (content: DocumentContent): string =>
@@ -218,7 +291,7 @@ function validContent(content: DocumentContent): DocumentContent {
 export function createAward(
   state: AwardState, ctx: AwardContext,
   input: { levelingBidderId: string; basis: LevelingBasis; budgetLineId?: string | null; allowanceIds?: string[] },
-  by: string, at = now(), generate: ExhibitGenerator = generateSampleExhibit, template: DocumentTemplate = SAMPLE_EXHIBIT_TEMPLATE,
+  by: string, at = now(), generate: ExhibitGenerator = generateSampleExhibit, template: DocumentTemplate = DEFAULT_EXHIBIT_TEMPLATE,
 ): AwardState {
   const candidate = ctx.candidates.find(c => c.levelingBidderId === input.levelingBidderId) ?? fail({ candidate: "Choose a bidder from the current leveling comparison." });
   const check = awardCandidates([candidate])[0];
@@ -249,6 +322,7 @@ export function createAward(
   const company = ctx.directory.find(c => c.id === submission.bidderId);
   const snapshot: AwardSnapshot = {
     projectName: ctx.projectName, packageName: pkg!.name, packageCode: pkg!.code, packageOwner: pkg!.owner, formVersion: revision.formVersion,
+    owner: ctx.owner?.trim() ?? "", projectAddress: ctx.projectAddress?.trim() ?? "", projectStart: ctx.projectStart ?? "", projectFinish: ctx.projectFinish ?? "",
     scope: form.items.map(item => ({ ...item, answer: answers.get(item.id)?.answer ?? null, note: answers.get(item.id)?.note ?? "" })),
     exclusions: [...revision.exclusions], alternates: structuredClone(revision.alternates), clarifications: [...revision.clarifications],
     allowances: allowances.map(a => ({ id: a.id, name: a.name, amount: a.amount, source: a.source, status: a.status })),
@@ -341,7 +415,7 @@ export function agreeExhibit(state: AwardState, id: string, by: string, party: P
 /** Only once Exhibit A is agreed; incorporates the agreed revision. Regenerating replaces an unsent draft. */
 export function generateSubcontract(
   state: AwardState, id: string, contractorName: string, by: string, at = now(),
-  generate: SubcontractGenerator = generateSampleSubcontract, template: DocumentTemplate = SAMPLE_SUBCONTRACT_TEMPLATE,
+  generate: SubcontractGenerator = generateSampleSubcontract, template: DocumentTemplate = DEFAULT_SUBCONTRACT_TEMPLATE,
 ): AwardState {
   const award = live(findAward(state, id));
   const agreement = award.exhibit.status === "agreed" ? award.exhibit.agreement : null;
