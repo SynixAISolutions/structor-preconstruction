@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { Activity, ArrowRight, ArrowUpRight, Bell, BookOpen, BookOpenText, Box, Building2, CalendarDays, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, ClipboardCheck, ClipboardList, Clock3, Command, FileCheck2, FileStack, FileText, FolderOpen, Gauge, GitCompareArrows, HardHat, Layers3, LayoutDashboard, ListChecks, MapPin, Menu, MessageSquare, Plus, Ruler, Search, Settings2, ShieldCheck, Sparkles, TrendingUp, Upload, Users, Wallet, X } from "lucide-react";
+import { Activity, ArrowRight, ArrowUpRight, Bell, BookOpen, BookOpenText, Box, Building2, CalendarDays, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, ClipboardCheck, ClipboardList, Clock3, Command, FileCheck2, FileStack, FileText, FolderOpen, Gauge, GitCompareArrows, HardHat, Layers3, LayoutDashboard, Lightbulb, ListChecks, MapPin, Menu, MessageSquare, Plus, Ruler, Search, Settings2, ShieldCheck, Sparkles, TrendingUp, Upload, Users, Wallet, X } from "lucide-react";
 import BidLevelingPage from "./leveling-workspace";
 import { IntelligenceView } from "./ui/intelligence";
 import { CommercialView } from "./ui/commercial";
@@ -16,8 +16,8 @@ import dynamic from "next/dynamic";
 const ModelStudio = dynamic(() => import("./ui/model-studio"), { ssr: false, loading: () => <div className="ui-empty">Opening model studio…</div> });
 
 // Nav structure and project data now live in lib/. This map is the UI half: icon name -> component.
-const ICONS: Record<string, typeof Box> = { LayoutDashboard, Box, FolderOpen, Building2, FileStack, ListChecks, Ruler, Layers3, ShieldCheck, FileText, BookOpenText, GitCompareArrows, Users, Gauge, Wallet, ClipboardList, FileCheck2, CalendarDays, MessageSquare, ClipboardCheck, HardHat, Settings2 };
-function NavIcon({name,size,id}:{name:string;size:number;id?:Screen}){const Icon=ICONS[id==="specifications"?"BookOpenText":name]??Box;return <Icon size={size}/>;}
+const ICONS: Record<string, typeof Box> = { LayoutDashboard, Box, FolderOpen, Building2, FileStack, ListChecks, Ruler, Layers3, ShieldCheck, FileText, BookOpenText, GitCompareArrows, Users, Gauge, Wallet, ClipboardList, FileCheck2, CalendarDays, MessageSquare, ClipboardCheck, HardHat, Settings2, Lightbulb };
+function NavIcon({name,size,id}:{name:string;size:number;id?:Screen}){const Icon=ICONS[id==="specifications"?"BookOpenText":id==="value-engineering"?"Lightbulb":name]??Box;return <Icon size={size}/>;}
 
 function BuildingModel({small=false}:{small?:boolean}) { return <div className={`model-stage ${small?"small":""}`} aria-label="Illustrative 3D building model" role="img"><div className="model-orbit"><div className="model-ground"><div className="model-grid"/><div className="model-walkway"/><div className="model-building main"><i className="roof"/><i className="front"/><i className="side"/><i className="window-line"/></div><div className="model-building wing"><i className="roof"/><i className="front"/><i className="side"/></div><div className="model-building tower"><i className="roof"/><i className="front"/><i className="side"/></div><div className="model-tree t1"/><div className="model-tree t2"/><div className="model-tree t3"/><div className="model-tree t4"/><div className="model-outline"/></div></div><span className="model-caption"><span/>CONCEPT MODEL <span className="model-coordinate">38.917° N / 77.068° W</span></span></div>; }
 
@@ -50,7 +50,7 @@ export default function StructorApp(){
      {screen==="projects"&&<Projects projects={projects} onNew={()=>setNewProject(true)} onOpen={p=>{selectProject(p.id);navigate("information");}}/>}
      {screen==="information"&&<ProjectInformation project={project} cover={<BuildingModel/>} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Project information saved locally.");}} navigate={navigate}/>}
       {['documents','scopes','takeoffs','specs','checks','drawings','specifications','revisions'].includes(screen)&&<IntelligenceView {...props} screen={screen}/>}
-     {['packages','bidders','portal','budget','allowances','contracts','schedule','messages','turnover'].includes(screen)&&<CommercialView {...props} screen={screen} project={project}/>}
+     {['packages','bidders','portal','budget','allowances','value-engineering','contracts','schedule','messages','turnover'].includes(screen)&&<CommercialView {...props} screen={screen} project={project}/>}
      {screen==="leveling"&&<><PageHeader eyebrow="BID & AWARD" title="Bid leveling" description="A complete scope. A comparable price. A confident decision." actions={<Button onClick={()=>navigate("budget")}><Wallet size={16}/>Budget summary<ArrowRight size={16}/></Button>}/><div className="legacy-leveling"><BidLevelingPage projectName={project.name}/></div></>}
      {screen==="settings"&&<WorkspaceSettings notify={notify} reduced={reduced} setReduced={setReduced} navigate={navigate}/>}
     </div>
