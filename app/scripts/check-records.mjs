@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { normalizeProject, parseProjectForm, sampleProjectRecords, squareFeetLabel } from "../lib/projects.ts";
+import { loadProjects, normalizeProject, parseProjectForm, sampleProjectRecords, squareFeetLabel } from "../lib/projects.ts";
 import { dateLabel, displayDate } from "../lib/format.ts";
 import { initialDrawings, initialSpecSections, initialSpecs } from "../lib/data/preconstruction.ts";
 import { CSI_DIVISIONS, csiDivision } from "../lib/csi.ts";
@@ -19,6 +19,16 @@ for (const p of sampleProjectRecords) {
   assert(!("size" in p), `${p.id}: the legacy size string is gone; area lives in squareFeet`);
   assert.equal(p.workType, null, `${p.id}: sample work type is not known and must stay "not recorded"`);
 }
+
+// Jelleff carries its real facts (Marcel's DD Budget and precon write-up).
+const jelleff = sampleProjectRecords.find(p => p.id === "jelleff");
+assert.deepEqual([jelleff.squareFeet, jelleff.architect, jelleff.value, jelleff.due, jelleff.rfi, jelleff.start, jelleff.certifications, jelleff.taxStatus], [26500, "DLR Group", 33328991, "2026-02-02", "2026-01-20", "2026-06-01", ["First Source"], null]);
+// A browser that saved the old placeholder Jelleff gets the real one; edited records and own projects are untouched.
+const placeholder = { id: "jelleff", name: "Jelleff Recreation Center", location: "Washington, DC", type: "Community & recreation", status: "Preconstruction", value: 18400000, size: "42,500 SF", architect: "Project design team", description: "", due: "2026-10-02", rfi: "", start: "", finish: "" };
+const stored = (list) => { globalThis.localStorage = { getItem: () => JSON.stringify(list), setItem() {} }; const out = loadProjects(); delete globalThis.localStorage; return out; };
+const upgraded = stored([placeholder, { id: "mine", name: "Mine", architect: "Project design team" }]);
+assert.deepEqual([upgraded[0].squareFeet, upgraded[0].architect, upgraded[1].name, upgraded[1].architect], [26500, "DLR Group", "Mine", "Project design team"]);
+assert.deepEqual([stored([{ ...placeholder, architect: "Our architect" }])[0].squareFeet, stored([{ ...placeholder, architect: "Our architect" }])[0].architect], [42500, "Our architect"], "An edited Jelleff record is kept as saved");
 
 // A record saved before the 20 Sep fields is upgraded, not rejected.
 const legacy = normalizeProject({ id: "old", name: "Old job", location: "DC", type: "Education", status: "Bidding", value: 5, size: "42,500 SF", architect: "A", description: "", due: "2026-10-02", rfi: "", start: "", finish: "" });

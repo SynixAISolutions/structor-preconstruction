@@ -59,11 +59,15 @@ export type ProjectFormErrors = Partial<Record<ProjectFormField, string>>;
 
 export const squareFeetLabel = (squareFeet: number): string => squareFeet > 0 ? `${squareFeet.toLocaleString("en-US")} SF` : "Not recorded";
 
-const sample = (p: Omit<Project, "renovationSquareFeet" | "additionSquareFeet" | "workType" | "taxStatus" | "certifications" | "team" | "rfpFileName" | "createdAt">): Project =>
-  ({ ...p, workType: null, renovationSquareFeet: 0, additionSquareFeet: 0, taxStatus: null, certifications: [], team: [], rfpFileName: "", createdAt: "2026-09-01" });
+const sample = (p: Omit<Project, "renovationSquareFeet" | "additionSquareFeet" | "workType" | "taxStatus" | "certifications" | "team" | "rfpFileName" | "createdAt">, extra: Partial<Project> = {}): Project =>
+  ({ ...p, workType: null, renovationSquareFeet: 0, additionSquareFeet: 0, taxStatus: null, certifications: [], team: [], rfpFileName: "", createdAt: "2026-09-01", ...extra });
 
 export const sampleProjectRecords: Project[] = [
-  sample({ id: "jelleff", name: "Jelleff Recreation Center", location: "Washington, DC", type: "Community & recreation", status: "Preconstruction", value: 18400000, squareFeet: 42500, architect: "Project design team", description: "Modernization of the existing recreation center, a new community addition, and improvements to the surrounding site. A coordinated approach to scopes, trade procurement, and cost planning.", due: "2026-10-02", rfi: "2026-09-25", start: "2027-01-11", finish: "2028-04-28" }),
+  // Jelleff facts from Marcel's shared drive: the DD Budget (26,500 SF gross, DLR Group, DD total
+  // $33,328,991; a "1st Source" wage premium row) and his step-by-step precon write-up (bid dates,
+  // construction start). Tax status is not stated in the Jelleff documents, so it stays unrecorded.
+  sample({ id: "jelleff", name: "Jelleff Recreation Center", location: "3265 S St NW, Washington, DC 20007", type: "Community & recreation", status: "Preconstruction", value: 33328991, squareFeet: 26500, architect: "DLR Group", description: "Modernization of the Jelleff Recreation Center for the DC Department of General Services: a new building, pool renovation, and sitework, delivered by MCN Build as CM at-risk.", due: "2026-02-02", rfi: "2026-01-20", start: "2026-06-01", finish: "" },
+    { certifications: ["First Source"], team: [{ name: "Marcel Khoury", role: "Estimator" }, { name: "Amit Patani", role: "Project executive" }] }),
   sample({ id: "whittier", name: "Whittier Campus", location: "Washington, DC", type: "Education", status: "Design development", value: 26800000, squareFeet: 68200, architect: "Campus design team", description: "A school modernization, classroom addition, and associated site work.", due: "2026-11-06", rfi: "2026-10-23", start: "2027-03-01", finish: "2028-08-18" }),
   sample({ id: "riverside", name: "Riverside Commons", location: "Arlington, VA", type: "Mixed-use", status: "Bidding", value: 12300000, squareFeet: 31800, architect: "Project architect", description: "A mixed-use community space with new retail and public gathering areas.", due: "2026-10-16", rfi: "2026-10-02", start: "2027-02-01", finish: "2028-02-25" }),
 ];
@@ -101,11 +105,20 @@ function areaSplit(workType: WorkType | null, total: number, renovation: number,
   return { squareFeet: total, renovationSquareFeet: 0, additionSquareFeet: 0 };
 }
 
+/**
+ * A saved Jelleff record whose architect is still the old placeholder ("Project design team",
+ * never a real value) predates the real project facts: it is replaced with them. A record whose
+ * architect was edited is left exactly as saved.
+ */
+function upgradeUntouchedSample(raw: Record<string, unknown>): Record<string, unknown> {
+  return raw.id === "jelleff" && raw.architect === "Project design team" ? sampleProjectRecords[0] : raw;
+}
+
 /** Saved projects for this browser, or null when there is nothing usable stored. */
 export function loadProjects(): Project[] | null {
   try {
     const saved = JSON.parse(localStorage.getItem(PROJECTS_STORAGE_KEY) || "null");
-    if (Array.isArray(saved) && saved.length && saved.every(p => p && p.id && p.name)) return saved.map(normalizeProject);
+    if (Array.isArray(saved) && saved.length && saved.every(p => p && p.id && p.name)) return saved.map(upgradeUntouchedSample).map(normalizeProject);
   } catch { /* An unreadable store falls back to the sample projects. */ }
   return null;
 }
