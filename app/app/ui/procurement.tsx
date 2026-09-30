@@ -48,7 +48,7 @@ import {
 import { useSubmissions } from "../../lib/use-submissions";
 import { useProcurement } from "../../lib/use-procurement";
 import { useLocalDraft } from "../../lib/use-local-draft";
-import { initialBidders, type Bidder } from "../../lib/data/commercial";
+import { conversations, initialBidders, type Bidder } from "../../lib/data/commercial";
 import { displayDate } from "../../lib/format";
 import {
   Badge,
@@ -72,6 +72,7 @@ const CURRENT_USER = "Marcel Khoury";
 
 type ScopeDraft = Pick<ScopeItem, "title" | "detail" | "source" | "origin"> & { id?: string; packageId: string };
 type OutreachTarget = { packageId: string; bidderId: string };
+type MessageDraft = { id: string; thread: string; text: string; time: string };
 
 const statusLabels: Record<PackageStatus, string> = { draft: "Draft", ready: "Ready", published: "Published", revised: "Revised" };
 const statusTone = (status: PackageStatus) => status === "published" ? "green" : status === "ready" ? "blue" : status === "revised" ? "orange" : "amber";
@@ -217,15 +218,27 @@ function OutreachDialog({ state, target, directory, run, notify, onClose }: {
 export function ProcurementPackagesView({ projectName, notify, navigate }: ViewProps) {
   const { procurement: state, runProcurement: run, submissions } = useSubmissions();
   const [directory] = useLocalDraft("directory", initialBidders);
+  const [messageDrafts, setMessageDrafts] = useLocalDraft<MessageDraft[]>("messages", []);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("All packages");
   const [packageId, setPackageId] = useState("demolition");
   const [invitePackage, setInvitePackage] = useState<string | null>(null);
   const [outreach, setOutreach] = useState<OutreachTarget | null>(null);
   const [detailTab, setDetailTab] = useState("Invitations");
+  const [messageText, setMessageText] = useState("");
   const activePackage = state.packages.find(pkg => pkg.id === packageId) ?? state.packages[0];
   const shown = state.packages.filter(pkg => `${pkg.name} ${pkg.code} ${pkg.owner}`.toLowerCase().includes(query.toLowerCase()) && (filter === "All packages" || packageStatus(state, pkg.id) === filter.toLowerCase()));
   const invitations = activePackage ? state.invitations.filter(item => item.packageId === activePackage.id) : [];
+  const conversation = activePackage ? conversations.find(item => item.id === activePackage.id || item.trade.toLowerCase() === activePackage.name.toLowerCase()) : undefined;
+  const activeDrafts = activePackage ? messageDrafts.filter(item => item.thread === activePackage.id) : [];
+
+  function saveMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!activePackage || !messageText.trim()) return;
+    setMessageDrafts(previous => [...previous, { id: crypto.randomUUID(), thread: activePackage.id, text: messageText.trim(), time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) }]);
+    setMessageText("");
+    notify("Message saved with this bid package. No message was sent.");
+  }
 
   if (!activePackage) return <div className="proc-view"><PageHeader eyebrow={`${projectName} / Bid management`} title="Bid packages" description="Assign trade owners, invite bidders, and keep outreach with each package."/><Empty title="No bid packages yet" description="This project starts empty. Add package setup to the project record before inviting bidders."/></div>;
 
@@ -237,8 +250,13 @@ export function ProcurementPackagesView({ projectName, notify, navigate }: ViewP
       <Panel className="proc-package-table"><div className="ui-toolbar"><Tabs tabs={["All packages", "Draft", "Ready", "Published", "Revised"]} value={filter} onChange={setFilter}/><SearchBox value={query} onChange={setQuery} placeholder="Search package, code, or owner…"/></div><div className="ui-table-wrap"><table className="ui-table"><thead><tr><th>Trade package</th><th>Owner</th><th>Bid due</th><th>Coverage</th><th>Status</th><th/></tr></thead><tbody>{shown.map(pkg => { const status = packageStatus(state, pkg.id); const invited = state.invitations.filter(item => item.packageId === pkg.id); const submitted = invited.filter(item => item.status === "submitted").length; return <tr className={pkg.id === activePackage.id ? "proc-active-row" : ""} key={pkg.id}><td><button className="proc-package-link" onClick={() => setPackageId(pkg.id)}><span className="proc-code">{pkg.code}</span><span><strong>{pkg.name}</strong><small>{bidForm(state, pkg.id).length} bid-form items</small></span></button></td><td><span className="proc-owner"><i>{pkg.owner[0] || "?"}</i>{pkg.owner || "Unassigned"}</span></td><td><span className="proc-date"><CalendarDays size={14}/>{displayDate(pkg.due)}</span></td><td><strong>{submitted} / {invited.length}</strong><small className="proc-table-sub">proposals received</small></td><td><Badge tone={statusTone(status)}>{statusLabels[status]}</Badge></td><td><Button onClick={() => { setPackageId(pkg.id); setInvitePackage(pkg.id); }}><Mail size={14}/>Invite</Button></td></tr>; })}</tbody></table></div>{!shown.length && <Empty title="No packages match" description="Try another trade, owner, or status."/>}</Panel>
       <Panel title={activePackage.name} subtitle={`${activePackage.code} · ${invitations.length} invited`} action={<Button onClick={() => navigate("scopes")}><FileText size={14}/>Review bid form</Button>} className="proc-invite-panel">
         <div className="proc-package-summary"><span><small>OWNER</small><strong>{activePackage.owner || "Unassigned"}</strong></span><span><small>BID DUE</small><strong>{displayDate(activePackage.due)}</strong></span><span><small>FORM</small><strong>{activePackage.published ? `Published v${activePackage.published.version}` : statusLabels[packageStatus(state, activePackage.id)]}</strong></span></div>
-        <Tabs tabs={["Invitations", "Bid responses"]} value={detailTab} onChange={setDetailTab}/>
-        {detailTab === "Invitations" ? <><div className="proc-invitation-list">{invitations.map(invitation => { const bidder = directory.find(item => item.id === invitation.bidderId); const entries = outreachLog(state, invitation.packageId, invitation.bidderId); return <article key={invitation.id}><span className="proc-company-mark">{(bidder?.company ?? "?").slice(0, 2).toUpperCase()}</span><div><strong>{bidder?.company ?? "Directory company"}</strong><small>{bidder?.name ?? invitation.bidderId} · Invited {displayDate(invitation.invitedAt.slice(0, 10))}</small><button onClick={() => setOutreach({ packageId: invitation.packageId, bidderId: invitation.bidderId })}>{entries.length ? `${entries.length} outreach entr${entries.length === 1 ? "y" : "ies"}` : "Add first outreach"}<ArrowRight size={12}/></button></div><select aria-label={`Invitation status for ${bidder?.company ?? invitation.bidderId}`} value={invitation.status} className={`proc-status-select ${invitationTone(invitation.status)}`} onChange={event => runAndNotify(run, current => setInvitationStatus(current, invitation.id, event.target.value as InvitationStatus), notify, "Invitation status updated.")}><option value="invited">Invited</option><option value="bidding">Bidding</option><option value="declined">Declined</option><option value="submitted">Submitted</option></select></article>; })}</div>{!invitations.length && <Empty title="No bidders invited" description="Invite suggested companies or search the full directory." action={<Button onClick={() => setInvitePackage(activePackage.id)}><UserPlus size={14}/>Invite bidders</Button>}/>}</> : <EstimatorSubmissions packageId={activePackage.id} procurement={state} submissions={submissions} directory={directory}/>}
+        <Tabs tabs={["Invitations", "Bid responses", "Messages"]} value={detailTab} onChange={setDetailTab}/>
+        {detailTab === "Invitations" ? <><div className="proc-invitation-list">{invitations.map(invitation => { const bidder = directory.find(item => item.id === invitation.bidderId); const entries = outreachLog(state, invitation.packageId, invitation.bidderId); return <article key={invitation.id}><span className="proc-company-mark">{(bidder?.company ?? "?").slice(0, 2).toUpperCase()}</span><div><strong>{bidder?.company ?? "Directory company"}</strong><small>{bidder?.name ?? invitation.bidderId} · Invited {displayDate(invitation.invitedAt.slice(0, 10))}</small><button onClick={() => setOutreach({ packageId: invitation.packageId, bidderId: invitation.bidderId })}>{entries.length ? `${entries.length} outreach entr${entries.length === 1 ? "y" : "ies"}` : "Add first outreach"}<ArrowRight size={12}/></button></div><select aria-label={`Invitation status for ${bidder?.company ?? invitation.bidderId}`} value={invitation.status} className={`proc-status-select ${invitationTone(invitation.status)}`} onChange={event => runAndNotify(run, current => setInvitationStatus(current, invitation.id, event.target.value as InvitationStatus), notify, "Invitation status updated.")}><option value="invited">Invited</option><option value="bidding">Bidding</option><option value="declined">Declined</option><option value="submitted">Submitted</option></select></article>; })}</div>{!invitations.length && <Empty title="No bidders invited" description="Invite suggested companies or search the full directory." action={<Button onClick={() => setInvitePackage(activePackage.id)}><UserPlus size={14}/>Invite bidders</Button>}/>}</> : detailTab === "Bid responses" ? <EstimatorSubmissions packageId={activePackage.id} procurement={state} submissions={submissions} directory={directory}/> : <div className="proc-package-thread">
+          <header><div><strong>Package message thread</strong><small>{conversation ? `${conversation.company} · ${conversation.name}` : "Questions and replies stay with this trade package."}</small></div><Badge tone="amber">Browser draft</Badge></header>
+          <div className="proc-package-messages">{conversation && <article><span className="proc-company-mark">{conversation.initial}</span><div><strong>{conversation.name}<small>{conversation.time}</small></strong><p>{conversation.text}</p></div></article>}{activeDrafts.map(draft => <article className="own" key={draft.id}><span className="proc-company-mark">Y</span><div><strong>You<Badge tone="amber">Local draft</Badge></strong><p>{draft.text}</p><small>{draft.time}</small></div></article>)}</div>
+          {!conversation && !activeDrafts.length && <Empty title="No messages yet" description="Start a package conversation below or record a call or note from the Invitations tab."/>}
+          <form className="proc-package-compose" onSubmit={saveMessage}><textarea required rows={3} value={messageText} onChange={event => setMessageText(event.target.value)} placeholder={`Add a message to ${activePackage.name}…`}/><div><span>Saved to this project in the demo. Nothing is emailed.</span><Button type="submit" variant="primary"><MessageSquareText size={14}/>Save message</Button></div></form>
+        </div>}
       </Panel>
     </div>
     {invitePackage && <BidderInvite state={state} pkgId={invitePackage} directory={directory} run={run} notify={notify} onClose={() => setInvitePackage(null)}/>}
