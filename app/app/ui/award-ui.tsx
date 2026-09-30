@@ -19,6 +19,7 @@ import { levelingCandidates, type LevelingBasis, type LevelingCandidate } from "
 import { initialBidders, type Bidder } from "../../lib/data/commercial";
 import type { BidProvenance, LevelingBidder, LevelingScopeItem } from "../../lib/leveling-import";
 import { useAward } from "../../lib/use-award";
+import type { Project } from "../../lib/projects";
 import { useBudget } from "../../lib/use-budget";
 import { useLocalDraft } from "../../lib/use-local-draft";
 import { useSubmissions } from "../../lib/use-submissions";
@@ -88,7 +89,7 @@ function CandidateValues({ candidate }: { candidate: LevelingCandidate }) {
   </div>;
 }
 
-export function AwardView({ projectName, notify, navigate }: ViewProps) {
+export function AwardView({ projectName, notify, navigate, project }: ViewProps & { project: Project }) {
   const { projectId, procurement, submissions } = useSubmissions();
   const { state: budget } = useBudget();
   const { state, run } = useAward();
@@ -164,7 +165,10 @@ export function AwardView({ projectName, notify, navigate }: ViewProps) {
 
   function makeAward() {
     if (!selectedCandidateId) { setErrors({ candidate: "Choose an eligible submitted bid." }); return; }
-    const context: AwardContext = { projectId, projectName, procurement, submissions, candidates, budget, directory };
+    const context: AwardContext = {
+      projectId, projectName, procurement, submissions, candidates, budget, directory,
+      projectAddress: project.location, projectStart: project.start, projectFinish: project.finish,
+    };
     if (perform(current => createAward(current, context, { levelingBidderId: selectedCandidateId, basis, budgetLineId: budgetLineId || null, allowanceIds }, actor), `${selectedCandidate?.bidderName ?? "Bidder"} selected for ${pkg?.name ?? "the package"}.`)) {
       setTab("Exhibit A"); setRevisionNumber(0);
     }

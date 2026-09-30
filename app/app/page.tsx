@@ -1,14 +1,14 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { Activity, ArrowRight, ArrowUpRight, Bell, BookOpen, BookOpenText, Box, Building2, CalendarDays, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, ClipboardCheck, ClipboardList, Clock3, Command, FileCheck2, FileStack, FileText, FolderOpen, Gauge, GitCompareArrows, HardHat, Layers3, LayoutDashboard, Lightbulb, ListChecks, MapPin, Menu, MessageSquare, Plus, Ruler, Search, Settings2, ShieldCheck, Sparkles, TrendingUp, Upload, Users, Wallet, X } from "lucide-react";
+import { Activity, ArrowRight, ArrowUpRight, Bell, BookOpen, BookOpenText, Box, Building2, CalendarDays, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, ClipboardCheck, ClipboardList, Clock3, Command, FileCheck2, FileStack, FileText, FolderOpen, Gauge, GitCompareArrows, HardHat, Layers3, LayoutDashboard, Lightbulb, ListChecks, MapPin, Menu, MessageSquare, Plus, Ruler, Search, Settings2, ShieldCheck, Sparkles, Star, TrendingUp, Upload, UserCheck, Users, Wallet, X } from "lucide-react";
 import BidLevelingPage from "./leveling-workspace";
 import { IntelligenceView } from "./ui/intelligence";
 import { CommercialView } from "./ui/commercial";
 import { UserManual } from "./ui/user-manual";
 import { ProjectForm, ProjectInformation } from "./ui/project-record";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, SearchBox, Tabs, usd, type Screen } from "./ui/shared";
-import { DEFAULT_SCREEN, SCREEN_GROUPS, isScreen, screenGroup, screenLabel, searchScreens } from "../lib/screens";
+import { DEFAULT_SCREEN, SCREEN_GROUPS, resolveScreen, screenGroup, screenLabel, searchScreens } from "../lib/screens";
 import { PROJECT_TABS, filterProjects, loadProjects, sampleProjectRecords, saveProjects, squareFeetLabel, type Project } from "../lib/projects";
 import { selectProject, useActiveProject } from "../lib/project-scope";
 import "./ui/product.css";
@@ -16,8 +16,8 @@ import dynamic from "next/dynamic";
 const ModelStudio = dynamic(() => import("./ui/model-studio"), { ssr: false, loading: () => <div className="ui-empty">Opening model studio…</div> });
 
 // Nav structure and project data now live in lib/. This map is the UI half: icon name -> component.
-const ICONS: Record<string, typeof Box> = { LayoutDashboard, Box, FolderOpen, Building2, FileStack, ListChecks, Ruler, Layers3, ShieldCheck, FileText, BookOpenText, GitCompareArrows, Users, Gauge, Wallet, ClipboardList, FileCheck2, CalendarDays, MessageSquare, ClipboardCheck, HardHat, Settings2, Lightbulb };
-function NavIcon({name,size,id}:{name:string;size:number;id?:Screen}){const Icon=ICONS[id==="specifications"?"BookOpenText":id==="value-engineering"?"Lightbulb":name]??Box;return <Icon size={size}/>;}
+const ICONS: Record<string, typeof Box> = { LayoutDashboard, Box, FolderOpen, Building2, FileStack, ListChecks, Ruler, Layers3, ShieldCheck, FileText, BookOpenText, GitCompareArrows, Users, Gauge, Wallet, ClipboardList, FileCheck2, CalendarDays, MessageSquare, ClipboardCheck, HardHat, Settings2, Lightbulb, Star, UserCheck };
+function NavIcon({name,size,id}:{name:string;size:number;id?:Screen}){const iconName=id==="specifications"?"BookOpenText":id==="value-engineering"?"Lightbulb":id==="ratings"?"Star":id==="prequalification"?"UserCheck":name;const Icon=ICONS[iconName]??Box;return <Icon size={size}/>;}
 
 function BuildingModel({small=false}:{small?:boolean}) { return <div className={`model-stage ${small?"small":""}`} aria-label="Illustrative 3D building model" role="img"><div className="model-orbit"><div className="model-ground"><div className="model-grid"/><div className="model-walkway"/><div className="model-building main"><i className="roof"/><i className="front"/><i className="side"/><i className="window-line"/></div><div className="model-building wing"><i className="roof"/><i className="front"/><i className="side"/></div><div className="model-building tower"><i className="roof"/><i className="front"/><i className="side"/></div><div className="model-tree t1"/><div className="model-tree t2"/><div className="model-tree t3"/><div className="model-tree t4"/><div className="model-outline"/></div></div><span className="model-caption"><span/>CONCEPT MODEL <span className="model-coordinate">38.917° N / 77.068° W</span></span></div>; }
 
@@ -26,7 +26,7 @@ export default function StructorApp(){
  const project=projects.find(p=>p.id===activeId)||projects[0];
  const notify=useCallback((message:string)=>setToast(message),[]);
  const navigate=useCallback((next:Screen)=>{setScreen(next);setMenuOpen(false);setSearchOpen(false); window.location.hash=next;scrollRef.current?.scrollTo({top:0});},[]);
- useEffect(()=>{const sync=()=>{const next=location.hash.slice(1);if(isScreen(next))setScreen(next);};sync();window.addEventListener("hashchange",sync);const saved=loadProjects();if(saved)setProjects(saved);setReady(true);return()=>window.removeEventListener("hashchange",sync);},[]);
+ useEffect(()=>{const sync=()=>{const value=location.hash.slice(1);const next=resolveScreen(value);if(next){setScreen(next);if(value!==next)history.replaceState(null,"",`#${next}`);}};sync();window.addEventListener("hashchange",sync);const saved=loadProjects();if(saved)setProjects(saved);setReady(true);return()=>window.removeEventListener("hashchange",sync);},[]);
  useEffect(()=>{if(ready)saveProjects(projects);},[projects,ready]);
  useEffect(()=>{if(!toast)return;const id=setTimeout(()=>setToast(""),4500);return()=>clearTimeout(id);},[toast]);
  useEffect(()=>{const handler=(e:KeyboardEvent)=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();setSearchOpen(v=>!v);}};window.addEventListener("keydown",handler);return()=>window.removeEventListener("keydown",handler);},[]);
@@ -42,7 +42,7 @@ export default function StructorApp(){
   </aside>
   <div className="product-main">
     <header className="product-topbar"><div className="topbar-left"><button className="ui-icon-btn mobile-menu" aria-label="Open navigation" onClick={()=>setMenuOpen(true)}><Menu size={21}/></button><span className="breadcrumb-home">{screenGroup(screen)?.label??"WORKSPACE"}</span><ChevronRight size={14}/><strong>{screenLabel(screen)}</strong></div><div className="topbar-right"><span className="preview-label"><span/>Design preview</span><button className="top-search" aria-label="Search workspace" onClick={()=>setSearchOpen(true)}><Search size={16}/><span>Quick find</span><kbd>⌘ K</kbd></button><button className="ui-icon-btn notification-btn" aria-label="Open notifications" onClick={()=>setNotifications(v=>!v)}><Bell size={18}/><i/></button><button className="top-avatar" onClick={()=>navigate("settings")} aria-label="Open profile">MK</button></div></header>
-   {notifications&&<div className="notification-popover"><h3>Activity inbox <Badge tone="orange">3 new</Badge></h3>{[["Revised drawing set received","Review changes to A-101","revisions"],["Steel scope needs your review","Fall-restraint anchors excluded","leveling"],["New bidder clarification","Selective demolition package","messages"]].map(([a,b,c])=><button key={a} onClick={()=>{setNotifications(false);navigate(c as Screen);}}><span className="activity-point"/><div><strong>{a}</strong><small>{b}</small></div><ChevronRight size={15}/></button>)}<p>Example project activity</p></div>}
+   {notifications&&<div className="notification-popover"><h3>Activity inbox <Badge tone="orange">3 new</Badge></h3>{[["Revised drawing set received","Review changes to A-101","revisions"],["Steel scope needs your review","Fall-restraint anchors excluded","leveling"],["New bidder clarification","Selective demolition package","packages"]].map(([a,b,c])=><button key={a} onClick={()=>{setNotifications(false);navigate(c as Screen);}}><span className="activity-point"/><div><strong>{a}</strong><small>{b}</small></div><ChevronRight size={15}/></button>)}<p>Example project activity</p></div>}
    <div className="product-content" ref={scrollRef}>
     <div className="page-enter" key={screen}>
      {screen==="overview"&&<Overview project={project} navigate={navigate} onNew={()=>setNewProject(true)}/>}
@@ -50,7 +50,7 @@ export default function StructorApp(){
      {screen==="projects"&&<Projects projects={projects} onNew={()=>setNewProject(true)} onOpen={p=>{selectProject(p.id);navigate("information");}}/>}
      {screen==="information"&&<ProjectInformation project={project} cover={<BuildingModel/>} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Project information saved locally.");}} navigate={navigate}/>}
       {['documents','scopes','takeoffs','specs','checks','drawings','specifications','revisions'].includes(screen)&&<IntelligenceView {...props} screen={screen}/>}
-     {['packages','bidders','portal','budget','allowances','value-engineering','contracts','schedule','messages','turnover'].includes(screen)&&<CommercialView {...props} screen={screen} project={project}/>}
+     {['packages','bidders','ratings','prequalification','portal','budget','allowances','value-engineering','contracts','schedule','turnover'].includes(screen)&&<CommercialView {...props} screen={screen} project={project}/>}
      {screen==="leveling"&&<><PageHeader eyebrow="BID & AWARD" title="Bid leveling" description="A complete scope. A comparable price. A confident decision." actions={<Button onClick={()=>navigate("budget")}><Wallet size={16}/>Budget summary<ArrowRight size={16}/></Button>}/><div className="legacy-leveling"><BidLevelingPage projectName={project.name}/></div></>}
      {screen==="settings"&&<WorkspaceSettings notify={notify} reduced={reduced} setReduced={setReduced} navigate={navigate}/>}
     </div>
@@ -59,7 +59,7 @@ export default function StructorApp(){
   </div>
   {toast&&<div className="product-toast" role="status"><CheckCheck size={18}/><span>{toast}</span><button onClick={()=>setToast("")} aria-label="Dismiss notification"><X size={16}/></button></div>}
    {searchOpen&&<Modal title="Find your next step" subtitle="Jump to any part of your workspace." onClose={()=>setSearchOpen(false)}><SearchBox value={search} onChange={setSearch} placeholder="Search scopes, budget, drawings…"/><div className="command-list">{searchScreens(search).map(s=><button key={s.id} onClick={()=>navigate(s.id)}><NavIcon id={s.id} name={s.icon} size={19}/>{s.label}<ArrowRight size={15}/></button>)}</div></Modal>}
-  <UserManual open={helpOpen} onOpen={()=>setHelpOpen(true)} onClose={()=>setHelpOpen(false)} currentScreen={screen} onNavigate={id=>{if(isScreen(id)&&id!==screen)navigate(id);}}/>
+  <UserManual open={helpOpen} onOpen={()=>setHelpOpen(true)} onClose={()=>setHelpOpen(false)} currentScreen={screen} onNavigate={id=>{const next=resolveScreen(id);if(next&&next!==screen)navigate(next);}}/>
    {newProject&&<Modal title="A new project starts here" subtitle="Set up the workspace, then add your RFP and project documents." wide onClose={()=>setNewProject(false)}><ProjectForm onCancel={()=>setNewProject(false)} onSave={createProject}/></Modal>}
  </div>;
 }
