@@ -104,7 +104,7 @@ export const pageGuides = [
     ],
     example: "Open the door-rating conflict, draft a question asking the architect to reconcile the plan and schedule, and record a response due date.",
     reality: "Issues and RFI drafts save locally. Review project does not scan files, and saving an RFI does not send it. The CSV contains issue summaries and RFI numbers, not the full question, assignee, or due date.",
-    related: ["documents", "drawings", "messages"],
+    related: ["documents", "drawings", "packages"],
   },
   {
     id: "drawings",
@@ -177,6 +177,7 @@ export const pageGuides = [
       "Choose Invite or Invite bidders. Suggestions come from the subcontractor directory and match the package's trade; type in the search box to look through the whole directory. A company can be invited to a package only once.",
       "Set each invitation's status to Invited, Bidding, Declined, or Submitted. Declined companies are not notified when the bid form is published.",
       "Open a company's outreach to log a call, internal note, or message. The newest entry appears first.",
+      "Use the package's Messages tab for conversations with the invited companies about that trade. Threads and drafts stay with the package; nothing is emailed.",
       "Choose Review bid form to approve and publish the package in Scopes & bid forms.",
     ],
     terms: [
@@ -207,7 +208,39 @@ export const pageGuides = [
     ],
     example: "Add a mechanical contractor's contact, keep Review required until your checks are complete, then change the status to Qualified.",
     reality: "The directory starts with sample contacts and saves changes locally. An invited company's contact name and email become the portal submitter defaults, but nothing is emailed and the contract partner dropdown remains separate. The top counts include all contacts even when the cards are filtered.",
-    related: ["packages", "portal", "messages"],
+    related: ["packages", "portal", "bidders"],
+  },
+  {
+    id: "ratings",
+    group: "Workspace",
+    title: "Subcontractor ratings",
+    purpose: "A place for general contractors to rate the subcontractors they have worked with, so the team can see who to trust before inviting them.",
+    steps: [
+      "Open a company from the subcontractor directory to see its ratings and how many ratings it has.",
+      "Rate a subcontractor after working with them, on parameters such as change-order behaviour, bidding responsiveness, professionalism, and performance on site.",
+    ],
+    terms: [
+      { name: "Rating parameters", meaning: "The things a subcontractor is scored on. Marcel's examples: change orders, bidding efficiency, professionalism on the ground. The final list is still to be agreed." },
+    ],
+    example: "After closing out a project, the estimator rates the demolition subcontractor on each parameter; the next team inviting bidders sees the average and the number of ratings.",
+    reality: "This is a placeholder so the feature is not forgotten. Nothing is rated or stored yet; the rating parameters, who may rate, and how ratings are shown still need to be decided.",
+    related: ["bidders", "prequalification"],
+  },
+  {
+    id: "prequalification",
+    group: "Workspace",
+    title: "Prequalification",
+    purpose: "Check whether invited subcontractors are prequalified with your company, and let the ones who are not fill in the prequalification form and upload the required documents.",
+    steps: [
+      "See which companies invited to a project are already prequalified.",
+      "Send a company that is not yet prequalified the prequalification form and the list of documents it must upload.",
+    ],
+    terms: [
+      { name: "Prequalification", meaning: "Reviewing a subcontractor's finances, safety, insurance, experience, and capacity before it can be awarded work." },
+    ],
+    example: "A new drywall company is invited to bid; it is not prequalified yet, so it completes the questionnaire and uploads its insurance certificate and safety record through Structor.",
+    reality: "This is a placeholder so the feature is not forgotten. The real questionnaire and document list have not been provided yet, so nothing is collected or stored.",
+    related: ["bidders", "ratings"],
   },
   {
     id: "portal",
@@ -337,28 +370,7 @@ export const pageGuides = [
     ],
     example: "Add a long-lead equipment milestone with a procurement owner, expected start and finish, and 0% progress; update it when planning advances.",
     reality: "Milestones save locally and start from sample dates. There are no task dependencies, automatic date shifts, or live progress feeds. The month headings remain the fixed September 2026–July 2027 example, so use row dates and CSV for dates outside that span.",
-    related: ["packages", "messages", "turnover"],
-  },
-  {
-    id: "messages",
-    group: "Preconstruction",
-    title: "Messages · conversations",
-    purpose: "Explore trade-based conversations and keep draft replies beside the sample question they address. Use clear wording to record the scope decision that needs confirmation.",
-    steps: [
-      "Search conversations by trade or company, then select Demolition, Concrete, or Structural steel from the conversation list.",
-      "Read the contact's sample message and the linked trade-package context. View package opens Bid packages for a separate review.",
-      "Type in the reply box, then choose Save draft. The reply appears in the conversation with a Local draft badge and the time it was saved.",
-      "Save your wording before choosing another conversation: switching conversations clears unsaved text in the reply box.",
-      "Choose Inbox connection to open Settings and inspect the available connection setup. Return to Messages to continue working with the saved drafts.",
-    ],
-    terms: [
-      { name: "Scope clarification", meaning: "A question about what a trade package includes, excludes, or requires." },
-      { name: "Local draft", meaning: "A saved reply in this browser. It has not been delivered to the named contact." },
-      { name: "Conversation preview", meaning: "The list shows the latest saved draft for that trade, or the original sample message if there is no draft." },
-    ],
-    example: "Open Demolition and draft a response clarifying whether slab removal is included, naming the drawing note that supports the answer.",
-    reality: "The three incoming conversations are prepared examples. Save draft stores text locally; it does not send email or portal messages. There is no attachment control, delivery confirmation, or live reply feed on this screen.",
-    related: ["packages", "checks", "settings"],
+    related: ["packages", "leveling", "turnover"],
   },
   {
     id: "turnover",

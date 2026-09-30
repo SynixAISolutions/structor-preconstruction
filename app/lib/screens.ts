@@ -10,7 +10,8 @@ export type Screen =
   | "overview" | "projects" | "information" | "documents" | "scopes" | "takeoffs"
   | "packages" | "bidders" | "portal" | "leveling" | "budget" | "allowances"
   | "contracts" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
-  | "messages" | "turnover" | "settings" | "model" | "specifications" | "value-engineering";
+  | "messages" | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
+  | "ratings" | "prequalification";
 
 export type ViewProps = { navigate: (screen: Screen) => void; notify: (message: string) => void; projectName: string };
 
@@ -33,14 +34,15 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
   { label: "WORKSPACE", scope: "global", items: [
     { id: "projects", label: "All projects", icon: "FolderOpen" },
     { id: "bidders", label: "Subcontractor directory", icon: "Users", keywords: ["bidder directory", "companies", "trade partners"] },
+    { id: "ratings", label: "Subcontractor ratings", icon: "Gauge", keywords: ["rate subcontractors", "reviews", "scorecard"] },
+    { id: "prequalification", label: "Prequalification", icon: "ClipboardCheck", keywords: ["prequal", "qualified subcontractors", "questionnaire"] },
   ]},
   { label: "PRECONSTRUCTION", scope: "project", items: [
     { id: "overview", label: "Overview", icon: "LayoutDashboard", keywords: ["dashboard"] },
     { id: "information", label: "Project information", icon: "Building2" },
     { id: "documents", label: "Project files", icon: "FileStack", keywords: ["documents", "document library", "rfp"] },
     { id: "scopes", label: "Scopes & bid forms", icon: "ListChecks" },
-    { id: "packages", label: "Bid packages", icon: "Box", section: OUTREACH, keywords: ["invited bidders", "invitations"] },
-    { id: "messages", label: "Messages", icon: "MessageSquare", count: "3", section: OUTREACH, keywords: ["conversations"] },
+    { id: "packages", label: "Bid packages", icon: "Box", section: OUTREACH, keywords: ["invited bidders", "invitations", "messages", "conversations"] },
     { id: "portal", label: "Subcontractor portal", icon: "HardHat", section: OUTREACH, keywords: ["proposals"] },
     { id: "leveling", label: "Bid leveling", icon: "Gauge", section: OUTREACH },
     { id: "takeoffs", label: "Quantity takeoffs", icon: "Ruler" },
@@ -64,6 +66,17 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
 export const SETTINGS_SCREEN: ScreenDef = { id: "settings", label: "Settings", icon: "Settings2" };
 
 export const ALL_SCREENS: ScreenDef[] = [...SCREEN_GROUPS.flatMap(group => group.items), SETTINGS_SCREEN];
+
+/**
+ * Ids no longer in navigation or search, and where their old links now go. Kept in the Screen type
+ * only until no view still refers to them. Messages: messaging lives in each Bid package (Marcel,
+ * 20 Sep: remove Conversations, keep it inside Subcontractor Outreach).
+ */
+export const RETIRED_SCREENS: Partial<Record<Screen, Screen>> = { messages: "packages" };
+
+/** A hash or link value → the screen to show: current screens as they are, retired ones redirected, anything else null. */
+export const resolveScreen = (value: string): Screen | null =>
+  isScreen(value) ? value : (RETIRED_SCREENS as Record<string, Screen | undefined>)[value] ?? null;
 
 export const isScreen = (value: string): value is Screen => ALL_SCREENS.some(screen => screen.id === value);
 
