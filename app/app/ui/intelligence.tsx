@@ -11,6 +11,7 @@ import { CSI_DIVISIONS, csiDivision } from "../../lib/csi";
 import { screenLabel } from "../../lib/screens";
 import { ProcurementScopesView } from "./procurement";
 import { RfiWorkspace } from "./rfi-ui";
+import { DrawingFlipWorkspace } from "./drawing-flip-ui";
 import "./intelligence.css";
 
 // Local UI drafts only; sample suggestions are never derived from uploaded files.
@@ -159,6 +160,7 @@ export function IntelligenceView(props: ViewProps & { screen: Screen }) {
   switch (props.screen) {
     case "documents": return <DocumentsScreen {...props}/>;
     case "scopes": return <ProcurementScopesView {...props}/>;
+    case "drawing-flip": return <DrawingFlipWorkspace {...props}/>;
     case "takeoffs": return <TakeoffsScreen {...props}/>;
     case "specs": return <SpecsScreen {...props}/>;
     case "specifications": return <SpecificationsScreen {...props}/>;

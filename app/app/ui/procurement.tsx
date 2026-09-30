@@ -9,6 +9,7 @@ import {
   CheckCheck,
   FileText,
   History,
+  LocateFixed,
   Mail,
   MessageSquareText,
   MoveRight,
@@ -162,7 +163,7 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
       </Panel>
       <div className="proc-detail-column">{selected ? <Panel title="Requirement detail" action={<Badge>{selected.origin}</Badge>}><div className="proc-detail">
         <span className="proc-label">SOURCE REFERENCE</span><strong>{selected.source || "No source linked"}</strong><p>{selected.detail || "No coordination notes recorded."}</p>
-        <div className="proc-detail-actions"><Button onClick={() => { setMoveItem(selected); setMoveTo(state.packages.find(pkg => pkg.id !== selected.packageId)?.id ?? ""); }}><MoveRight size={14}/>{selected.allTrades ? "Assign to one trade" : "Move trade"}</Button>{!selected.allTrades && <Button onClick={() => runAndNotify(run, current => applyScopeToAllTrades(current, selected.id, CURRENT_USER), notify, "Scope item applied to every trade for review.")}><Share2 size={14}/>Apply to all trades</Button>}</div>
+        <div className="proc-detail-actions"><Button onClick={() => { sessionStorage.setItem("drawing-flip-scope", selected.id); navigate("drawing-flip"); }}><LocateFixed size={14}/>View on drawings</Button><Button onClick={() => { setMoveItem(selected); setMoveTo(state.packages.find(pkg => pkg.id !== selected.packageId)?.id ?? ""); }}><MoveRight size={14}/>{selected.allTrades ? "Assign to one trade" : "Move trade"}</Button>{!selected.allTrades && <Button onClick={() => runAndNotify(run, current => applyScopeToAllTrades(current, selected.id, CURRENT_USER), notify, "Scope item applied to every trade for review.")}><Share2 size={14}/>Apply to all trades</Button>}</div>
         <div className="proc-history"><span className="proc-label"><History size={12}/>HISTORY</span>{selected.history.slice().reverse().map((event, index) => <div key={`${event.at}-${index}`}><i/><span><strong>{historyLabel(event, state.packages)}</strong><small>{event.by} · {eventTime(event.at)}</small></span></div>)}</div>
       </div></Panel> : <Panel><Empty title="Select a scope item" description="Choose an item to see its source, notes, and history."/></Panel>}</div>
     </div>

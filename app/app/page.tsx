@@ -49,7 +49,7 @@ export default function StructorApp(){
      {screen==="model"&&<ModelStudio/>}
      {screen==="projects"&&<Projects projects={projects} onNew={()=>setNewProject(true)} onOpen={p=>{selectProject(p.id);navigate("information");}}/>}
      {screen==="information"&&<ProjectInformation project={project} cover={<BuildingModel/>} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Project information saved locally.");}} navigate={navigate}/>}
-      {['documents','scopes','takeoffs','specs','checks','drawings','specifications','revisions'].includes(screen)&&<IntelligenceView {...props} screen={screen}/>}
+      {['documents','scopes','drawing-flip','takeoffs','specs','checks','drawings','specifications','revisions'].includes(screen)&&<IntelligenceView {...props} screen={screen}/>}
      {['packages','bidders','ratings','prequalification','portal','budget','allowances','value-engineering','contracts','schedule','turnover'].includes(screen)&&<CommercialView {...props} screen={screen} project={project}/>}
      {screen==="leveling"&&<><PageHeader eyebrow="BID & AWARD" title="Bid leveling" description="A complete scope. A comparable price. A confident decision." actions={<Button onClick={()=>navigate("budget")}><Wallet size={16}/>Budget summary<ArrowRight size={16}/></Button>}/><div className="legacy-leveling"><BidLevelingPage projectName={project.name}/></div></>}
      {screen==="settings"&&<WorkspaceSettings notify={notify} reduced={reduced} setReduced={setReduced} navigate={navigate}/>}
