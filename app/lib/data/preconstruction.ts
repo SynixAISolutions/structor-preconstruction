@@ -42,6 +42,7 @@ export const initialSpecs: SpecItem[] = [
   { id: "p7", section: "23 73 13", title: "Air handling units", product: "Packaged rooftop air handling unit", manufacturer: "Trane / Carrier / Daikin", submittal: "Equipment data · Controls diagram", source: "Project manual · p. 564", reviewed: false },
 ];
 
+/** @deprecated The earlier Structor Check preview. Replaced by StructorIssue in lib/rfi.ts; removed once the screen moves over. */
 export type CheckIssue = { id: string; title: string; detail: string; type: string; priority: string; trade: string; source: string; crossReference: string; status: string; rfi?: string; question?: string; assignee?: string; due?: string };
 export const initialIssues: CheckIssue[] = [
   { id: "SC-001", title: "Roof fall-restraint anchors are not detailed", detail: "The roof access notes require fall protection, but the current roof plan does not identify anchor positions, loading, or attachment details. Confirm responsibility and design criteria before issuing the roofing package.", type: "Missing detail", priority: "High", trade: "07 · Roofing", source: "A-102 · Roof plan", crossReference: "07 72 00 · Roof accessories", status: "Open" },

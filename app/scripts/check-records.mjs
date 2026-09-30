@@ -3,7 +3,7 @@ import { loadProjects, normalizeProject, parseProjectForm, sampleProjectRecords,
 import { dateLabel, displayDate } from "../lib/format.ts";
 import { initialDrawings, initialSpecSections, initialSpecs } from "../lib/data/preconstruction.ts";
 import { CSI_DIVISIONS, csiDivision } from "../lib/csi.ts";
-import { initialChecklist, initialMilestones } from "../lib/data/commercial.ts";
+import { initialMilestones } from "../lib/data/commercial.ts";
 import { SAMPLE_PROJECT_ID, draftStorageKey, getActiveProjectId, projectScopedKey, startingDraft } from "../lib/project-scope.ts";
 
 const form = (fields) => {
@@ -91,10 +91,6 @@ assert.equal(startingDraft(SAMPLE_PROJECT_ID, "schedule", initialMilestones), in
 assert.deepEqual(startingDraft("p2", "schedule", initialMilestones), [], "A new project must not start with Jelleff's schedule");
 assert.deepEqual([startingDraft("p2", "contract-price", 498000), startingDraft("p2", "contract-bidder", "Capital Demolition"), startingDraft("p2", "contract-created", true)], [0, "", false]);
 assert.deepEqual(startingDraft("p2", "nested", { price: "9", answers: [1], meta: { ok: true } }), { price: "", answers: [], meta: { ok: false } });
-const todo = startingDraft("p2", "turnover", initialChecklist);
-assert(initialChecklist.some(item => item.done), "Fixture: the sample to-do has completed steps");
-assert.deepEqual(todo.map(item => item.id), initialChecklist.map(item => item.id), "A new project gets the same to-do steps");
-assert(todo.every(item => item.done === false), "…with nothing marked done");
 assert.equal(startingDraft("p2", "directory", initialMilestones), initialMilestones, "Organization-wide drafts are the same for every project");
 assert.deepEqual([projectScopedKey("active", SAMPLE_PROJECT_ID), projectScopedKey("active", "p2")], ["active", "active:p2"], "Bid-leveling workspace is stored per project");
 

@@ -28,9 +28,9 @@ const retired = Object.keys(RETIRED_SCREENS);
 const iconMap = read("app/page.tsx").match(/const ICONS: Record<string, typeof Box> = \{([^}]+)\}/);
 assert(iconMap, "The page.tsx ICONS map was not found");
 const iconNames = new Set(iconMap[1].split(",").map(name => name.trim()).filter(Boolean));
-assert.equal(ALL_SCREENS.length, screens.length - retired.length, "Every current Screen id must appear once in the navigation groups");
+assert.equal(ALL_SCREENS.length, screens.length, "Every Screen id must appear once in the navigation groups");
 for (const id of retired) {
-  assert(screens.includes(id) && !ALL_SCREENS.some(s => s.id === id), `${id}: a retired id stays in the type but leaves navigation`);
+  assert(!screens.includes(id) && !ALL_SCREENS.some(s => s.id === id), `${id}: a retired id is gone from the type and navigation`);
   assert(ALL_SCREENS.some(s => s.id === RETIRED_SCREENS[id]), `${id}: must redirect to a current screen`);
   assert.equal(resolveScreen(id), RETIRED_SCREENS[id]);
 }
@@ -45,12 +45,13 @@ const guideIds = new Set(ids);
 const unique = (values, message) => assert.equal(new Set(values).size, values.length, message);
 const nonempty = (value, message) => assert(typeof value === "string" && value.trim(), message);
 
-assert.equal(screens.length - retired.length, 25, "Expected coverage of all 25 current app screens");
+assert.equal(screens.length, 25, "Expected coverage of all 25 current app screens");
 unique(screens, "Screen ids must be unique");
 unique(ids, "Manual article ids must be unique");
 unique(manualGroups, "Manual group names must be unique");
 assert(!guideIds.has("glossary"), "The virtual glossary id must not collide with an article");
-for (const screen of screens) assert.equal(ids.filter(id => id === screen).length, retired.includes(screen) ? 0 : 1, `${screen}: expected ${retired.includes(screen) ? "no" : "exactly one"} guide`);
+for (const screen of screens) assert.equal(ids.filter(id => id === screen).length, 1, `${screen}: expected exactly one guide`);
+for (const id of retired) assert(!ids.includes(id), `${id}: a retired screen has no guide`);
 for (const guide of manualGuides) {
   for (const field of ["id", "title", "purpose", "example", "reality"]) nonempty(guide[field], `${guide.id}: empty ${field}`);
   assert(manualGroups.includes(guide.group), `${guide.id}: unknown group ${guide.group}`);

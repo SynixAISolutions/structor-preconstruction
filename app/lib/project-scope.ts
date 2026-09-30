@@ -50,9 +50,6 @@ export const draftStorageKey = (projectId: string, key: string): string =>
  * Anything not listed starts empty on a new project, so it never shows Jelleff's data.
  */
 const NEW_PROJECT_START: Record<string, (initial: unknown) => unknown> = {
-  // The preconstruction to-do list: same steps, nothing done yet.
-  turnover: initial => Array.isArray(initial) ? initial.map(item => ({ ...item, done: false })) : initial,
-  "turnover-recipient": initial => initial,
   // The portal preview's answer sheet is shaped by the portal scope, not by saved project data.
   "portal-bid": initial => initial,
   // Already empty; emptying it again would turn the markup factor 1 into 0.

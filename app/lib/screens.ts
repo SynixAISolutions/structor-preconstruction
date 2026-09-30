@@ -10,7 +10,7 @@ export type Screen =
   | "overview" | "projects" | "information" | "documents" | "scopes" | "takeoffs"
   | "packages" | "bidders" | "portal" | "leveling" | "budget" | "allowances"
   | "contracts" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
-  | "messages" | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
+  | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
   | "ratings" | "prequalification";
 
 export type ViewProps = { navigate: (screen: Screen) => void; notify: (message: string) => void; projectName: string };
@@ -46,7 +46,7 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "portal", label: "Subcontractor portal", icon: "HardHat", section: OUTREACH, keywords: ["proposals"] },
     { id: "leveling", label: "Bid leveling", icon: "Gauge", section: OUTREACH },
     { id: "takeoffs", label: "Quantity takeoffs", icon: "Ruler" },
-    { id: "checks", label: "Structor Check", icon: "ShieldCheck", count: "4", keywords: ["rfi", "issues"] },
+    { id: "checks", label: "Structor Check & RFIs", icon: "ShieldCheck", keywords: ["rfi", "rfi log", "issues", "questions", "design team"] },
     { id: "drawings", label: "List of drawings", icon: "FileText", keywords: ["drawing register", "sheets"] },
     { id: "specifications", label: "List of specifications", icon: "FileText", keywords: ["spec register", "project manual", "specification sections"] },
     { id: "revisions", label: "Revision comparison", icon: "GitCompareArrows" },
@@ -68,15 +68,14 @@ export const SETTINGS_SCREEN: ScreenDef = { id: "settings", label: "Settings", i
 export const ALL_SCREENS: ScreenDef[] = [...SCREEN_GROUPS.flatMap(group => group.items), SETTINGS_SCREEN];
 
 /**
- * Ids no longer in navigation or search, and where their old links now go. Kept in the Screen type
- * only until no view still refers to them. Messages: messaging lives in each Bid package (Marcel,
+ * Screens that no longer exist, and where their old links now go. Messages: messaging lives in each Bid package (Marcel,
  * 20 Sep: remove Conversations, keep it inside Subcontractor Outreach).
  */
-export const RETIRED_SCREENS: Partial<Record<Screen, Screen>> = { messages: "packages" };
+export const RETIRED_SCREENS: Record<string, Screen> = { messages: "packages" };
 
 /** A hash or link value → the screen to show: current screens as they are, retired ones redirected, anything else null. */
 export const resolveScreen = (value: string): Screen | null =>
-  isScreen(value) ? value : (RETIRED_SCREENS as Record<string, Screen | undefined>)[value] ?? null;
+  isScreen(value) ? value : RETIRED_SCREENS[value] ?? null;
 
 export const isScreen = (value: string): value is Screen => ALL_SCREENS.some(screen => screen.id === value);
 
