@@ -11,7 +11,7 @@ export type Screen =
   | "packages" | "bidders" | "portal" | "leveling" | "budget" | "allowances"
   | "contracts" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
   | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
-  | "ratings" | "prequalification";
+  | "ratings" | "prequalification" | "drawing-flip";
 
 export type ViewProps = { navigate: (screen: Screen) => void; notify: (message: string) => void; projectName: string };
 
@@ -42,6 +42,7 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "information", label: "Project information", icon: "Building2" },
     { id: "documents", label: "Project files", icon: "FileStack", keywords: ["documents", "document library", "rfp"] },
     { id: "scopes", label: "Scopes & bid forms", icon: "ListChecks" },
+    { id: "drawing-flip", label: "Drawing Flip", icon: "Layers3", keywords: ["drawing review", "trade overlay", "trade colors", "scope on drawings"] },
     { id: "packages", label: "Bid packages", icon: "Box", section: OUTREACH, keywords: ["invited bidders", "invitations", "messages", "conversations"] },
     { id: "portal", label: "Subcontractor portal", icon: "HardHat", section: OUTREACH, keywords: ["proposals"] },
     { id: "leveling", label: "Bid leveling", icon: "Gauge", section: OUTREACH },

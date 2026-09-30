@@ -43,6 +43,28 @@ export const pageGuides = [
     related: ["packages", "documents", "checks"],
   },
   {
+    id: "drawing-flip",
+    group: "Preconstruction",
+    title: "Drawing Flip",
+    purpose: "Review the drawings trade by trade: every region is coloured by the trade responsible for it and tied to the scope items it shows, so missing scope and overlaps between trades stand out.",
+    steps: [
+      "Flip through the drawing pages. Each region is coloured by the trade responsible for it; the legend lists the trades on the page.",
+      "Filter by page, trade, bid package, or review state, or search by region number, label, or evidence.",
+      "Select a region to see its trade, the scope items it shows, Structor's evidence and confidence, notes, and history.",
+      "Review Structor's regions: approve the trade call, or reassign the region to the right trade. Reassigning unlinks scope items of the old trade, and every correction stays in the history.",
+      "Link the scope items each region shows, or unlink them. From Scopes & bid forms, open a scope item on the drawings to see where it is.",
+      "Check the scope items not located on any drawing: they may be missing or belong to another trade.",
+    ],
+    terms: [
+      { name: "Region", meaning: "An outlined area of a drawing page, assigned to one trade and linked to the scope items it shows." },
+      { name: "Confidence", meaning: "How sure Structor is of its trade call for a region, from 0 to 100%. An estimator's own regions have none." },
+      { name: "Correction", meaning: "A region reassigned from the trade Structor proposed to another; kept in the region's history." },
+    ],
+    example: "Structor marked the doors on the demolition plan as the openings trade. Reassign them to demolition, because removing existing doors is demolition work; the new doors stay with openings.",
+    reality: "Pages and regions save in this browser for the open project. The sample regions are illustrative; Structor does not read the drawings yet, and pages show without drawing images in the demo.",
+    related: ["scopes", "drawings", "packages"],
+  },
+  {
     id: "takeoffs",
     group: "Preconstruction",
     title: "Quantity takeoffs",

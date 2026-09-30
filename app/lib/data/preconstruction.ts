@@ -1,5 +1,5 @@
 // Sample data and record shapes for the preconstruction screens (documents, takeoffs,
-// specs, Structor Check, drawings, revisions). Scopes live in lib/procurement.ts.
+// specs, drawings, revisions). Scopes live in lib/procurement.ts, Structor Check in lib/rfi.ts.
 //
 // This is illustrative preview content, not data read from drawings or specifications.
 
@@ -40,16 +40,6 @@ export const initialSpecs: SpecItem[] = [
   { id: "p5", section: "09 29 00", title: "Gypsum board", product: "5/8-inch Type X gypsum board", manufacturer: "USG / National Gypsum / CertainTeed", submittal: "Product data · Assembly ratings", source: "Project manual · p. 346", reviewed: true },
   { id: "p6", section: "09 65 19", title: "Resilient tile flooring", product: "Luxury vinyl tile · Type LVT-1", manufacturer: "To be selected by architect", submittal: "Finish samples · Maintenance", source: "Project manual · p. 368", reviewed: false },
   { id: "p7", section: "23 73 13", title: "Air handling units", product: "Packaged rooftop air handling unit", manufacturer: "Trane / Carrier / Daikin", submittal: "Equipment data · Controls diagram", source: "Project manual · p. 564", reviewed: false },
-];
-
-/** @deprecated The earlier Structor Check preview. Replaced by StructorIssue in lib/rfi.ts; removed once the screen moves over. */
-export type CheckIssue = { id: string; title: string; detail: string; type: string; priority: string; trade: string; source: string; crossReference: string; status: string; rfi?: string; question?: string; assignee?: string; due?: string };
-export const initialIssues: CheckIssue[] = [
-  { id: "SC-001", title: "Roof fall-restraint anchors are not detailed", detail: "The roof access notes require fall protection, but the current roof plan does not identify anchor positions, loading, or attachment details. Confirm responsibility and design criteria before issuing the roofing package.", type: "Missing detail", priority: "High", trade: "07 · Roofing", source: "A-102 · Roof plan", crossReference: "07 72 00 · Roof accessories", status: "Open" },
-  { id: "SC-002", title: "Door D-104 fire rating does not match the schedule", detail: "The partition plan indicates a rated corridor wall. The door schedule lists D-104 without a rating. Ask the architect to reconcile the door and wall assembly requirements.", type: "Conflict", priority: "High", trade: "08 · Openings", source: "A-101 · Room 104", crossReference: "A-601 · Door schedule", status: "Open" },
-  { id: "SC-003", title: "Floor finish is not defined for storage room 118", detail: "Room 118 is shown on the floor plan, but its finish schedule entry is blank. The flooring allowance and scope require confirmation.", type: "Missing information", priority: "Medium", trade: "09 · Finishes", source: "A-101 · Room 118", crossReference: "A-701 · Finish schedule", status: "Open" },
-  { id: "SC-004", title: "Structural opening conflicts with duct routing", detail: "The supply duct route crosses the beam line at grid C without a coordinated penetration detail. Confirm the final route or approved structural opening.", type: "Coordination", priority: "High", trade: "23 · HVAC", source: "M-101 · Grid C", crossReference: "S-101 · Framing plan", status: "Open" },
-  { id: "SC-005", title: "Exterior wall air-barrier transition needs confirmation", detail: "The wall section shows an air barrier but does not call out the transition at the storefront head. Confirm the termination and compatible materials.", type: "Missing detail", priority: "Medium", trade: "07 · Envelope", source: "A-501 · Detail 4", crossReference: "07 27 00 · Air barriers", status: "Resolved" },
 ];
 
 export type Drawing = { id: string; title: string; discipline: string; date: string; received: string; revision: string; status: string };
