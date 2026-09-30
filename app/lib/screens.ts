@@ -10,7 +10,7 @@ export type Screen =
   | "overview" | "projects" | "information" | "documents" | "scopes" | "takeoffs"
   | "packages" | "bidders" | "portal" | "leveling" | "budget" | "allowances"
   | "contracts" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
-  | "messages" | "turnover" | "settings" | "model" | "specifications";
+  | "messages" | "turnover" | "settings" | "model" | "specifications" | "value-engineering";
 
 export type ViewProps = { navigate: (screen: Screen) => void; notify: (message: string) => void; projectName: string };
 
@@ -51,6 +51,7 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "model", label: "3D model studio", icon: "Box" },
     { id: "budget", label: "Budget summary", icon: "Wallet" },
     { id: "allowances", label: "Allowances", icon: "ClipboardList" },
+    { id: "value-engineering", label: "Value engineering", icon: "Wallet", keywords: ["VE", "savings", "target reduction", "cost reduction"] },
     { id: "contracts", label: "Contracts & exhibits", icon: "FileCheck2", keywords: ["exhibit a", "award"] },
     { id: "turnover", label: "Preconstruction to-do", icon: "ClipboardCheck", keywords: ["project turnover", "percent complete", "checklist"] },
   ]},

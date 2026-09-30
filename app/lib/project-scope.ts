@@ -55,6 +55,8 @@ const NEW_PROJECT_START: Record<string, (initial: unknown) => unknown> = {
   "turnover-recipient": initial => initial,
   // The portal preview's answer sheet is shaped by the portal scope, not by saved project data.
   "portal-bid": initial => initial,
+  // Already empty; emptying it again would turn the markup factor 1 into 0.
+  "value-engineering": initial => initial,
 };
 
 function emptyLike(value: unknown): unknown {
