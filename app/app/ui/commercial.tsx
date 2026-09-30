@@ -1,14 +1,22 @@
 "use client";
 
-import { useState, type FormEvent, type ReactNode } from "react";
-import { ArrowRight, Building2, Check, Download, FileText, Mail, Pencil, Plus } from "lucide-react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { ArrowRight, Building2, Check, Clock3, Download, FileText, Mail, Pencil, Plus } from "lucide-react";
 import { Badge, Button, Empty, ExportButton, Modal, PageHeader, Panel, PreviewNote, SearchBox, Stats, Tabs, downloadText, exportRows, type Screen, type ViewProps } from "./shared";
 import "./commercial.css";
 import { useLocalDraft } from "../../lib/use-local-draft";
 import { dateLabel } from "../../lib/format";
 import { screenLabel } from "../../lib/screens";
-import { trades, initialBidders, initialMilestones, conversations, initialChecklist,
+import { trades, initialBidders, initialMilestones, conversations,
   type Bidder, type Milestone } from "../../lib/data/commercial";
+import { sampleFiles } from "../../lib/data/preconstruction";
+import { deriveTodo, type LevelingSnapshot } from "../../lib/todo";
+import type { Project } from "../../lib/projects";
+import type { BidProvenance, LevelingBidder, LevelingScopeItem } from "../../lib/leveling-import";
+import { loadWorkspace } from "../../lib/workspace-storage";
+import { useSubmissions } from "../../lib/use-submissions";
+import { useBudget } from "../../lib/use-budget";
+import { useAward } from "../../lib/use-award";
 import { ProcurementPackagesView } from "./procurement";
 import { SubmissionPortalView } from "./submission-ui";
 import { AllowancesView, BudgetView } from "./budget-ui";
@@ -33,8 +41,59 @@ function ScheduleView({notify}:ViewProps){const[rows,setRows]=useLocalDraft("sch
 
 function MessagesView({notify,navigate}:ViewProps){const[active,setActive]=useState("demolition");const[query,setQuery]=useState("");const[drafts,setDrafts]=useLocalDraft<{id:string;thread:string;text:string;time:string}[]>("messages",[]);const[text,setText]=useState("");const conversation=conversations.find(c=>c.id===active)!;return <div className="cm-view"><PageHeader eyebrow="PROJECT COMMUNICATION" title={screenLabel("messages")} description="Keep bidder questions, scope clarifications, and decisions together." actions={<Button onClick={()=>navigate("settings")}><Mail size={16}/>Inbox connection</Button>}/><PreviewNote>Sample conversations · Composed messages are local drafts and are not sent.</PreviewNote><Panel className="cm-messages-panel"><div className="cm-conversations"><div className="cm-conversation-list"><SearchBox value={query} onChange={setQuery} placeholder="Search conversations…"/>{conversations.filter(c=>`${c.trade} ${c.company}`.toLowerCase().includes(query.toLowerCase())).map(c=><button key={c.id} className={active===c.id?"active":""} onClick={()=>{setActive(c.id);setText("");}}><span className="cm-avatar">{c.initial}</span><span><strong>{c.trade}<small>{c.time}</small></strong><b>{c.company}</b><p>{drafts.filter(d=>d.thread===c.id).at(-1)?.text||c.text}</p></span></button>)}</div><div className="cm-thread"><header><div><h2>{conversation.trade}</h2><p>{conversation.company} · {conversation.name}</p></div><Badge tone="blue">Scope clarification</Badge></header><div className="cm-thread-body"><div className="cm-thread-day">Sample conversation</div><div className="cm-message"><span className="cm-avatar">{conversation.initial}</span><div><strong>{conversation.name}<small>{conversation.time}</small></strong><p>{conversation.text}</p></div></div><div className="cm-thread-context"><FileText size={17}/><span>Linked to {conversation.trade} bid package</span><button className="cm-text-button" onClick={()=>navigate("packages")}>View package<ArrowRight size={13}/></button></div>{drafts.filter(d=>d.thread===active).map(d=><div className="cm-message cm-message-own" key={d.id}><span className="cm-avatar">Y</span><div><strong>You<Badge tone="amber">Local draft</Badge></strong><p>{d.text}</p><small>{d.time}</small></div></div>)}</div><form className="cm-thread-compose" onSubmit={e=>{e.preventDefault();if(!text.trim())return;setDrafts(prev=>[...prev,{id:crypto.randomUUID(),thread:active,text:text.trim(),time:new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}]);setText("");notify("Message saved as a local draft.");}}><textarea required rows={3} value={text} onChange={e=>setText(e.target.value)} placeholder={`Reply to ${conversation.name}…`}/><div><span>Replies stay with this trade package.</span><Button variant="primary" type="submit"><Plus size={15}/>Save draft</Button></div></form></div></div></Panel></div>;}
 
-function TurnoverView({notify,navigate,projectName}:ViewProps){const[items,setItems]=useLocalDraft("turnover",initialChecklist);const[recipient,setRecipient]=useLocalDraft("turnover-recipient","Project management team");const done=items.filter(i=>i.done).length;return <div className="cm-view"><PageHeader eyebrow="PRECONSTRUCTION → OPERATIONS" title={screenLabel("turnover")} description="See what is complete, what still needs attention, and what must be ready before operations begin." actions={<Button variant="primary" onClick={()=>{downloadText("preconstruction-to-do.txt",`PRECONSTRUCTION TO-DO\n${projectName}\nPrepared for: ${recipient}\n\n${done}/${items.length} tasks complete\n\n${items.map(i=>`${i.done?"[READY]":"[OPEN]"} ${i.title}\n${i.description}`).join("\n\n")}\n\nLocal preview checklist. Verify and attach the final source documents before distribution.`);notify("Preconstruction to-do list downloaded.");}}><Download size={16}/>Export to-do list</Button>}/><PreviewNote>Preconstruction to-do preview · Checklist status saves locally and stays tied to the required documents.</PreviewNote><div className="cm-turnover-hero"><div className="cm-completion-ring" style={{background:`conic-gradient(#ef743d ${done/items.length*100}%, #e8ece9 0)`}}><span>{Math.round(done/items.length*100)}<small>%</small></span></div><div><h2>{done} of {items.length} preconstruction tasks complete</h2><p>Resolve the open items and verify source documents before operations begin.</p><Badge tone={done===items.length?"green":"amber"}>{done===items.length?"Checklist complete":"In preparation"}</Badge></div><div className="cm-turnover-recipient"><Field label="Checklist owner"><input value={recipient} onChange={e=>setRecipient(e.target.value)}/></Field></div></div><Panel title="Project readiness checklist" subtitle="Complete each task once its required material has been reviewed."><div className="cm-turnover-list">{items.map(item=><div className={item.done?"complete":""} key={item.id}><label className="cm-check"><input type="checkbox" checked={item.done} onChange={e=>setItems(prev=>prev.map(i=>i.id===item.id?{...i,done:e.target.checked}:i))}/><span><Check size={15}/></span></label><div><strong>{item.title}<Badge>{item.group}</Badge></strong><p>{item.description}</p></div><Button onClick={()=>navigate(item.screen)}>Review<ArrowRight size={14}/></Button></div>)}</div></Panel></div>;}
+function TurnoverView({ notify, navigate, projectName, project }: ViewProps & { project: Project }) {
+  const { procurement, submissions } = useSubmissions();
+  const { state: budget } = useBudget();
+  const { state: awards } = useAward();
+  const [documents] = useLocalDraft("library", sampleFiles);
+  const [provenance] = useLocalDraft<Record<string, BidProvenance>>("leveling-submission-provenance", {});
+  const [loadedPackageId] = useLocalDraft("leveling-submission-package", "");
+  const [leveling, setLeveling] = useState<LevelingSnapshot | null>(null);
+  const [filter, setFilter] = useState("My actions");
 
-export function CommercialView(props: ViewProps & { screen: Screen }) {
+  useEffect(() => {
+    let current = true;
+    void loadWorkspace<unknown, LevelingScopeItem, LevelingBidder>()
+      .then(saved => { if (current) setLeveling(saved ? { packageId: loadedPackageId || null, items: saved.items, bidders: saved.bidders, provenance } : null); })
+      .catch(() => { if (current) setLeveling(null); });
+    return () => { current = false; };
+  }, [loadedPackageId, project.id, provenance]);
+
+  const summary = deriveTodo({ project, documents, procurement, submissions, leveling, budget, awards });
+  const teamActions = summary.tasks.filter(task => task.status === "todo").length;
+  const waiting = summary.tasks.filter(task => task.status === "waiting").length;
+  const visible = summary.tasks.filter(task => filter === "All work" || (filter === "My actions" ? task.status === "todo" : task.status === "waiting"));
+  const groupLabel = (group: string) => summary.groups.find(item => item.group === group)?.label ?? group;
+
+  function exportTodo() {
+    const tasks = summary.tasks.length ? summary.tasks.map(task => `[${task.status === "todo" ? "ACTION" : "WAITING"}] ${task.title}\n${task.detail}\nOpen: ${screenLabel(task.screen)}`).join("\n\n") : "No open tasks.";
+    const packages = summary.packages.map(pkg => `${pkg.code} ${pkg.name}: ${pkg.done}/${pkg.total} milestones (${pkg.percent}%)`).join("\n");
+    downloadText("preconstruction-to-do.txt", `PRECONSTRUCTION TO-DO\n${projectName}\n\n${summary.progress.done}/${summary.progress.total} workflow milestones complete (${summary.progress.percent}%)\n${teamActions} team actions · ${waiting} waiting\n\nOPEN WORK\n${tasks}\n\nPACKAGE PROGRESS\n${packages || "No trade packages."}\n\nCalculated from the current project state.`);
+    notify("Preconstruction to-do list downloaded.");
+  }
+
+  return <div className="cm-view">
+    <PageHeader eyebrow="PRECONSTRUCTION → OPERATIONS" title={screenLabel("turnover")} description="See the next action calculated from the project’s scopes, outreach, bids, budget, and awards." actions={<Button variant="primary" onClick={exportTodo}><Download size={16}/>Export to-do list</Button>}/>
+    <PreviewNote>Calculated from current project state · Complete work on its source screen and this list updates automatically.</PreviewNote>
+    <div className="cm-turnover-hero">
+      <div className="cm-completion-ring" style={{background:`conic-gradient(#ef743d ${summary.progress.percent}%, #e8ece9 0)`}}><span>{summary.progress.percent}<small>%</small></span></div>
+      <div><h2>{summary.progress.done} of {summary.progress.total} workflow milestones complete</h2><p>Progress follows each package from scope approval through an executed subcontract.</p><Badge tone={teamActions ? "amber" : "green"}>{teamActions ? `${teamActions} team action${teamActions === 1 ? "" : "s"}` : "Team work complete"}</Badge></div>
+      <div className="cm-todo-summary"><span><strong>{teamActions}</strong><small>Team actions</small></span><span><strong>{waiting}</strong><small>Waiting outside team</small></span><span><strong>{summary.packages.length}</strong><small>Trade packages</small></span></div>
+    </div>
+    <Panel title="Current work" subtitle="Team actions appear first; waiting items remain visible without blocking the action queue." action={<Badge>{visible.length} shown</Badge>}>
+      <div className="ui-toolbar"><Tabs tabs={["My actions", "Waiting", "All work"]} value={filter} onChange={setFilter}/><div className="cm-todo-groups">{summary.groups.filter(group => group.todo || group.waiting).map(group => <span key={group.group}>{group.label}<b>{group.todo + group.waiting}</b></span>)}</div></div>
+      {visible.length ? <div className="cm-turnover-list">{visible.map(task => <div key={task.id}>
+        <span className={`cm-todo-state ${task.status}`}>{task.status === "waiting" ? <Clock3 size={15}/> : <ArrowRight size={15}/>}</span>
+        <div><strong>{task.title}<Badge>{groupLabel(task.group)}</Badge>{task.priority === "high" && <Badge tone="orange">High priority</Badge>}{task.status === "waiting" && <Badge tone="blue">Waiting</Badge>}</strong><p>{task.detail}</p></div>
+        <Button onClick={() => navigate(task.screen)}>Open {screenLabel(task.screen)}<ArrowRight size={14}/></Button>
+      </div>)}</div> : <Empty title={filter === "Waiting" ? "Nothing is waiting" : "Preconstruction is caught up"} description={filter === "Waiting" ? "No subcontractor or outside response is holding the workflow." : "The current project state has no open team actions."}/>}
+    </Panel>
+    {summary.packages.length > 0 && <Panel title="Package readiness" subtitle="Eight milestones per trade package, from approved scope to executed subcontract.">
+      <div className="cm-package-progress-list">{summary.packages.map(pkg => <button key={pkg.packageId} onClick={() => navigate("packages")}><span><strong>{pkg.code} · {pkg.name}</strong><small>{pkg.owner || "Owner not assigned"}</small></span><div><span>{pkg.done}/{pkg.total}</span><i><b style={{width:`${pkg.percent}%`}}/></i></div><Badge tone={pkg.percent === 100 ? "green" : "neutral"}>{pkg.percent}%</Badge><ArrowRight size={15}/></button>)}</div>
+    </Panel>}
+  </div>;
+}
+
+export function CommercialView(props: ViewProps & { screen: Screen; project: Project }) {
   switch(props.screen){case "packages":return <ProcurementPackagesView {...props}/>;case "bidders":return <BiddersView {...props}/>;case "portal":return <SubmissionPortalView {...props}/>;case "budget":return <BudgetView {...props}/>;case "allowances":return <AllowancesView {...props}/>;case "contracts":return <AwardView {...props}/>;case "schedule":return <ScheduleView {...props}/>;case "messages":return <MessagesView {...props}/>;case "turnover":return <TurnoverView {...props}/>;default:return null;}
 }

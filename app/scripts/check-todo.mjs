@@ -9,7 +9,7 @@ const A = await import("../lib/award.ts");
 const { levelingCandidates } = await import("../lib/budget.ts");
 const { buildLevelingImport } = await import("../lib/leveling-import.ts");
 const { sampleProcurement } = await import("../lib/data/procurement.ts");
-const { sampleBudget } = await import("../lib/data/budget.ts");
+const { ruleFixtureBudget } = await import("./fixtures/budget-rules.mjs");
 const { initialBidders } = await import("../lib/data/commercial.ts");
 const { sampleFiles } = await import("../lib/data/preconstruction.ts");
 const { sampleProjectRecords, parseProjectForm } = await import("../lib/projects.ts");
@@ -21,7 +21,7 @@ const task = (summary, id) => summary.tasks.find(t => t.id === id);
 const has = (summary, id) => ids(summary).includes(id);
 const milestones = (summary, pkg) => summary.packages.find(p => p.packageId === pkg).milestones.filter(m => m.done).map(m => m.key);
 const noAwards = freeze({ awards: [], notifications: [] });
-const base = freeze({ project: sampleProjectRecords[0], documents: sampleFiles, procurement: structuredClone(sampleProcurement), submissions: [], leveling: null, budget: structuredClone(sampleBudget), awards: noAwards });
+const base = freeze({ project: sampleProjectRecords[0], documents: sampleFiles, procurement: structuredClone(sampleProcurement), submissions: [], leveling: null, budget: structuredClone(ruleFixtureBudget), awards: noAwards });
 const derive = (patch = {}) => deriveTodo({ ...base, ...patch });
 
 // An empty project: only setup and budget work, nothing invented.
