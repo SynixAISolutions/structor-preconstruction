@@ -12,6 +12,7 @@ import { screenLabel } from "../../lib/screens";
 import { ProcurementScopesView } from "./procurement";
 import { RfiWorkspace } from "./rfi-ui";
 import { DrawingFlipWorkspace } from "./drawing-flip-ui";
+import { SubmittalLogWorkspace } from "./submittal-log-ui";
 import "./intelligence.css";
 
 // Local UI drafts only; sample suggestions are never derived from uploaded files.
@@ -162,7 +163,7 @@ export function IntelligenceView(props: ViewProps & { screen: Screen }) {
     case "scopes": return <ProcurementScopesView {...props}/>;
     case "drawing-flip": return <DrawingFlipWorkspace {...props}/>;
     case "takeoffs": return <TakeoffsScreen {...props}/>;
-    case "specs": return <SpecsScreen {...props}/>;
+    case "specs": return <SubmittalLogWorkspace {...props}/>;
     case "specifications": return <SpecificationsScreen {...props}/>;
     case "checks": return <RfiWorkspace {...props}/>;
     case "drawings": return <DrawingsScreen {...props}/>;
