@@ -64,7 +64,7 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
   ]},
   { label: "OPERATIONS", scope: "project", items: [
     { id: "schedule", label: "Project schedule", icon: "CalendarDays" },
-    { id: "specs", label: "Submittal packages", icon: "Layers3", keywords: ["spec matrix", "submittal log", "submittal requirements"] },
+    { id: "specs", label: "Submittal packages", icon: "Layers3", keywords: ["spec matrix", "submittal log", "submittal requirements", "ball in court", "architect review", "shop drawings", "product data"] },
   ]},
 ];
 

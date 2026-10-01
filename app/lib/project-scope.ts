@@ -54,6 +54,8 @@ const NEW_PROJECT_START: Record<string, (initial: unknown) => unknown> = {
   "portal-bid": initial => initial,
   // Already empty; emptying it again would turn the markup factor 1 into 0.
   "value-engineering": initial => initial,
+  // No architect until one is entered (emptying would leave a blank contact).
+  "submittal-log": initial => ({ ...(emptyLike(initial) as object), architect: null }),
 };
 
 function emptyLike(value: unknown): unknown {
