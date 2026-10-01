@@ -11,19 +11,21 @@ import { Badge, Button, Empty, Modal, PageHeader, Panel, SearchBox, Tabs, usd, t
 import { DEFAULT_SCREEN, SCREEN_GROUPS, resolveScreen, screenGroup, screenLabel, searchScreens } from "../lib/screens";
 import { PROJECT_TABS, filterProjects, loadProjects, sampleProjectRecords, saveProjects, squareFeetLabel, type Project } from "../lib/projects";
 import { selectProject, useActiveProject } from "../lib/project-scope";
+import { modelViewForScreen } from "../lib/model";
 import "./ui/product.css";
 import dynamic from "next/dynamic";
 const ModelStudio = dynamic(() => import("./ui/model-studio"), { ssr: false, loading: () => <div className="ui-empty">Opening model studio…</div> });
 
 // Nav structure and project data now live in lib/. This map is the UI half: icon name -> component.
 const ICONS: Record<string, typeof Box> = { LayoutDashboard, Box, FolderOpen, Building2, FileStack, ListChecks, Ruler, Layers3, ShieldCheck, FileText, BookOpenText, GitCompareArrows, Users, Gauge, Wallet, ClipboardList, FileCheck2, CalendarDays, MessageSquare, ClipboardCheck, HardHat, Settings2, Lightbulb, Star, UserCheck };
-function NavIcon({name,size,id}:{name:string;size:number;id?:Screen}){const iconName=id==="specifications"?"BookOpenText":id==="value-engineering"?"Lightbulb":id==="ratings"?"Star":id==="prequalification"?"UserCheck":name;const Icon=ICONS[iconName]??Box;return <Icon size={size}/>;}
+function NavIcon({name,size,id}:{name:string;size:number;id?:Screen}){const iconName=id==="specifications"?"BookOpenText":id==="value-engineering"?"Lightbulb":id==="ratings"?"Star":id==="prequalification"?"UserCheck":id==="model"?"Layers3":id==="model-mep"?"Ruler":id==="model-structural"?"Building2":id==="model-exterior"?"Box":name;const Icon=ICONS[iconName]??Box;return <Icon size={size}/>;}
 
 function BuildingModel({small=false}:{small?:boolean}) { return <div className={`model-stage ${small?"small":""}`} aria-label="Illustrative 3D building model" role="img"><div className="model-orbit"><div className="model-ground"><div className="model-grid"/><div className="model-walkway"/><div className="model-building main"><i className="roof"/><i className="front"/><i className="side"/><i className="window-line"/></div><div className="model-building wing"><i className="roof"/><i className="front"/><i className="side"/></div><div className="model-building tower"><i className="roof"/><i className="front"/><i className="side"/></div><div className="model-tree t1"/><div className="model-tree t2"/><div className="model-tree t3"/><div className="model-tree t4"/><div className="model-outline"/></div></div><span className="model-caption"><span/>CONCEPT MODEL <span className="model-coordinate">38.917° N / 77.068° W</span></span></div>; }
 
 export default function StructorApp(){
  const [screen,setScreen]=useState<Screen>(DEFAULT_SCREEN); const [menuOpen,setMenuOpen]=useState(false); const [searchOpen,setSearchOpen]=useState(false); const [search,setSearch]=useState(""); const [helpOpen,setHelpOpen]=useState(false); const [notifications,setNotifications]=useState(false); const [toast,setToast]=useState(""); const [projects,setProjects]=useState<Project[]>(sampleProjectRecords); const activeId=useActiveProject(); const [newProject,setNewProject]=useState(false); const [ready,setReady]=useState(false); const [reduced,setReduced]=useState(false); const scrollRef=useRef<HTMLDivElement>(null);
  const project=projects.find(p=>p.id===activeId)||projects[0];
+ const modelView=modelViewForScreen(screen);
  const notify=useCallback((message:string)=>setToast(message),[]);
  const navigate=useCallback((next:Screen)=>{setScreen(next);setMenuOpen(false);setSearchOpen(false); window.location.hash=next;scrollRef.current?.scrollTo({top:0});},[]);
  useEffect(()=>{const sync=()=>{const value=location.hash.slice(1);const next=resolveScreen(value);if(next){setScreen(next);if(value!==next)history.replaceState(null,"",`#${next}`);}};sync();window.addEventListener("hashchange",sync);const saved=loadProjects();if(saved)setProjects(saved);setReady(true);return()=>window.removeEventListener("hashchange",sync);},[]);
@@ -46,7 +48,7 @@ export default function StructorApp(){
    <div className="product-content" ref={scrollRef}>
     <div className="page-enter" key={screen}>
      {screen==="overview"&&<Overview project={project} navigate={navigate} onNew={()=>setNewProject(true)}/>}
-     {screen==="model"&&<ModelStudio/>}
+     {modelView&&<ModelStudio view={modelView} projectId={project.id} projectName={project.name} navigate={navigate} notify={notify}/>}
      {screen==="projects"&&<Projects projects={projects} onNew={()=>setNewProject(true)} onOpen={p=>{selectProject(p.id);navigate("information");}}/>}
      {screen==="information"&&<ProjectInformation project={project} cover={<BuildingModel/>} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Project information saved locally.");}} navigate={navigate}/>}
       {['documents','scopes','drawing-flip','takeoffs','specs','checks','drawings','specifications','revisions'].includes(screen)&&<IntelligenceView {...props} screen={screen}/>}
