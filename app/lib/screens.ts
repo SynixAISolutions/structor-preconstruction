@@ -11,7 +11,7 @@ export type Screen =
   | "packages" | "bidders" | "portal" | "leveling" | "budget" | "allowances"
   | "contracts" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
   | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
-  | "ratings" | "prequalification" | "drawing-flip";
+  | "ratings" | "prequalification" | "drawing-flip" | "model-mep" | "model-structural" | "model-exterior";
 
 export type ViewProps = { navigate: (screen: Screen) => void; notify: (message: string) => void; projectName: string };
 
@@ -29,6 +29,7 @@ export type ScreenGroup = { label: string; scope: ScreenScope; items: ScreenDef[
 export const DEFAULT_SCREEN: Screen = "projects";
 
 const OUTREACH = "Subcontractor outreach";
+const MODEL = "3D model studio";
 
 export const SCREEN_GROUPS: ScreenGroup[] = [
   { label: "WORKSPACE", scope: "global", items: [
@@ -51,7 +52,10 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "drawings", label: "List of drawings", icon: "FileText", keywords: ["drawing register", "sheets"] },
     { id: "specifications", label: "List of specifications", icon: "FileText", keywords: ["spec register", "project manual", "specification sections"] },
     { id: "revisions", label: "Revision comparison", icon: "GitCompareArrows" },
-    { id: "model", label: "3D model studio", icon: "Box" },
+    { id: "model", label: "Interior finishes", icon: "Box", section: MODEL, keywords: ["3d model studio", "3d model", "interiors", "finishes", "doors", "walkthrough"] },
+    { id: "model-mep", label: "MEP coordination", icon: "Box", section: MODEL, keywords: ["3d mep", "mechanical", "electrical", "plumbing", "fire protection", "bim", "clash"] },
+    { id: "model-structural", label: "Structural model", icon: "Box", section: MODEL, keywords: ["3d structure", "concrete", "steel", "framing", "columns"] },
+    { id: "model-exterior", label: "Exterior model", icon: "Box", section: MODEL, keywords: ["3d exterior", "facade", "envelope", "roof", "storefront"] },
     { id: "budget", label: "Budget summary", icon: "Wallet" },
     { id: "allowances", label: "Allowances", icon: "ClipboardList" },
     { id: "value-engineering", label: "Value engineering", icon: "Wallet", keywords: ["VE", "savings", "target reduction", "cost reduction"] },

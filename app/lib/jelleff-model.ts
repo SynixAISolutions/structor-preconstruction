@@ -1,35 +1,11 @@
-export type Point = [number, number];
+// The Jelleff Recreation Center model: the traced first floor the studio has always shown, plus
+// illustrative structural, MEP and roof objects for the four views. Types and measuring rules are
+// in lib/model.ts.
 
-export type SourceRef = {
-  sheet: string;
-  page: number;
-  detail: string;
-  asset: string;
-};
+import { resolveObjects, type MaterialInfo, type ModelElement, type ModelInput, type ModelObject, type ModelReviewState, type Point, type SourceRef } from "./model";
+import { SAMPLE_PROJECT_ID } from "./project-scope";
 
-export type MaterialInfo = {
-  id: string;
-  name: string;
-  color: string;
-  description: string;
-  status: "Documented" | "Illustrative";
-  sources: SourceRef[];
-};
-
-export type ModelElement = {
-  id: string;
-  name: string;
-  kind: "wall" | "floor" | "glass" | "door";
-  materialId: string;
-  points: Point[];
-  height: number;
-  thickness?: number;
-  base?: number;
-  room?: string;
-  description: string;
-  source: SourceRef;
-  geometryStatus: string;
-};
+export type { MaterialInfo, ModelElement, Point, SourceRef } from "./model";
 
 export const planTransform = {
   origin: [460, 725] as Point,
@@ -39,74 +15,96 @@ export const planTransform = {
 };
 
 const plan: SourceRef = {
-  sheet: "A1.1", page: 46, detail: "Level 01 - first floor plan", asset: "/models/jelleff/a1-1.png",
+  drawing: "Jelleff drawing set", sheet: "A1.1", page: 46, detail: "Level 01 - first floor plan", asset: "/models/jelleff/a1-1.png",
 };
 const partitions: SourceRef = {
-  sheet: "A8.1", page: 64, detail: "SA3.20 non-rated stud partition, 4 7/8 in. rough thickness", asset: "/models/jelleff/a8-1.png",
+  drawing: "Jelleff drawing set", sheet: "A8.1", page: 64, detail: "SA3.20 non-rated stud partition, 4 7/8 in. rough thickness", asset: "/models/jelleff/a8-1.png",
 };
 const finishSchedule: SourceRef = {
-  sheet: "A12.1", page: 79, detail: "Finish schedules and details", asset: "/models/jelleff/a12-1.png",
+  drawing: "Jelleff drawing set", sheet: "A12.1", page: 79, detail: "Finish schedules and details", asset: "/models/jelleff/a12-1.png",
 };
 const finishPlan: SourceRef = {
-  sheet: "A12.2", page: 80, detail: "Level 01 - finish plan", asset: "/models/jelleff/a12-2.png",
+  drawing: "Jelleff drawing set", sheet: "A12.2", page: 80, detail: "Level 01 - finish plan", asset: "/models/jelleff/a12-2.png",
 };
 export const levelSource: SourceRef = {
-  sheet: "A5.1", page: 57, detail: "Building sections: first floor 0 ft, second floor 14 ft, low roof 28 ft", asset: "/models/jelleff/a5-1.png",
+  drawing: "Jelleff drawing set", sheet: "A5.1", page: 57, detail: "Building sections: first floor 0 ft, second floor 14 ft, low roof 28 ft", asset: "/models/jelleff/a5-1.png",
 };
 
 export const materials: MaterialInfo[] = [
   {
     id: "partition", name: "SA3.20 - gypsum board / metal stud", color: "#e7e1d5", status: "Documented",
+    discipline: "architectural", division: "09", specSection: "09 21 16", unit: "SF", views: ["interior"],
+    properties: [{ label: "Type", value: "SA3.20" }, { label: "Rating", value: "Non-rated" }, { label: "Rough thickness", value: "4 7/8 in." }, { label: "Construction", value: "Metal studs, gypsum board both sides" }, { label: "Acoustic", value: "Sound attenuation where required" }],
     description: "A8.1 lists a non-rated, 4 7/8 in. stud partition with gypsum wall board both sides and sound attenuation where required. A1.1 names SA3.20 as the default interior partition unless noted. Individual segment assignments are simplified; verify local tags before estimating.",
     sources: [partitions, plan],
   },
   {
     id: "envelope", name: "Exterior / existing wall - schematic", color: "#c8c5bc", status: "Illustrative",
+    discipline: "architectural", division: "04", specSection: null, unit: "SF", views: ["interior", "exterior"],
+    properties: [{ label: "Assembly", value: "Not verified from the envelope details" }, { label: "Model thickness", value: "12 in. nominal" }],
     description: "Neutral exterior wall representation. Its layers, finish, and nominal 12 in. model thickness have not been verified from the envelope details.",
     sources: [plan],
   },
   {
     id: "storefront", name: "Aluminum storefront / glazing", color: "#89c9d7", status: "Documented",
+    discipline: "architectural", division: "08", specSection: "08 41 13", unit: "SF", views: ["interior", "exterior"],
+    properties: [{ label: "System", value: "Aluminum storefront" }, { label: "Glazing", value: "Not specified in the model" }],
     description: "Aluminum storefront is called out on A1.1 at the lobby and fitness area. Glass tint, simplified frames, height, and placement of individual panels are illustrative; no glazing specification is inferred.",
     sources: [plan],
   },
   {
     id: "gym-floor", name: "FAF-01 - poured sports flooring", color: "#b69770", status: "Documented",
+    discipline: "architectural", division: "09", specSection: "09 65 66", unit: "SF", views: ["interior"],
+    properties: [{ label: "Finish tag", value: "FAF-01" }, { label: "Product", value: "Tarkett Sports Indoor, Polyturf Plus Pad + Pour" }, { label: "Color", value: "Desert base, grey and white striping" }],
     description: "A12.2 tags the gym FAF-01. A12.1 schedules Tarkett Sports Indoor, Polyturf Plus Pad + Pour; Desert base with grey and white striping. Display color and court markings are approximate.",
     sources: [finishPlan, finishSchedule],
   },
   {
     id: "concrete", name: "PLC-01 - polished concrete", color: "#c5c2b9", status: "Documented",
+    discipline: "architectural", division: "03", specSection: "03 35 43", unit: "SF", views: ["interior"],
+    properties: [{ label: "Finish tag", value: "PLC-01" }, { label: "Product", value: "Ardex Ultraflor Diamatic" }, { label: "Sheen", value: "Low gloss" }],
     description: "The lobby and circulation are tagged PLC-01 on A12.2. A12.1 lists Ardex, Ultraflor Diamatic, low gloss. The slab thickness and display color are illustrative.",
     sources: [finishPlan, finishSchedule],
   },
   {
     id: "carpet", name: "CPT-01 - carpet", color: "#959d92", status: "Documented",
+    discipline: "architectural", division: "09", specSection: "09 68 13", unit: "SF", views: ["interior"],
+    properties: [{ label: "Finish tag", value: "CPT-01" }, { label: "Product", value: "Shaw Contract Observe" }, { label: "Color", value: "Radiant Nature 05326" }, { label: "Size", value: "9 × 36 in." }, { label: "Installation", value: "Ashlar" }],
     description: "Office areas are tagged CPT-01 on A12.2. A12.1 lists Shaw Contract Observe, color Radiant Nature 05326, 9 x 36 in., installed ashlar. Pattern and display color are simplified.",
     sources: [finishPlan, finishSchedule],
   },
   {
     id: "fitness-floor", name: "RF-01 - resilient sports flooring", color: "#786e55", status: "Documented",
+    discipline: "architectural", division: "09", specSection: "09 65 66", unit: "SF", views: ["interior"],
+    properties: [{ label: "Finish tag", value: "RF-01" }, { label: "Product", value: "Mondo Sports Impact" }, { label: "Color", value: "136 Brown" }, { label: "Installation", value: "Ashlar" }],
     description: "Fitness 106 is tagged RF-01 on A12.2. A12.1 schedules Mondo Sports Impact, 136 Brown, installed ashlar. Display color and floor thickness are approximate.",
     sources: [finishPlan, finishSchedule],
   },
   {
     id: "tile", name: "FT-01 - taupe floor tile", color: "#b8b2a0", status: "Documented",
+    discipline: "architectural", division: "09", specSection: "09 30 13", unit: "SF", views: ["interior"],
+    properties: [{ label: "Finish tag", value: "FT-01" }, { label: "Product", value: "Tilebar Nashville" }, { label: "Color", value: "Taupe matte" }, { label: "Size", value: "12 × 24 in." }, { label: "Showers", value: "FT-02" }],
     description: "Wet-area floors are tagged FT-01 on A12.2. A12.1 lists Tilebar Nashville, taupe matte, 12 x 24 in.; shower areas use FT-02. Small shower transitions are omitted from this room-level model.",
     sources: [finishPlan, finishSchedule],
   },
   {
     id: "entry-grille", name: "WOG-01 - entrance floor grille", color: "#7d8989", status: "Documented",
+    discipline: "architectural", division: "12", specSection: "12 48 16", unit: "SF", views: ["interior"],
+    properties: [{ label: "Finish tag", value: "WOG-01" }, { label: "Product", value: "Construction Specialties Gridline G6" }, { label: "Material", value: "Stainless steel" }],
     description: "Vestibules are tagged WOG-01 on A12.2. A12.1 schedules Construction Specialties Gridline G6 stainless steel entrance grilles. Individual bars are omitted.",
     sources: [finishPlan, finishSchedule],
   },
   {
     id: "service-floor", name: "SCE-01 - sealed concrete", color: "#a9aca6", status: "Documented",
+    discipline: "architectural", division: "03", specSection: "03 35 00", unit: "SF", views: ["interior"],
+    properties: [{ label: "Finish tag", value: "SCE-01" }, { label: "Finish", value: "Sealed concrete" }, { label: "Sealer", value: "Clear, low-VOC" }],
     description: "Storage 120 and electrical utility 119A are tagged SCE-01 on A12.2. A12.1 lists sealed concrete with a clear, premium-quality, low-VOC sealer. The grouped service zone also includes a simplified stair footprint.",
     sources: [finishPlan, finishSchedule],
   },
   {
     id: "door", name: "Door leaf - schematic", color: "#81876f", status: "Illustrative",
+    discipline: "architectural", division: "08", specSection: null, unit: "EA", views: ["interior"],
+    properties: [{ label: "Leaf", value: "Schematic: material, handing and hardware not checked" }, { label: "Model height", value: "7 ft" }],
     description: "Open leaves locate selected circulation openings. Leaf material, handing, hardware and 7 ft model height are illustrative and have not been checked against the door schedule.",
     sources: [plan],
   },
@@ -252,3 +250,92 @@ export const rooms: { id: string; name: string; number: string; center: Point }[
   { id: "yard", name: "Open mechanical yard", number: "118", center: point([1203, 855]) },
   { id: "storage", name: "Storage", number: "120", center: point([1008, 817]) },
 ];
+
+// ── Structural, MEP and roof objects (illustrative) ─────────────────────────
+// Placed for the demo on the traced gym and service areas. Footprints follow A1.1 and heights the
+// A5.1 levels; positions, sizes and products are NOT from structural, MEP or roofing drawings.
+
+const placed = "Illustrative placement for the demo; not taken from structural, MEP or roofing drawings.";
+const illustrative = (properties: [string, string][]) => properties.map(([label, value]) => ({ label, value }));
+
+export const systemMaterials: MaterialInfo[] = [
+  { id: "slab-on-grade", name: "Concrete slab on grade", color: "#a8a49b", status: "Illustrative", sources: [plan],
+    description: "Slab under the traced floor finishes. Thickness, reinforcing and vapour retarder are assumed for the demo.",
+    discipline: "structural", division: "03", specSection: "03 30 00", unit: "CY", views: ["structural"],
+    properties: illustrative([["Thickness", "5 in. (illustrative)"], ["Reinforcing", "Not modeled"], ["Concrete", "4,000 psi (illustrative)"]]) },
+  { id: "steel-column", name: "Structural steel column", color: "#6f7f8f", status: "Illustrative", sources: [plan, levelSource],
+    description: "Columns at the gym wall lines, rising to the low-roof datum. Grid, section and base plates are assumed.",
+    discipline: "structural", division: "05", specSection: "05 12 00", unit: "EA", views: ["structural"],
+    properties: illustrative([["Section", "W10 (illustrative)"], ["Base", "Not modeled"]]) },
+  { id: "roof-framing", name: "Steel roof girder", color: "#7c8a96", status: "Illustrative", sources: [levelSource],
+    description: "Girders spanning the gym under the roof. Spacing, depth and bearing are assumed.",
+    discipline: "structural", division: "05", specSection: "05 12 00", unit: "LF", views: ["structural"],
+    properties: illustrative([["Depth", "24 in. (illustrative)"], ["Spacing", "About 25 ft (illustrative)"]]) },
+  { id: "roof-membrane", name: "TPO roof assembly", color: "#d9d6cf", status: "Illustrative", sources: [levelSource],
+    description: "Roof over the gym at the low-roof datum. Membrane and insulation follow the demo's specification list, not the Jelleff roof details.",
+    discipline: "architectural", division: "07", specSection: "07 54 23", unit: "SF", views: ["exterior"],
+    properties: illustrative([["Membrane", "60-mil reinforced TPO (illustrative)"], ["Insulation", "Tapered polyiso, R-30 (illustrative)"], ["Assembly thickness", "6 in. (illustrative)"]]) },
+  { id: "ductwork", name: "Galvanized supply and return ductwork", color: "#b9c4cc", status: "Illustrative", sources: [plan],
+    description: "Main duct runs from the mechanical yard into the gym. Sizes, routing and insulation are assumed.",
+    discipline: "mechanical", division: "23", specSection: "23 31 13", unit: "LF", views: ["mep"],
+    properties: illustrative([["Size", "24 × 14 in. (illustrative)"], ["Insulation", "Duct wrap R-6 (illustrative)"]]) },
+  { id: "air-handler", name: "Packaged air-handling unit", color: "#9aa7a0", status: "Illustrative", sources: [plan],
+    description: "Equipment in the open mechanical yard. Tag, capacity and footprint are assumed.",
+    discipline: "mechanical", division: "23", specSection: "23 73 13", unit: "EA", views: ["mep"],
+    properties: illustrative([["Tag", "AHU-1 (illustrative)"], ["Capacity", "Not verified"]]) },
+  { id: "sprinkler-main", name: "Wet-pipe sprinkler main", color: "#c75b4a", status: "Illustrative", sources: [plan],
+    description: "Main across the gym below the roof. Size, hazard class and head layout are assumed.",
+    discipline: "fire-protection", division: "21", specSection: "21 13 13", unit: "LF", views: ["mep"],
+    properties: illustrative([["Size", "4 in. (illustrative)"], ["System", "Wet pipe"]]) },
+  { id: "water-pipe", name: "Domestic water piping", color: "#5b8fc7", status: "Illustrative", sources: [plan],
+    description: "Cold-water main to the locker rooms. Size, material and route are assumed.",
+    discipline: "plumbing", division: "22", specSection: "22 11 16", unit: "LF", views: ["mep"],
+    properties: illustrative([["Size", "2 in. (illustrative)"], ["Material", "Copper type L (illustrative)"]]) },
+  { id: "panelboard", name: "Electrical panelboard", color: "#8a8170", status: "Illustrative", sources: [plan],
+    description: "Panel in electrical utility 119A. Rating and circuits are assumed.",
+    discipline: "electrical", division: "26", specSection: "26 24 16", unit: "EA", views: ["mep"],
+    properties: illustrative([["Rating", "225 A, 208Y/120 V (illustrative)"]]) },
+  { id: "high-bay", name: "High-bay LED light fixture", color: "#e2c86b", status: "Illustrative", sources: [plan],
+    description: "Gym light fixtures below the roof. Type, count and mounting height are assumed.",
+    discipline: "electrical", division: "26", specSection: "26 51 00", unit: "EA", views: ["mep"],
+    properties: illustrative([["Type", "LED high-bay (illustrative)"], ["Mounting", "About 25 ft (illustrative)"]]) },
+];
+
+const gym: Point[] = [[460, 725], [970, 725], [970, 1445], [460, 1445]];
+const system = (id: string, name: string, kind: ModelInput["kind"], materialId: string, pixels: Point[], base: number, height: number, thickness: number, level: ModelInput["level"], source: SourceRef, room?: string, depth?: number): ModelInput =>
+  ({ id, name, kind, materialId, points: pixels.map(point), base, height, thickness, depth, level, room, source, geometry: "illustrative", geometryStatus: placed, description: systemMaterials.find(m => m.id === materialId)!.description });
+
+export const systemElements: ModelInput[] = [
+  system("slab-gym", "Gym 103 - slab on grade", "slab", "slab-on-grade", gym, -0.18 - 5 / 12, 5 / 12, 0, "L1", plan, "103"),
+  system("slab-wing", "Lobby and offices - slab on grade (part)", "slab", "slab-on-grade", [[977, 998], [1310, 998], [1310, 1445], [977, 1445]], -0.18 - 5 / 12, 5 / 12, 0, "L1", plan),
+  ...([["gw-n", "west, north end", 460, 725], ["gw-m", "west, middle", 460, 1085], ["gw-s", "west, south end", 460, 1445], ["ge-n", "east, north end", 970, 725], ["ge-m", "east, middle", 970, 1085], ["ge-s", "east, south end", 970, 1445]] as [string, string, number, number][])
+    .map(([id, where, x, z]) => system(`col-${id}`, `Gym column - ${where}`, "column", "steel-column", [[x, z]], 0, 28, 10 / 12, "L1", plan, "103")),
+  ...[905, 1085, 1265].map((z, i) => system(`girder-${i + 1}`, `Gym roof girder ${i + 1}`, "beam", "roof-framing", [[460, z], [970, z]], 26, 2, 0.75, "roof", levelSource, "103")),
+  system("roof-gym", "Gym roof", "roof", "roof-membrane", gym, 28, 0.5, 0, "roof", levelSource, "103"),
+  system("ahu-1", "AHU-1 in the mechanical yard", "equipment", "air-handler", [[1203, 860]], 0, 6, 8, "L1", plan, "118", 14),
+  system("duct-yard", "Supply duct - yard to gym", "duct", "ductwork", [[1150, 860], [970, 860]], 20, 14 / 12, 2, "L1", plan),
+  system("duct-gym-supply", "Supply duct - gym main", "duct", "ductwork", [[970, 860], [520, 860]], 20, 14 / 12, 2, "L1", plan, "103"),
+  system("duct-gym-return", "Return duct - gym", "duct", "ductwork", [[970, 1310], [520, 1310]], 20, 14 / 12, 2, "L1", plan, "103"),
+  system("sprinkler-gym", "Sprinkler main - gym", "pipe", "sprinkler-main", [[520, 1085], [940, 1085]], 25, 4 / 12, 4 / 12, "L1", plan, "103"),
+  system("water-lockers", "Domestic water main - locker rooms", "pipe", "water-pipe", [[1370, 950], [1700, 950]], 9, 2 / 12, 2 / 12, "L1", plan),
+  system("panel-119a", "Panelboard in electrical utility 119A", "equipment", "panelboard", [[1400, 765]], 1, 6, 1.75, "L1", plan, "119A", 0.5),
+  ...([[590, 905], [840, 905], [590, 1265], [840, 1265]] as Point[]).map((p, i) => system(`light-hb-${i + 1}`, `Gym high-bay light ${i + 1}`, "fixture", "high-bay", [p], 25, 1, 2, "L1", plan, "103", 2)),
+];
+
+/** Every assembly: the studio's first-floor materials, then the illustrative system ones. */
+export const allMaterials: MaterialInfo[] = [...materials, ...systemMaterials];
+
+/** Every selectable object in the four views, resolved with quantities and sources. */
+export const modelObjects: ModelObject[] = resolveObjects([...elements, ...systemElements], allMaterials);
+
+/** The model for a project: Jelleff has one; other projects have none yet. */
+export const modelForProject = (projectId: string): ModelObject[] => projectId === SAMPLE_PROJECT_ID ? modelObjects : [];
+
+/** Jelleff's starting review: one finish checked, one wall waiting on the envelope details. */
+export const sampleModelReview: ModelReviewState = {
+  reviews: [
+    { objectId: "floor-gym", status: "verified", note: "Matches the FAF-01 tag on A12.2.", by: "Safi", at: "2026-09-29T15:00:00.000Z", history: [{ status: "verified", note: "Matches the FAF-01 tag on A12.2.", by: "Safi", at: "2026-09-29T15:00:00.000Z" }] },
+    { objectId: "gym-north", status: "flagged", note: "Exterior wall layers not verified; check the wall sections.", by: "Vijay", at: "2026-09-29T15:10:00.000Z", history: [{ status: "flagged", note: "Exterior wall layers not verified; check the wall sections.", by: "Vijay", at: "2026-09-29T15:10:00.000Z" }] },
+  ],
+  hidden: { interior: [], mep: [], structural: [], exterior: [] },
+};
