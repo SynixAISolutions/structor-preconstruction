@@ -120,10 +120,24 @@ export function listSampleBackups(storage: StorageLike): SampleBackup[] {
  */
 export function restoreSampleBackup(storage: StorageLike, key: string, at = new Date().toISOString()): string {
   const b = readBackup(storage, key);
+  const current = jelleffDraftKeys(storage).map(k => [k, storage.getItem(k)!] as const);
+  const currentVersion = storage.getItem(SAMPLE_VERSION_KEY);
   const saved = backup(storage, at);
-  for (const k of jelleffDraftKeys(storage)) storage.removeItem(k);
-  for (const [k, v] of Object.entries(b.entries)) storage.setItem(k, v);
-  if (b.version === null) storage.removeItem(SAMPLE_VERSION_KEY); else storage.setItem(SAMPLE_VERSION_KEY, b.version);
+  try {
+    for (const k of jelleffDraftKeys(storage)) storage.removeItem(k);
+    for (const [k, v] of Object.entries(b.entries)) storage.setItem(k, v);
+    if (b.version === null) storage.removeItem(SAMPLE_VERSION_KEY); else storage.setItem(SAMPLE_VERSION_KEY, b.version);
+  } catch {
+    try {
+      for (const k of jelleffDraftKeys(storage)) storage.removeItem(k);
+      for (const [k, v] of current) storage.setItem(k, v);
+      if (currentVersion === null) storage.removeItem(SAMPLE_VERSION_KEY); else storage.setItem(SAMPLE_VERSION_KEY, currentVersion);
+      storage.removeItem(saved);
+    } catch {
+      throw new SampleRefreshError("Restore stopped. Your previous Jelleff data is in the newest backup; download it before trying again.");
+    }
+    throw new SampleRefreshError("This backup could not be restored with the available browser storage. Your current Jelleff data was kept.");
+  }
   return saved;
 }
 

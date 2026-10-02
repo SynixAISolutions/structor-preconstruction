@@ -97,6 +97,19 @@ const limitedRestore = memoryStorage(sBefore, Object.entries(sBefore).reduce((n,
 fails(() => R.restoreSampleBackup(limitedRestore, backupKey, at), /nothing was changed/);
 assert.deepEqual(limitedRestore.snapshot(), sBefore);
 
+// A small current draft can be backed up even when the much larger target cannot fit.
+// That later failure must roll the active draft and sample version back completely.
+const largeTarget = memoryStorage({
+  "structor-sample-backup:large": JSON.stringify({ at, version: null, entries: { "structor-ui-procurement": "X".repeat(1000) } }),
+  "structor-ui-procurement": "small current draft",
+  [R.SAMPLE_VERSION_KEY]: R.SAMPLE_VERSION,
+});
+const largeBefore = largeTarget.snapshot();
+const largeLimit = Object.entries(largeBefore).reduce((n, [k, v]) => n + k.length + v.length, 0) + 300;
+const limitedLargeRestore = memoryStorage(largeBefore, largeLimit);
+fails(() => R.restoreSampleBackup(limitedLargeRestore, "structor-sample-backup:large", at), /current Jelleff data was kept/);
+assert.deepEqual(limitedLargeRestore.snapshot(), largeBefore, "A failed restore does not partially remove the active draft");
+
 // Bad backups.
 fails(() => R.restoreSampleBackup(s, "structor-ui-procurement", at), /not a sample backup/);
 fails(() => R.restoreSampleBackup(s, "structor-sample-backup:nope", at), /no longer exists/);
@@ -114,4 +127,4 @@ R.deleteSampleBackup(s, second);
 assert.deepEqual(R.listSampleBackups(s).map(b => b.key), [backupKey]);
 fails(() => R.deleteSampleBackup(s, second), /no longer exists/);
 
-console.log(`Sample refresh checked: version ${R.SAMPLE_VERSION}; Jelleff drafts only, fresh vs returning browsers, keep my data, backup-then-load, restore (itself backed up), full storage changes nothing, bad backups refused.`);
+console.log(`Sample refresh checked: version ${R.SAMPLE_VERSION}; Jelleff drafts only, fresh vs returning browsers, keep my data, backup-then-load, restore (itself backed up), quota failures roll back, bad backups refused.`);
