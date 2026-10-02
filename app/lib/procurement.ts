@@ -246,9 +246,22 @@ export function inviteBidder(state: Procurement, packageId: string, bidderId: st
   })] };
 }
 
+/**
+ * Invited, bidding or declined, as the estimator hears it. "Submitted" is not set by hand: it comes
+ * from a bid submitted in the portal (markInvitationSubmitted), so proposal counts are real.
+ */
 export function setInvitationStatus(state: Procurement, invitationId: string, status: InvitationStatus): Procurement {
-  if (!state.invitations.some(i => i.id === invitationId)) fail("That invitation no longer exists.");
+  const invitation = state.invitations.find(i => i.id === invitationId) ?? fail("That invitation no longer exists.");
+  if (status === "submitted") fail("A bid is marked submitted when the company submits it in the portal.");
+  if (invitation.status === "submitted") fail("This company has submitted a bid; its status can't be changed by hand.");
   return { ...state, invitations: state.invitations.map(i => i.id === invitationId ? { ...i, status } : i) };
+}
+
+/** Records that the invited company submitted a bid in the portal (called with submitBid). */
+export function markInvitationSubmitted(state: Procurement, invitationId: string): Procurement {
+  const invitation = state.invitations.find(i => i.id === invitationId) ?? fail("That invitation no longer exists.");
+  if (invitation.status === "declined") fail("A declined company cannot submit a bid.");
+  return { ...state, invitations: state.invitations.map(i => i.id === invitationId ? { ...i, status: "submitted" } : i) };
 }
 
 /** Adds a call, note or message to an invited company's outreach log. */

@@ -1,8 +1,13 @@
 // Sample procurement record for the Jelleff project: trade packages, scope items,
 // invitations and outreach. Illustrative preview content, not read from the documents.
 // Bidder ids refer to the organization-wide directory (initialBidders).
+//
+// Concrete is the one trade carried all the way through the sample: its bid form is approved and
+// published here, District Concrete's bid is in lib/data/sample-award.ts, and so are the award,
+// Exhibit A and executed subcontract its submittals hang off.
 
-import type { Procurement, ScopeItem, ScopeOrigin, TradePackage } from "../procurement";
+import { approveScope, bidForm, markInvitationSubmitted, publishPackage, type Procurement, type ScopeItem, type ScopeOrigin, type TradePackage } from "../procurement";
+import { stableIds } from "./stable-ids";
 
 const packages: TradePackage[] = [
   { id: "demolition", name: "Demolition", division: "02", code: "02 41 19", owner: "Safi", due: "2026-10-02" },
@@ -46,7 +51,7 @@ const scopes: ScopeItem[] = [
   item("electrical", "Furnish and install lighting fixtures and associated controls.", "Include fixture support, branch wiring, occupancy controls, and commissioning.", "E-101 · Lighting plan", "drawing", false),
 ];
 
-export const sampleProcurement: Procurement = {
+const listed: Procurement = {
   packages,
   scopes,
   invitations: [
@@ -63,3 +68,8 @@ export const sampleProcurement: Procurement = {
   ],
   notifications: [],
 };
+
+const concrete = bidForm(listed, "concrete").filter(i => i.status === "draft").reduce((next, i) => approveScope(next, i.id, "Vijay", "2026-09-17T13:00:00.000Z"), listed);
+const published = publishPackage(concrete, "concrete", "Vijay", "2026-09-17T15:00:00.000Z");
+
+export const sampleProcurement: Procurement = stableIds(markInvitationSubmitted(published, "inv-2"), "pn");

@@ -9,6 +9,7 @@ const A = await import("../lib/award.ts");
 const { levelingCandidates } = await import("../lib/budget.ts");
 const { buildLevelingImport } = await import("../lib/leveling-import.ts");
 const { sampleProcurement } = await import("../lib/data/procurement.ts");
+const { sampleSubmissions, sampleAwards } = await import("../lib/data/sample-award.ts");
 const { ruleFixtureBudget } = await import("./fixtures/budget-rules.mjs");
 const { initialBidders } = await import("../lib/data/commercial.ts");
 const { sampleFiles } = await import("../lib/data/preconstruction.ts");
@@ -21,7 +22,7 @@ const task = (summary, id) => summary.tasks.find(t => t.id === id);
 const has = (summary, id) => ids(summary).includes(id);
 const milestones = (summary, pkg) => summary.packages.find(p => p.packageId === pkg).milestones.filter(m => m.done).map(m => m.key);
 const noAwards = freeze({ awards: [], notifications: [] });
-const base = freeze({ project: sampleProjectRecords[0], documents: sampleFiles, procurement: structuredClone(sampleProcurement), submissions: [], leveling: null, budget: structuredClone(ruleFixtureBudget), awards: noAwards });
+const base = freeze({ project: sampleProjectRecords[0], documents: sampleFiles, procurement: structuredClone(sampleProcurement), submissions: structuredClone(sampleSubmissions), leveling: null, budget: structuredClone(ruleFixtureBudget), awards: structuredClone(sampleAwards) });
 const derive = (patch = {}) => deriveTodo({ ...base, ...patch });
 
 // An empty project: only setup and budget work, nothing invented.
@@ -32,9 +33,10 @@ assert.equal(task(empty, "setup:facts").detail, "Missing: bid due date.");
 assert.deepEqual([empty.packages.length, empty.progress], [0, { done: 1, total: 4, percent: 25 }], "Only 'allowances decided' is true on an empty project");
 assert.deepEqual(missingProjectFacts(null), ["project"]);
 
-// Jelleff as sampled: drafts everywhere, nothing published, budget partly approved.
+// Jelleff as sampled: Concrete carried through to an executed subcontract; drafts in the other trades; budget partly approved.
 const start = derive();
-assert.equal(ids(start).filter(id => id.startsWith("scopes:approve:")).length, 11, "Every package with draft items (all but Carpentry)");
+assert.equal(ids(start).filter(id => id.startsWith("scopes:approve:")).length, 10, "Every package with draft items (all but Carpentry and the finished Concrete)");
+assert.deepEqual([start.packages.find(p => p.packageId === "concrete").percent, ids(start).some(id => id.endsWith(":concrete"))], [100, false], "Concrete: every milestone done, nothing left to do");
 assert(has(start, "scopes:empty:carpentry") && !ids(start).some(id => id.startsWith("scopes:publish") || id.startsWith("outreach:")));
 assert.deepEqual(task(start, "scopes:approve:demolition").count, 2);
 assert.deepEqual([task(start, "budget:approve").count, task(start, "budget:over").count, task(start, "budget:allowances").count, has(start, "budget:forecast")], [11, 2, 2, false]);
