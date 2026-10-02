@@ -2,9 +2,10 @@
 
 import { useCallback, useRef } from "react";
 import { AwardRuleError, type AwardErrors, type AwardState } from "./award";
+import { sampleAwards } from "./data/sample-award";
 import { useLocalDraft } from "./use-local-draft";
 
-/** No award exists until someone makes one: every project, Jelleff included, starts here. */
+/** A project with no awards yet. New projects start here; Jelleff starts with Concrete awarded (sampleAwards). */
 export const EMPTY_AWARDS: AwardState = { awards: [], notifications: [] };
 
 /**
@@ -15,7 +16,7 @@ export const EMPTY_AWARDS: AwardState = { awards: [], notifications: [] };
  *   const errors = run(s => createAward(s, context, { levelingBidderId, basis }, userName));
  */
 export function useAward() {
-  const [state, setState] = useLocalDraft<AwardState>("awards", EMPTY_AWARDS);
+  const [state, setState] = useLocalDraft<AwardState>("awards", sampleAwards);
   const latest = useRef(state);
   latest.current = state;
   const run = useCallback((action: (current: AwardState) => AwardState): AwardErrors | null => {

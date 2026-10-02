@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
-import {
+import { register } from "node:module";
+
+register("./ts-resolver.mjs", import.meta.url);
+const {
   ProcurementRuleError, addScope, applyScopeToAllTrades, approveScope, bidForm, editScope, inviteBidder, inviteCandidates,
   logOutreach, markNotificationsRead, moveScope, outreachLog, packageStatus, publishBlockers, publishPackage, reopenScope,
-  setInvitationStatus, unreadFor,
-} from "../lib/procurement.ts";
-import { sampleProcurement } from "../lib/data/procurement.ts";
-import { initialBidders } from "../lib/data/commercial.ts";
-import { startingDraft } from "../lib/project-scope.ts";
+  setInvitationStatus, markInvitationSubmitted, unreadFor,
+} = await import("../lib/procurement.ts");
+const { sampleProcurement } = await import("../lib/data/procurement.ts");
+const { initialBidders } = await import("../lib/data/commercial.ts");
+const { startingDraft } = await import("../lib/project-scope.ts");
 
 // Every action must return new state and never mutate its input: freeze the sample.
 const freeze = (v) => { if (v && typeof v === "object") { Object.values(v).forEach(freeze); Object.freeze(v); } return v; };
@@ -36,7 +39,7 @@ const movedItem = moved.scopes.find(s => s.id === anchor.id);
 assert.deepEqual([movedItem.packageId, movedItem.status, movedItem.history.at(-1).kind], ["carpentry", "draft", "moved"], "A moved item goes back to draft even if it was approved, so the receiving estimator reviews it");
 assert.deepEqual(unreadFor(moved, "Vijay").map(n => [n.kind, n.packageId]), [["scope-moved", "carpentry"]]);
 assert.match(unreadFor(moved, "Vijay")[0].text, /Naija moved "Furnish and install brick anchors.*from Masonry to Carpentry/);
-assert.equal(moveScope(sample, anchor.id, "carpentry", "Vijay", at).notifications.length, 0, "Moving into your own trade tags nobody");
+assert.equal(moveScope(sample, anchor.id, "carpentry", "Vijay", at).notifications.length, sample.notifications.length, "Moving into your own trade tags nobody");
 rule(() => moveScope(sample, anchor.id, "masonry", "Naija", at), /already in Masonry/);
 rule(() => moveScope(sample, anchor.id, "nope", "Naija", at), /no longer exists/);
 assert(!bidForm(moved, "masonry").some(s => s.id === anchor.id) && bidForm(moved, "carpentry").some(s => s.id === anchor.id));
@@ -46,7 +49,7 @@ const dust = scope(sample, "dust-control");
 const everywhere = applyScopeToAllTrades(sample, dust.id, "Safi", at);
 for (const p of everywhere.packages) assert(bidForm(everywhere, p.id).some(s => s.id === dust.id), `${p.id}: must carry the all-trades item`);
 assert.equal(everywhere.scopes.length, sample.scopes.length, "Applying to all trades must not duplicate the item");
-assert.deepEqual(everywhere.notifications.map(n => n.recipient).sort(), ["Naija", "Vijay"]);
+assert.deepEqual(everywhere.notifications.slice(sample.notifications.length).map(n => n.recipient).sort(), ["Naija", "Vijay"]);
 assert.equal(applyScopeToAllTrades(everywhere, dust.id, "Safi", at), everywhere, "Applying twice is a no-op");
 const backToOne = moveScope(everywhere, dust.id, "demolition", "Safi", at);
 assert(!backToOne.scopes.find(s => s.id === dust.id).allTrades && !bidForm(backToOne, "concrete").some(s => s.id === dust.id), "Moving an all-trades item returns it to one trade");
@@ -61,7 +64,7 @@ assert.equal(packageStatus(s, "demolition"), "ready");
 s = publishPackage(s, "demolition", "Safi", at);
 const demo = pkg(s, "demolition");
 assert.deepEqual([demo.published.version, demo.published.items.length, packageStatus(s, "demolition")], [1, 4, "published"]);
-assert.deepEqual(s.notifications.map(n => [n.kind, n.recipientType, n.recipient]), [["bid-form-published", "bidder", "b1"]], "Invited bidders are told the bid form is ready");
+assert.deepEqual(s.notifications.slice(sample.notifications.length).map(n => [n.kind, n.recipientType, n.recipient]), [["bid-form-published", "bidder", "b1"]], "Invited bidders are told the bid form is ready");
 rule(() => publishPackage(s, "demolition", "Safi", at), /already published/);
 
 // Changing a published form: item goes back to draft, package is "revised", and version 2 re-notifies.
@@ -79,11 +82,11 @@ assert.equal(reopenScope(s, firstItem.id, "Safi", at).scopes.find(x => x.id === 
 // Declined companies are not notified; late invitees to a published package are told immediately.
 let m = sample;
 for (const item of bidForm(m, "mechanical")) m = approveScope(m, item.id, "Vijay", at);
-assert.equal(publishPackage(m, "mechanical", "Vijay", at).notifications.length, 0, "A declined company is not notified");
+assert.equal(publishPackage(m, "mechanical", "Vijay", at).notifications.length, m.notifications.length, "A declined company is not notified");
 rule(() => inviteBidder(s, "demolition", "b1", "Safi", at), /already invited/);
 const late = inviteBidder(s, "demolition", "b6", "Safi", at);
 assert.equal(late.notifications.at(-1).kind, "invited");
-assert.equal(inviteBidder(sample, "masonry", "b6", "Naija", at).notifications.length, 0, "Unpublished package: invitation is recorded, nobody notified yet");
+assert.equal(inviteBidder(sample, "masonry", "b6", "Naija", at).notifications.length, sample.notifications.length, "Unpublished package: invitation is recorded, nobody notified yet");
 
 // Invite candidates: trade match by default; a search widens to the whole directory; invited ones drop out.
 const withMason = [...initialBidders, { id: "b9", company: "Brick & Block Co.", name: "Dana Ortiz", trade: " masonry " }];
@@ -97,7 +100,12 @@ rule(() => logOutreach(sample, { packageId: "masonry", bidderId: "b1", kind: "ca
 rule(() => logOutreach(sample, { packageId: "demolition", bidderId: "b1", kind: "note", text: "  " }, "Safi", at), /Write what happened/);
 const logged = logOutreach(sample, { packageId: "demolition", bidderId: "b1", kind: "message", text: "Sent the site-visit time." }, "Safi", at);
 assert.deepEqual(outreachLog(logged, "demolition", "b1").map(e => e.text), ["Sent the site-visit time.", "Called Michael — confirmed they will bid. Asked about slab removal."], "Newest first");
-assert.equal(setInvitationStatus(sample, "inv-2", "declined").invitations.find(i => i.id === "inv-2").status, "declined");
+assert.equal(setInvitationStatus(sample, "inv-3", "declined").invitations.find(i => i.id === "inv-3").status, "declined");
+rule(() => setInvitationStatus(sample, "inv-3", "submitted"), /when the company submits it in the portal/);
+rule(() => setInvitationStatus(sample, "inv-2", "bidding"), /has submitted a bid/);
+assert.equal(markInvitationSubmitted(sample, "inv-3").invitations.find(i => i.id === "inv-3").status, "submitted", "Submitting in the portal marks it");
+rule(() => markInvitationSubmitted(sample, "inv-4"), /declined company cannot submit/);
+rule(() => markInvitationSubmitted(sample, "inv-x"), /no longer exists/);
 rule(() => setInvitationStatus(sample, "inv-x", "declined"), /no longer exists/);
 
 // New items, notifications.

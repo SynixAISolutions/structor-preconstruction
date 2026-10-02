@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
-import { addScope, approveScope, bidForm, editScope, moveScope, publishPackage } from "../lib/procurement.ts";
-import { sampleProcurement } from "../lib/data/procurement.ts";
-import {
+import { register } from "node:module";
+
+register("./ts-resolver.mjs", import.meta.url);
+const { addScope, approveScope, bidForm, editScope, moveScope, publishPackage } = await import("../lib/procurement.ts");
+const { sampleProcurement } = await import("../lib/data/procurement.ts");
+const {
   MAX_ATTACHMENTS, SubmissionRuleError, addAttachment, bidExceptions, hasUnsubmittedChanges, invitationIssues, isStale, latestRevision,
   openSubmission, removeAttachment, revisionChanges, sanitizeBidContent, setResponse, submitBid, updateDraft, validateSubmission,
-} from "../lib/submissions.ts";
-import { attachmentStorageKey } from "../lib/submission-api.ts";
-import { startingDraft } from "../lib/project-scope.ts";
+} = await import("../lib/submissions.ts");
+const { attachmentStorageKey } = await import("../lib/submission-api.ts");
+const { startingDraft } = await import("../lib/project-scope.ts");
 
 const freeze = (v) => { if (v && typeof v === "object") { Object.values(v).forEach(freeze); Object.freeze(v); } return v; };
 const at = "2026-09-26T12:00:00.000Z";
@@ -15,7 +18,7 @@ const fields = (issues) => issues.map(i => i.field);
 const rule = (fn, field, pattern) => assert.throws(fn, e => e instanceof SubmissionRuleError && e.issues.some(i => i.field === field && pattern.test(i.message)));
 const approveAll = (s, pkg) => bidForm(s, pkg).reduce((acc, item) => approveScope(acc, item.id, "Safi", at), s);
 
-// Jelleff: publish demolition (inv-1, Capital Demolition, bidding). Concrete stays unpublished; mechanical's invitee declined.
+// Jelleff: publish demolition (inv-1, Capital Demolition, bidding). Structural steel stays unpublished; mechanical's invitee declined.
 const proc = freeze(publishPackage(approveAll(structuredClone(sampleProcurement), "demolition"), "demolition", "Safi", at));
 const withMechanical = freeze(publishPackage(approveAll(proc, "mechanical"), "mechanical", "Vijay", at));
 const who = { name: "  Michael Brooks ", email: "michael@example.com " };
@@ -23,7 +26,7 @@ const input = { projectId: "jelleff", invitationId: "inv-1" };
 
 // Which invitations may bid.
 assert.deepEqual(invitationIssues(proc, "inv-1"), []);
-rule(() => openSubmission([], proc, { ...input, invitationId: "inv-2" }), "form", /Concrete bid form has not been published/);
+rule(() => openSubmission([], proc, { ...input, invitationId: "inv-3" }), "form", /Structural steel bid form has not been published/);
 rule(() => openSubmission([], withMechanical, { ...input, invitationId: "inv-4" }), "invitation", /declined/);
 rule(() => openSubmission([], proc, { ...input, invitationId: "nope" }), "invitation", /no longer exists/);
 

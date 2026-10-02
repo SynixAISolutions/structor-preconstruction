@@ -4,6 +4,8 @@ import { register } from "node:module";
 register("./ts-resolver.mjs", import.meta.url);
 const S = await import("../lib/submittals.ts");
 const { sampleSubmittals } = await import("../lib/data/submittals.ts");
+const { sampleAwards } = await import("../lib/data/sample-award.ts");
+const { awardStage } = await import("../lib/award.ts");
 const { sampleProcurement } = await import("../lib/data/procurement.ts");
 const { initialSpecs } = await import("../lib/data/preconstruction.ts");
 const { startingDraft } = await import("../lib/project-scope.ts");
@@ -12,24 +14,31 @@ const freeze = (v) => { if (v && typeof v === "object") { Object.values(v).forEa
 const fails = (fn, field, pattern) => assert.throws(fn, e => e instanceof S.SubmittalRuleError && pattern.test(e.errors[field] ?? ""), `expected ${field} error ${pattern}`);
 const proc = freeze(structuredClone(sampleProcurement));
 const base = freeze(structuredClone(sampleSubmittals));
-const today = "2026-10-01", at = "2026-10-01T15:00:00.000Z";
+const today = "2026-10-02", at = "2026-10-01T15:00:00.000Z";
 const by = (s, number) => s.submittals.find(x => x.number === number);
 const idOf = (s, number) => by(s, number).id;
 const pdf = (name, size = 1000) => ({ name, size, type: "application/pdf" });
-const architect = { name: "Project architect", company: "Design team (sample)", email: "architect@example.com" };
+const architect = { name: "Project architect", company: "DLR Group", email: "architect@example.com" };
 const b2 = { bidderId: "b2", company: "District Concrete", contact: "Sarah Chen", email: "sarah@example.com", awardId: null };
 
-// ── Sample: 14 spec-matrix requirements + 2 electrical; concrete and electrical awarded ──
-assert.deepEqual(base.submittals.map(s => [s.number, s.status]), [
-  ["03 30 00-01", "contractor-review"], ["03 30 00-02", "requested"], ["04 22 00-01", "draft"], ["04 22 00-02", "draft"],
-  ["07 54 23-01", "draft"], ["07 54 23-02", "draft"], ["08 11 13-01", "draft"], ["08 11 13-02", "draft"],
-  ["09 29 00-01", "draft"], ["09 29 00-02", "draft"], ["09 65 19-01", "draft"], ["09 65 19-02", "draft"],
-  ["23 73 13-01", "draft"], ["23 73 13-02", "draft"], ["26 51 00-01", "with-architect"], ["26 51 00-02", "closed"],
+// ── Sample: 14 spec-matrix requirements + 2 more for concrete, the one awarded trade ──
+assert.deepEqual([...base.submittals].sort((x, y) => x.number.localeCompare(y.number)).map(s => [s.number, s.status]), [
+  ["03 30 00-01", "contractor-review"], ["03 30 00-02", "requested"], ["03 30 00-03", "with-architect"], ["03 30 00-04", "closed"],
+  ["04 22 00-01", "draft"], ["04 22 00-02", "draft"], ["07 54 23-01", "draft"], ["07 54 23-02", "draft"],
+  ["08 11 13-01", "draft"], ["08 11 13-02", "draft"], ["09 29 00-01", "draft"], ["09 29 00-02", "draft"],
+  ["09 65 19-01", "draft"], ["09 65 19-02", "draft"], ["23 73 13-01", "draft"], ["23 73 13-02", "draft"],
 ]);
+// Coherent with the award records: every assigned submittal belongs to the executed Concrete award, and was requested after it.
+const concreteAward = sampleAwards.awards[0];
+assert.deepEqual([concreteAward.packageId, concreteAward.bidderId, awardStage(concreteAward)], ["concrete", "b2", "executed"]);
+const assigned = base.submittals.filter(x => x.subcontractor);
+assert.deepEqual(assigned.map(x => x.number), ["03 30 00-01", "03 30 00-02", "03 30 00-03", "03 30 00-04"]);
+assert(assigned.every(x => x.subcontractor.awardId === concreteAward.id && x.subcontractor.bidderId === concreteAward.bidderId && x.subcontractor.company === concreteAward.snapshot.company.name));
+assert(assigned.every(x => x.history.filter(e => e.kind !== "created").every(e => e.at > concreteAward.subcontract.executedAt)), "Nothing happens before the subcontract is executed");
 assert(base.submittals.every(s => /^sub-\d{6}-\d\d$/.test(s.id)) && base.notifications.every((n, i) => n.id === `sn-${i + 1}`), "Fixed sample ids");
 assert.equal(new Set(base.submittals.flatMap(s => s.revisions.flatMap(r => r.files.map(f => f.id)))).size, 4, "Fixed, unique file ids");
 assert.deepEqual(by(base, "03 30 00-01").revisions.map(r => [r.number, r.response?.action ?? null, !!r.returned]), [[0, "revise-and-resubmit", true], [1, null, false]], "The mix design went round once");
-assert.deepEqual([base.architect, base.sequences.length], [architect, 8]);
+assert.deepEqual([base.architect, base.sequences.length], [architect, 7]);
 assert.deepEqual(startingDraft("p2", "submittal-log", sampleSubmittals), S.EMPTY_SUBMITTALS, "A new project starts with an empty log and no architect");
 
 // ── Log, holder, next action, due state ──
@@ -38,25 +47,28 @@ const row = (n) => log.find(r => r.number === n);
 assert.deepEqual(row("03 30 00-01"), {
   id: "sub-033000-01", number: "03 30 00-01", specSection: "03 30 00", title: "Mix design", packageId: "concrete", packageName: "Concrete",
   subcontractor: "District Concrete", bidderId: "b2", status: "contractor-review", revision: 1, party: "contractor", nextAction: "Review revision 1",
-  due: "", overdue: false, daysOverdue: 0, architectAction: "revise-and-resubmit", updatedAt: "2026-09-30T14:00:00.000Z",
+  due: "", overdue: false, daysOverdue: 0, architectAction: "revise-and-resubmit", updatedAt: "2026-10-01T15:00:00.000Z",
 });
 assert.deepEqual([row("03 30 00-02").party, row("03 30 00-02").nextAction, row("03 30 00-02").overdue, row("03 30 00-02").daysOverdue], ["subcontractor", "Submit", true, 2]);
-assert.deepEqual([row("26 51 00-01").party, row("26 51 00-01").due, row("26 51 00-01").overdue], ["architect", "2026-10-09", false]);
-assert.deepEqual([row("26 51 00-02").party, row("26 51 00-02").nextAction, row("26 51 00-02").architectAction], [null, "Complete", "approved-as-noted"]);
+assert.deepEqual([row("03 30 00-03").party, row("03 30 00-03").due, row("03 30 00-03").overdue], ["architect", "2026-10-13", false]);
+assert.deepEqual([row("03 30 00-04").party, row("03 30 00-04").nextAction, row("03 30 00-04").architectAction], [null, "Complete", "approved-as-noted"]);
 assert.deepEqual([row("04 22 00-01").party, row("04 22 00-01").nextAction, row("04 22 00-01").subcontractor], ["contractor", "Assign the awarded subcontractor", ""]);
-assert.equal(S.isOverdue(by(base, "03 30 00-02"), "2026-09-29"), false, "Due today is not overdue");
+assert.equal(S.isOverdue(by(base, "03 30 00-02"), "2026-09-30"), false, "Due today is not overdue");
 assert.deepEqual(S.submittalSummary(base, today), { total: 16, needsAssignment: 12, withContractor: 13, withSubcontractor: 1, withArchitect: 1, overdue: 1, closed: 1 });
-assert.equal(S.submittalSummary(base, "2026-10-10").overdue, 2, "The architect is late too after 10-09");
+assert.equal(S.submittalSummary(base, "2026-10-14").overdue, 2, "The architect is late too after 10-13");
 const numbers = (rows) => rows.map(r => r.number);
 assert.deepEqual(numbers(S.filterSubmittals(base, proc, { party: "subcontractor" }, today)), ["03 30 00-02"]);
-assert.deepEqual(numbers(S.filterSubmittals(base, proc, { party: "none" }, today)), ["26 51 00-02"]);
+assert.deepEqual(numbers(S.filterSubmittals(base, proc, { party: "none" }, today)), ["03 30 00-04"]);
 assert.deepEqual(numbers(S.filterSubmittals(base, proc, { overdue: true }, today)), ["03 30 00-02"]);
-assert.deepEqual(numbers(S.filterSubmittals(base, proc, { packageId: "electrical" }, today)), ["26 51 00-01", "26 51 00-02"]);
+const concrete4 = ["03 30 00-01", "03 30 00-02", "03 30 00-03", "03 30 00-04"];
+assert.deepEqual(numbers(S.filterSubmittals(base, proc, { packageId: "concrete" }, today)), concrete4);
+assert.deepEqual(numbers(S.filterSubmittals(base, proc, { packageId: "electrical" }, today)), []);
 assert.deepEqual(numbers(S.filterSubmittals(base, proc, { bidderId: "b2", status: "requested" }, today)), ["03 30 00-02"]);
-assert.deepEqual(numbers(S.filterSubmittals(base, proc, { bidderId: "b5" }, today)), ["26 51 00-01", "26 51 00-02"]);
-assert.deepEqual(numbers(S.submittalLog(S.addRequirement(base, proc, { specSection: "03 30 00", title: "Curing compound data", packageId: "concrete" }, "Vijay", at), proc, today)).slice(0, 4), ["03 30 00-01", "03 30 00-02", "03 30 00-03", "04 22 00-01"], "The log is in number order");
+assert.deepEqual(numbers(S.filterSubmittals(base, proc, { bidderId: "b2" }, today)), concrete4);
+assert.deepEqual(numbers(S.filterSubmittals(base, proc, { bidderId: "b5" }, today)), []);
+assert.deepEqual(numbers(S.submittalLog(S.addRequirement(base, proc, { specSection: "03 30 00", title: "Curing compound data", packageId: "concrete" }, "Vijay", at), proc, today)).slice(0, 6), ["03 30 00-01", "03 30 00-02", "03 30 00-03", "03 30 00-04", "03 30 00-05", "04 22 00-01"], "The log is in number order");
 assert.deepEqual(numbers(S.filterSubmittals(base, proc, { specSection: "09 29 00" }, today)), ["09 29 00-01", "09 29 00-02"]);
-assert.deepEqual(numbers(S.filterSubmittals(base, proc, { query: "precision" }, today)), ["26 51 00-01", "26 51 00-02"], "Searches the subcontractor");
+assert.deepEqual(numbers(S.filterSubmittals(base, proc, { query: "district" }, today)), concrete4, "Searches the subcontractor");
 assert.deepEqual(numbers(S.filterSubmittals(base, proc, { query: "drywall" }, today)), ["09 29 00-01", "09 29 00-02"], "Searches the trade");
 
 // ── Requirements from the spec matrix and by hand ──
@@ -173,29 +185,31 @@ assert.equal(S.submittalLog(round2, proc, today).find(r => r.number === "04 22 0
 // ── Reminders and overdue ──
 fails(() => S.sendReminder(base, idOf(base, "03 30 00-01"), "Vijay", at), "submittal", /isn't waiting on the subcontractor or the architect/);
 const toSub = S.sendReminder(base, idOf(base, "03 30 00-02"), "Vijay", at);
-assert.deepEqual([toSub.notifications.at(-1).recipient, toSub.notifications.at(-1).text], ["b2", "Reminder: please submit 03 30 00-02 Test reports. It was due 2026-09-29."]);
-const toArch = S.sendReminder(base, idOf(base, "26 51 00-01"), "Naija", at);
-assert.deepEqual([toArch.notifications.at(-1).recipientType, toArch.notifications.at(-1).recipient, toArch.notifications.at(-1).text], ["architect", "architect@example.com", "Reminder: please review 26 51 00-01 Product data. It is due 2026-10-09."]);
-const nudged = freeze(S.remindOverdue(base, today, "Structor", at));
+assert.deepEqual([toSub.notifications.at(-1).recipient, toSub.notifications.at(-1).text], ["b2", "Reminder: please submit 03 30 00-02 Test reports. It was due 2026-09-30."]);
+const toArch = S.sendReminder(base, idOf(base, "03 30 00-03"), "Vijay", at);
+assert.deepEqual([toArch.notifications.at(-1).recipientType, toArch.notifications.at(-1).recipient, toArch.notifications.at(-1).text], ["architect", "architect@example.com", "Reminder: please review 03 30 00-03 Shop drawings. It is due 2026-10-13."]);
+const atToday = "2026-10-02T15:00:00.000Z";
+const nudged = freeze(S.remindOverdue(base, today, "Structor", atToday));
 assert.deepEqual(nudged.notifications.slice(base.notifications.length).map(n => [n.kind, n.recipient]), [["reminder", "b2"]], "Only the overdue one");
-assert.equal(S.remindOverdue(nudged, today, "Structor", at), nudged, "Not twice the same day");
-assert.equal(S.remindOverdue(base, "2026-09-30", "Structor", "2026-09-30T18:00:00.000Z"), base, "Already reminded that day (and not overdue yet)");
-assert.deepEqual(S.remindOverdue(base, "2026-10-10", "Structor", "2026-10-10T15:00:00.000Z").notifications.slice(base.notifications.length).map(n => n.recipient), ["b2", "architect@example.com"]);
-assert.equal(S.daysOverdue(by(base, "03 30 00-02"), "2026-10-11"), 12);
+assert.equal(S.remindOverdue(nudged, today, "Structor", atToday), nudged, "Not twice the same day");
+assert.equal(S.remindOverdue(base, "2026-10-01", "Structor", "2026-10-01T18:00:00.000Z"), base, "Already reminded that day");
+assert.equal(S.remindOverdue(base, "2026-09-30", "Structor", "2026-09-30T18:00:00.000Z"), base, "Not overdue yet");
+assert.deepEqual(S.remindOverdue(base, "2026-10-14", "Structor", "2026-10-14T15:00:00.000Z").notifications.slice(base.notifications.length).map(n => n.recipient), ["b2", "architect@example.com"]);
+assert.equal(S.daysOverdue(by(base, "03 30 00-02"), "2026-10-11"), 11);
 
 // ── Next action at every status ──
 assert.deepEqual(S.nextStep({ ...by(base, "04 22 00-01"), subcontractor: b2 }), { party: "contractor", action: "Request from District Concrete" });
 assert.deepEqual(S.nextStep(by(s, "04 22 00-01")), { party: "subcontractor", action: "Resubmit as revision 1" });
 assert.deepEqual(S.nextStep(by(s, "04 22 00-03")), { party: "subcontractor", action: "Submit" });
-assert.deepEqual(S.nextStep(by(base, "26 51 00-01")), { party: "architect", action: "Review revision 0" });
+assert.deepEqual(S.nextStep(by(base, "03 30 00-03")), { party: "architect", action: "Review revision 0" });
 assert.deepEqual(S.nextStep(by(approved, "04 22 00-01")), { party: "contractor", action: "Return the architect's response to Keystone Masonry" });
 assert.deepEqual(S.nextStep({ ...by(base, "03 30 00-01"), status: "ready-to-send" }), { party: "contractor", action: "Send to the architect" });
 
 // ── The subcontractor's portal ──
 const portal = S.portalSubmittals(base, "b2");
-assert.deepEqual(portal.map(p => [p.number, p.status, p.yourTurn, p.due]), [["03 30 00-01", "in-review", false, ""], ["03 30 00-02", "to-submit", true, "2026-09-29"]]);
+assert.deepEqual(portal.map(p => [p.number, p.status, p.yourTurn, p.due]), [["03 30 00-01", "in-review", false, ""], ["03 30 00-02", "to-submit", true, "2026-09-30"], ["03 30 00-03", "in-review", false, ""], ["03 30 00-04", "closed", false, ""]], "The architect's due date is not the subcontractor's");
 assert.deepEqual(portal[0].revisions.map(r => r.response?.action ?? null), ["revise-and-resubmit", null]);
-assert.deepEqual(S.portalSubmittals(base, "b5").map(p => [p.number, p.status, p.due, p.revisions[0].response?.action ?? null]), [["26 51 00-01", "in-review", "", null], ["26 51 00-02", "closed", "", "approved-as-noted"]], "The architect's due date is not the subcontractor's");
+assert.deepEqual([portal[2].revisions[0].response, portal[3].revisions[0].response.action], [null, "approved-as-noted"], "Only returned responses are shown");
 assert.deepEqual(S.portalSubmittals(base, "b1"), [], "Drafts and other companies' submittals are not shown");
 
 // ── Notifications ──

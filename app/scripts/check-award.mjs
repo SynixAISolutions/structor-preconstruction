@@ -188,4 +188,26 @@ const customTemplate = { id: "acme-exhibit", name: "Acme Exhibit A", version: "2
 const custom = A.createAward(empty, ctx, { levelingBidderId: capital.levelingBidderId, basis: "base" }, "Safi", at, (snap, terms) => ({ title: `Custom ${snap.packageName}`, sections: [{ heading: "Amount", lines: [String(terms.amount)] }] }), customTemplate).awards[0];
 assert.deepEqual([A.latestExhibit(custom).content.title, A.latestExhibit(custom).content.sections[0].lines, A.latestExhibit(custom).template.id], ["Custom Demolition", ["498000"], "acme-exhibit"]);
 
-console.log(`Award checked: candidates, explicit award and basis, snapshot, Exhibit A share/changes/revise/resolve/agree, subcontract generate/send/sign/countersign/execute, notifications, documents.`);
+// ── The Jelleff sample is one coherent story for Concrete: published form → bid → award → executed ──
+{
+  const { sampleSubmissions, sampleAwards } = await import("../lib/data/sample-award.ts");
+  const { sampleBudget: jelleffBudget } = await import("../lib/data/budget.ts");
+  const [award] = sampleAwards.awards;
+  const submission = sampleSubmissions.find(x => x.id === award.submissionId);
+  const form = sampleProcurement.packages.find(p => p.id === award.packageId).published;
+  assert.deepEqual([sampleAwards.awards.length, award.packageId, award.bidderId, A.awardStage(award), award.amount, award.basis], [1, "concrete", "b2", "executed", 1742000, "base"]);
+  assert(submission && submission.revisions.at(-1).formVersion === form.version && submission.revisions.at(-1).baseBid === award.amount, "The award is the submitted bid on the current form");
+  assert.deepEqual(award.snapshot.scope.map(i => i.id), form.items.map(i => i.id), "Awarded scope = the published form");
+  assert(jelleffBudget.lines.some(l => l.id === award.budgetLineId && l.classification === "direct"), "Linked to the concrete budget line");
+  assert(award.createdAt > submission.revisions.at(-1).submittedAt && award.subcontract.executedAt > award.exhibit.agreement.at, "In date order");
+  for (const inv of sampleProcurement.invitations) {
+    const bid = sampleSubmissions.some(x => x.invitationId === inv.id && x.revisions.length);
+    assert.equal(inv.status === "submitted", bid, `${inv.id}: "submitted" only with a submitted bid`);
+  }
+  assert(sampleSubmissions.every(x => sampleProcurement.packages.find(p => p.id === x.packageId).published), "No bids on unpublished forms");
+  assert.deepEqual(startingDraft("p2", "awards", sampleAwards), { awards: [], notifications: [] }, "Other projects start with no awards");
+  assert.deepEqual(startingDraft("p2", "submissions", sampleSubmissions), [], "Other projects start with no bids");
+  assert(!JSON.stringify([sampleAwards, sampleSubmissions, sampleProcurement]).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}/), "Fixed ids, no random UUIDs");
+}
+
+console.log(`Award checked: candidates, explicit award and basis, snapshot, Exhibit A share/changes/revise/resolve/agree, subcontract generate/send/sign/countersign/execute, notifications, documents; Jelleff sample Concrete coherent from bid to executed subcontract.`);

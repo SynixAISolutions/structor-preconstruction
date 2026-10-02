@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useRef } from "react";
-import { setInvitationStatus } from "./procurement";
+import { markInvitationSubmitted } from "./procurement";
+import { sampleSubmissions } from "./data/sample-award";
 import { useActiveProject } from "./project-scope";
 import { SubmissionRuleError, submitBid, type Submission, type SubmissionIssue, type Submitter } from "./submissions";
 import { useLocalDraft } from "./use-local-draft";
@@ -18,7 +19,7 @@ import { useProcurement } from "./use-procurement";
 export function useSubmissions() {
   const projectId = useActiveProject();
   const { state: procurement, run: runProcurement } = useProcurement();
-  const [submissions, setSubmissions] = useLocalDraft<Submission[]>("submissions", []);
+  const [submissions, setSubmissions] = useLocalDraft<Submission[]>("submissions", sampleSubmissions);
   const latest = useRef(submissions);
   latest.current = submissions;
 
@@ -38,7 +39,7 @@ export function useSubmissions() {
     const issues = run(current => submitBid(current, procurement, submissionId, submitter));
     if (issues.length) return issues;
     const invitationId = latest.current.find(s => s.id === submissionId)?.invitationId;
-    if (invitationId) runProcurement(s => setInvitationStatus(s, invitationId, "submitted"));
+    if (invitationId) runProcurement(s => markInvitationSubmitted(s, invitationId));
     return [];
   }, [run, procurement, runProcurement]);
 

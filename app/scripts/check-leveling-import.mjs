@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
-import { addScope, applyScopeToAllTrades, approveScope, bidForm, inviteBidder, moveScope, publishPackage } from "../lib/procurement.ts";
-import { sampleProcurement } from "../lib/data/procurement.ts";
-import { initialBidders } from "../lib/data/commercial.ts";
-import { addAttachment, openSubmission, setResponse, submitBid, updateDraft } from "../lib/submissions.ts";
-import { STALE_SOURCE_ELIGIBILITY, buildLevelingImport } from "../lib/leveling-import.ts";
-import { bidderTotals, rankedBidders } from "../lib/leveling.mjs";
+import { register } from "node:module";
+
+register("./ts-resolver.mjs", import.meta.url);
+const { addScope, applyScopeToAllTrades, approveScope, bidForm, inviteBidder, moveScope, publishPackage } = await import("../lib/procurement.ts");
+const { sampleProcurement } = await import("../lib/data/procurement.ts");
+const { initialBidders } = await import("../lib/data/commercial.ts");
+const { addAttachment, openSubmission, setResponse, submitBid, updateDraft } = await import("../lib/submissions.ts");
+const { STALE_SOURCE_ELIGIBILITY, buildLevelingImport } = await import("../lib/leveling-import.ts");
+const { bidderTotals, rankedBidders } = await import("../lib/leveling.mjs");
 
 const freeze = (v) => { if (v && typeof v === "object") { Object.values(v).forEach(freeze); Object.freeze(v); } return v; };
 const at = "2026-09-26T12:00:00.000Z";
@@ -38,7 +41,7 @@ const input = freeze({ projectId: "jelleff", projectName: "Jelleff Recreation Ce
 
 // Package problems return nothing to level, with a clear reason.
 assert.deepEqual(codes(buildLevelingImport({ ...input, packageId: "nope" })), ["package-missing"]);
-const unpublished = buildLevelingImport({ ...input, packageId: "concrete" });
+const unpublished = buildLevelingImport({ ...input, packageId: "steel" });
 assert.deepEqual([codes(unpublished), unpublished.items.length, unpublished.bidders.length], [["package-unpublished"], 0, 0]);
 assert.deepEqual(codes(buildLevelingImport({ ...input, submissions: subs.filter(s => s.bidderId === "b2") })), ["no-submitted-bids"], "Drafts alone are not bids");
 
