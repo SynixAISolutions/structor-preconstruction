@@ -13,7 +13,7 @@ export class WalkthroughControls {
   private pressed = new Set<string>();
   private held = new Set<WalkDirection>();
 
-  constructor(private camera: PerspectiveCamera, private bounds: Box3, private start: Vector3) {
+  constructor(private camera: PerspectiveCamera, private bounds: Box3, private start: Vector3, private startYaw = 0) {
     camera.rotation.order = "YXZ";
     this.reset();
   }
@@ -21,7 +21,7 @@ export class WalkthroughControls {
   reset() {
     this.stop();
     this.camera.position.copy(this.start);
-    this.camera.rotation.set(0, 0, 0, "YXZ");
+    this.camera.rotation.set(0, this.startYaw, 0, "YXZ");
     this.move(0, 0, 0);
   }
 

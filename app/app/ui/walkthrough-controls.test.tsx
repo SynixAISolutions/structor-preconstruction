@@ -44,6 +44,16 @@ test("movement follows heading and stays horizontal even while looking up", () =
   near(camera.position.z, -1.5);
 });
 
+test("the Level 02 tour keeps its 19.25 ft eye height through movement, focus and reset", () => {
+  const camera = new PerspectiveCamera();
+  const start = new Vector3(0, 19.25, 0);
+  const controls = new WalkthroughControls(camera, new Box3(new Vector3(-20, 0, -20), new Vector3(20, 28, 20)), start, Math.PI / 2);
+  controls.walk("forward"); controls.face(new Vector3(10, 14, 10));
+  controls.key("KeyW", true); controls.step(.05);
+  near(camera.position.y, 19.25);
+  controls.reset(); assert.deepEqual(camera.position, start); near(camera.rotation.y, Math.PI / 2);
+});
+
 test("held input, key releases, opposite directions and stop have predictable behavior", () => {
   const { camera, controls } = setup();
   controls.key("KeyW", true); controls.key("KeyS", true); controls.step(.05);
