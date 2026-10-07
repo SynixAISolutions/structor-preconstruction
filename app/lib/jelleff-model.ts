@@ -2,7 +2,7 @@
 // illustrative structural, MEP and roof objects for the four views. Types and measuring rules are
 // in lib/model.ts.
 
-import { resolveObjects, type FinishScheduleRow, type LevelId, type MaterialInfo, type ModelElement, type ModelInput, type ModelObject, type ModelReviewState, type Point, type SourceRef } from "./model";
+import { resolveObjects, type FinishScheduleRow, type PartitionSchedule, type PartitionTypeRow, type LevelId, type MaterialInfo, type ModelElement, type ModelInput, type ModelObject, type ModelReviewState, type Point, type SourceRef } from "./model";
 import { SAMPLE_PROJECT_ID } from "./project-scope";
 
 export type { MaterialInfo, ModelElement, Point, SourceRef } from "./model";
@@ -18,7 +18,7 @@ const plan: SourceRef = {
   drawing: "Jelleff drawing set", sheet: "A1.1", page: 46, detail: "Level 01 - first floor plan", asset: "/models/jelleff/a1-1.png",
 };
 const partitions: SourceRef = {
-  drawing: "Jelleff drawing set", sheet: "A8.1", page: 64, detail: "SA3.20 non-rated stud partition, 4 7/8 in. rough thickness", asset: "/models/jelleff/a8-1.png",
+  drawing: "Jelleff drawing set", sheet: "A8.1", page: 64, detail: "Partition schedules S_-_-1 and S_-_-2, and the partition type legend", asset: "/models/jelleff/a8-1.png",
 };
 const finishSchedule: SourceRef = {
   drawing: "Jelleff drawing set", sheet: "A12.1", page: 79, detail: "Finish schedules and details", asset: "/models/jelleff/a12-1.png",
@@ -30,14 +30,66 @@ export const levelSource: SourceRef = {
   drawing: "Jelleff drawing set", sheet: "A5.1", page: 57, detail: "Building sections: first floor 0 ft, second floor 14 ft, low roof 28 ft", asset: "/models/jelleff/a5-1.png",
 };
 
+// A8.1 partition type legend. A tag reads construction, rating/height, stud width, gypsum layers,
+// unique condition: SA3.21 = steel studs, full height, 3 5/8" metal, one layer each side, sound
+// attenuation full height. Only the codes the schedules use are listed.
+const partitionLegend = {
+  construction: { S: "Steel (metal studs)" } as Record<string, string>,
+  rating: { A: "Full height / underside of structure (not rated)" } as Record<string, string>,
+  width: { "2": [2.5, "2 1/2\" metal"], "3": [3.625, "3 5/8\" metal"], "6": [6, "6\" metal"], "8": [8, "8\" metal"] } as Record<string, [number, string]>,
+  gypsum: { "1": [1, "One layer, tag side"], "2": [2, "One layer, each side"] } as Record<string, [number, string]>,
+  unique: { "0": "No unique condition", "1": "Sound attenuation full height", "2": "Impact resistant gypsum board" } as Record<string, string>,
+};
+/** Both A8.1 partition schedules, as printed: every row is non-rated (NR), no STC or details. */
+const partitionScheduleRows: [tag: string, schedule: string, rough: string][] = [
+  ["SA2.10", "S_-_-1 non-rated stud partition", "<varies>"], ["SA2.13", "S_-_-1 non-rated stud partition", "3 1/8\""],
+  ["SA3.10", "S_-_-1 non-rated stud partition", "4 1/4\""], ["SA6.10", "S_-_-1 non-rated stud partition", "6 5/8\""],
+  ["SA3.20", "S_-_-2 non-rated stud partition", "4 7/8\""], ["SA3.21", "S_-_-2 non-rated stud partition", "4 7/8\""],
+  ["SA6.20", "S_-_-2 non-rated stud partition", "<varies>"], ["SA6.21", "S_-_-2 non-rated stud partition", "7 1/4\""],
+  ["SA8.20", "S_-_-2 non-rated stud partition", "9 1/4\""],
+];
+const inches = (v: string) => { const m = v.match(/^(\d+)(?: (\d+)\/(\d+))?"$/); return m ? +m[1] + (m[2] ? +m[2] / +m[3] : 0) : null; };
+export const partitionTypes: PartitionTypeRow[] = partitionScheduleRows.map(([tag, schedule, rough]) => {
+  const [c, r, w, g, u] = [tag[0], tag[1], tag.slice(2, -3), tag.at(-2)!, tag.at(-1)!];
+  const width = partitionLegend.width[w], gypsum = partitionLegend.gypsum[g];
+  if (!width || !gypsum) throw new Error(`${tag}: stud width or gypsum code not in the A8.1 legend`);
+  return {
+    tag, schedule, construction: partitionLegend.construction[c], ratingHeight: partitionLegend.rating[r], unitWidth: width[1], gypsum: gypsum[1],
+    uniqueCondition: partitionLegend.unique[u] ?? `${u} (not in the A8.1 legend)`,
+    roughThickness: rough, roughThicknessIn: inches(rough), modeledThicknessIn: inches(rough) ?? width[0] + gypsum[0] * 5 / 8,
+    fireRating: "Not rated (NR)", source: partitions,
+  };
+});
+export const partitionSchedule: PartitionSchedule = {
+  types: partitionTypes, defaultType: "SA3.20",
+  defaultNote: "General note 3 on A1.1 and A1.2: all interior partitions are wall type SA.3.20 unless noted otherwise.",
+};
+const typeRow = (tag: string) => partitionTypes.find(r => r.tag === tag)!;
+const partitionAssembly = (id: string, type: string, color: string, note: string): MaterialInfo => {
+  const row = typeRow(type);
+  return {
+    id, name: `${type} - ${row.unitWidth} studs, ${row.gypsum.toLowerCase()}`, color, status: "Documented",
+    discipline: "architectural", division: "09", specSection: "09 21 16", unit: "SF", views: ["interior"], partitionType: type, properties: [],
+    description: `A8.1 ${row.schedule}: ${row.unitWidth} studs, ${row.gypsum.toLowerCase()}, ${row.uniqueCondition.toLowerCase()}; rough thickness ${row.roughThickness}. ${note}`,
+    sources: [partitions],
+  };
+};
+const partitionAssemblies: MaterialInfo[] = [
+  partitionAssembly("partition", "SA3.20", "#e7e1d5", "The plan's default interior partition (general note 3 on A1.1 and A1.2)."),
+  partitionAssembly("partition-sa2-10", "SA2.10", "#d9cdb8", "A8.1 leaves the thickness to the condition; the model uses the legend's nominal 3 1/8 in."),
+  partitionAssembly("partition-sa3-10", "SA3.10", "#ddd3bf", "Gypsum board on the tag side only."),
+  partitionAssembly("partition-sa3-21", "SA3.21", "#d3dadb", "Full-height sound attenuation."),
+  partitionAssembly("partition-sa6-20", "SA6.20", "#d6c6a8", "A8.1 leaves the thickness to the condition; the model uses the legend's nominal 7 1/4 in."),
+  partitionAssembly("partition-sa8-20", "SA8.20", "#cdb995", ""),
+];
+/** A wall's model thickness in feet: its partition type's, or 12 in. for the schematic envelope. */
+const wallThickness = (materialId: string) => {
+  const type = partitionAssemblies.find(m => m.id === materialId)?.partitionType;
+  return type ? typeRow(type).modeledThicknessIn / 12 : 1;
+};
+
 export const materials: MaterialInfo[] = [
-  {
-    id: "partition", name: "SA3.20 - gypsum board / metal stud", color: "#e7e1d5", status: "Documented",
-    discipline: "architectural", division: "09", specSection: "09 21 16", unit: "SF", views: ["interior"],
-    properties: [{ label: "Type", value: "SA3.20" }, { label: "Rating", value: "Non-rated" }, { label: "Rough thickness", value: "4 7/8 in." }, { label: "Construction", value: "Metal studs, gypsum board both sides" }, { label: "Acoustic", value: "Sound attenuation where required" }],
-    description: "A8.1 lists a non-rated, 4 7/8 in. stud partition with gypsum wall board both sides and sound attenuation where required. A1.1 names SA3.20 as the default interior partition unless noted. Individual segment assignments are simplified; verify local tags before estimating.",
-    sources: [partitions, plan],
-  },
+  ...partitionAssemblies,
   {
     id: "envelope", name: "Exterior / existing wall - schematic", color: "#c8c5bc", status: "Illustrative",
     discipline: "architectural", division: "04", specSection: null, unit: "SF", views: ["interior", "exterior"],
@@ -118,10 +170,10 @@ const point = ([x, y]: Point): Point => [
 // ponytail: this is one hand-traced demo, not a PDF parser; measured use needs validated reconstruction.
 const simplified = "Simplified manual trace for visualization; not surveyed geometry, quantities, or construction coordination.";
 
-function wall(id: string, name: string, a: Point, b: Point, materialId = "partition", height = 14, room?: string): ModelElement {
+function wall(id: string, name: string, a: Point, b: Point, materialId = "partition", height = 14, room?: string, partitionTag?: string): ModelInput {
   return {
     id, name, kind: "wall", materialId, points: [point(a), point(b)], height,
-    thickness: materialId === "partition" ? 4.875 / 12 : 1,
+    thickness: wallThickness(materialId), partitionTag,
     room, source: plan, geometryStatus: simplified,
     description: height === 28
       ? "Gym enclosure traced from A1.1. A 28 ft visualization height represents a tall gym volume; the low-roof datum is documented, but this wall height is not verified."
@@ -153,7 +205,7 @@ function floor(id: string, name: string, materialId: string, points: Point[], ro
   };
 }
 
-export const elements: ModelElement[] = [
+export const elements: ModelInput[] = [
   // The gym stays separate from the low-rise wing; the central yard has no floor or roof mesh.
   wall("gym-north", "Gym - north enclosure", [460, 725], [970, 725], "envelope", 28, "103"),
   wall("gym-west-north", "Gym - northwest pier", [460, 725], [460, 789], "envelope", 28, "103"),
@@ -181,15 +233,17 @@ export const elements: ModelElement[] = [
   wall("service-locker-south", "South locker room - west partition", [1448, 917], [1448, 998], "partition", 14, "116B"),
   wall("service-south", "South toilet / shower - corridor partition", [1448, 998], [1668, 998], "partition", 14, "116A"),
   wall("office-west", "Office 105 - west partition", [1067, 1004], [1067, 1185], "partition", 14, "105"),
-  wall("office-divider", "Offices 104 / 105 - dividing partition", [1204, 1004], [1204, 1140], "partition"),
-  wall("office-east", "Office 104 - east partition", [1310, 1004], [1310, 1140], "partition", 14, "104"),
-  wall("office-105-south", "Office 105 - lobby partition", [1067, 1140], [1166, 1140], "partition", 14, "105"),
+  { ...wall("office-divider", "Offices 104 / 105 - dividing partition", [1204, 1004], [1204, 1140], "partition-sa2-10", 14, undefined, "SA. 2. 10"),
+    description: "First-floor segment traced from A1.1. A1.1 tags SA2.10 on both faces, around a solid-filled core the supplied sheets don't type; the model shows one SA2.10 wall at 14 ft." },
+  wall("office-east", "Office 104 - east partition", [1310, 1004], [1310, 1140], "partition-sa2-10", 14, "104", "SA. 2. 10"),
+  wall("office-105-south", "Office 105 - lobby partition", [1067, 1140], [1166, 1140], "partition-sa6-20", 14, "105", "SA. 6. 20"),
   wall("office-104-south", "Office 104 - lobby partition", [1245, 1140], [1310, 1140], "partition", 14, "104"),
   wall("stair-a-west", "Stair A - gym-side boundary", [1028, 942], [1028, 1185], "envelope"),
   wall("stair-a-south", "Stair A - lobby return", [970, 1185], [1028, 1185], "envelope"),
-  wall("fitness-west", "Fitness - lobby return", [1274, 1215], [1274, 1330], "partition", 14, "106"),
+  { ...wall("fitness-west", "Fitness - lobby return", [1274, 1215], [1274, 1330], "partition", 14, "106"),
+    partitionUnverified: "SA6.20 and SA3.10 tags sit beside this segment on A1.1, but neither leader can be followed to it" },
   wall("fitness-entry-return", "Fitness - south entrance return", [1254, 1330], [1254, 1378], "envelope", 14, "106"),
-  wall("fitness-office", "Fitness / office 108 partition", [1530, 1100], [1579, 1240], "partition", 14, "106"),
+  wall("fitness-office", "Fitness / office 108 partition", [1530, 1100], [1579, 1240], "partition-sa8-20", 14, "106", "SA. 8. 20"),
   wall("office-108-north", "Office 108 - storage partition", [1549, 1155], [1598, 1134], "partition", 14, "108"),
   wall("guard-divider", "Guard / office partition", [1598, 1070], [1660, 1205], "partition", 14, "110"),
   wall("family-south", "Family room - guard partition", [1624, 1140], [1677, 1117], "partition", 14, "109"),
@@ -408,10 +462,9 @@ export const level2Materials: MaterialInfo[] = [
     properties: [{ label: "Infill", value: "Woven wire mesh" }, { label: "Supports", value: "Stainless steel supports and handrail" }, { label: "Model height", value: "42 in. (assumed)" }] },
 ];
 
-const tag = (value?: string) => value ? [{ label: "Partition tag (A1.2)", value }] : [];
 const wall2 = (id: string, name: string, a: Point, b: Point, materialId: string, partitionTag?: string, room?: string): ModelInput => ({
-  id, name, kind: "wall", materialId, points: [point(a), point(b)], base: L2, height: 14, thickness: materialId === "partition" ? 4.875 / 12 : 1,
-  level: "L2", room, source: planL2, geometryStatus: tracedL2, properties: tag(partitionTag),
+  id, name, kind: "wall", materialId, points: [point(a), point(b)], base: L2, height: 14, thickness: wallThickness(materialId),
+  level: "L2", room, source: planL2, geometryStatus: tracedL2, partitionTag,
   description: "Level 02 segment traced from A1.2; 14 ft model height from the second floor to the low roof (A5.1).",
 });
 const glass2 = (id: string, name: string, a: Point, b: Point, room?: string): ModelInput => ({
@@ -428,7 +481,7 @@ const floor2 = (id: string, name: string, pixels: Point[], room: string): ModelI
   source: planL2, geometryStatus: tracedL2, description: "Level 02 room zone traced from A1.2. Edges and recesses are simplified.",
 });
 
-const circulation2: Point[] = [[1500, 790], [1545, 790], [1548, 1043], [1705, 983], [1705, 1000], [1662, 1043], [1445, 1138], [1405, 1150], [1308, 1140], [1140, 1140], [1140, 1099], [1350, 1099], [1350, 1092], [1417, 1092], [1417, 1082], [1500, 1082]];
+const circulation2: Point[] = [[1500, 790], [1545, 790], [1548, 1043], [1705, 983], [1705, 1000], [1662, 1043], [1445, 1138], [1405, 1150], [1277, 1140], [1140, 1140], [1140, 1099], [1350, 1099], [1350, 1092], [1417, 1092], [1417, 1082], [1500, 1082]];
 /** `label` where a room's middle falls outside it (the L-shaped corridor). */
 const level2Floors: { id: string; name: string; number: string; pixels: Point[]; label?: Point }[] = [
   { id: "l2-circulation", name: "Circulation", number: "200", pixels: circulation2, label: [1420, 1118] },
@@ -438,7 +491,7 @@ const level2Floors: { id: string; name: string; number: string; pixels: Point[];
   { id: "l2-toilet-205", name: "Toilet", number: "205", pixels: [[1289, 1036], [1348, 1036], [1348, 1095], [1289, 1095]] },
   { id: "l2-closet", name: "Closet", number: "209A", pixels: [[1289, 1003], [1348, 1003], [1348, 1032], [1289, 1032]] },
   { id: "l2-office", name: "Office / reception", number: "206", pixels: [[1352, 1003], [1415, 1003], [1415, 1088], [1352, 1088]] },
-  { id: "l2-kitchen", name: "Kitchen", number: "208", pixels: [[1310, 1142], [1378, 1142], [1378, 1196], [1398, 1196], [1452, 1302], [1310, 1302]] },
+  { id: "l2-kitchen", name: "Kitchen", number: "208", pixels: [[1279, 1142], [1378, 1142], [1378, 1196], [1398, 1196], [1452, 1302], [1279, 1302]] },
   { id: "l2-storage", name: "Storage", number: "209", pixels: [[1381, 1142], [1404, 1150], [1398, 1192], [1381, 1192]] },
   { id: "l2-mpr-1", name: "Multipurpose room 1", number: "210", pixels: [[1405, 1150], [1445, 1138], [1543, 1094], [1600, 1218], [1455, 1300], [1400, 1196]] },
   { id: "l2-mpr-2", name: "Multipurpose room 2", number: "211", pixels: [[1543, 1094], [1662, 1043], [1705, 1000], [1768, 1166], [1600, 1218]] },
@@ -450,6 +503,7 @@ const level2Floors: { id: string; name: string; number: string; pixels: Point[];
   { id: "l2-janitor", name: "Janitor / laundry", number: "221", pixels: [[1430, 946], [1497, 946], [1497, 994], [1430, 994]] },
 ];
 
+const serviceCoreTags = "SA3.10 tags sit around the stair B / mechanical / janitor walls on A1.2, but their leaders can't be followed to this segment";
 export const level2Elements: ModelInput[] = [
   ...level2Floors.map(f => floor2(f.id, `${f.name} ${f.number} - Level 02 floor`, f.pixels, f.number)),
   // Envelope around the Level 02 wing (schematic, like Level 01's).
@@ -457,37 +511,37 @@ export const level2Elements: ModelInput[] = [
   wall2("l2-east", "Level 02 - east wall, activity and game rooms", [1725, 720], [1725, 975], "envelope"),
   wall2("l2-mpr-east", "Level 02 - multipurpose room 2 east wall", [1708, 995], [1770, 1168], "envelope", undefined, "211"),
   wall2("l2-south", "Level 02 - angled south wall, multipurpose rooms", [1770, 1168], [1455, 1302], "envelope"),
-  wall2("l2-kitchen-south", "Level 02 - kitchen south wall", [1455, 1302], [1308, 1305], "envelope", undefined, "208"),
+  wall2("l2-kitchen-south", "Level 02 - kitchen south wall", [1455, 1302], [1277, 1305], "envelope", undefined, "208"),
   wall2("l2-yard-east", "Level 02 - wall along the mechanical yard (east)", [1362, 720], [1362, 995], "envelope"),
   wall2("l2-yard-south", "Level 02 - wall along the mechanical yard (south)", [1140, 997], [1420, 997], "envelope"),
   // Partitions.
-  wall2("l2-stair-b-south", "Stair B - south partition", [1362, 790], [1497, 790], "partition", "SA.3.10", "S202"),
-  wall2("l2-elec-west", "Electrical 217 - west partition", [1405, 792], [1405, 836], "partition", "SA.3.10", "217"),
-  wall2("l2-mech-north", "Mechanical 218 - north partition", [1362, 836], [1497, 836], "partition", "SA.3.10", "218"),
-  wall2("l2-mech-south", "Mechanical 218 - south partition", [1362, 944], [1497, 944], "partition", "SA.3.10", "218"),
-  wall2("l2-janitor-west", "Janitor / laundry 221 - west partition", [1428, 944], [1428, 996], "partition", "SA.3.10", "221"),
+  { ...wall2("l2-stair-b-south", "Stair B - south partition", [1362, 790], [1497, 790], "partition", undefined, "S202"), partitionUnverified: serviceCoreTags },
+  wall2("l2-elec-west", "Electrical 217 - west partition", [1405, 792], [1405, 836], "partition-sa3-10", "SA. 3. 10", "217"),
+  { ...wall2("l2-mech-north", "Mechanical 218 - north partition", [1362, 836], [1497, 836], "partition", undefined, "218"), partitionUnverified: serviceCoreTags },
+  { ...wall2("l2-mech-south", "Mechanical 218 - south partition", [1362, 944], [1497, 944], "partition", undefined, "218"), partitionUnverified: serviceCoreTags },
+  { ...wall2("l2-janitor-west", "Janitor / laundry 221 - west partition", [1428, 944], [1428, 996], "partition", undefined, "221"), partitionUnverified: serviceCoreTags },
   wall2("l2-corridor-west", "Corridor - west partition (rooms 217-221, elevator)", [1500, 790], [1500, 1080], "partition", undefined, "200"),
-  wall2("l2-game-west", "Game room 213 - corridor partition", [1548, 722], [1548, 985], "partition", "SA.3.10", "213"),
-  wall2("l2-it-west", "IT 201 - west partition", [1142, 997], [1142, 1097], "partition", "SA.3.21", "201"),
+  wall2("l2-game-west", "Game room 213 - corridor partition", [1548, 722], [1548, 985], "partition-sa3-10", "SA. 3. 10", "213"),
+  wall2("l2-it-west", "IT 201 - west partition", [1142, 997], [1142, 1097], "partition-sa3-21", "SA. 3. 21", "201"),
   wall2("l2-it-toilet", "IT 201 / toilet 203 partition", [1180, 997], [1180, 1097], "partition", undefined, "203"),
   wall2("l2-toilets", "Toilets 203 / 204 partition", [1229, 997], [1229, 1097], "partition", undefined, "204"),
   wall2("l2-toilet-205-wall", "Toilet 204 / 205 partition", [1287, 997], [1287, 1097], "partition", undefined, "205"),
   wall2("l2-closet-wall", "Closet 209A / toilet 205 partition", [1287, 1034], [1350, 1034], "partition", undefined, "209A"),
-  wall2("l2-office-west", "Office / reception 206 - west partition", [1350, 997], [1350, 1097], "partition", "SA.3.21", "206"),
+  wall2("l2-office-west", "Office / reception 206 - west partition", [1350, 997], [1350, 1097], "partition", undefined, "206"),
   wall2("l2-toilets-south", "Toilets - corridor partition", [1142, 1097], [1350, 1097], "partition", undefined, "200"),
-  wall2("l2-office-south", "Office / reception 206 - corridor partition", [1350, 1090], [1417, 1090], "partition", "SA.3.21", "206"),
-  wall2("l2-elevator-west", "Elevator 207 - west shaft wall", [1417, 997], [1417, 1080], "partition", "SA.1.21"),
-  wall2("l2-elevator-south", "Elevator 207 - south shaft wall", [1417, 1080], [1502, 1080], "partition", "SA.1.21"),
-  wall2("l2-kitchen-north", "Kitchen 208 - north partition", [1308, 1138], [1395, 1138], "partition", undefined, "208"),
-  wall2("l2-kitchen-west", "Kitchen 208 - west partition", [1308, 1138], [1308, 1305], "partition", "SA.6.20", "208"),
-  wall2("l2-kitchen-east", "Kitchen 208 / multipurpose room 1 partition", [1398, 1195], [1455, 1305], "partition", "SA.6.20", "210"),
+  wall2("l2-office-south", "Office / reception 206 - corridor partition", [1350, 1090], [1417, 1090], "partition", undefined, "206"),
+  wall2("l2-elevator-west", "Office 206 / elevator 207 partition", [1417, 997], [1417, 1080], "partition-sa3-21", "SA. 3. 21", "206"),
+  wall2("l2-elevator-south", "Elevator 207 - south shaft wall", [1417, 1080], [1502, 1080], "partition"),
+  wall2("l2-kitchen-north", "Kitchen 208 - north partition", [1277, 1138], [1395, 1138], "partition", undefined, "208"),
+  wall2("l2-kitchen-west", "Kitchen 208 - west partition", [1277, 1138], [1277, 1305], "partition-sa6-20", "SA. 6. 20", "208"),
+  wall2("l2-kitchen-east", "Kitchen 208 / multipurpose room 1 partition", [1398, 1195], [1455, 1305], "partition-sa6-20", "SA. 6. 20", "210"),
   // Corridor storefronts, operable partitions, guardrail.
   glass2("l2-game-storefront-west", "Game room 213 - storefront at the corridor (west)", [1548, 985], [1548, 1043], "213"),
   glass2("l2-game-storefront", "Game room 213 - angled corridor storefront", [1548, 1043], [1705, 983], "213"),
   glass2("l2-mpr-storefront", "Multipurpose rooms - angled corridor storefront", [1445, 1138], [1662, 1043], "211"),
   operable("l2-operable-activity", "Operable partition - activity 1 / game room", [1552, 805], [1722, 805], 10, "10'-0\" high", "215"),
   operable("l2-operable-mpr", "Operable partition - multipurpose rooms 1 / 2", [1543, 1094], [1600, 1218], 9 + 8 / 12, "9'-8\" high", "210"),
-  { id: "l2-guardrail", name: "Guardrail over the lobby", kind: "wall", materialId: "guardrail", points: [point([1030, 1180]), point([1300, 1180])], base: L2, height: 3.5, thickness: 0.15,
+  { id: "l2-guardrail", name: "Guardrail over the lobby", kind: "wall", materialId: "guardrail", points: [point([1030, 1180]), point([1275, 1180])], base: L2, height: 3.5, thickness: 0.15,
     level: "L2", room: "200", source: planL2, geometryStatus: tracedL2, description: "Woven wire mesh guardrail along the Level 02 edge over the lobby (A1.2)." },
 ];
 
@@ -502,7 +556,7 @@ export const allRooms = [...rooms, ...level2Rooms];
 export const planVoids: { id: string; level: LevelId; name: string; points: Point[]; source: SourceRef }[] = [
   { id: "void-gym", level: "L2", name: "Open to gym below", points: ([[460, 725], [970, 725], [970, 1445], [460, 1445]] as Point[]).map(point), source: planL2 },
   { id: "void-yard", level: "L2", name: "Open to mechanical yard below", points: ([[1045, 725], [1362, 725], [1362, 995], [1045, 995]] as Point[]).map(point), source: planL2 },
-  { id: "void-lobby", level: "L2", name: "Open to lobby below", points: ([[977, 1180], [1300, 1180], [1300, 1330], [977, 1330]] as Point[]).map(point), source: planL2 },
+  { id: "void-lobby", level: "L2", name: "Open to lobby below", points: ([[977, 1180], [1275, 1180], [1275, 1330], [977, 1330]] as Point[]).map(point), source: planL2 },
 ];
 
 // ── Sheet coordinates ───────────────────────────────────────────────────────
@@ -529,7 +583,7 @@ export function toSheetPoint(sheet: string, [x, z]: Point): Point | null {
 export const allMaterials: MaterialInfo[] = [...materials, ...transitionMaterials, ...level2Materials, ...systemMaterials];
 
 /** Every selectable object in the four views, resolved with quantities and sources. */
-export const modelObjects: ModelObject[] = resolveObjects([...elements, ...interiorTransitions, ...level2Elements, ...systemElements], allMaterials, finishScheduleRows);
+export const modelObjects: ModelObject[] = resolveObjects([...elements, ...interiorTransitions, ...level2Elements, ...systemElements], allMaterials, finishScheduleRows, partitionSchedule);
 
 /** The model for a project: Jelleff has one; other projects have none yet. */
 export const modelForProject = (projectId: string): ModelObject[] => projectId === SAMPLE_PROJECT_ID ? modelObjects : [];

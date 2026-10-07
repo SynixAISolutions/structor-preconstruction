@@ -70,6 +70,8 @@ export type MaterialInfo = {
   tag?: string;
   /** Finish schedule tag of the base along a floor finish's edge ("WB-01", "VWB-01", "TB-01"). */
   base?: string;
+  /** Partition type from the A8.1 schedule ("SA3.20"), for a partition assembly. */
+  partitionType?: string;
   /** How its objects are counted. */
   unit: QuantityUnit;
   views: ModelView[];
@@ -103,6 +105,36 @@ export type ModelInput = Omit<ModelElement, "kind"> & {
   properties?: ModelProperty[];
   /** For a transition: the room on the other side (room is the side with the special floor). */
   adjoins?: string;
+  /** The wall type tag the plan puts on this segment, as read ("SA. 3. 10"). */
+  partitionTag?: string;
+  /** Why the plan's type for this segment can't be confirmed (a nearby tag whose leader can't be followed). It keeps the default type. */
+  partitionUnverified?: string;
+};
+
+/** One partition type from the A8.1 schedules, with its tag decoded through the A8.1 legend. */
+export type PartitionTypeRow = {
+  tag: string;
+  /** "S_-_-2 non-rated stud partition". */
+  schedule: string;
+  construction: string; ratingHeight: string; unitWidth: string; gypsum: string; uniqueCondition: string;
+  /** As scheduled ("4 7/8\"", "<varies>") and in inches when it is a number. */
+  roughThickness: string; roughThicknessIn: number | null;
+  /** The rough thickness, or where it says <varies>, the legend's nominal (studs plus 5/8 in. per gypsum layer). */
+  modeledThicknessIn: number;
+  fireRating: string;
+  source: SourceRef;
+};
+
+/** The partition schedule and the plan's default type ("interior partitions are SA3.20 unless noted"). */
+export type PartitionSchedule = { types: PartitionTypeRow[]; defaultType: string; defaultNote: string };
+
+/** How a partition's type is known: a plan tag on the segment, the general note, or unverified (a nearby tag that can't be tied to it). */
+export type PartitionBasis = "tag" | "general-note" | "unverified";
+
+/** "SA. 3. 10", "sa 3.10" → "SA3.10". */
+export const normalizePartitionTag = (tag: string): string => {
+  const m = tag.toUpperCase().replace(/[\s.]/g, "").match(/^([A-Z]{2})(\d{1,2})(\d)(\d)$/);
+  return m ? `${m[1]}${m[2]}.${m[3]}${m[4]}` : tag.trim().toUpperCase();
 };
 
 /** One row of the architect's finish schedule (A12.1). */
@@ -130,6 +162,8 @@ export type ModelObject = {
   baseTag: string | null;
   /** For a transition, the room on the other side. */
   adjoins: string | null;
+  /** For a partition: its A8.1 type row, and how the type is known. */
+  partitionType: PartitionTypeRow | null; partitionBasis: PartitionBasis | null;
   /** The takeoff quantity in the assembly's unit. */
   quantity: { value: number; unit: QuantityUnit };
   /** Only the dimensions that mean something for the kind; the rest are null. */
@@ -191,11 +225,18 @@ function scheduleProperties(row: FinishScheduleRow): ModelProperty[] {
     .filter(([, value]) => value.trim()).map(([label, value]) => ({ label, value }));
 }
 
+/** A partition type as inspector properties. */
+function partitionProperties(row: PartitionTypeRow): ModelProperty[] {
+  return ([["Partition type", row.tag], ["Schedule", row.schedule], ["Construction", row.construction], ["Height / rating", row.ratingHeight],
+    ["Stud width", row.unitWidth], ["Gypsum board", row.gypsum], ["Unique condition", row.uniqueCondition], ["Rough thickness", row.roughThickness], ["Fire rating", row.fireRating]] as [string, string][]).map(([label, value]) => ({ label, value }));
+}
+
 /**
  * Resolves the data into selectable objects. Throws on a missing assembly, a unit the shape can't
- * measure, or a schedule tag that isn't on the finish schedule.
+ * measure, a tag that isn't on its schedule, or a partition whose plan tag or thickness disagrees
+ * with its assembly's A8.1 type.
  */
-export function resolveObjects(inputs: ModelInput[], materials: MaterialInfo[], schedule: FinishScheduleRow[] = []): ModelObject[] {
+export function resolveObjects(inputs: ModelInput[], materials: MaterialInfo[], schedule: FinishScheduleRow[] = [], partitions: PartitionSchedule = { types: [], defaultType: "", defaultNote: "" }): ModelObject[] {
   const rowOf = (tag: string | undefined, id: string): FinishScheduleRow | null => {
     if (!tag) return null;
     return schedule.find(r => r.tag === tag) ?? (() => { throw new Error(`${id}: ${tag} is not on the finish schedule`); })();
@@ -204,6 +245,18 @@ export function resolveObjects(inputs: ModelInput[], materials: MaterialInfo[], 
     const material = materials.find(m => m.id === input.materialId);
     if (!material) throw new Error(`${input.id}: no assembly ${input.materialId}`);
     const row = rowOf(material.tag, material.id), baseRow = rowOf(material.base, material.id);
+    const partition = material.partitionType
+      ? partitions.types.find(r => r.tag === material.partitionType) ?? (() => { throw new Error(`${material.id}: ${material.partitionType} is not on the partition schedule`); })()
+      : null;
+    const planTag = input.partitionTag ? normalizePartitionTag(input.partitionTag) : null;
+    const partitionBasis: PartitionBasis | null = !partition ? null : planTag ? "tag" : input.partitionUnverified ? "unverified" : "general-note";
+    if (!partition && (planTag || input.partitionUnverified)) throw new Error(`${input.id}: a partition type note on ${material.id}, which isn't a partition type`);
+    if (planTag && input.partitionUnverified) throw new Error(`${input.id}: tagged ${planTag} and unverified at once`);
+    if (partition && planTag && planTag !== partition.tag) throw new Error(`${input.id}: the plan tags ${planTag} but the assembly is ${partition.tag}`);
+    if (partition && !planTag && partition.tag !== partitions.defaultType) throw new Error(`${input.id}: untagged, so ${partitions.defaultType} by the general note, but the assembly is ${partition.tag}`);
+    if (partition && Math.abs((input.thickness ?? 0) * 12 - partition.modeledThicknessIn) > 0.01) {
+      throw new Error(`${input.id}: modeled ${round((input.thickness ?? 0) * 12)} in. thick, ${partition.tag} is ${partition.modeledThicknessIn} in.`);
+    }
     const thickness = input.thickness ?? 0, depth = input.depth ?? thickness;
     const all = measures(input.kind, input.points, input.height, thickness, depth);
     const dimensions = Object.fromEntries((Object.keys(all) as (keyof Dimensions)[])
@@ -220,10 +273,14 @@ export function resolveObjects(inputs: ModelInput[], materials: MaterialInfo[], 
       discipline: material.discipline, division: material.division, divisionName: CSI_DIVISIONS[material.division] ?? "",
       specSection: material.specSection, materialId: material.id, assembly: material.name,
       tag: material.tag ?? null, schedule: row, baseTag: material.base ?? null, adjoins: input.adjoins ?? null,
+      partitionType: partition, partitionBasis,
       quantity: { value: round(raw), unit: material.unit }, dimensions,
       properties: [
         ...(row ? scheduleProperties(row) : []),
         ...(baseRow ? [{ label: "Base", value: [baseRow.tag, baseRow.description, baseRow.manufacturer, baseRow.color, baseRow.size].filter(Boolean).join(", ") }] : []),
+        ...(partition ? partitionProperties(partition) : []),
+        ...(partitionBasis ? [{ label: "Type basis", value: partitionBasis === "tag" ? `Tagged ${planTag} on ${input.source.sheet}`
+          : partitionBasis === "unverified" ? `Unverified: ${input.partitionUnverified}. Modeled as ${partitions.defaultType} by the general note.` : partitions.defaultNote }] : []),
         ...material.properties, ...(input.properties ?? []),
       ],
       sources, basis, confidence: confidenceFor(basis),
