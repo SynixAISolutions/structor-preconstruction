@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { register } from "node:module";
 
 register("./ts-resolver.mjs", import.meta.url);
-const { elements, materials, rooms, planTransform, systemElements, systemMaterials, allMaterials, modelObjects, modelForProject, sampleModelReview, interiorTransitions, transitionMaterials, finishScheduleRows } = await import("../lib/jelleff-model.ts");
+const { elements, materials, rooms, planTransform, systemElements, systemMaterials, allMaterials, modelObjects, modelForProject, sampleModelReview, interiorTransitions, transitionMaterials, finishScheduleRows, level2Elements, level2Rooms, allRooms, planVoids, sheetTransforms, sheetTransformFor, toSheetPoint } = await import("../lib/jelleff-model.ts");
 const M = await import("../lib/model.ts");
 const { ALL_SCREENS } = await import("../lib/screens.ts");
 const { startingDraft } = await import("../lib/project-scope.ts");
@@ -50,7 +50,7 @@ for (const s of [...systemElements].filter(e => M.SHAPES[e.kind] === "polygon"))
 
 // ── Every object: complete metadata for the inspector ──
 const objects = modelObjects;
-assert.equal(objects.length, elements.length + interiorTransitions.length + systemElements.length);
+assert.equal(objects.length, elements.length + interiorTransitions.length + level2Elements.length + systemElements.length);
 assert.equal(new Set(objects.map(o => o.id)).size, objects.length, "Object IDs must be unique across the model");
 assert.equal(new Set(allMaterials.map(m => m.id)).size, allMaterials.length, "Assembly IDs must be unique");
 const levels = new Set(M.LEVELS.map(l => l.id));
@@ -101,6 +101,7 @@ const floorTags = Object.fromEntries(objects.filter(o => o.kind === "floor").map
 assert.deepEqual(floorTags, {
   "gym-floor": ["FAF-01", "VWB-01", "09 67 00"], "entry-grille": ["WOG-01", null, "12 48 16"], "concrete": ["PLC-01", "WB-01", "03 33 00"], "carpet": ["CPT-01", "WB-01", "09 68 00"],
   "fitness-floor": ["RF-01", "WB-01", "09 65 00"], "tile": ["FT-01", "TB-01", "09 30 00"], "service-floor": ["SCE-01", null, "03 33 00"],
+  "l2-floor": [null, null, null],
 }, "Every floor finish: its A12.1 tag, base and section heading");
 assert(objects.filter(o => o.tag).every(o => o.schedule?.tag === o.tag && o.specSection === o.schedule.section), "A scheduled object's section is the schedule's");
 const prop = (o, label) => o.properties.find(p => p.label === label)?.value;
@@ -125,7 +126,7 @@ for (const t of transitions) {
 }
 
 const schedule = M.roomFinishSchedule(objects);
-assert.equal(schedule.length, 16, "One row per room with a floor finish");
+assert.equal(schedule.length, 33, "One row per room with a floor zone: 16 on Level 01, 17 on Level 02");
 const roomRow = (r) => schedule.find(x => x.room === r);
 assert.deepEqual(roomRow("103"), {
   room: "103", level: "L1", floors: [{ id: "floor-gym", tag: "FAF-01", assembly: gymFloor.assembly, areaSf: 6841.23 }], areaSf: 6841.23,
@@ -138,6 +139,47 @@ assert.equal(roomRow("103").wallLf, Math.round(objects.filter(o => o.kind === "w
 assert(schedule.every((r, i) => i === 0 || schedule[i - 1].room < r.room), "Room order");
 assert.equal(M.roomFinishSchedule(objects.filter(o => o.kind !== "floor")).length, 0, "Rooms come from floor finishes");
 
+// ── Level 02 (A1.2): floors, walls, storefront, operable partitions, voids, labels, sheet transforms ──
+const l2 = objects.filter(o => o.level === "L2");
+assert.equal(l2.length, level2Elements.length);
+assert.deepEqual(Object.fromEntries(["floor", "wall", "glass"].map(k => [k, l2.filter(o => o.kind === k).length])), { floor: 17, wall: 30, glass: 3 });
+assert(l2.every(o => o.sources[0].sheet === "A1.2" && o.caution.includes("A1.2")), "Level 02 objects cite A1.2");
+assert(objects.filter(o => o.sources[0].sheet === "A1.2").every(o => o.level === "L2"), "…and only they do");
+assert(l2.filter(o => o.kind === "floor").every(o => Math.abs(o.base + o.height - 14) < 1e-9 && o.tag === null && o.baseTag === null && o.basis.material === "illustrative"), "Floors at 14 ft, no finish assigned (no Level 02 finish plan)");
+assert(l2.filter(o => o.kind !== "floor").every(o => o.base === 14), "Walls and storefront stand on the second floor");
+const operables = l2.filter(o => o.materialId === "operable-partition");
+assert.deepEqual(operables.map(o => [o.id, o.quantity.unit, o.height, prop(o, "Height (A1.2)")]), [["l2-operable-activity", "LF", 10, "10'-0\" high"], ["l2-operable-mpr", "LF", 9 + 8 / 12, "9'-8\" high"]]);
+assert(operables.every(o => o.quantity.value === o.dimensions.lengthFt && o.quantity.value > 15), "Counted by length");
+assert.deepEqual([find("l2-guardrail").quantity.unit, find("l2-guardrail").height], ["LF", 3.5]);
+assert.equal(prop(find("l2-it-west"), "Partition tag (A1.2)"), "SA.3.21", "Type tags as read on A1.2");
+assert.deepEqual(roomRow("210").level === "L2" && [roomRow("210").baseTags, roomRow("210").transitions, roomRow("210").floors[0].tag], [[], [], null]);
+assert(roomRow("200").areaSf > roomRow("201").areaSf, "Corridor bigger than the IT closet");
+assert.deepEqual(M.filterObjects(objects, { level: "L2", kind: "glass" }).map(o => o.id), ["l2-game-storefront-west", "l2-game-storefront", "l2-mpr-storefront"]);
+
+// Voids: no Level 02 floor sits in a double-height volume.
+assert.deepEqual(planVoids.map(v => [v.id, v.level]), [["void-gym", "L2"], ["void-yard", "L2"], ["void-lobby", "L2"]]);
+assert.deepEqual(planVoids.find(v => v.id === "void-gym").points.map(p => toSheetPoint("A1.2", p).map(Math.round)), [[460, 725], [970, 725], [970, 1445], [460, 1445]], "The gym void is the gym's footprint");
+for (const f of l2.filter(o => o.kind === "floor")) {
+  const c = [f.points.reduce((a, p) => a + p[0], 0) / f.points.length, f.points.reduce((a, p) => a + p[1], 0) / f.points.length];
+  assert(planVoids.every(v => !contains(v.points, c)), `${f.id}: not over a void`);
+}
+assert(contains(planVoids[0].points, rooms.find(r => r.id === "gym").center), "The gym is open to Level 02");
+
+// Labels know their level, and each Level 02 label sits inside its room.
+assert.deepEqual([rooms.every(r => r.level === "L1"), level2Rooms.length, level2Rooms.every(r => r.level === "L2"), allRooms.length], [true, 17, true, rooms.length + 17]);
+for (const r of level2Rooms) assert(contains(find(r.id).points, r.center), `${r.number}: label inside the room`);
+
+// Sheet transforms: plan feet → each sheet's 2400 x 1715 viewBox.
+assert.deepEqual(sheetTransforms.map(t => [t.sheet, t.levels.join()]), [["A1.1", "L1"], ["A1.2", "L2"], ["A12.2", "L1"]]);
+for (const t of sheetTransforms) assert(existsSync(new URL(`../public${t.asset}`, import.meta.url)) && t.imageWidth === 2400 && t.imageHeight === 1715, `${t.sheet}: image and viewBox`);
+const close = (a, b) => Math.abs(a[0] - b[0]) < 1e-6 && Math.abs(a[1] - b[1]) < 1e-6;
+const gymCorner = find("gym-north").points[0];
+assert(close(toSheetPoint("A1.1", gymCorner), [460, 725]) && close(toSheetPoint("A1.2", gymCorner), [460, 725]), "A1.2 is plotted exactly over A1.1");
+assert(close(toSheetPoint("A12.2", gymCorner), [557.6, 827.4]), "A12.2: same scale, shifted on its sheet");
+assert(close(toSheetPoint("A1.1", find("l2-it-west").points[0]), [1142, 997]), "Round trip to the traced pixels");
+assert.equal(toSheetPoint("A5.1", gymCorner), null, "No transform, no highlight");
+assert.equal(sheetTransformFor("A8.1"), null);
+
 // ── Views and screens ──
 assert.deepEqual(M.MODEL_VIEWS.map(v => v.screen), ["model", "model-mep", "model-structural", "model-exterior"]);
 for (const v of M.MODEL_VIEWS) {
@@ -148,7 +190,8 @@ for (const v of M.MODEL_VIEWS) {
 }
 assert.equal(M.modelViewForScreen("budget"), null);
 const inView = (view) => M.filterObjects(objects, { view }).length;
-assert.deepEqual([inView("interior"), inView("mep"), inView("structural"), inView("exterior")], [82, 11, 11, 37]);
+assert.deepEqual([inView("interior"), inView("mep"), inView("structural"), inView("exterior")], [132, 11, 11, 44]);
+assert.deepEqual(M.filterObjects(objects, { view: "exterior", level: "L2" }).map(o => o.materialId), Array(7).fill("envelope"), "Level 02 envelope is exterior; the corridor storefront is interior only");
 assert(M.filterObjects(objects, { view: "exterior" }).every(o => ["envelope", "storefront", "roof-membrane"].includes(o.materialId)), "Exterior: envelope, storefront, roof");
 assert.deepEqual(modelForProject("jelleff"), objects);
 assert.deepEqual(modelForProject("p2"), [], "Other projects have no model yet");
@@ -164,8 +207,8 @@ assert.deepEqual(M.filterObjects(objects, { query: "09 68 00" }).map(o => o.id),
 assert.deepEqual(M.filterObjects(objects, { review: "flagged" }, sampleModelReview).map(o => o.id), ["gym-north"]);
 assert.deepEqual(M.filterObjects(objects, { view: "interior", division: "09", kind: "floor", level: "L1" }).length, 10);
 assert.deepEqual(M.divisionsIn(objects, "structural"), [{ division: "03", name: "Concrete", count: 2 }, { division: "05", name: "Metals", count: 9 }]);
-assert.deepEqual(M.divisionsIn(objects, "interior").map(d => d.division), ["03", "04", "08", "09", "12"]);
-assert.deepEqual(M.reviewSummary(objects, sampleModelReview), { objects: 105, verified: 1, flagged: 1, unreviewed: 103, lowConfidence: 23 });
+assert.deepEqual(M.divisionsIn(objects, "interior").map(d => d.division), ["03", "04", "05", "08", "09", "10", "12"]);
+assert.deepEqual(M.reviewSummary(objects, sampleModelReview), { objects: 155, verified: 1, flagged: 1, unreviewed: 153, lowConfidence: 23 });
 assert.deepEqual(M.reviewSummary(objects, sampleModelReview, "mep"), { objects: 11, verified: 0, flagged: 0, unreviewed: 11, lowConfidence: 11 });
 
 // ── Selection ──

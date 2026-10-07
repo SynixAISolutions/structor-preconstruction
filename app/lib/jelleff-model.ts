@@ -2,7 +2,7 @@
 // illustrative structural, MEP and roof objects for the four views. Types and measuring rules are
 // in lib/model.ts.
 
-import { resolveObjects, type FinishScheduleRow, type MaterialInfo, type ModelElement, type ModelInput, type ModelObject, type ModelReviewState, type Point, type SourceRef } from "./model";
+import { resolveObjects, type FinishScheduleRow, type LevelId, type MaterialInfo, type ModelElement, type ModelInput, type ModelObject, type ModelReviewState, type Point, type SourceRef } from "./model";
 import { SAMPLE_PROJECT_ID } from "./project-scope";
 
 export type { MaterialInfo, ModelElement, Point, SourceRef } from "./model";
@@ -235,7 +235,8 @@ export const elements: ModelElement[] = [
   floor("floor-circulation", "Circulation 102B - polished concrete", "concrete", [[1316, 998], [1417, 998], [1417, 1072], [1500, 1072], [1500, 1005], [1580, 1005], [1540, 1050], [1598, 1070], [1530, 1100], [1316, 1197]], "102B"),
 ];
 
-export const rooms: { id: string; name: string; number: string; center: Point }[] = [
+/** Room labels, Level 01. Level 02 labels are in level2Rooms; allRooms has both. */
+export const rooms: { id: string; name: string; number: string; center: Point; level: LevelId }[] = ([
   { id: "gym", name: "Gym", number: "103", center: point([716, 1090]) },
   { id: "lobby", name: "Lobby", number: "102", center: point([1120, 1250]) },
   { id: "vestibule", name: "Vestibule", number: "101", center: point([1040, 1390]) },
@@ -249,7 +250,7 @@ export const rooms: { id: string; name: string; number: string; center: Point }[
   { id: "lockers-south", name: "Toilet / shower + lockers", number: "116", center: point([1570, 950]) },
   { id: "yard", name: "Open mechanical yard", number: "118", center: point([1203, 855]) },
   { id: "storage", name: "Storage", number: "120", center: point([1008, 817]) },
-];
+] as { id: string; name: string; number: string; center: Point }[]).map(r => ({ ...r, level: "L1" as LevelId }));
 
 // ── Structural, MEP and roof objects (illustrative) ─────────────────────────
 // Placed for the demo on the traced gym and service areas. Footprints follow A1.1 and heights the
@@ -379,11 +380,156 @@ export const interiorTransitions: ModelInput[] = [
   transition("ts-fitness", "Fitness 106 / circulation", "transition-gym", [1410, 1157], [1442, 1143], "106", "102B", "106 Fitness (RF-01) / 102B Circulation (PLC-01)"),
 ];
 
-/** Every assembly: the studio's first-floor materials, the transitions, then the illustrative system ones. */
-export const allMaterials: MaterialInfo[] = [...materials, ...transitionMaterials, ...systemMaterials];
+// ── Level 02 (A1.2) ─────────────────────────────────────────────────────────
+// Traced from A1.2, which is plotted at the same position and scale as A1.1, so it uses the same
+// plan transform. The floor sits 14 ft up (A5.1). The Level 02 finish plan isn't among the app's
+// sheets, so its floors carry no finish tag; partition type tags are kept as read on A1.2.
+
+const planL2: SourceRef = { drawing: "Jelleff drawing set", sheet: "A1.2", page: 47, detail: "Level 02 - second floor plan", asset: "/models/jelleff/a1-2.png" };
+const L2 = 14;
+const tracedL2 = "Simplified manual trace from A1.2 for visualization; not surveyed geometry, quantities, or construction coordination.";
+
+export const level2Materials: MaterialInfo[] = [
+  { id: "l2-floor", name: "Level 02 floor zone - finish not scheduled", color: "#d2cec4", status: "Illustrative", sources: [planL2],
+    description: "Room-level floor zone traced from A1.2. The Level 02 finish plan isn't among the app's sheets, so no finish is assigned.",
+    discipline: "architectural", division: "09", specSection: null, unit: "SF", views: ["interior"],
+    properties: [{ label: "Finish", value: "Not scheduled in the sheets available (Level 02 finish plan needed)" }] },
+  { id: "interior-storefront", name: "Aluminum storefront - interior", color: "#9fd0dc", status: "Documented", sources: [planL2],
+    description: "Interior aluminum storefront along the Level 02 corridor (A1.2, \"aluminum storefront typ.\"). Height, mullions and glass type are illustrative.",
+    discipline: "architectural", division: "08", specSection: null, unit: "SF", views: ["interior"],
+    properties: [{ label: "System", value: "Aluminum storefront (interior)" }, { label: "Glazing", value: "Not specified in the model" }] },
+  { id: "operable-partition", name: "Operable partition", color: "#a7a196", status: "Documented", sources: [planL2],
+    description: "Operable partitions shown and dimensioned on A1.2. Panel system and acoustic rating are not in the sheets available.",
+    discipline: "architectural", division: "10", specSection: null, unit: "LF", views: ["interior"],
+    properties: [{ label: "Type", value: "Operable partition, height as noted on A1.2" }] },
+  { id: "guardrail", name: "Woven wire mesh guardrail", color: "#8f9294", status: "Documented", sources: [planL2],
+    description: "Guardrail at the Level 02 edge over the lobby, noted on A1.2 (woven wire mesh, stainless supports and handrail). Height is assumed.",
+    discipline: "architectural", division: "05", specSection: null, unit: "LF", views: ["interior"],
+    properties: [{ label: "Infill", value: "Woven wire mesh" }, { label: "Supports", value: "Stainless steel supports and handrail" }, { label: "Model height", value: "42 in. (assumed)" }] },
+];
+
+const tag = (value?: string) => value ? [{ label: "Partition tag (A1.2)", value }] : [];
+const wall2 = (id: string, name: string, a: Point, b: Point, materialId: string, partitionTag?: string, room?: string): ModelInput => ({
+  id, name, kind: "wall", materialId, points: [point(a), point(b)], base: L2, height: 14, thickness: materialId === "partition" ? 4.875 / 12 : 1,
+  level: "L2", room, source: planL2, geometryStatus: tracedL2, properties: tag(partitionTag),
+  description: "Level 02 segment traced from A1.2; 14 ft model height from the second floor to the low roof (A5.1).",
+});
+const glass2 = (id: string, name: string, a: Point, b: Point, room?: string): ModelInput => ({
+  id, name, kind: "glass", materialId: "interior-storefront", points: [point(a), point(b)], base: L2, height: 10, thickness: 0.15, level: "L2", room,
+  source: planL2, geometryStatus: tracedL2, description: "Aluminum storefront on A1.2; the 10 ft height and panel extent are illustrative.",
+});
+const operable = (id: string, name: string, a: Point, b: Point, heightFt: number, noted: string, room: string): ModelInput => ({
+  id, name, kind: "wall", materialId: "operable-partition", points: [point(a), point(b)], base: L2, height: heightFt, thickness: 0.5, level: "L2", room,
+  source: planL2, geometryStatus: tracedL2, properties: [{ label: "Height (A1.2)", value: noted }],
+  description: `Operable partition noted on A1.2 as ${noted}.`,
+});
+const floor2 = (id: string, name: string, pixels: Point[], room: string): ModelInput => ({
+  id, name, kind: "floor", materialId: "l2-floor", points: pixels.map(point), base: L2 - 0.18, height: 0.18, level: "L2", room,
+  source: planL2, geometryStatus: tracedL2, description: "Level 02 room zone traced from A1.2. Edges and recesses are simplified.",
+});
+
+const circulation2: Point[] = [[1500, 790], [1545, 790], [1548, 1043], [1705, 983], [1705, 1000], [1662, 1043], [1445, 1138], [1405, 1150], [1308, 1140], [1140, 1140], [1140, 1099], [1350, 1099], [1350, 1092], [1417, 1092], [1417, 1082], [1500, 1082]];
+/** `label` where a room's middle falls outside it (the L-shaped corridor). */
+const level2Floors: { id: string; name: string; number: string; pixels: Point[]; label?: Point }[] = [
+  { id: "l2-circulation", name: "Circulation", number: "200", pixels: circulation2, label: [1420, 1118] },
+  { id: "l2-it", name: "IT", number: "201", pixels: [[1144, 1003], [1178, 1003], [1178, 1095], [1144, 1095]] },
+  { id: "l2-toilet-203", name: "Toilet", number: "203", pixels: [[1182, 1003], [1227, 1003], [1227, 1095], [1182, 1095]] },
+  { id: "l2-toilet-204", name: "Toilet", number: "204", pixels: [[1231, 1003], [1285, 1003], [1285, 1095], [1231, 1095]] },
+  { id: "l2-toilet-205", name: "Toilet", number: "205", pixels: [[1289, 1036], [1348, 1036], [1348, 1095], [1289, 1095]] },
+  { id: "l2-closet", name: "Closet", number: "209A", pixels: [[1289, 1003], [1348, 1003], [1348, 1032], [1289, 1032]] },
+  { id: "l2-office", name: "Office / reception", number: "206", pixels: [[1352, 1003], [1415, 1003], [1415, 1088], [1352, 1088]] },
+  { id: "l2-kitchen", name: "Kitchen", number: "208", pixels: [[1310, 1142], [1378, 1142], [1378, 1196], [1398, 1196], [1452, 1302], [1310, 1302]] },
+  { id: "l2-storage", name: "Storage", number: "209", pixels: [[1381, 1142], [1404, 1150], [1398, 1192], [1381, 1192]] },
+  { id: "l2-mpr-1", name: "Multipurpose room 1", number: "210", pixels: [[1405, 1150], [1445, 1138], [1543, 1094], [1600, 1218], [1455, 1300], [1400, 1196]] },
+  { id: "l2-mpr-2", name: "Multipurpose room 2", number: "211", pixels: [[1543, 1094], [1662, 1043], [1705, 1000], [1768, 1166], [1600, 1218]] },
+  { id: "l2-game", name: "Game room", number: "213", pixels: [[1550, 807], [1723, 807], [1723, 970], [1705, 983], [1550, 1041]] },
+  { id: "l2-activity", name: "Activity 1", number: "215", pixels: [[1550, 723], [1723, 723], [1723, 803], [1550, 803]] },
+  { id: "l2-stair-b", name: "Stair B", number: "S202", pixels: [[1364, 723], [1497, 723], [1497, 788], [1364, 788]] },
+  { id: "l2-elec", name: "Electrical", number: "217", pixels: [[1407, 792], [1497, 792], [1497, 834], [1407, 834]] },
+  { id: "l2-mech", name: "Mechanical", number: "218", pixels: [[1364, 838], [1497, 838], [1497, 942], [1364, 942]] },
+  { id: "l2-janitor", name: "Janitor / laundry", number: "221", pixels: [[1430, 946], [1497, 946], [1497, 994], [1430, 994]] },
+];
+
+export const level2Elements: ModelInput[] = [
+  ...level2Floors.map(f => floor2(f.id, `${f.name} ${f.number} - Level 02 floor`, f.pixels, f.number)),
+  // Envelope around the Level 02 wing (schematic, like Level 01's).
+  wall2("l2-north", "Level 02 - north wall", [1362, 720], [1725, 720], "envelope"),
+  wall2("l2-east", "Level 02 - east wall, activity and game rooms", [1725, 720], [1725, 975], "envelope"),
+  wall2("l2-mpr-east", "Level 02 - multipurpose room 2 east wall", [1708, 995], [1770, 1168], "envelope", undefined, "211"),
+  wall2("l2-south", "Level 02 - angled south wall, multipurpose rooms", [1770, 1168], [1455, 1302], "envelope"),
+  wall2("l2-kitchen-south", "Level 02 - kitchen south wall", [1455, 1302], [1308, 1305], "envelope", undefined, "208"),
+  wall2("l2-yard-east", "Level 02 - wall along the mechanical yard (east)", [1362, 720], [1362, 995], "envelope"),
+  wall2("l2-yard-south", "Level 02 - wall along the mechanical yard (south)", [1140, 997], [1420, 997], "envelope"),
+  // Partitions.
+  wall2("l2-stair-b-south", "Stair B - south partition", [1362, 790], [1497, 790], "partition", "SA.3.10", "S202"),
+  wall2("l2-elec-west", "Electrical 217 - west partition", [1405, 792], [1405, 836], "partition", "SA.3.10", "217"),
+  wall2("l2-mech-north", "Mechanical 218 - north partition", [1362, 836], [1497, 836], "partition", "SA.3.10", "218"),
+  wall2("l2-mech-south", "Mechanical 218 - south partition", [1362, 944], [1497, 944], "partition", "SA.3.10", "218"),
+  wall2("l2-janitor-west", "Janitor / laundry 221 - west partition", [1428, 944], [1428, 996], "partition", "SA.3.10", "221"),
+  wall2("l2-corridor-west", "Corridor - west partition (rooms 217-221, elevator)", [1500, 790], [1500, 1080], "partition", undefined, "200"),
+  wall2("l2-game-west", "Game room 213 - corridor partition", [1548, 722], [1548, 985], "partition", "SA.3.10", "213"),
+  wall2("l2-it-west", "IT 201 - west partition", [1142, 997], [1142, 1097], "partition", "SA.3.21", "201"),
+  wall2("l2-it-toilet", "IT 201 / toilet 203 partition", [1180, 997], [1180, 1097], "partition", undefined, "203"),
+  wall2("l2-toilets", "Toilets 203 / 204 partition", [1229, 997], [1229, 1097], "partition", undefined, "204"),
+  wall2("l2-toilet-205-wall", "Toilet 204 / 205 partition", [1287, 997], [1287, 1097], "partition", undefined, "205"),
+  wall2("l2-closet-wall", "Closet 209A / toilet 205 partition", [1287, 1034], [1350, 1034], "partition", undefined, "209A"),
+  wall2("l2-office-west", "Office / reception 206 - west partition", [1350, 997], [1350, 1097], "partition", "SA.3.21", "206"),
+  wall2("l2-toilets-south", "Toilets - corridor partition", [1142, 1097], [1350, 1097], "partition", undefined, "200"),
+  wall2("l2-office-south", "Office / reception 206 - corridor partition", [1350, 1090], [1417, 1090], "partition", "SA.3.21", "206"),
+  wall2("l2-elevator-west", "Elevator 207 - west shaft wall", [1417, 997], [1417, 1080], "partition", "SA.1.21"),
+  wall2("l2-elevator-south", "Elevator 207 - south shaft wall", [1417, 1080], [1502, 1080], "partition", "SA.1.21"),
+  wall2("l2-kitchen-north", "Kitchen 208 - north partition", [1308, 1138], [1395, 1138], "partition", undefined, "208"),
+  wall2("l2-kitchen-west", "Kitchen 208 - west partition", [1308, 1138], [1308, 1305], "partition", "SA.6.20", "208"),
+  wall2("l2-kitchen-east", "Kitchen 208 / multipurpose room 1 partition", [1398, 1195], [1455, 1305], "partition", "SA.6.20", "210"),
+  // Corridor storefronts, operable partitions, guardrail.
+  glass2("l2-game-storefront-west", "Game room 213 - storefront at the corridor (west)", [1548, 985], [1548, 1043], "213"),
+  glass2("l2-game-storefront", "Game room 213 - angled corridor storefront", [1548, 1043], [1705, 983], "213"),
+  glass2("l2-mpr-storefront", "Multipurpose rooms - angled corridor storefront", [1445, 1138], [1662, 1043], "211"),
+  operable("l2-operable-activity", "Operable partition - activity 1 / game room", [1552, 805], [1722, 805], 10, "10'-0\" high", "215"),
+  operable("l2-operable-mpr", "Operable partition - multipurpose rooms 1 / 2", [1543, 1094], [1600, 1218], 9 + 8 / 12, "9'-8\" high", "210"),
+  { id: "l2-guardrail", name: "Guardrail over the lobby", kind: "wall", materialId: "guardrail", points: [point([1030, 1180]), point([1300, 1180])], base: L2, height: 3.5, thickness: 0.15,
+    level: "L2", room: "200", source: planL2, geometryStatus: tracedL2, description: "Woven wire mesh guardrail along the Level 02 edge over the lobby (A1.2)." },
+];
+
+const centroid = (pixels: Point[]): Point => [pixels.reduce((s, p) => s + p[0], 0) / pixels.length, pixels.reduce((s, p) => s + p[1], 0) / pixels.length];
+/** Level 02 room labels, at the middle of each traced room. */
+export const level2Rooms: { id: string; name: string; number: string; center: Point; level: LevelId }[] =
+  level2Floors.map(f => ({ id: f.id, name: f.name, number: f.number, center: point(f.label ?? centroid(f.pixels)), level: "L2" as LevelId }));
+/** Every room label, both levels. */
+export const allRooms = [...rooms, ...level2Rooms];
+
+/** Areas with no floor at a level: the double-height volumes seen from above. Plan feet, like everything else. */
+export const planVoids: { id: string; level: LevelId; name: string; points: Point[]; source: SourceRef }[] = [
+  { id: "void-gym", level: "L2", name: "Open to gym below", points: ([[460, 725], [970, 725], [970, 1445], [460, 1445]] as Point[]).map(point), source: planL2 },
+  { id: "void-yard", level: "L2", name: "Open to mechanical yard below", points: ([[1045, 725], [1362, 725], [1362, 995], [1045, 995]] as Point[]).map(point), source: planL2 },
+  { id: "void-lobby", level: "L2", name: "Open to lobby below", points: ([[977, 1180], [1300, 1180], [1300, 1330], [977, 1330]] as Point[]).map(point), source: planL2 },
+];
+
+// ── Sheet coordinates ───────────────────────────────────────────────────────
+
+/**
+ * Where plan feet land on each sheet image, in the image's 2400 x 1715 viewBox (the PNGs are
+ * 3000 x 2143; scale the viewBox to the image). A1.2 is plotted exactly over A1.1; A12.2 is the same
+ * 1/8" scale shifted on its sheet (measured by matching the gym and east-wing linework).
+ */
+export type SheetTransform = { sheet: string; asset: string; origin: Point; feetPerPixel: number; imageWidth: number; imageHeight: number; levels: LevelId[] };
+export const sheetTransforms: SheetTransform[] = [
+  { sheet: "A1.1", asset: "/models/jelleff/a1-1.png", ...planTransform, levels: ["L1"] },
+  { sheet: "A1.2", asset: "/models/jelleff/a1-2.png", ...planTransform, levels: ["L2"] },
+  { sheet: "A12.2", asset: "/models/jelleff/a12-2.png", ...planTransform, origin: [planTransform.origin[0] + 97.6, planTransform.origin[1] + 102.4], levels: ["L1"] },
+];
+export const sheetTransformFor = (sheet: string): SheetTransform | null => sheetTransforms.find(t => t.sheet === sheet) ?? null;
+/** A plan point (feet) on a sheet's viewBox, or null when there is no transform for that sheet. */
+export function toSheetPoint(sheet: string, [x, z]: Point): Point | null {
+  const t = sheetTransformFor(sheet);
+  return t ? [x / t.feetPerPixel + t.origin[0], z / t.feetPerPixel + t.origin[1]] : null;
+}
+
+/** Every assembly: the studio's first-floor materials, the transitions, Level 02, then the illustrative system ones. */
+export const allMaterials: MaterialInfo[] = [...materials, ...transitionMaterials, ...level2Materials, ...systemMaterials];
 
 /** Every selectable object in the four views, resolved with quantities and sources. */
-export const modelObjects: ModelObject[] = resolveObjects([...elements, ...interiorTransitions, ...systemElements], allMaterials, finishScheduleRows);
+export const modelObjects: ModelObject[] = resolveObjects([...elements, ...interiorTransitions, ...level2Elements, ...systemElements], allMaterials, finishScheduleRows);
 
 /** The model for a project: Jelleff has one; other projects have none yet. */
 export const modelForProject = (projectId: string): ModelObject[] => projectId === SAMPLE_PROJECT_ID ? modelObjects : [];
