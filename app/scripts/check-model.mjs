@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { register } from "node:module";
 
 register("./ts-resolver.mjs", import.meta.url);
-const { elements, materials, rooms, planTransform, systemElements, systemMaterials, allMaterials, modelObjects, modelForProject, sampleModelReview, interiorTransitions, transitionMaterials, finishScheduleRows, level2Elements, level2Rooms, allRooms, planVoids, sheetTransforms, sheetTransformFor, toSheetPoint } = await import("../lib/jelleff-model.ts");
+const { elements, materials, rooms, planTransform, systemElements, systemMaterials, allMaterials, modelObjects, modelForProject, sampleModelReview, interiorTransitions, transitionMaterials, finishScheduleRows, level2Elements, level2Rooms, allRooms, planVoids, sheetTransforms, sheetTransformFor, toSheetPoint, partitionTypes, partitionSchedule } = await import("../lib/jelleff-model.ts");
 const M = await import("../lib/model.ts");
 const { ALL_SCREENS } = await import("../lib/screens.ts");
 const { startingDraft } = await import("../lib/project-scope.ts");
@@ -151,7 +151,6 @@ const operables = l2.filter(o => o.materialId === "operable-partition");
 assert.deepEqual(operables.map(o => [o.id, o.quantity.unit, o.height, prop(o, "Height (A1.2)")]), [["l2-operable-activity", "LF", 10, "10'-0\" high"], ["l2-operable-mpr", "LF", 9 + 8 / 12, "9'-8\" high"]]);
 assert(operables.every(o => o.quantity.value === o.dimensions.lengthFt && o.quantity.value > 15), "Counted by length");
 assert.deepEqual([find("l2-guardrail").quantity.unit, find("l2-guardrail").height], ["LF", 3.5]);
-assert.equal(prop(find("l2-it-west"), "Partition tag (A1.2)"), "SA.3.21", "Type tags as read on A1.2");
 assert.deepEqual(roomRow("210").level === "L2" && [roomRow("210").baseTags, roomRow("210").transitions, roomRow("210").floors[0].tag], [[], [], null]);
 assert(roomRow("200").areaSf > roomRow("201").areaSf, "Corridor bigger than the IT closet");
 assert.deepEqual(M.filterObjects(objects, { level: "L2", kind: "glass" }).map(o => o.id), ["l2-game-storefront-west", "l2-game-storefront", "l2-mpr-storefront"]);
@@ -179,6 +178,53 @@ assert(close(toSheetPoint("A12.2", gymCorner), [557.6, 827.4]), "A12.2: same sca
 assert(close(toSheetPoint("A1.1", find("l2-it-west").points[0]), [1142, 997]), "Round trip to the traced pixels");
 assert.equal(toSheetPoint("A5.1", gymCorner), null, "No transform, no highlight");
 assert.equal(sheetTransformFor("A8.1"), null);
+
+// ── Partition types: A8.1 schedules + legend, the tags on A1.1 / A1.2, and the general note ──
+assert.deepEqual(partitionTypes.map(r => [r.tag, r.roughThickness]), [["SA2.10", "<varies>"], ["SA2.13", '3 1/8"'], ["SA3.10", '4 1/4"'], ["SA6.10", '6 5/8"'],
+  ["SA3.20", '4 7/8"'], ["SA3.21", '4 7/8"'], ["SA6.20", "<varies>"], ["SA6.21", '7 1/4"'], ["SA8.20", '9 1/4"']], "Both A8.1 schedules, as printed");
+const legendNominal = r => ({ 2: 2.5, 3: 3.625, 6: 6, 8: 8 })[r.tag.slice(2, -3)] + Number(r.tag.at(-2)) * 5 / 8;
+for (const r of partitionTypes) assert.equal(legendNominal(r), r.roughThicknessIn ?? r.modeledThicknessIn, `${r.tag}: the legend decode (studs + 5/8 in. per layer) matches the schedule`);
+const sa321 = partitionTypes.find(r => r.tag === "SA3.21");
+assert.deepEqual([sa321.construction, sa321.ratingHeight, sa321.unitWidth, sa321.gypsum, sa321.uniqueCondition, sa321.fireRating, sa321.source.sheet],
+  ["Steel (metal studs)", "Full height / underside of structure (not rated)", '3 5/8" metal', "One layer, each side", "Sound attenuation full height", "Not rated (NR)", "A8.1"]);
+assert.equal(partitionTypes.find(r => r.tag === "SA2.13").uniqueCondition, "3 (not in the A8.1 legend)", "A code the legend doesn't list stays explicit");
+assert.deepEqual(["SA. 3. 10", "sa 3.21", "SA3.20", "SA.1.21"].map(M.normalizePartitionTag), ["SA3.10", "SA3.21", "SA3.20", "SA1.21"]);
+
+const studWalls = objects.filter(o => o.partitionType);
+assert(objects.filter(o => o.materialId.startsWith("partition")).every(o => o.partitionType && o.partitionBasis), "Every stud partition has a type and a basis");
+assert(objects.filter(o => !o.materialId.startsWith("partition")).every(o => o.partitionType === null && o.partitionBasis === null), "Nothing else does");
+const byBasis = b => studWalls.filter(o => o.partitionBasis === b).map(o => `${o.id} ${o.partitionType.tag}`).sort();
+assert.deepEqual(byBasis("tag"), ["fitness-office SA8.20", "l2-elec-west SA3.10", "l2-elevator-west SA3.21", "l2-game-west SA3.10", "l2-it-west SA3.21",
+  "l2-kitchen-east SA6.20", "l2-kitchen-west SA6.20", "office-105-south SA6.20", "office-divider SA2.10", "office-east SA2.10"], "Tags whose leaders end on a traced segment");
+assert.deepEqual(byBasis("unverified"), ["fitness-west SA3.20", "l2-janitor-west SA3.20", "l2-mech-north SA3.20", "l2-mech-south SA3.20", "l2-stair-b-south SA3.20"], "Tags nearby that can't be tied to the segment");
+assert.equal(byBasis("general-note").length, studWalls.length - 15);
+assert(studWalls.filter(o => o.partitionBasis !== "tag").every(o => o.partitionType.tag === partitionSchedule.defaultType), "Untagged walls are SA3.20 by the general note");
+for (const o of studWalls) {
+  assert.equal(o.dimensions.thicknessIn, Math.round(o.partitionType.modeledThicknessIn * 100) / 100, `${o.id}: thickness from its type`);
+  assert.equal(prop(o, "Partition type"), o.partitionType.tag);
+}
+assert.deepEqual(["Partition type", "Stud width", "Unique condition", "Rough thickness", "Type basis"].map(l => prop(find("l2-it-west"), l)),
+  ["SA3.21", '3 5/8" metal', "Sound attenuation full height", '4 7/8"', "Tagged SA3.21 on A1.2"]);
+assert.deepEqual([prop(find("office-divider"), "Rough thickness"), find("office-divider").dimensions.thicknessIn, prop(find("office-divider"), "Type basis")], ["<varies>", 3.13, "Tagged SA2.10 on A1.1"]);
+assert.equal(prop(find("office-west"), "Type basis"), partitionSchedule.defaultNote);
+assert.match(prop(find("l2-mech-north"), "Type basis"), /^Unverified: SA3\.10 tags .+\. Modeled as SA3\.20 by the general note\.$/);
+assert(!objects.some(o => o.properties.some(p => /Partition tag \(A1\.2\)/.test(p.label) || /SA\.?1\.21/.test(p.value))), "The loose tag property and the misread SA.1.21 are gone");
+assert.equal(find("l2-elevator-west").name, "Office 206 / elevator 207 partition");
+
+// resolveObjects refuses a partition that disagrees with A8.1 or the general note.
+const officeWest = elements.find(e => e.id === "office-west");
+const resolveWall = patch => M.resolveObjects([{ ...officeWest, ...patch }], allMaterials, [], partitionSchedule);
+assert.equal(resolveWall({ materialId: "partition-sa3-21", partitionTag: "sa 3.21" })[0].partitionBasis, "tag");
+assert.throws(() => resolveWall({ partitionTag: "SA. 3. 21" }), /plan tags SA3\.21 but the assembly is SA3\.20/);
+assert.throws(() => resolveWall({ materialId: "partition-sa3-21" }), /untagged, so SA3\.20 by the general note, but the assembly is SA3\.21/);
+assert.throws(() => resolveWall({ thickness: 0.5 }), /modeled 6 in\. thick, SA3\.20 is 4\.875 in\./);
+assert.throws(() => resolveWall({ materialId: "envelope", thickness: 1, partitionTag: "SA. 3. 20" }), /isn't a partition type/);
+assert.throws(() => resolveWall({ partitionTag: "SA. 3. 20", partitionUnverified: "a nearby tag" }), /tagged SA3\.20 and unverified at once/);
+assert.throws(() => M.resolveObjects([officeWest], allMaterials, [], { ...partitionSchedule, types: [] }), /SA3\.20 is not on the partition schedule/);
+
+// The SA6.20 tag put the kitchen's west wall at x 1277 on A1.2; the lobby void and guardrail stop there.
+assert.deepEqual(find("l2-kitchen-west").points.map(p => toSheetPoint("A1.2", p).map(Math.round)), [[1277, 1138], [1277, 1305]]);
+assert.deepEqual([planVoids.find(v => v.id === "void-lobby"), find("l2-guardrail")].map(x => Math.round(Math.max(...x.points.map(p => toSheetPoint("A1.2", p)[0])))), [1275, 1275]);
 
 // ── Views and screens ──
 assert.deepEqual(M.MODEL_VIEWS.map(v => v.screen), ["model", "model-mep", "model-structural", "model-exterior"]);
