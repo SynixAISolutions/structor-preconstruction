@@ -26,6 +26,9 @@ const finishSchedule: SourceRef = {
 const finishPlan: SourceRef = {
   drawing: "Jelleff drawing set", sheet: "A12.2", page: 80, detail: "Level 01 - finish plan", asset: "/models/jelleff/a12-2.png",
 };
+const finishPlanL2: SourceRef = {
+  drawing: "Jelleff drawing set", sheet: "A12.3", page: 81, detail: "Level 02 - finish plan", asset: "/models/jelleff/a12-3.png",
+};
 export const levelSource: SourceRef = {
   drawing: "Jelleff drawing set", sheet: "A5.1", page: 57, detail: "Building sections: first floor 0 ft, second floor 14 ft, low roof 28 ft", asset: "/models/jelleff/a5-1.png",
 };
@@ -115,8 +118,8 @@ export const materials: MaterialInfo[] = [
     id: "concrete", name: "PLC-01 - polished concrete", color: "#c5c2b9", status: "Documented",
     discipline: "architectural", division: "03", specSection: "03 33 00", tag: "PLC-01", base: "WB-01", unit: "SF", views: ["interior"],
     properties: [],
-    description: "The lobby and circulation are tagged PLC-01 on A12.2. A12.1 lists Ardex, Ultraflor Diamatic, low gloss. The slab thickness and display color are illustrative.",
-    sources: [finishPlan, finishSchedule],
+    description: "Tagged PLC-01 on A12.2 (lobby and circulation) and A12.3 (Level 02 corridor). A12.1 lists Ardex, Ultraflor Diamatic, low gloss. WB-01 is the field base; A12.1 puts WB-02 along PT-02 walls and WB-03 along PT-03 walls, which the model doesn't split out. The slab thickness and display color are illustrative.",
+    sources: [finishSchedule],
   },
   {
     id: "carpet", name: "CPT-01 - carpet", color: "#959d92", status: "Documented",
@@ -136,8 +139,8 @@ export const materials: MaterialInfo[] = [
     id: "tile", name: "FT-01 - taupe floor tile", color: "#b8b2a0", status: "Documented",
     discipline: "architectural", division: "09", specSection: "09 30 00", tag: "FT-01", base: "TB-01", unit: "SF", views: ["interior"],
     properties: [{ label: "Showers", value: "FT-02, 2\" x 2\" (not modeled)" }],
-    description: "Wet-area floors are tagged FT-01 on A12.2. A12.1 lists Tilebar Nashville, taupe matte, 12 x 24 in.; shower areas use FT-02. Small shower transitions are omitted from this room-level model.",
-    sources: [finishPlan, finishSchedule],
+    description: "Tagged FT-01 on A12.2 (Level 01 wet areas) and A12.3 (toilets 203-205). A12.1 lists Tilebar Nashville, taupe matte, 12 x 24 in.; shower areas use FT-02. Small shower transitions are omitted from this room-level model.",
+    sources: [finishSchedule],
   },
   {
     id: "entry-grille", name: "WOG-01 - entrance floor grille", color: "#7d8989", status: "Documented",
@@ -150,8 +153,8 @@ export const materials: MaterialInfo[] = [
     id: "service-floor", name: "SCE-01 - sealed concrete", color: "#a9aca6", status: "Documented",
     discipline: "architectural", division: "03", specSection: "03 33 00", tag: "SCE-01", unit: "SF", views: ["interior"],
     properties: [],
-    description: "Storage 120 and electrical utility 119A are tagged SCE-01 on A12.2. A12.1 lists sealed concrete with a clear, premium-quality, low-VOC sealer. The grouped service zone also includes a simplified stair footprint.",
-    sources: [finishPlan, finishSchedule],
+    description: "Tagged SCE-01 on A12.2 (storage 120, electrical utility 119A) and A12.3 (IT 201, electrical 217, mechanical 218, janitor 221). A12.1 lists sealed concrete with a clear, premium-quality, low-VOC sealer. The grouped Level 01 service zone also includes a simplified stair footprint.",
+    sources: [finishSchedule],
   },
   {
     id: "door", name: "Door leaf - schematic", color: "#81876f", status: "Illustrative",
@@ -389,8 +392,14 @@ export const finishScheduleRows: FinishScheduleRow[] = [
   row("PLC-01", "03 33 00", "Concrete finishing", "Polished concrete", "Ardex", "Ultraflor Diamatic", "Low gloss", "", ""),
   row("SCE-01", "03 33 00", "Concrete finishing", "Sealed concrete (BOH)", "Ardex", "", "", "", "Clear sealer, premium quality, low VOC"),
   row("FT-01", "09 30 00", "Tiling", "Floor tile", "Tilebar", "Nashville", "Taupe, matte finish", "12\" x 24\"", "Install: soldier course; see plans"),
+  row("QT-01", "09 30 00", "Tiling", "Quarry tile", "Daltile", "Quarry Tile", "Ashen grey, abrasive", "6\" x 6\"", ""),
   row("TB-01", "09 30 00", "Tiling", "Tile base", "Tilebar", "Nashville", "Beige, matte finish", "6\" x TBD", ""),
+  row("TB-02", "09 30 00", "Tiling", "Tile base", "Daltile", "Quarry Tile Round Top Cove Base Q3565", "Ashen grey", "5\" x 6\"", "Include outside and inside corner profiles as needed"),
+  row("LVT-01", "09 65 00", "Resilient flooring", "Resilient flooring (wood-look)", "Interface", "Northern Grain A025", "A02611 Oak Satin", "3 mm; 25 cm x 1 m", ""),
+  row("LVT-02", "09 65 00", "Resilient flooring", "Resilient flooring (yellow)", "Interface", "Studioset A007", "A00712 Marigold", "3 mm; 25 cm x 1 m", ""),
+  row("LVT-03", "09 65 00", "Resilient flooring", "Resilient flooring (green)", "Interface", "Studioset A007", "A00715 Chartreuse", "3 mm; 25 cm x 1 m", ""),
   row("RF-01", "09 65 00", "Resilient flooring", "Resilient flooring", "Mondo", "Sports Impact", "136 Brown", "7/16\" thk; 91 cm x 91 cm", "Install: ashlar"),
+  row("RF-02", "09 65 00", "Resilient flooring", "Resilient flooring (stairs)", "Nora", "Norament Grano", "5302 Angelica Root", "Article 468 (5' wide)", "Include black anti-slip nosing strip"),
   row("TS-02", "09 65 00", "Resilient flooring", "Resilient floor transition", "Schluter", "Vinpro-U", "Stainless steel V2A", "", "Concrete to LVT"),
   row("TS-03", "09 65 00", "Resilient flooring", "Concrete transition", "Johnsonite", "Reno-U", "Finish TBD", "", "Concrete to floor tile"),
   row("TS-04", "09 65 00", "Resilient flooring", "Carpet transition", "Schluter", "Reno TK", "Stainless steel V2A", "", "Concrete to carpet"),
@@ -417,6 +426,15 @@ export const transitionMaterials: MaterialInfo[] = [
   { id: "transition-gym", name: "TS-06 - gym floor transition", color: "#8b8f92", status: "Documented", sources: [detail("E", "concrete to fitness flooring"), finishSchedule],
     description: "Continuous extruded aluminum cover plate where the gym or fitness floor meets concrete (A12.1 detail E).",
     discipline: "architectural", division: "09", specSection: "09 65 00", tag: "TS-06", unit: "LF", views: ["interior"], properties: [] },
+  { id: "transition-resilient-concrete", name: "TS-02 - resilient floor transition", color: "#a2a6a8", status: "Documented", sources: [detail("B", "resilient to concrete"), finishSchedule],
+    description: "Reducer strip where resilient flooring meets concrete (A12.1 detail B).",
+    discipline: "architectural", division: "09", specSection: "09 65 00", tag: "TS-02", unit: "LF", views: ["interior"], properties: [] },
+  { id: "transition-tile", name: "TS-03 - concrete transition", color: "#959a9c", status: "Documented", sources: [detail("D", "concrete to tile"), finishSchedule],
+    description: "Metal edge strip where tile meets concrete (A12.1 detail D).",
+    discipline: "architectural", division: "09", specSection: "09 65 00", tag: "TS-03", unit: "LF", views: ["interior"], properties: [] },
+  { id: "transition-resilient", name: "TS-07 - resilient floor transition", color: "#9fa3a1", status: "Documented", sources: [detail("F", "resilient floor to resilient floor"), finishSchedule],
+    description: "Transition strip between two resilient floors (A12.1 detail F).",
+    discipline: "architectural", division: "09", specSection: "09 65 00", tag: "TS-07", unit: "LF", views: ["interior"], properties: [] },
 ];
 
 const atOpening = "Traced at the door opening on A1.1; the strip type follows the two finishes and the A12.1 schedule. Confirm on the finish plan.";
@@ -436,18 +454,33 @@ export const interiorTransitions: ModelInput[] = [
 
 // ── Level 02 (A1.2) ─────────────────────────────────────────────────────────
 // Traced from A1.2, which is plotted at the same position and scale as A1.1, so it uses the same
-// plan transform. The floor sits 14 ft up (A5.1). The Level 02 finish plan isn't among the app's
-// sheets, so its floors carry no finish tag; partition type tags are kept as read on A1.2.
+// plan transform. The floor sits 14 ft up (A5.1). Floor finishes, finish lines and transition
+// marks are read from the Level 02 finish plan (A12.3) and resolved through A12.1.
 
 const planL2: SourceRef = { drawing: "Jelleff drawing set", sheet: "A1.2", page: 47, detail: "Level 02 - second floor plan", asset: "/models/jelleff/a1-2.png" };
 const L2 = 14;
 const tracedL2 = "Simplified manual trace from A1.2 for visualization; not surveyed geometry, quantities, or construction coordination.";
 
 export const level2Materials: MaterialInfo[] = [
-  { id: "l2-floor", name: "Level 02 floor zone - finish not scheduled", color: "#d2cec4", status: "Illustrative", sources: [planL2],
-    description: "Room-level floor zone traced from A1.2. The Level 02 finish plan isn't among the app's sheets, so no finish is assigned.",
+  { id: "l2-floor", name: "Level 02 floor zone - no finish tag", color: "#d2cec4", status: "Illustrative", sources: [finishPlanL2],
+    description: "Room-level floor zone traced from A1.2 where A12.3 shows no floor finish tag, so no finish is assigned.",
     discipline: "architectural", division: "09", specSection: null, unit: "SF", views: ["interior"],
-    properties: [{ label: "Finish", value: "Not scheduled in the sheets available (Level 02 finish plan needed)" }] },
+    properties: [{ label: "Finish", value: "Not tagged on A12.3" }] },
+  { id: "lvt-wood", name: "LVT-01 - wood-look resilient flooring", color: "#b89a74", status: "Documented", sources: [finishSchedule],
+    description: "A12.3 tags activity 215, game room 213, storage 209 and both multipurpose rooms LVT-01. A12.1 lists Interface Northern Grain A025, A02611 Oak Satin, 3 mm, 25 cm x 1 m. WB-01 is the field base; A12.1 puts WB-02 along PT-02 walls and WB-03 along PT-03 walls, which the model doesn't split out. Display color is approximate.",
+    discipline: "architectural", division: "09", specSection: "09 65 00", tag: "LVT-01", base: "WB-01", unit: "SF", views: ["interior"], properties: [] },
+  { id: "lvt-yellow", name: "LVT-02 - yellow resilient flooring", color: "#d6b04a", status: "Documented", sources: [finishSchedule],
+    description: "A12.3 tags the band along the south side of game room 213 LVT-02, split from its LVT-01 floor by a resilient-to-resilient finish line. A12.1 lists Interface Studioset A007, A00712 Marigold, 3 mm, 25 cm x 1 m.",
+    discipline: "architectural", division: "09", specSection: "09 65 00", tag: "LVT-02", base: "WB-01", unit: "SF", views: ["interior"], properties: [] },
+  { id: "lvt-green", name: "LVT-03 - green resilient flooring", color: "#a8b552", status: "Documented", sources: [finishSchedule],
+    description: "A12.3 tags the west band of multipurpose room 1 LVT-03, split from its LVT-01 floor by a resilient-to-resilient finish line. A12.1 lists Interface Studioset A007, A00715 Chartreuse, 3 mm, 25 cm x 1 m.",
+    discipline: "architectural", division: "09", specSection: "09 65 00", tag: "LVT-03", base: "WB-01", unit: "SF", views: ["interior"], properties: [] },
+  { id: "quarry-tile", name: "QT-01 - quarry tile", color: "#9c9a94", status: "Documented", sources: [finishSchedule],
+    description: "A12.3 tags kitchen 208 QT-01. A12.1 lists Daltile quarry tile, Ashen Grey abrasive, 6 x 6 in. The base is TB-02, the schedule's quarry tile cove base; A12.3 doesn't tag bases. FRP-01 wall panels are not modeled.",
+    discipline: "architectural", division: "09", specSection: "09 30 00", tag: "QT-01", base: "TB-02", unit: "SF", views: ["interior"], properties: [] },
+  { id: "stair-rubber", name: "RF-02 - stair rubber flooring", color: "#8f7f74", status: "Documented", sources: [finishSchedule],
+    description: "A12.3 tags stair B RF-02. A12.1 lists Nora Norament Grano, 5302 Angelica Root, with a black anti-slip nosing strip. The stair is shown as a flat zone at the second floor, and no base is scheduled for it.",
+    discipline: "architectural", division: "09", specSection: "09 65 00", tag: "RF-02", unit: "SF", views: ["interior"], properties: [] },
   { id: "interior-storefront", name: "Aluminum storefront - interior", color: "#9fd0dc", status: "Documented", sources: [planL2],
     description: "Interior aluminum storefront along the Level 02 corridor (A1.2, \"aluminum storefront typ.\"). Height, mullions and glass type are illustrative.",
     discipline: "architectural", division: "08", specSection: null, unit: "SF", views: ["interior"],
@@ -476,36 +509,49 @@ const operable = (id: string, name: string, a: Point, b: Point, heightFt: number
   source: planL2, geometryStatus: tracedL2, properties: [{ label: "Height (A1.2)", value: noted }],
   description: `Operable partition noted on A1.2 as ${noted}.`,
 });
-const floor2 = (id: string, name: string, pixels: Point[], room: string): ModelInput => ({
-  id, name, kind: "floor", materialId: "l2-floor", points: pixels.map(point), base: L2 - 0.18, height: 0.18, level: "L2", room,
-  source: planL2, geometryStatus: tracedL2, description: "Level 02 room zone traced from A1.2. Edges and recesses are simplified.",
+/** A Level 02 floor zone: a room, or a band where A12.3 draws a finish line inside it (`zone`, no label). */
+type Level2Floor = { id: string; name: string; number: string; finish: string; pixels: Point[]; label?: Point; zone?: string; openEdges?: number[]; note?: string };
+const floor2 = (f: Level2Floor): ModelInput => ({
+  id: f.id, name: `${f.name} ${f.number}${f.zone ? ` - ${f.zone}` : ""} - Level 02 floor`, kind: "floor", materialId: f.finish, points: f.pixels.map(point),
+  base: L2 - 0.18, height: 0.18, level: "L2", room: f.number, openEdges: f.openEdges, source: finishPlanL2, geometryStatus: tracedL2,
+  properties: f.note ? [{ label: "Finish plan (A12.3)", value: f.note }] : [],
+  description: "Level 02 room zone traced from A1.2 and checked against A12.3, where its finish is read. Edges and recesses are simplified.",
 });
+const concreteDoor = "Door mark SLE / PLC (sealed to polished concrete). A12.1 has no transition strip for concrete to concrete.";
 
-const circulation2: Point[] = [[1500, 790], [1545, 790], [1548, 1043], [1705, 983], [1705, 1000], [1662, 1043], [1445, 1138], [1405, 1150], [1277, 1140], [1140, 1140], [1140, 1099], [1350, 1099], [1350, 1092], [1417, 1092], [1417, 1082], [1500, 1082]];
-/** `label` where a room's middle falls outside it (the L-shaped corridor). */
-const level2Floors: { id: string; name: string; number: string; pixels: Point[]; label?: Point }[] = [
-  { id: "l2-circulation", name: "Circulation", number: "200", pixels: circulation2, label: [1420, 1118] },
-  { id: "l2-it", name: "IT", number: "201", pixels: [[1144, 1003], [1178, 1003], [1178, 1095], [1144, 1095]] },
-  { id: "l2-toilet-203", name: "Toilet", number: "203", pixels: [[1182, 1003], [1227, 1003], [1227, 1095], [1182, 1095]] },
-  { id: "l2-toilet-204", name: "Toilet", number: "204", pixels: [[1231, 1003], [1285, 1003], [1285, 1095], [1231, 1095]] },
-  { id: "l2-toilet-205", name: "Toilet", number: "205", pixels: [[1289, 1036], [1348, 1036], [1348, 1095], [1289, 1095]] },
-  { id: "l2-closet", name: "Closet", number: "209A", pixels: [[1289, 1003], [1348, 1003], [1348, 1032], [1289, 1032]] },
-  { id: "l2-office", name: "Office / reception", number: "206", pixels: [[1352, 1003], [1415, 1003], [1415, 1088], [1352, 1088]] },
-  { id: "l2-kitchen", name: "Kitchen", number: "208", pixels: [[1279, 1142], [1378, 1142], [1378, 1196], [1398, 1196], [1452, 1302], [1279, 1302]] },
-  { id: "l2-storage", name: "Storage", number: "209", pixels: [[1381, 1142], [1404, 1150], [1398, 1192], [1381, 1192]] },
-  { id: "l2-mpr-1", name: "Multipurpose room 1", number: "210", pixels: [[1405, 1150], [1445, 1138], [1543, 1094], [1600, 1218], [1455, 1300], [1400, 1196]] },
-  { id: "l2-mpr-2", name: "Multipurpose room 2", number: "211", pixels: [[1543, 1094], [1662, 1043], [1705, 1000], [1768, 1166], [1600, 1218]] },
-  { id: "l2-game", name: "Game room", number: "213", pixels: [[1550, 807], [1723, 807], [1723, 970], [1705, 983], [1550, 1041]] },
-  { id: "l2-activity", name: "Activity 1", number: "215", pixels: [[1550, 723], [1723, 723], [1723, 803], [1550, 803]] },
-  { id: "l2-stair-b", name: "Stair B", number: "S202", pixels: [[1364, 723], [1497, 723], [1497, 788], [1364, 788]] },
-  { id: "l2-elec", name: "Electrical", number: "217", pixels: [[1407, 792], [1497, 792], [1497, 834], [1407, 834]] },
-  { id: "l2-mech", name: "Mechanical", number: "218", pixels: [[1364, 838], [1497, 838], [1497, 942], [1364, 942]] },
-  { id: "l2-janitor", name: "Janitor / laundry", number: "221", pixels: [[1430, 946], [1497, 946], [1497, 994], [1430, 994]] },
+const circulation2: Point[] = [[1500, 723], [1545, 723], [1548, 1043], [1705, 983], [1705, 1000], [1683, 1037], [1662, 1043], [1445, 1138], [1400, 1150], [1394, 1140], [1072, 1140], [1072, 1099], [1350, 1099], [1350, 1092], [1417, 1092], [1417, 1082], [1500, 1082]];
+/**
+ * Finishes as tagged on A12.3. `label` where a room's middle falls outside it (the L-shaped corridor).
+ * Game room 213 and multipurpose room 1 each have a band A12.3 splits off with an RF / RF finish
+ * line; that line is an open edge (no wall, no base) of both zones.
+ */
+const level2Floors: Level2Floor[] = [
+  { id: "l2-circulation", name: "Circulation", number: "200", finish: "concrete", pixels: circulation2, label: [1420, 1118] },
+  { id: "l2-it", name: "IT", number: "201", finish: "service-floor", pixels: [[1114, 1003], [1178, 1003], [1178, 1095], [1114, 1095]], note: concreteDoor },
+  { id: "l2-toilet-203", name: "Toilet", number: "203", finish: "tile", pixels: [[1182, 1003], [1227, 1003], [1227, 1095], [1182, 1095]] },
+  { id: "l2-toilet-204", name: "Toilet", number: "204", finish: "tile", pixels: [[1231, 1003], [1285, 1003], [1285, 1095], [1231, 1095]] },
+  { id: "l2-toilet-205", name: "Toilet", number: "205", finish: "tile", pixels: [[1289, 1036], [1348, 1036], [1348, 1095], [1289, 1095]] },
+  { id: "l2-closet", name: "Closet", number: "206A", finish: "l2-floor", pixels: [[1289, 1003], [1348, 1003], [1348, 1032], [1289, 1032]], note: "No floor tag, and no finish mark at its door." },
+  { id: "l2-office", name: "Office / reception", number: "206", finish: "l2-floor", pixels: [[1352, 1003], [1415, 1003], [1415, 1088], [1352, 1088]],
+    note: "No floor tag. The door mark reads RF, so the floor is resilient, but A12.3 doesn't say which product." },
+  { id: "l2-kitchen", name: "Kitchen", number: "208", finish: "quarry-tile", pixels: [[1279, 1140], [1342, 1140], [1342, 1213], [1426, 1213], [1460, 1299], [1279, 1302]] },
+  { id: "l2-storage", name: "Storage", number: "209", finish: "lvt-wood", pixels: [[1346, 1140], [1394, 1140], [1425, 1211], [1346, 1211]] },
+  { id: "l2-mpr-1", name: "Multipurpose room 1", number: "210", finish: "lvt-wood", pixels: [[1463.4, 1129.8], [1543, 1094], [1600, 1218], [1520.9, 1263.8]], openEdges: [3] },
+  { id: "l2-mpr-1-band", name: "Multipurpose room 1", number: "210", zone: "LVT-03 band", finish: "lvt-green",
+    pixels: [[1400, 1150], [1445, 1138], [1463.4, 1129.8], [1520.9, 1263.8], [1460, 1299], [1420, 1198], [1410, 1177]], openEdges: [2] },
+  { id: "l2-mpr-2", name: "Multipurpose room 2", number: "211", finish: "lvt-wood", pixels: [[1543, 1094], [1662, 1043], [1683, 1037], [1705, 1000], [1768, 1166], [1600, 1218]] },
+  { id: "l2-game", name: "Game room", number: "213", finish: "lvt-wood", pixels: [[1550, 807], [1723, 807], [1723, 963], [1550, 963]], openEdges: [2] },
+  { id: "l2-game-band", name: "Game room", number: "213", zone: "LVT-02 band", finish: "lvt-yellow", pixels: [[1550, 963], [1723, 963], [1723, 970], [1705, 983], [1550, 1041]], openEdges: [0] },
+  { id: "l2-activity", name: "Activity 1", number: "215", finish: "lvt-wood", pixels: [[1550, 723], [1723, 723], [1723, 803], [1550, 803]] },
+  { id: "l2-stair-b", name: "Stair B", number: "S202", finish: "stair-rubber", pixels: [[1364, 723], [1497, 723], [1497, 788], [1364, 788]] },
+  { id: "l2-elec", name: "Electrical", number: "217", finish: "service-floor", pixels: [[1407, 792], [1497, 792], [1497, 834], [1407, 834]] },
+  { id: "l2-mech", name: "Mechanical", number: "218", finish: "service-floor", pixels: [[1364, 838], [1497, 838], [1497, 942], [1426, 942], [1426, 996], [1364, 996]], note: concreteDoor },
+  { id: "l2-janitor", name: "Janitor / laundry", number: "221", finish: "service-floor", pixels: [[1430, 946], [1497, 946], [1497, 994], [1430, 994]], note: concreteDoor },
 ];
 
 const serviceCoreTags = "SA3.10 tags sit around the stair B / mechanical / janitor walls on A1.2, but their leaders can't be followed to this segment";
 export const level2Elements: ModelInput[] = [
-  ...level2Floors.map(f => floor2(f.id, `${f.name} ${f.number} - Level 02 floor`, f.pixels, f.number)),
+  ...level2Floors.map(floor2),
   // Envelope around the Level 02 wing (schematic, like Level 01's).
   wall2("l2-north", "Level 02 - north wall", [1362, 720], [1725, 720], "envelope"),
   wall2("l2-east", "Level 02 - east wall, activity and game rooms", [1725, 720], [1725, 975], "envelope"),
@@ -518,37 +564,63 @@ export const level2Elements: ModelInput[] = [
   { ...wall2("l2-stair-b-south", "Stair B - south partition", [1362, 790], [1497, 790], "partition", undefined, "S202"), partitionUnverified: serviceCoreTags },
   wall2("l2-elec-west", "Electrical 217 - west partition", [1405, 792], [1405, 836], "partition-sa3-10", "SA. 3. 10", "217"),
   { ...wall2("l2-mech-north", "Mechanical 218 - north partition", [1362, 836], [1497, 836], "partition", undefined, "218"), partitionUnverified: serviceCoreTags },
-  { ...wall2("l2-mech-south", "Mechanical 218 - south partition", [1362, 944], [1497, 944], "partition", undefined, "218"), partitionUnverified: serviceCoreTags },
+  { ...wall2("l2-mech-south", "Mechanical 218 / janitor 221 partition", [1428, 944], [1497, 944], "partition", undefined, "218"), partitionUnverified: serviceCoreTags },
   { ...wall2("l2-janitor-west", "Janitor / laundry 221 - west partition", [1428, 944], [1428, 996], "partition", undefined, "221"), partitionUnverified: serviceCoreTags },
   wall2("l2-corridor-west", "Corridor - west partition (rooms 217-221, elevator)", [1500, 790], [1500, 1080], "partition", undefined, "200"),
   wall2("l2-game-west", "Game room 213 - corridor partition", [1548, 722], [1548, 985], "partition-sa3-10", "SA. 3. 10", "213"),
-  wall2("l2-it-west", "IT 201 - west partition", [1142, 997], [1142, 1097], "partition-sa3-21", "SA. 3. 21", "201"),
+  { ...wall2("l2-it-west", "IT 201 - west partition", [1112, 997], [1112, 1097], "partition", undefined, "201"),
+    partitionUnverified: "An SA3.21 tag sits inside IT 201 on A1.2 with no leader, midway between its walls, so it can't be tied to this one" },
   wall2("l2-it-toilet", "IT 201 / toilet 203 partition", [1180, 997], [1180, 1097], "partition", undefined, "203"),
   wall2("l2-toilets", "Toilets 203 / 204 partition", [1229, 997], [1229, 1097], "partition", undefined, "204"),
   wall2("l2-toilet-205-wall", "Toilet 204 / 205 partition", [1287, 997], [1287, 1097], "partition", undefined, "205"),
-  wall2("l2-closet-wall", "Closet 209A / toilet 205 partition", [1287, 1034], [1350, 1034], "partition", undefined, "209A"),
+  wall2("l2-closet-wall", "Closet 206A / toilet 205 partition", [1287, 1034], [1350, 1034], "partition", undefined, "206A"),
   wall2("l2-office-west", "Office / reception 206 - west partition", [1350, 997], [1350, 1097], "partition", undefined, "206"),
-  wall2("l2-toilets-south", "Toilets - corridor partition", [1142, 1097], [1350, 1097], "partition", undefined, "200"),
+  wall2("l2-toilets-south", "Toilets - corridor partition", [1112, 1097], [1350, 1097], "partition", undefined, "200"),
   wall2("l2-office-south", "Office / reception 206 - corridor partition", [1350, 1090], [1417, 1090], "partition", undefined, "206"),
   wall2("l2-elevator-west", "Office 206 / elevator 207 partition", [1417, 997], [1417, 1080], "partition-sa3-21", "SA. 3. 21", "206"),
   wall2("l2-elevator-south", "Elevator 207 - south shaft wall", [1417, 1080], [1502, 1080], "partition"),
   wall2("l2-kitchen-north", "Kitchen 208 - north partition", [1277, 1138], [1395, 1138], "partition", undefined, "208"),
   wall2("l2-kitchen-west", "Kitchen 208 - west partition", [1277, 1138], [1277, 1305], "partition-sa6-20", "SA. 6. 20", "208"),
-  wall2("l2-kitchen-east", "Kitchen 208 / multipurpose room 1 partition", [1398, 1195], [1455, 1305], "partition-sa6-20", "SA. 6. 20", "210"),
+  wall2("l2-kitchen-east", "Kitchen 208 / multipurpose room 1 partition", [1420, 1198], [1460, 1299], "partition-sa6-20", "SA. 6. 20", "210"),
   // Corridor storefronts, operable partitions, guardrail.
   glass2("l2-game-storefront-west", "Game room 213 - storefront at the corridor (west)", [1548, 985], [1548, 1043], "213"),
   glass2("l2-game-storefront", "Game room 213 - angled corridor storefront", [1548, 1043], [1705, 983], "213"),
   glass2("l2-mpr-storefront", "Multipurpose rooms - angled corridor storefront", [1445, 1138], [1662, 1043], "211"),
   operable("l2-operable-activity", "Operable partition - activity 1 / game room", [1552, 805], [1722, 805], 10, "10'-0\" high", "215"),
   operable("l2-operable-mpr", "Operable partition - multipurpose rooms 1 / 2", [1543, 1094], [1600, 1218], 9 + 8 / 12, "9'-8\" high", "210"),
-  { id: "l2-guardrail", name: "Guardrail over the lobby", kind: "wall", materialId: "guardrail", points: [point([1030, 1180]), point([1275, 1180])], base: L2, height: 3.5, thickness: 0.15,
+  { id: "l2-guardrail", name: "Guardrail over the lobby", kind: "wall", materialId: "guardrail", points: [point([1072, 1141]), point([1275, 1141])], base: L2, height: 3.5, thickness: 0.15,
     level: "L2", room: "200", source: planL2, geometryStatus: tracedL2, description: "Woven wire mesh guardrail along the Level 02 edge over the lobby (A1.2)." },
+];
+
+// ── Level 02 transitions: where A12.3 marks a finish change (an X with the two finishes), typed by
+// the A12.1 detail for that pair: RF / PLC is detail B (TS-02), tile / PLC detail D (TS-03), RF / RF
+// detail F (TS-07). Door strips span the opening drawn on A1.2. SLE / PLC (concrete to concrete) has
+// no strip in A12.1, so none is added there.
+const atMark = "Placed where A12.3 marks the finish change; the strip type is A12.1's detail for the two finishes. Door strips span the opening on A1.2.";
+const transition2 = (id: string, name: string, materialId: string, a: Point, b: Point, room: string, adjoins: string, between: string): ModelInput => ({
+  id, name, kind: "transition", materialId, points: [point(a), point(b)], base: L2, height: 0.05, thickness: 0.17, level: "L2", room, adjoins,
+  source: finishPlanL2, geometryStatus: atMark, description: transitionMaterials.find(m => m.id === materialId)!.description,
+  properties: [{ label: "Between", value: between }],
+});
+export const level2Transitions: ModelInput[] = [
+  transition2("ts2-activity", "Activity 1 215 / corridor", "transition-resilient-concrete", [1548, 741], [1548, 764], "215", "200", "215 Activity 1 (LVT-01) / 200 Circulation (PLC-01)"),
+  transition2("ts2-game", "Game room 213 / corridor", "transition-resilient-concrete", [1548, 964], [1548, 987], "213", "200", "213 Game room band (LVT-02) / 200 Circulation (PLC-01)"),
+  transition2("ts2-game-band", "Game room 213 - LVT-01 / LVT-02 finish line", "transition-resilient", [1550, 963], [1723, 963], "213", "213", "213 Game room (LVT-01) / 213 band (LVT-02)"),
+  transition2("ts2-mpr-1", "Multipurpose room 1 210 / corridor", "transition-resilient-concrete", [1416, 1151], [1437, 1143], "210", "200", "210 MPR 1 band (LVT-03) / 200 Circulation (PLC-01)"),
+  transition2("ts2-mpr-1-band", "Multipurpose room 1 210 - LVT-03 / LVT-01 finish line", "transition-resilient", [1463.4, 1129.8], [1520.9, 1263.8], "210", "210", "210 MPR 1 band (LVT-03) / 210 MPR 1 (LVT-01)"),
+  transition2("ts2-mpr-2", "Multipurpose room 2 211 / corridor", "transition-resilient-concrete", [1663, 1048], [1683, 1037], "211", "200", "211 MPR 2 (LVT-01) / 200 Circulation (PLC-01)"),
+  transition2("ts2-storage", "Storage 209 / multipurpose room 1", "transition-resilient", [1410, 1178], [1420, 1198], "209", "210", "209 Storage (LVT-01) / 210 MPR 1 band (LVT-03)"),
+  transition2("ts2-office", "Office / reception 206 / corridor", "transition-resilient-concrete", [1351, 1090], [1373, 1090], "206", "200", "206 Office (RF, product not tagged) / 200 Circulation (PLC-01)"),
+  transition2("ts2-toilet-203", "Toilet 203 / corridor", "transition-tile", [1185, 1097], [1206, 1097], "203", "200", "203 Toilet (FT-01) / 200 Circulation (PLC-01)"),
+  transition2("ts2-toilet-204", "Toilet 204 / corridor", "transition-tile", [1264, 1097], [1284, 1097], "204", "200", "204 Toilet (FT-01) / 200 Circulation (PLC-01)"),
+  transition2("ts2-toilet-205", "Toilet 205 / corridor", "transition-tile", [1321, 1097], [1343, 1097], "205", "200", "205 Toilet (FT-01) / 200 Circulation (PLC-01)"),
+  transition2("ts2-kitchen", "Kitchen 208 / corridor", "transition-tile", [1294, 1138], [1317, 1138], "208", "200", "208 Kitchen (QT-01) / 200 Circulation (PLC-01)"),
 ];
 
 const centroid = (pixels: Point[]): Point => [pixels.reduce((s, p) => s + p[0], 0) / pixels.length, pixels.reduce((s, p) => s + p[1], 0) / pixels.length];
 /** Level 02 room labels, at the middle of each traced room. */
 export const level2Rooms: { id: string; name: string; number: string; center: Point; level: LevelId }[] =
-  level2Floors.map(f => ({ id: f.id, name: f.name, number: f.number, center: point(f.label ?? centroid(f.pixels)), level: "L2" as LevelId }));
+  level2Floors.filter(f => !f.zone).map(f => ({ id: f.id, name: f.name, number: f.number, center: point(f.label ?? centroid(f.pixels)), level: "L2" as LevelId }));
 /** Every room label, both levels. */
 export const allRooms = [...rooms, ...level2Rooms];
 
@@ -556,21 +628,23 @@ export const allRooms = [...rooms, ...level2Rooms];
 export const planVoids: { id: string; level: LevelId; name: string; points: Point[]; source: SourceRef }[] = [
   { id: "void-gym", level: "L2", name: "Open to gym below", points: ([[460, 725], [970, 725], [970, 1445], [460, 1445]] as Point[]).map(point), source: planL2 },
   { id: "void-yard", level: "L2", name: "Open to mechanical yard below", points: ([[1045, 725], [1362, 725], [1362, 995], [1045, 995]] as Point[]).map(point), source: planL2 },
-  { id: "void-lobby", level: "L2", name: "Open to lobby below", points: ([[977, 1180], [1275, 1180], [1275, 1330], [977, 1330]] as Point[]).map(point), source: planL2 },
+  { id: "void-lobby", level: "L2", name: "Open to lobby below", points: ([[977, 1180], [1072, 1180], [1072, 1141], [1275, 1141], [1275, 1330], [977, 1330]] as Point[]).map(point), source: planL2 },
 ];
 
 // ── Sheet coordinates ───────────────────────────────────────────────────────
 
 /**
  * Where plan feet land on each sheet image, in the image's 2400 x 1715 viewBox (the PNGs are
- * 3000 x 2143; scale the viewBox to the image). A1.2 is plotted exactly over A1.1; A12.2 is the same
- * 1/8" scale shifted on its sheet (measured by matching the gym and east-wing linework).
+ * 3000 x 2143; scale the viewBox to the image). A1.2 is plotted exactly over A1.1. A12.2 and A12.3
+ * are the same 1/8" scale shifted on their sheets, measured by cross-correlating their linework with
+ * A1.1 / A1.2 (A12.3: +150.4, +86.4; 0.5% off scale halves the overlap).
  */
 export type SheetTransform = { sheet: string; asset: string; origin: Point; feetPerPixel: number; imageWidth: number; imageHeight: number; levels: LevelId[] };
 export const sheetTransforms: SheetTransform[] = [
   { sheet: "A1.1", asset: "/models/jelleff/a1-1.png", ...planTransform, levels: ["L1"] },
   { sheet: "A1.2", asset: "/models/jelleff/a1-2.png", ...planTransform, levels: ["L2"] },
   { sheet: "A12.2", asset: "/models/jelleff/a12-2.png", ...planTransform, origin: [planTransform.origin[0] + 97.6, planTransform.origin[1] + 102.4], levels: ["L1"] },
+  { sheet: "A12.3", asset: "/models/jelleff/a12-3.png", ...planTransform, origin: [planTransform.origin[0] + 150.4, planTransform.origin[1] + 86.4], levels: ["L2"] },
 ];
 export const sheetTransformFor = (sheet: string): SheetTransform | null => sheetTransforms.find(t => t.sheet === sheet) ?? null;
 /** A plan point (feet) on a sheet's viewBox, or null when there is no transform for that sheet. */
@@ -583,7 +657,7 @@ export function toSheetPoint(sheet: string, [x, z]: Point): Point | null {
 export const allMaterials: MaterialInfo[] = [...materials, ...transitionMaterials, ...level2Materials, ...systemMaterials];
 
 /** Every selectable object in the four views, resolved with quantities and sources. */
-export const modelObjects: ModelObject[] = resolveObjects([...elements, ...interiorTransitions, ...level2Elements, ...systemElements], allMaterials, finishScheduleRows, partitionSchedule);
+export const modelObjects: ModelObject[] = resolveObjects([...elements, ...interiorTransitions, ...level2Elements, ...level2Transitions, ...systemElements], allMaterials, finishScheduleRows, partitionSchedule);
 
 /** The model for a project: Jelleff has one; other projects have none yet. */
 export const modelForProject = (projectId: string): ModelObject[] => projectId === SAMPLE_PROJECT_ID ? modelObjects : [];

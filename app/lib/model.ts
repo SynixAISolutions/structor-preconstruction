@@ -109,6 +109,8 @@ export type ModelInput = Omit<ModelElement, "kind"> & {
   partitionTag?: string;
   /** Why the plan's type for this segment can't be confirmed (a nearby tag whose leader can't be followed). It keeps the default type. */
   partitionUnverified?: string;
+  /** For a floor: edges (edge i runs from point i to the next) that are a finish line inside a room, not a wall. No base runs along them. */
+  openEdges?: number[];
 };
 
 /** One partition type from the A8.1 schedules, with its tag decoded through the A8.1 legend. */
@@ -147,6 +149,7 @@ export type FinishScheduleRow = {
 };
 
 /** `perimeterFt` is a floor zone's edge: the gross base run, door openings not deducted. */
+/** perimeterFt is a floor's edge run along walls, the base line: its open edges (finish lines inside a room) are left out. */
 export type Dimensions = { lengthFt: number | null; areaSf: number | null; perimeterFt: number | null; heightFt: number | null; thicknessIn: number | null; volumeCy: number | null };
 
 /** One selectable object, resolved for the views and the inspector. */
@@ -197,7 +200,7 @@ export function planArea(points: Point[]): number {
 }
 
 /** Every measure of an object's geometry, before choosing the ones that apply to its kind. */
-function measures(kind: ObjectKind, points: Point[], height: number, thickness: number, depth: number): Dimensions {
+function measures(kind: ObjectKind, points: Point[], height: number, thickness: number, depth: number, openEdges: number[] = []): Dimensions {
   const shape = SHAPES[kind];
   if (shape === "segment") {
     const length = Math.hypot(points[1][0] - points[0][0], points[1][1] - points[0][1]);
@@ -205,7 +208,7 @@ function measures(kind: ObjectKind, points: Point[], height: number, thickness: 
   }
   if (shape === "polygon") {
     const area = planArea(points);
-    const perimeter = points.reduce((sum, [x, z], i) => { const [nx, nz] = points[(i + 1) % points.length]; return sum + Math.hypot(nx - x, nz - z); }, 0);
+    const perimeter = points.reduce((sum, [x, z], i) => { const [nx, nz] = points[(i + 1) % points.length]; return openEdges.includes(i) ? sum : sum + Math.hypot(nx - x, nz - z); }, 0);
     return { lengthFt: null, areaSf: area, perimeterFt: perimeter, heightFt: null, thicknessIn: height * 12, volumeCy: area * height / 27 };
   }
   return { lengthFt: null, areaSf: thickness * depth, perimeterFt: null, heightFt: height, thicknessIn: null, volumeCy: thickness * depth * height / 27 };
@@ -258,7 +261,8 @@ export function resolveObjects(inputs: ModelInput[], materials: MaterialInfo[], 
       throw new Error(`${input.id}: modeled ${round((input.thickness ?? 0) * 12)} in. thick, ${partition.tag} is ${partition.modeledThicknessIn} in.`);
     }
     const thickness = input.thickness ?? 0, depth = input.depth ?? thickness;
-    const all = measures(input.kind, input.points, input.height, thickness, depth);
+    if (input.openEdges?.some(i => input.kind !== "floor" || !Number.isInteger(i) || i < 0 || i >= input.points.length)) throw new Error(`${input.id}: open edges must be edges of a floor`);
+    const all = measures(input.kind, input.points, input.height, thickness, depth, input.openEdges);
     const dimensions = Object.fromEntries((Object.keys(all) as (keyof Dimensions)[])
       .map(k => [k, DIMENSIONS[input.kind].includes(k) && all[k] !== null ? round(all[k]!) : null])) as Dimensions;
     const raw = material.unit === "EA" ? 1 : material.unit === "SF" ? all.areaSf : material.unit === "LF" ? all.lengthFt : all.volumeCy;
