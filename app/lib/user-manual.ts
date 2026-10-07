@@ -188,10 +188,11 @@ const workspaceGuides: ManualGuide[] = [
       "Open Connections, then Gmail → View connection → Open bid workspace. In Bid leveling choose Proposal inbox to use the real read-only connector after setup.",
       "The Outlook, BuildingConnected, and Google Drive / OneDrive cards are planned integrations. Their buttons explain the preview; they do not authorize or synchronize those services.",
       "In Appearance, turn on Reduce animation if movement is distracting. The interface also respects the device’s reduced-motion preference.",
+      "Open Sample data to see the current Jelleff sample. Load updated sample backs up this browser's Jelleff data first, then reloads with the latest sample. Saved backups lists each backup with Restore (your current Jelleff data is backed up before it is replaced), Download (a JSON copy), and Delete. When the sample has changed since this browser last saved Jelleff work, a banner offers Load updated sample or Keep my data.",
     ],
-    terms: [{ name: "Role", meaning: "A person’s intended responsibilities and access in a future shared workspace." }, { name: "Connection", meaning: "An authorized link to another service. Seeing a service logo does not mean it is connected." }],
+    terms: [{ name: "Role", meaning: "A person’s intended responsibilities and access in a future shared workspace." }, { name: "Connection", meaning: "An authorized link to another service. Seeing a service logo does not mean it is connected." }, { name: "Sample backup", meaning: "A copy of this browser's Jelleff data, made before a newer sample or an older backup replaces it, so nothing you saved is lost." }],
     example: "For a calmer walkthrough, enable Reduce animation. To inspect incoming proposals, use the Gmail connection route, not a Bid package's Messages tab, which is a separate draft conversation.",
-    reality: "Workspace preferences and roles are UI previews, not durable organization settings or enforced account permissions. Reduce animation lasts for the current app session. Gmail needs server configuration and account authorization; the other connection cards are not live integrations.",
+    reality: "Workspace preferences and roles are UI previews, not durable organization settings or enforced account permissions. Reduce animation lasts for the current app session. Gmail needs server configuration and account authorization; the other connection cards are not live integrations. Sample data affects only the Jelleff demo in this browser; other projects and the shared subcontractor directory stay as they are, and if the browser has no room for the backup, nothing is replaced.",
     related: ["gmail", "saving", "packages"],
   },
   {
