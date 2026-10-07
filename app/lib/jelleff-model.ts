@@ -4,6 +4,7 @@
 
 import { resolveObjects, type FinishScheduleRow, type PartitionSchedule, type PartitionTypeRow, type LevelId, type MaterialInfo, type ModelElement, type ModelInput, type ModelObject, type ModelReviewState, type Point, type SourceRef } from "./model";
 import { SAMPLE_PROJECT_ID } from "./project-scope";
+import { doorMaterialFor, doorMaterials, doorSchedule, doorScheduleRows, doorTraces } from "./jelleff-doors";
 
 export type { MaterialInfo, ModelElement, Point, SourceRef } from "./model";
 
@@ -156,13 +157,6 @@ export const materials: MaterialInfo[] = [
     description: "Tagged SCE-01 on A12.2 (storage 120, electrical utility 119A) and A12.3 (IT 201, electrical 217, mechanical 218, janitor 221). A12.1 lists sealed concrete with a clear, premium-quality, low-VOC sealer. The grouped Level 01 service zone also includes a simplified stair footprint.",
     sources: [finishSchedule],
   },
-  {
-    id: "door", name: "Door leaf - schematic", color: "#81876f", status: "Illustrative",
-    discipline: "architectural", division: "08", specSection: null, unit: "EA", views: ["interior"],
-    properties: [{ label: "Leaf", value: "Schematic: material, handing and hardware not checked" }, { label: "Model height", value: "7 ft" }],
-    description: "Open leaves locate selected circulation openings. Leaf material, handing, hardware and 7 ft model height are illustrative and have not been checked against the door schedule.",
-    sources: [plan],
-  },
 ];
 
 const point = ([x, y]: Point): Point => [
@@ -189,14 +183,6 @@ function glass(id: string, name: string, a: Point, b: Point, room?: string): Mod
     id, name, kind: "glass", materialId: "storefront", points: [point(a), point(b)], height: 10, thickness: 0.15,
     room, source: plan, geometryStatus: simplified,
     description: "Storefront location approximated from A1.1. The 10 ft glazing height, tint, mullions, and simplified panel extent are illustrative.",
-  };
-}
-
-function door(id: string, name: string, a: Point, b: Point, room?: string): ModelElement {
-  return {
-    id, name, kind: "door", materialId: "door", points: [point(a), point(b)], height: 7, thickness: 0.15,
-    room, source: plan, geometryStatus: simplified,
-    description: "Selected door represented as an open leaf so the passage remains visible. Opening width, handing, and leaf height are approximate.",
   };
 }
 
@@ -265,15 +251,6 @@ export const elements: ModelInput[] = [
   glass("office-108-south-glass", "Office 108 - angled exterior storefront", [1579, 1240], [1660, 1205], "108"),
   glass("guard-south-glass", "Guard room - angled exterior storefront", [1660, 1205], [1766, 1165], "110"),
   glass("side-entry-glass", "Side vestibule storefront", [1681, 998], [1732, 1074], "111"),
-  door("main-entry-west-door", "Main entry - open west leaf", [1015, 1445], [1015, 1413], "101"),
-  door("main-entry-east-door", "Main entry - open east leaf", [1060, 1445], [1060, 1413], "101"),
-  door("lobby-entry-door", "Vestibule to lobby - open leaf", [1015, 1330], [1015, 1298], "102"),
-  door("gym-lobby-north-door", "Lobby to gym - north open leaf", [970, 1186], [938, 1186], "103"),
-  door("gym-lobby-south-door", "Lobby to gym - south open leaf", [970, 1295], [938, 1295], "103"),
-  door("gym-west-exit", "Gym - west open exit leaf", [460, 835], [493, 835], "103"),
-  door("office-105-door", "Office 105 - open leaf", [1166, 1140], [1166, 1108], "105"),
-  door("office-104-door", "Office 104 - open leaf", [1245, 1140], [1245, 1108], "104"),
-  door("fitness-door", "Fitness - open access leaf", [1410, 1157], [1396, 1125], "106"),
   floor("floor-gym", "Gym 103 - sports floor", "gym-floor", [[467, 732], [964, 732], [964, 1438], [467, 1438]], "103"),
   floor("floor-vestibule", "Vestibule 101 - entrance grille", "entry-grille", [[977, 1330], [1100, 1330], [1100, 1445], [977, 1445]], "101"),
   floor("floor-lobby", "Lobby 102 - polished concrete", "concrete", [[977, 1185], [1067, 1185], [1067, 1140], [1310, 1140], [1310, 1200], [1274, 1215], [1274, 1330], [977, 1330]], "102"),
@@ -437,7 +414,9 @@ export const transitionMaterials: MaterialInfo[] = [
     discipline: "architectural", division: "09", specSection: "09 65 00", tag: "TS-07", unit: "LF", views: ["interior"], properties: [] },
 ];
 
-const atOpening = "Traced at the door opening on A1.1; the strip type follows the two finishes and the A12.1 schedule. Confirm on the finish plan.";
+/** A traced door's opening, jamb to jamb, in its plan sheet's viewBox: strips at doors sit on it. */
+const opening = (number: string): [Point, Point] => (doorTraces.find(t => t.number === number) ?? (() => { throw new Error(`door ${number} isn't traced`); })()).opening;
+const atOpening = "On the door's traced opening (A1.1); the strip type follows the two finishes and the A12.1 schedule. Confirm on the finish plan.";
 const transition = (id: string, name: string, materialId: string, a: Point, b: Point, room: string, adjoins: string, between: string): ModelInput => ({
   id, name, kind: "transition", materialId, points: [point(a), point(b)], base: 0, height: 0.05, thickness: 0.17, level: "L1", room, adjoins,
   source: plan, geometryStatus: atOpening, description: transitionMaterials.find(m => m.id === materialId)!.description,
@@ -445,11 +424,11 @@ const transition = (id: string, name: string, materialId: string, a: Point, b: P
 });
 
 export const interiorTransitions: ModelInput[] = [
-  transition("ts-gym-lobby-north", "Gym / lobby - north doors", "transition-gym", [970, 1186], [970, 1238], "103", "102", "103 Gym (FAF-01) / 102 Lobby (PLC-01)"),
-  transition("ts-gym-lobby-south", "Gym / lobby - south doors", "transition-gym", [970, 1254], [970, 1295], "103", "102", "103 Gym (FAF-01) / 102 Lobby (PLC-01)"),
-  transition("ts-office-105", "Office 105 / lobby", "transition-carpet", [1166, 1140], [1204, 1140], "105", "102", "105 Office (CPT-01) / 102 Lobby (PLC-01)"),
-  transition("ts-office-104", "Office 104 / lobby", "transition-carpet", [1204, 1140], [1245, 1140], "104", "102", "104 Office (CPT-01) / 102 Lobby (PLC-01)"),
-  transition("ts-fitness", "Fitness 106 / circulation", "transition-gym", [1410, 1157], [1442, 1143], "106", "102B", "106 Fitness (RF-01) / 102B Circulation (PLC-01)"),
+  transition("ts-gym-lobby-north", "Gym / lobby - north doors", "transition-gym", ...opening("103A"), "103", "102", "103 Gym (FAF-01) / 102 Lobby (PLC-01)"),
+  transition("ts-gym-lobby-south", "Gym / lobby - south doors", "transition-gym", ...opening("103B"), "103", "102", "103 Gym (FAF-01) / 102 Lobby (PLC-01)"),
+  transition("ts-office-105", "Office 105 / lobby", "transition-carpet", ...opening("105"), "105", "102", "105 Office (CPT-01) / 102 Lobby (PLC-01)"),
+  transition("ts-office-104", "Office 104 / lobby", "transition-carpet", ...opening("104"), "104", "102", "104 Office (CPT-01) / 102 Lobby (PLC-01)"),
+  transition("ts-fitness", "Fitness 106 / circulation", "transition-gym", ...opening("106"), "106", "102B", "106 Fitness (RF-01) / 102B Circulation (PLC-01)"),
 ];
 
 // ── Level 02 (A1.2) ─────────────────────────────────────────────────────────
@@ -596,25 +575,25 @@ export const level2Elements: ModelInput[] = [
 // the A12.1 detail for that pair: RF / PLC is detail B (TS-02), tile / PLC detail D (TS-03), RF / RF
 // detail F (TS-07). Door strips span the opening drawn on A1.2. SLE / PLC (concrete to concrete) has
 // no strip in A12.1, so none is added there.
-const atMark = "Placed where A12.3 marks the finish change; the strip type is A12.1's detail for the two finishes. Door strips span the opening on A1.2.";
+const atMark = "Placed where A12.3 marks the finish change; the strip type is A12.1's detail for the two finishes. Door strips sit on the door's traced opening (A1.2).";
 const transition2 = (id: string, name: string, materialId: string, a: Point, b: Point, room: string, adjoins: string, between: string): ModelInput => ({
   id, name, kind: "transition", materialId, points: [point(a), point(b)], base: L2, height: 0.05, thickness: 0.17, level: "L2", room, adjoins,
   source: finishPlanL2, geometryStatus: atMark, description: transitionMaterials.find(m => m.id === materialId)!.description,
   properties: [{ label: "Between", value: between }],
 });
 export const level2Transitions: ModelInput[] = [
-  transition2("ts2-activity", "Activity 1 215 / corridor", "transition-resilient-concrete", [1548, 741], [1548, 764], "215", "200", "215 Activity 1 (LVT-01) / 200 Circulation (PLC-01)"),
-  transition2("ts2-game", "Game room 213 / corridor", "transition-resilient-concrete", [1548, 964], [1548, 987], "213", "200", "213 Game room band (LVT-02) / 200 Circulation (PLC-01)"),
+  transition2("ts2-activity", "Activity 1 215 / corridor", "transition-resilient-concrete", ...opening("215"), "215", "200", "215 Activity 1 (LVT-01) / 200 Circulation (PLC-01)"),
+  transition2("ts2-game", "Game room 213 / corridor", "transition-resilient-concrete", ...opening("213"), "213", "200", "213 Game room band (LVT-02) / 200 Circulation (PLC-01)"),
   transition2("ts2-game-band", "Game room 213 - LVT-01 / LVT-02 finish line", "transition-resilient", [1550, 963], [1723, 963], "213", "213", "213 Game room (LVT-01) / 213 band (LVT-02)"),
-  transition2("ts2-mpr-1", "Multipurpose room 1 210 / corridor", "transition-resilient-concrete", [1416, 1151], [1437, 1143], "210", "200", "210 MPR 1 band (LVT-03) / 200 Circulation (PLC-01)"),
+  transition2("ts2-mpr-1", "Multipurpose room 1 210 / corridor", "transition-resilient-concrete", ...opening("210"), "210", "200", "210 MPR 1 band (LVT-03) / 200 Circulation (PLC-01)"),
   transition2("ts2-mpr-1-band", "Multipurpose room 1 210 - LVT-03 / LVT-01 finish line", "transition-resilient", [1463.4, 1129.8], [1520.9, 1263.8], "210", "210", "210 MPR 1 band (LVT-03) / 210 MPR 1 (LVT-01)"),
-  transition2("ts2-mpr-2", "Multipurpose room 2 211 / corridor", "transition-resilient-concrete", [1663, 1048], [1683, 1037], "211", "200", "211 MPR 2 (LVT-01) / 200 Circulation (PLC-01)"),
-  transition2("ts2-storage", "Storage 209 / multipurpose room 1", "transition-resilient", [1410, 1178], [1420, 1198], "209", "210", "209 Storage (LVT-01) / 210 MPR 1 band (LVT-03)"),
-  transition2("ts2-office", "Office / reception 206 / corridor", "transition-resilient-concrete", [1351, 1090], [1373, 1090], "206", "200", "206 Office (RF, product not tagged) / 200 Circulation (PLC-01)"),
-  transition2("ts2-toilet-203", "Toilet 203 / corridor", "transition-tile", [1185, 1097], [1206, 1097], "203", "200", "203 Toilet (FT-01) / 200 Circulation (PLC-01)"),
-  transition2("ts2-toilet-204", "Toilet 204 / corridor", "transition-tile", [1264, 1097], [1284, 1097], "204", "200", "204 Toilet (FT-01) / 200 Circulation (PLC-01)"),
-  transition2("ts2-toilet-205", "Toilet 205 / corridor", "transition-tile", [1321, 1097], [1343, 1097], "205", "200", "205 Toilet (FT-01) / 200 Circulation (PLC-01)"),
-  transition2("ts2-kitchen", "Kitchen 208 / corridor", "transition-tile", [1294, 1138], [1317, 1138], "208", "200", "208 Kitchen (QT-01) / 200 Circulation (PLC-01)"),
+  transition2("ts2-mpr-2", "Multipurpose room 2 211 / corridor", "transition-resilient-concrete", ...opening("211"), "211", "200", "211 MPR 2 (LVT-01) / 200 Circulation (PLC-01)"),
+  transition2("ts2-storage", "Storage 209 / multipurpose room 1", "transition-resilient", ...opening("209"), "209", "210", "209 Storage (LVT-01) / 210 MPR 1 band (LVT-03)"),
+  transition2("ts2-office", "Office / reception 206 / corridor", "transition-resilient-concrete", ...opening("206"), "206", "200", "206 Office (RF, product not tagged) / 200 Circulation (PLC-01)"),
+  transition2("ts2-toilet-203", "Toilet 203 / corridor", "transition-tile", ...opening("203"), "203", "200", "203 Toilet (FT-01) / 200 Circulation (PLC-01)"),
+  transition2("ts2-toilet-204", "Toilet 204 / corridor", "transition-tile", ...opening("204"), "204", "200", "204 Toilet (FT-01) / 200 Circulation (PLC-01)"),
+  transition2("ts2-toilet-205", "Toilet 205 / corridor", "transition-tile", ...opening("205"), "205", "200", "205 Toilet (FT-01) / 200 Circulation (PLC-01)"),
+  transition2("ts2-kitchen", "Kitchen 208 / corridor", "transition-tile", ...opening("208"), "208", "200", "208 Kitchen (QT-01) / 200 Circulation (PLC-01)"),
 ];
 
 const centroid = (pixels: Point[]): Point => [pixels.reduce((s, p) => s + p[0], 0) / pixels.length, pixels.reduce((s, p) => s + p[1], 0) / pixels.length];
@@ -630,6 +609,46 @@ export const planVoids: { id: string; level: LevelId; name: string; points: Poin
   { id: "void-yard", level: "L2", name: "Open to mechanical yard below", points: ([[1045, 725], [1362, 725], [1362, 995], [1045, 995]] as Point[]).map(point), source: planL2 },
   { id: "void-lobby", level: "L2", name: "Open to lobby below", points: ([[977, 1180], [1072, 1180], [1072, 1141], [1275, 1141], [1275, 1330], [977, 1330]] as Point[]).map(point), source: planL2 },
 ];
+
+// ── Doors (A8.2), traced on A1.1 / A1.2 ──────────────────────────────────────
+// Each door is one opening (jamb to jamb) with its leaves as drawn. Its rooms come from the traced
+// floor zones 1.5 ft either side of the opening: room is the side the leaves swing into, adjoins the
+// other. A side with no floor zone (outside, or a room not traced) stays null. Walls aren't cut.
+
+const insidePolygon = ([x, z]: Point, poly: Point[]): boolean => {
+  let hit = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, zi] = poly[i], [xj, zj] = poly[j];
+    if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) hit = !hit;
+  }
+  return hit;
+};
+const floorZones = [...elements, ...level2Elements].filter(e => e.kind === "floor");
+const zoneAt = (p: Point, level: LevelId) => floorZones.find(z => (z.level ?? "L1") === level && insidePolygon(p, z.points))?.room ?? null;
+
+/** Each traced door's rooms, from the floor zones either side of its opening. */
+export const doorAssociations: { number: string; level: LevelId; swingSide: string | null; otherSide: string | null }[] = doorTraces.map(t => {
+  const [a, b] = t.opening.map(point), len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const n: Point = [-(b[1] - a[1]) / len, (b[0] - a[0]) / len], mid: Point = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  const leaf = t.leaves[0]?.map(point);
+  const sign = leaf ? Math.sign((leaf[1][0] - leaf[0][0]) * n[0] + (leaf[1][1] - leaf[0][1]) * n[1]) || 1 : 1;
+  const side = (k: number): Point => [mid[0] + n[0] * 1.5 * k, mid[1] + n[1] * 1.5 * k];
+  return { number: t.number, level: t.level, swingSide: zoneAt(side(sign), t.level), otherSide: zoneAt(side(-sign), t.level) };
+});
+
+export const doorInputs: ModelInput[] = doorTraces.map((t, i) => {
+  const row = doorScheduleRows.find(r => r.number === t.number)!, sheet = t.level === "L2" ? planL2 : plan;
+  const coiling = row.panels === null, floorLevel = t.level === "L2" ? L2 : 0, { swingSide, otherSide } = doorAssociations[i];
+  return {
+    id: `door-${t.number.toLowerCase()}`, name: `Door ${t.number}`, kind: "door", materialId: doorMaterialFor(row), doorNumber: t.number,
+    points: t.opening.map(point), leaves: t.leaves.map(([hinge, tip]) => [point(hinge), point(tip)] as [Point, Point]),
+    base: coiling ? floorLevel + 3 : floorLevel, height: coiling ? 4 : row.heightIn! / 12, thickness: (row.thicknessIn ?? 1.75) / 12,
+    level: t.level, room: swingSide ?? otherSide ?? undefined, adjoins: (swingSide ? otherSide : null) ?? undefined, source: sheet, traceNote: t.note,
+    geometryStatus: `Traced from the door on ${sheet.sheet} (vector linework): the opening runs jamb to jamb, each leaf hinge to open tip. Walls run through the opening; it isn't cut.`,
+    description: coiling ? `Door ${row.number}: ${row.comments} (A8.2), steel frame type ${row.frameType}.`
+      : `Door ${row.number}: ${row.panels === 2 ? "pair of " : ""}${row.width} x ${row.height} ${row.material} panel${row.panels === 2 ? "s" : ""}, ${row.frameMaterial} frame type ${row.frameType}, hardware set ${row.hardwareSet} on A8.2.`,
+  };
+});
 
 // ── Sheet coordinates ───────────────────────────────────────────────────────
 
@@ -654,10 +673,10 @@ export function toSheetPoint(sheet: string, [x, z]: Point): Point | null {
 }
 
 /** Every assembly: the studio's first-floor materials, the transitions, Level 02, then the illustrative system ones. */
-export const allMaterials: MaterialInfo[] = [...materials, ...transitionMaterials, ...level2Materials, ...systemMaterials];
+export const allMaterials: MaterialInfo[] = [...materials, ...transitionMaterials, ...level2Materials, ...doorMaterials, ...systemMaterials];
 
 /** Every selectable object in the four views, resolved with quantities and sources. */
-export const modelObjects: ModelObject[] = resolveObjects([...elements, ...interiorTransitions, ...level2Elements, ...level2Transitions, ...systemElements], allMaterials, finishScheduleRows, partitionSchedule);
+export const modelObjects: ModelObject[] = resolveObjects([...elements, ...interiorTransitions, ...level2Elements, ...level2Transitions, ...doorInputs, ...systemElements], allMaterials, finishScheduleRows, partitionSchedule, doorSchedule);
 
 /** The model for a project: Jelleff has one; other projects have none yet. */
 export const modelForProject = (projectId: string): ModelObject[] => projectId === SAMPLE_PROJECT_ID ? modelObjects : [];
