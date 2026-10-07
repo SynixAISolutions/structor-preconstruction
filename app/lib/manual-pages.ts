@@ -392,7 +392,7 @@ export const pageGuides = [
       "Under Predecessor links, choose the predecessor activity, the link type, and the lag in working days, then Add link. A link that would make a loop is refused; the bin removes a link.",
       "When an activity moves later or gets longer, the activities linked after it move later just enough to keep their links, and so on down the chain. Nothing moves earlier on its own, and work already started keeps its start date. The Change log records who changed the plan and which dates moved.",
       "Critical path activities have no float: delaying any of them delays the project finish. Next 3 weeks lists the unfinished work in the working-day look-ahead.",
-      "Export XML saves a Microsoft Project XML file that Microsoft Project and Primavera P6 can open. Import XML replaces this project's schedule with a file saved as XML from either program, and lists any import warnings. Export CSV downloads every activity for Excel.",
+      "Export XML saves a Microsoft Project XML file that Microsoft Project and Primavera P6 can open. Import XML reads a file saved as XML from either program and asks Replace project schedule?, showing how many activities the file holds and how many it will replace; choose Export current XML to keep a copy, then Replace schedule. Any import warnings are listed afterwards. Export CSV downloads every activity for Excel.",
     ],
     terms: [
       { name: "Working days", meaning: "Monday through Friday. Durations and lags count working days; a duration includes the start day." },
@@ -401,7 +401,7 @@ export const pageGuides = [
       { name: "Critical path / float", meaning: "Float is how many working days an activity can slip without delaying the project finish. Activities with no float form the critical path." },
     ],
     example: "Add five working days to Bid leveling & owner approval: GMP approved, the trade awards, and every construction activity after them move five working days later, and the Change log lists each move.",
-    reality: "The schedule saves in this browser for the open project; the Jelleff dates are illustrative. The calendar has no holidays. Importing replaces the current schedule, so export it first if you want to keep it. Imports bring in tasks, dates, durations, progress, links, and phases from summary tasks; resources, calendars, and costs are not imported. The XML follows Microsoft's published format but has not been tested against every version of Project or P6.",
+    reality: "The schedule saves in this browser for the open project; the Jelleff dates are illustrative. The calendar has no holidays. Importing replaces the current schedule once you confirm; export it first if you want to keep it. Imports bring in tasks, dates, durations, progress, links, and phases from summary tasks; resources, calendars, and costs are not imported. The XML follows Microsoft's published format but has not been tested against every version of Project or P6.",
     related: ["packages", "contracts", "turnover"],
   },
   {

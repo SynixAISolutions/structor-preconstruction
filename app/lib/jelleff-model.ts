@@ -2,7 +2,7 @@
 // illustrative structural, MEP and roof objects for the four views. Types and measuring rules are
 // in lib/model.ts.
 
-import { resolveObjects, type MaterialInfo, type ModelElement, type ModelInput, type ModelObject, type ModelReviewState, type Point, type SourceRef } from "./model";
+import { resolveObjects, type FinishScheduleRow, type MaterialInfo, type ModelElement, type ModelInput, type ModelObject, type ModelReviewState, type Point, type SourceRef } from "./model";
 import { SAMPLE_PROJECT_ID } from "./project-scope";
 
 export type { MaterialInfo, ModelElement, Point, SourceRef } from "./model";
@@ -54,50 +54,50 @@ export const materials: MaterialInfo[] = [
   },
   {
     id: "gym-floor", name: "FAF-01 - poured sports flooring", color: "#b69770", status: "Documented",
-    discipline: "architectural", division: "09", specSection: "09 65 66", unit: "SF", views: ["interior"],
-    properties: [{ label: "Finish tag", value: "FAF-01" }, { label: "Product", value: "Tarkett Sports Indoor, Polyturf Plus Pad + Pour" }, { label: "Color", value: "Desert base, grey and white striping" }],
+    discipline: "architectural", division: "09", specSection: "09 67 00", tag: "FAF-01", base: "VWB-01", unit: "SF", views: ["interior"],
+    properties: [],
     description: "A12.2 tags the gym FAF-01. A12.1 schedules Tarkett Sports Indoor, Polyturf Plus Pad + Pour; Desert base with grey and white striping. Display color and court markings are approximate.",
     sources: [finishPlan, finishSchedule],
   },
   {
     id: "concrete", name: "PLC-01 - polished concrete", color: "#c5c2b9", status: "Documented",
-    discipline: "architectural", division: "03", specSection: "03 35 43", unit: "SF", views: ["interior"],
-    properties: [{ label: "Finish tag", value: "PLC-01" }, { label: "Product", value: "Ardex Ultraflor Diamatic" }, { label: "Sheen", value: "Low gloss" }],
+    discipline: "architectural", division: "03", specSection: "03 33 00", tag: "PLC-01", base: "WB-01", unit: "SF", views: ["interior"],
+    properties: [],
     description: "The lobby and circulation are tagged PLC-01 on A12.2. A12.1 lists Ardex, Ultraflor Diamatic, low gloss. The slab thickness and display color are illustrative.",
     sources: [finishPlan, finishSchedule],
   },
   {
     id: "carpet", name: "CPT-01 - carpet", color: "#959d92", status: "Documented",
-    discipline: "architectural", division: "09", specSection: "09 68 13", unit: "SF", views: ["interior"],
-    properties: [{ label: "Finish tag", value: "CPT-01" }, { label: "Product", value: "Shaw Contract Observe" }, { label: "Color", value: "Radiant Nature 05326" }, { label: "Size", value: "9 × 36 in." }, { label: "Installation", value: "Ashlar" }],
+    discipline: "architectural", division: "09", specSection: "09 68 00", tag: "CPT-01", base: "WB-01", unit: "SF", views: ["interior"],
+    properties: [],
     description: "Office areas are tagged CPT-01 on A12.2. A12.1 lists Shaw Contract Observe, color Radiant Nature 05326, 9 x 36 in., installed ashlar. Pattern and display color are simplified.",
     sources: [finishPlan, finishSchedule],
   },
   {
     id: "fitness-floor", name: "RF-01 - resilient sports flooring", color: "#786e55", status: "Documented",
-    discipline: "architectural", division: "09", specSection: "09 65 66", unit: "SF", views: ["interior"],
-    properties: [{ label: "Finish tag", value: "RF-01" }, { label: "Product", value: "Mondo Sports Impact" }, { label: "Color", value: "136 Brown" }, { label: "Installation", value: "Ashlar" }],
+    discipline: "architectural", division: "09", specSection: "09 65 00", tag: "RF-01", base: "WB-01", unit: "SF", views: ["interior"],
+    properties: [],
     description: "Fitness 106 is tagged RF-01 on A12.2. A12.1 schedules Mondo Sports Impact, 136 Brown, installed ashlar. Display color and floor thickness are approximate.",
     sources: [finishPlan, finishSchedule],
   },
   {
     id: "tile", name: "FT-01 - taupe floor tile", color: "#b8b2a0", status: "Documented",
-    discipline: "architectural", division: "09", specSection: "09 30 13", unit: "SF", views: ["interior"],
-    properties: [{ label: "Finish tag", value: "FT-01" }, { label: "Product", value: "Tilebar Nashville" }, { label: "Color", value: "Taupe matte" }, { label: "Size", value: "12 × 24 in." }, { label: "Showers", value: "FT-02" }],
+    discipline: "architectural", division: "09", specSection: "09 30 00", tag: "FT-01", base: "TB-01", unit: "SF", views: ["interior"],
+    properties: [{ label: "Showers", value: "FT-02, 2\" x 2\" (not modeled)" }],
     description: "Wet-area floors are tagged FT-01 on A12.2. A12.1 lists Tilebar Nashville, taupe matte, 12 x 24 in.; shower areas use FT-02. Small shower transitions are omitted from this room-level model.",
     sources: [finishPlan, finishSchedule],
   },
   {
     id: "entry-grille", name: "WOG-01 - entrance floor grille", color: "#7d8989", status: "Documented",
-    discipline: "architectural", division: "12", specSection: "12 48 16", unit: "SF", views: ["interior"],
-    properties: [{ label: "Finish tag", value: "WOG-01" }, { label: "Product", value: "Construction Specialties Gridline G6" }, { label: "Material", value: "Stainless steel" }],
+    discipline: "architectural", division: "12", specSection: "12 48 16", tag: "WOG-01", unit: "SF", views: ["interior"],
+    properties: [],
     description: "Vestibules are tagged WOG-01 on A12.2. A12.1 schedules Construction Specialties Gridline G6 stainless steel entrance grilles. Individual bars are omitted.",
     sources: [finishPlan, finishSchedule],
   },
   {
     id: "service-floor", name: "SCE-01 - sealed concrete", color: "#a9aca6", status: "Documented",
-    discipline: "architectural", division: "03", specSection: "03 35 00", unit: "SF", views: ["interior"],
-    properties: [{ label: "Finish tag", value: "SCE-01" }, { label: "Finish", value: "Sealed concrete" }, { label: "Sealer", value: "Clear, low-VOC" }],
+    discipline: "architectural", division: "03", specSection: "03 33 00", tag: "SCE-01", unit: "SF", views: ["interior"],
+    properties: [],
     description: "Storage 120 and electrical utility 119A are tagged SCE-01 on A12.2. A12.1 lists sealed concrete with a clear, premium-quality, low-VOC sealer. The grouped service zone also includes a simplified stair footprint.",
     sources: [finishPlan, finishSchedule],
   },
@@ -322,11 +322,68 @@ export const systemElements: ModelInput[] = [
   ...([[590, 905], [840, 905], [590, 1265], [840, 1265]] as Point[]).map((p, i) => system(`light-hb-${i + 1}`, `Gym high-bay light ${i + 1}`, "fixture", "high-bay", [p], 25, 1, 2, "L1", plan, "103", 2)),
 ];
 
-/** Every assembly: the studio's first-floor materials, then the illustrative system ones. */
-export const allMaterials: MaterialInfo[] = [...materials, ...systemMaterials];
+
+// ── Finish schedule (A12.1), the rows the interior model uses ───────────────
+
+const a12: SourceRef = { ...finishSchedule, detail: "Finish schedule" };
+const row = (tag: string, section: string, sectionTitle: string, description: string, manufacturer: string, product: string, color: string, size: string, comments: string): FinishScheduleRow =>
+  ({ tag, section, sectionTitle, description, manufacturer, product, color, size, comments, source: a12 });
+
+/** Rows transcribed from the A12.1 finish schedule for the finishes, bases and transitions in the model. */
+export const finishScheduleRows: FinishScheduleRow[] = [
+  row("PLC-01", "03 33 00", "Concrete finishing", "Polished concrete", "Ardex", "Ultraflor Diamatic", "Low gloss", "", ""),
+  row("SCE-01", "03 33 00", "Concrete finishing", "Sealed concrete (BOH)", "Ardex", "", "", "", "Clear sealer, premium quality, low VOC"),
+  row("FT-01", "09 30 00", "Tiling", "Floor tile", "Tilebar", "Nashville", "Taupe, matte finish", "12\" x 24\"", "Install: soldier course; see plans"),
+  row("TB-01", "09 30 00", "Tiling", "Tile base", "Tilebar", "Nashville", "Beige, matte finish", "6\" x TBD", ""),
+  row("RF-01", "09 65 00", "Resilient flooring", "Resilient flooring", "Mondo", "Sports Impact", "136 Brown", "7/16\" thk; 91 cm x 91 cm", "Install: ashlar"),
+  row("TS-02", "09 65 00", "Resilient flooring", "Resilient floor transition", "Schluter", "Vinpro-U", "Stainless steel V2A", "", "Concrete to LVT"),
+  row("TS-03", "09 65 00", "Resilient flooring", "Concrete transition", "Johnsonite", "Reno-U", "Finish TBD", "", "Concrete to floor tile"),
+  row("TS-04", "09 65 00", "Resilient flooring", "Carpet transition", "Schluter", "Reno TK", "Stainless steel V2A", "", "Concrete to carpet"),
+  row("TS-06", "09 65 00", "Resilient flooring", "Gym floor transition", "Johnsonite", "Threshold", "Grey", "VT-XX-M2 3' pieces 5-1/2\" exposed threshold", "Concrete to gym floor"),
+  row("TS-07", "09 65 00", "Resilient flooring", "Resilient floor transition", "Johnsonite", "Slimline", "Grey", "CTA-XX-C", "Resilient to resilient"),
+  row("TS-08", "09 65 00", "Resilient flooring", "Tile transition", "Schluter", "Schiene", "Stainless steel V2A", "", ""),
+  row("VWB-01", "09 65 00", "Resilient flooring", "Vented wall base", "Johnsonite", "TBD", "47 Brown", "", "At gym"),
+  row("WB-01", "09 65 00", "Resilient flooring", "Resilient base (field)", "Roppe", "", "694 Parchment", "4\" H base", "Cove base at hard surfaces, straight base at carpet"),
+  row("FAF-01", "09 67 00", "Fluid applied flooring", "Fluid applied flooring", "Tarkett Sports Indoor", "Polyturf Plus Pad + Pour", "Base - Desert, line 1 - grey, line 2 - white", "", "At gyms, logo and lettering included, see plans"),
+  row("CPT-01", "09 68 00", "Carpet", "Carpet", "Shaw Contract", "Observe color 5T309", "Radiant Nature 05326", "9\" x 36\"", "Install: ashlar"),
+  row("WOG-01", "12 48 16", "Entrance floor grilles", "Walk off grilles", "Construction Specialties", "Gridline G6", "Stainless steel", "", "At vestibules"),
+];
+
+// ── Floor transitions at the traced openings (A1.1), typed from A12.1 ────────
+// The strip at each opening follows the two finishes it joins: concrete to carpet is TS-04
+// (detail A), concrete to the gym or fitness floor is TS-06 (detail E). Locations are the door
+// openings traced on A1.1; the assignment is read from the schedule, not from a tagged plan.
+
+const detail = (letter: string, title: string): SourceRef => ({ ...finishSchedule, detail: `Transition detail ${letter}: ${title}` });
+export const transitionMaterials: MaterialInfo[] = [
+  { id: "transition-carpet", name: "TS-04 - carpet transition", color: "#9aa0a4", status: "Documented", sources: [detail("A", "carpet to concrete"), finishSchedule],
+    description: "Reducer strip where carpet meets polished concrete (A12.1 detail A).",
+    discipline: "architectural", division: "09", specSection: "09 65 00", tag: "TS-04", unit: "LF", views: ["interior"], properties: [] },
+  { id: "transition-gym", name: "TS-06 - gym floor transition", color: "#8b8f92", status: "Documented", sources: [detail("E", "concrete to fitness flooring"), finishSchedule],
+    description: "Continuous extruded aluminum cover plate where the gym or fitness floor meets concrete (A12.1 detail E).",
+    discipline: "architectural", division: "09", specSection: "09 65 00", tag: "TS-06", unit: "LF", views: ["interior"], properties: [] },
+];
+
+const atOpening = "Traced at the door opening on A1.1; the strip type follows the two finishes and the A12.1 schedule. Confirm on the finish plan.";
+const transition = (id: string, name: string, materialId: string, a: Point, b: Point, room: string, adjoins: string, between: string): ModelInput => ({
+  id, name, kind: "transition", materialId, points: [point(a), point(b)], base: 0, height: 0.05, thickness: 0.17, level: "L1", room, adjoins,
+  source: plan, geometryStatus: atOpening, description: transitionMaterials.find(m => m.id === materialId)!.description,
+  properties: [{ label: "Between", value: between }],
+});
+
+export const interiorTransitions: ModelInput[] = [
+  transition("ts-gym-lobby-north", "Gym / lobby - north doors", "transition-gym", [970, 1186], [970, 1238], "103", "102", "103 Gym (FAF-01) / 102 Lobby (PLC-01)"),
+  transition("ts-gym-lobby-south", "Gym / lobby - south doors", "transition-gym", [970, 1254], [970, 1295], "103", "102", "103 Gym (FAF-01) / 102 Lobby (PLC-01)"),
+  transition("ts-office-105", "Office 105 / lobby", "transition-carpet", [1166, 1140], [1204, 1140], "105", "102", "105 Office (CPT-01) / 102 Lobby (PLC-01)"),
+  transition("ts-office-104", "Office 104 / lobby", "transition-carpet", [1204, 1140], [1245, 1140], "104", "102", "104 Office (CPT-01) / 102 Lobby (PLC-01)"),
+  transition("ts-fitness", "Fitness 106 / circulation", "transition-gym", [1410, 1157], [1442, 1143], "106", "102B", "106 Fitness (RF-01) / 102B Circulation (PLC-01)"),
+];
+
+/** Every assembly: the studio's first-floor materials, the transitions, then the illustrative system ones. */
+export const allMaterials: MaterialInfo[] = [...materials, ...transitionMaterials, ...systemMaterials];
 
 /** Every selectable object in the four views, resolved with quantities and sources. */
-export const modelObjects: ModelObject[] = resolveObjects([...elements, ...systemElements], allMaterials);
+export const modelObjects: ModelObject[] = resolveObjects([...elements, ...interiorTransitions, ...systemElements], allMaterials, finishScheduleRows);
 
 /** The model for a project: Jelleff has one; other projects have none yet. */
 export const modelForProject = (projectId: string): ModelObject[] => projectId === SAMPLE_PROJECT_ID ? modelObjects : [];
