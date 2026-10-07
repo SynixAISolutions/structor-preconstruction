@@ -25,14 +25,14 @@ export type ModelSource = SourceRef & { drawing: string };
 
 export type ModelView = "interior" | "mep" | "structural" | "exterior";
 export type Discipline = "architectural" | "structural" | "mechanical" | "plumbing" | "electrical" | "fire-protection";
-export type ObjectKind = "wall" | "glass" | "door" | "floor" | "slab" | "roof" | "column" | "beam" | "duct" | "pipe" | "equipment" | "fixture";
+export type ObjectKind = "wall" | "glass" | "door" | "floor" | "transition" | "slab" | "roof" | "column" | "beam" | "duct" | "pipe" | "equipment" | "fixture";
 export type Shape = "segment" | "polygon" | "box";
 export type QuantityUnit = "SF" | "LF" | "EA" | "CY";
 export type LevelId = "L1" | "L2" | "roof";
 export type ModelProperty = { label: string; value: string };
 
 export const SHAPES: Record<ObjectKind, Shape> = {
-  wall: "segment", glass: "segment", door: "segment", beam: "segment", duct: "segment", pipe: "segment",
+  wall: "segment", glass: "segment", door: "segment", transition: "segment", beam: "segment", duct: "segment", pipe: "segment",
   floor: "polygon", slab: "polygon", roof: "polygon", column: "box", equipment: "box", fixture: "box",
 };
 
@@ -61,8 +61,15 @@ export type MaterialInfo = {
   discipline: Discipline;
   /** CSI division, "09". */
   division: string;
-  /** MasterFormat section for this work, e.g. "09 65 66". A classification, not read from the project manual. */
+  /**
+   * Specification section, e.g. "09 67 00": the finish schedule's heading when the assembly has a
+   * schedule tag; otherwise a MasterFormat classification, not read from the project manual.
+   */
   specSection: string | null;
+  /** Finish schedule tag ("FAF-01", "TS-06"), when the assembly is on the finish schedule. */
+  tag?: string;
+  /** Finish schedule tag of the base along a floor finish's edge ("WB-01", "VWB-01", "TB-01"). */
+  base?: string;
   /** How its objects are counted. */
   unit: QuantityUnit;
   views: ModelView[];
@@ -94,9 +101,21 @@ export type ModelInput = Omit<ModelElement, "kind"> & {
   /** "traced" from a sheet (default) or "illustrative" placement. */
   geometry?: "traced" | "illustrative";
   properties?: ModelProperty[];
+  /** For a transition: the room on the other side (room is the side with the special floor). */
+  adjoins?: string;
 };
 
-export type Dimensions = { lengthFt: number | null; areaSf: number | null; heightFt: number | null; thicknessIn: number | null; volumeCy: number | null };
+/** One row of the architect's finish schedule (A12.1). */
+export type FinishScheduleRow = {
+  tag: string;
+  /** The schedule's section heading, "09 67 00", and its title. */
+  section: string; sectionTitle: string;
+  description: string; manufacturer: string; product: string; color: string; size: string; comments: string;
+  source: SourceRef;
+};
+
+/** `perimeterFt` is a floor zone's edge: the gross base run, door openings not deducted. */
+export type Dimensions = { lengthFt: number | null; areaSf: number | null; perimeterFt: number | null; heightFt: number | null; thicknessIn: number | null; volumeCy: number | null };
 
 /** One selectable object, resolved for the views and the inspector. */
 export type ModelObject = {
@@ -105,11 +124,17 @@ export type ModelObject = {
   level: LevelId; room: string | null; views: ModelView[];
   discipline: Discipline; division: string; divisionName: string; specSection: string | null;
   materialId: string; assembly: string;
+  /** Finish schedule tag and row, when the assembly is scheduled (A12.1). */
+  tag: string | null; schedule: FinishScheduleRow | null;
+  /** Base tag along a floor finish's edge, from the finish schedule. */
+  baseTag: string | null;
+  /** For a transition, the room on the other side. */
+  adjoins: string | null;
   /** The takeoff quantity in the assembly's unit. */
   quantity: { value: number; unit: QuantityUnit };
   /** Only the dimensions that mean something for the kind; the rest are null. */
   dimensions: Dimensions;
-  /** The assembly's properties, then the object's own. */
+  /** The finish schedule row's fields (and the base), then the assembly's properties, then the object's own. */
   properties: ModelProperty[];
   /** The object's own source first, then the assembly's. */
   sources: ModelSource[];
@@ -126,7 +151,7 @@ export type ModelObject = {
 const round = (v: number) => Math.round(v * 100) / 100;
 const DIMENSIONS: Record<ObjectKind, (keyof Dimensions)[]> = {
   wall: ["lengthFt", "areaSf", "heightFt", "thicknessIn"], glass: ["lengthFt", "areaSf", "heightFt"], door: ["lengthFt", "heightFt"],
-  floor: ["areaSf"], slab: ["areaSf", "thicknessIn", "volumeCy"], roof: ["areaSf", "thicknessIn"],
+  floor: ["areaSf", "perimeterFt"], transition: ["lengthFt"], slab: ["areaSf", "thicknessIn", "volumeCy"], roof: ["areaSf", "thicknessIn"],
   beam: ["lengthFt", "heightFt"], duct: ["lengthFt"], pipe: ["lengthFt"], column: ["heightFt"], equipment: ["heightFt"], fixture: ["heightFt"],
 };
 
@@ -142,13 +167,14 @@ function measures(kind: ObjectKind, points: Point[], height: number, thickness: 
   const shape = SHAPES[kind];
   if (shape === "segment") {
     const length = Math.hypot(points[1][0] - points[0][0], points[1][1] - points[0][1]);
-    return { lengthFt: length, areaSf: length * height, heightFt: height, thicknessIn: thickness * 12, volumeCy: length * height * thickness / 27 };
+    return { lengthFt: length, areaSf: length * height, perimeterFt: null, heightFt: height, thicknessIn: thickness * 12, volumeCy: length * height * thickness / 27 };
   }
   if (shape === "polygon") {
     const area = planArea(points);
-    return { lengthFt: null, areaSf: area, heightFt: null, thicknessIn: height * 12, volumeCy: area * height / 27 };
+    const perimeter = points.reduce((sum, [x, z], i) => { const [nx, nz] = points[(i + 1) % points.length]; return sum + Math.hypot(nx - x, nz - z); }, 0);
+    return { lengthFt: null, areaSf: area, perimeterFt: perimeter, heightFt: null, thicknessIn: height * 12, volumeCy: area * height / 27 };
   }
-  return { lengthFt: null, areaSf: thickness * depth, heightFt: height, thicknessIn: null, volumeCy: thickness * depth * height / 27 };
+  return { lengthFt: null, areaSf: thickness * depth, perimeterFt: null, heightFt: height, thicknessIn: null, volumeCy: thickness * depth * height / 27 };
 }
 
 /**
@@ -158,11 +184,26 @@ function measures(kind: ObjectKind, points: Point[], height: number, thickness: 
 export const confidenceFor = (basis: ModelObject["basis"]): number =>
   basis.geometry === "illustrative" ? 0.25 : basis.material === "documented" ? 0.75 : 0.5;
 
-/** Resolves the data into selectable objects. Throws on a missing assembly or a unit the shape can't measure. */
-export function resolveObjects(inputs: ModelInput[], materials: MaterialInfo[]): ModelObject[] {
+/** A schedule row as inspector properties, skipping empty columns. */
+function scheduleProperties(row: FinishScheduleRow): ModelProperty[] {
+  return ([["Tag", row.tag], ["Description", row.description], ["Manufacturer", row.manufacturer], ["Product", row.product],
+    ["Color / finish", row.color], ["Size", row.size], ["Comments", row.comments], ["Specification", `${row.section} ${row.sectionTitle}`]] as [string, string][])
+    .filter(([, value]) => value.trim()).map(([label, value]) => ({ label, value }));
+}
+
+/**
+ * Resolves the data into selectable objects. Throws on a missing assembly, a unit the shape can't
+ * measure, or a schedule tag that isn't on the finish schedule.
+ */
+export function resolveObjects(inputs: ModelInput[], materials: MaterialInfo[], schedule: FinishScheduleRow[] = []): ModelObject[] {
+  const rowOf = (tag: string | undefined, id: string): FinishScheduleRow | null => {
+    if (!tag) return null;
+    return schedule.find(r => r.tag === tag) ?? (() => { throw new Error(`${id}: ${tag} is not on the finish schedule`); })();
+  };
   return inputs.map(input => {
     const material = materials.find(m => m.id === input.materialId);
     if (!material) throw new Error(`${input.id}: no assembly ${input.materialId}`);
+    const row = rowOf(material.tag, material.id), baseRow = rowOf(material.base, material.id);
     const thickness = input.thickness ?? 0, depth = input.depth ?? thickness;
     const all = measures(input.kind, input.points, input.height, thickness, depth);
     const dimensions = Object.fromEntries((Object.keys(all) as (keyof Dimensions)[])
@@ -178,8 +219,14 @@ export function resolveObjects(inputs: ModelInput[], materials: MaterialInfo[]):
       level: input.level ?? "L1", room: input.room ?? null, views: material.views,
       discipline: material.discipline, division: material.division, divisionName: CSI_DIVISIONS[material.division] ?? "",
       specSection: material.specSection, materialId: material.id, assembly: material.name,
+      tag: material.tag ?? null, schedule: row, baseTag: material.base ?? null, adjoins: input.adjoins ?? null,
       quantity: { value: round(raw), unit: material.unit }, dimensions,
-      properties: [...material.properties, ...(input.properties ?? [])], sources, basis, confidence: confidenceFor(basis),
+      properties: [
+        ...(row ? scheduleProperties(row) : []),
+        ...(baseRow ? [{ label: "Base", value: [baseRow.tag, baseRow.description, baseRow.manufacturer, baseRow.color, baseRow.size].filter(Boolean).join(", ") }] : []),
+        ...material.properties, ...(input.properties ?? []),
+      ],
+      sources, basis, confidence: confidenceFor(basis),
       description: input.description, caution: input.geometryStatus,
     };
   });
@@ -280,6 +327,41 @@ export function reviewSummary(objects: ModelObject[], state: ModelReviewState, v
   const list = objects.filter(o => !view || o.views.includes(view));
   const count = (s: ObjectReviewStatus) => list.filter(o => reviewStatus(state, o.id) === s).length;
   return { objects: list.length, verified: count("verified"), flagged: count("flagged"), unreviewed: count("unreviewed"), lowConfidence: list.filter(o => o.confidence < 0.5).length };
+}
+
+export type RoomFinishRow = {
+  room: string; level: LevelId;
+  floors: { id: string; tag: string | null; assembly: string; areaSf: number }[];
+  areaSf: number;
+  /** Base tags along the room's floor finishes, and their gross run (door openings not deducted). */
+  baseTags: string[]; baseLf: number;
+  transitions: { id: string; tag: string | null; lengthFt: number; to: string | null }[];
+  doors: number;
+  /** Walls drawn for the room, by centreline length. */
+  wallLf: number;
+};
+
+/**
+ * The interior takeoff by room, like a finish schedule: floor finishes and areas, base run,
+ * transitions at its openings, doors and walls. Rooms come from the floor finish zones; in room order.
+ */
+export function roomFinishSchedule(objects: ModelObject[]): RoomFinishRow[] {
+  const rooms = [...new Set(objects.filter(o => o.kind === "floor" && o.room).map(o => o.room!))].sort();
+  const sum = (values: number[]) => round(values.reduce((a, b) => a + b, 0));
+  return rooms.map(room => {
+    const floors = objects.filter(o => o.kind === "floor" && o.room === room);
+    const based = floors.filter(f => f.baseTag);
+    return {
+      room, level: floors[0].level,
+      floors: floors.map(f => ({ id: f.id, tag: f.tag, assembly: f.assembly, areaSf: f.quantity.value })),
+      areaSf: sum(floors.map(f => f.quantity.value)),
+      baseTags: [...new Set(based.map(f => f.baseTag!))], baseLf: sum(based.map(f => f.dimensions.perimeterFt ?? 0)),
+      transitions: objects.filter(o => o.kind === "transition" && (o.room === room || o.adjoins === room))
+        .map(t => ({ id: t.id, tag: t.tag, lengthFt: t.quantity.value, to: t.room === room ? t.adjoins : t.room })),
+      doors: objects.filter(o => o.kind === "door" && o.room === room).length,
+      wallLf: sum(objects.filter(o => o.kind === "wall" && o.room === room).map(o => o.dimensions.lengthFt ?? 0)),
+    };
+  });
 }
 
 // ── Selection ───────────────────────────────────────────────────────────────
