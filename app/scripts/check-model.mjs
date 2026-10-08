@@ -3,11 +3,12 @@ import { existsSync } from "node:fs";
 import { register } from "node:module";
 
 register("./ts-resolver.mjs", import.meta.url);
-const { elements, materials, rooms, planTransform, systemElements, systemMaterials, allMaterials, modelObjects, modelForProject, sampleModelReview, interiorTransitions, transitionMaterials, finishScheduleRows, level2Elements, level2Transitions, doorInputs, doorAssociations, ceilingInputs, ceilingMaterials, level2Rooms, allRooms, planVoids, sheetTransforms, sheetTransformFor, toSheetPoint, partitionTypes, partitionSchedule } = await import("../lib/jelleff-model.ts");
+const { elements, materials, rooms, planTransform, systemElements, systemMaterials, allMaterials, modelObjects, modelForProject, sampleModelReview, interiorTransitions, transitionMaterials, finishScheduleRows, level2Elements, level2Transitions, doorInputs, doorAssociations, ceilingInputs, ceilingMaterials, wallFinishRecords, wallFinishFaces, wallBaseBreakdown, level2Rooms, allRooms, planVoids, sheetTransforms, sheetTransformFor, toSheetPoint, partitionTypes, partitionSchedule } = await import("../lib/jelleff-model.ts");
 const M = await import("../lib/model.ts");
 const { doorScheduleRows, doorSchedule, doorTraces, scheduleOnlyDoors, doorPanelTypes, doorMaterials, DOOR_WIDTH_TOLERANCE_FT } = await import("../lib/jelleff-doors.ts");
 const { hardwareSets, hardwareManufacturers, hardwareFinishes } = await import("../lib/data/jelleff-hardware.ts");
 const { ceilingTypes, ceilingSchedule, ceilingZones, roomsWithoutCeiling, unplacedCeilingTags, RCP_OFFSETS } = await import("../lib/jelleff-ceilings.ts");
+const { wallFinishData, excludedFinishTags, wallFinishGaps } = await import("../lib/jelleff-wall-finishes.ts");
 const { ALL_SCREENS } = await import("../lib/screens.ts");
 const { startingDraft } = await import("../lib/project-scope.ts");
 
@@ -354,6 +355,82 @@ assert.throws(() => M.resolveObjects([{ ...elements.find(e => e.id === "gym-nort
 assert.deepEqual([RCP_OFFSETS["A3.1"], RCP_OFFSETS["A3.2"]], [[-35.2, 12.8], [-37.6, 11.2]]);
 assert(ceilings.every(o => o.sources[0].sheet === (o.level === "L2" ? "A3.2" : "A3.1") && sheetTransformFor(o.sources[0].sheet).levels.includes(o.level)), "Each zone cites its level's RCP, which has a transform");
 assert.deepEqual(ceilingMaterials.map(m => [m.id, m.tag ?? null, m.specSection]), [["ceiling-apc-1", "ACP-01", "09 51 00"], ["ceiling-apc-2", "ACP-02", "09 51 00"], ["ceiling-gwb-1", null, "09 29 00"], ["ceiling-mpc", null, null], ["ceiling-untagged", null, null]]);
+
+// ── Wall finishes: plan tags, elevations, faces, bands, accent bases ──
+const point = ([x, y]) => [(x - planTransform.origin[0]) * planTransform.feetPerPixel, (y - planTransform.origin[1]) * planTransform.feetPerPixel];
+const wf = wallFinishRecords, wfById = id => wf.find(r => r.id === id);
+const statusCount = level => Object.fromEntries(["assigned", "face-unresolved", "extent-unresolved", "wall-not-traced", "graphic"].map(st => [st, wf.filter(r => r.level === level && r.status === st).length]));
+assert.deepEqual([wf.length, new Set(wf.map(r => r.id)).size, statusCount("L1"), statusCount("L2")],
+  [50, 50, { assigned: 10, "face-unresolved": 6, "extent-unresolved": 0, "wall-not-traced": 14, graphic: 3 }, { assigned: 12, "face-unresolved": 0, "extent-unresolved": 1, "wall-not-traced": 3, graphic: 1 }], "Records by level and status");
+// Faces: on traced walls only, never glazing; the finished side comes from the evidence.
+for (const r of wf) for (const id of r.wallIds) assert.equal(find(id).kind, "wall", `${r.id}: ${id} is a wall`);
+assert(!wf.some(r => r.wallIds.some(id => /storefront|glass/.test(find(id).materialId))), "No face on storefront");
+for (const r of wf.filter(r => r.status === "assigned" && r.level === "L2")) assert(objects.some(o => o.kind === "floor" && o.room === r.room && contains(o.points, r.toward)), `${r.id}: the finished side is in room ${r.room}`);
+assert.deepEqual(["fitness-west", "l2-toilets", "l2-yard-south"].map(id => wallFinishFaces.filter(f => f.wallId === id).map(f => [f.side, f.rooms.join()])),
+  [[["left", "102"], ["right", "106"]], [["left", "203"], ["right", "204"]], [["left", "203,204"], ["right", ""]]], "Two faces per wall, each with its own evidence");
+const faceCount = level => { const f = wallFinishFaces.filter(x => x.level === level); return [f.length, f.filter(x => x.status === "noted").length]; };
+assert.deepEqual([faceCount("L1"), faceCount("L2")], [[80, 21], [64, 15]], "Faces noted vs not noted, by level");
+assert(wallFinishFaces.filter(f => f.status === "not noted").every(f => f.rooms.length === 0 && f.recordIds.length === 0), "Not-noted faces carry no room and no finish");
+// Extents and lengths.
+assert.deepEqual(["wf-l1-105-west", "wf-l1-104-east", "wf-l1-103-north", "wf-l2-206-east", "wf-l2-210-west", "wf-l2-208-west", "wf-l2-203-north"].map(id => wfById(id).lengthFt), [17.04, 17.59, 71.21, 11.03, 15.17, 26.11, 6.84]);
+assert(wf.every(r => (r.status === "assigned") === (r.extent !== null) && (r.lengthFt === null) === (r.extent === null)), "Only assigned faces have an extent and a length");
+// Bands: tile below paint; areas only where height and run are both dimensioned.
+assert.deepEqual(wfById("wf-l2-203-north").bands.map(b => [b.tags.join("+"), b.from, b.to, b.heightFt, b.areaSf]), [["WT-01", "4\"", "7' - 4\"", 7, 47.88], ["PT-02", "7' - 4\"", null, null, null]], "Tile below paint on one face");
+assert.deepEqual(wfById("wf-l1-117a-west").bands.map(b => [b.tags.join("+"), b.heightFt, b.areaSf]), [["WT-01+WT-02", 7, null], ["PT-02", null, null]], "Untraced wall: heights kept, no area");
+assert.deepEqual(wf.flatMap(r => r.bands.filter(b => b.areaSf !== null).map(b => [r.id, b.tags.join("+"), b.areaSf])), [
+  ["wf-l1-106-west", "MR-01", 52], ["wf-l1-106-east", "MR-01", 104], ["wf-l2-208-west", "FRP-01", 206.67], ["wf-l2-208-north", "FRP-01", 112.67],
+  ["wf-l2-203-north", "WT-01", 47.88], ["wf-l2-204-north", "WT-01", 56.7], ["wf-l2-205-north", "WT-01", 61.6]], "Areas only from dimensioned heights and runs");
+assert(wf.flatMap(r => r.bands).every(b => b.areaSf === null || b.heightFt !== null), "No area without a height");
+assert(wf.flatMap(r => r.bands).filter(b => b.width === null && !b.fullRun).every(b => b.areaSf === null), "A partial band without a printed width has no area");
+// Every tag is on A12.1; excluded tags stay out of faces.
+const wfTags = new Set(wf.flatMap(r => [...r.bands.flatMap(b => b.tags), ...(r.base?.tag ? [r.base.tag] : [])]));
+assert([...wfTags, ...excludedFinishTags.map(t => t.tag).filter(t => !["PL-04", "SSM-01"].includes(t))].every(t => finishScheduleRows.some(r => r.tag === t)), "Every tag is on A12.1");
+assert.deepEqual(excludedFinishTags.map(t => [t.level, t.tag, t.count]), [["L1", "PT-07", 4], ["L1", "WF-01", 1], ["L1", "WF-01", 3], ["L1", "CGD-01", 4], ["L2", "CGD-01", 4], ["L2", "PL-04", 2], ["L2", "SSM-01", 2]]);
+assert(!wfTags.has("PT-01"), "No field paint assumed on any face");
+assert(excludedFinishTags.every(t => !wfTags.has(t.tag)), "Column, glazing, accessory and casework tags aren't on any face");
+assert.deepEqual(finishScheduleRows.find(r => r.tag === "WB-02").comments, "Cove base at hard, straight base at carpet; at PT-02 locations");
+// Conflicts and gaps stay explicit.
+assert(wf.filter(r => r.base?.tag === "WT-01").every(r => r.conflicts.some(c => /TB-01/.test(c))), "Tile base vs TB-01 kept");
+assert(["north", "west", "south", "east"].every(d => wfById(`wf-l1-103-${d}`).conflicts.length === 2), "Gym: WB-02 vs VWB-01 and pad height kept");
+assert(["wf-l2-215-niche", "wf-l2-213-niche"].every(id => wfById(id).bands.map(b => b.tags[0]).join() === "PT-02,PT-03" && wfById(id).conflicts.some(c => /PT-02.*PT-03/.test(c))), "Plan PT-02 vs elevation PT-03, both listed");
+assert(["wf-l2-203-north", "wf-l2-205-north"].every(id => wfById(id).conflicts.some(c => /views 18 and 24/.test(c))), "A10.3 title swap recorded");
+assert(wallFinishGaps.some(g => /room finish schedule/.test(g)) && wallFinishGaps.some(g => /never by a sheet transform/.test(g)));
+// Sources: A10.x and A2.x are cited, never transformed.
+const wfSheets = new Set(wf.flatMap(r => r.evidence.map(e => e.sheet)));
+assert.deepEqual([...wfSheets].sort(), ["A10.1", "A10.2", "A10.3", "A10.4", "A10.5", "A12.2", "A12.3", "A2.1", "A2.2"]);
+assert(["A10.1", "A10.2", "A10.3", "A10.4", "A10.5", "A2.1", "A2.2"].every(sh => sheetTransformFor(sh) === null), "No sheet transform for elevations or enlarged plans");
+assert(wf.flatMap(r => r.evidence).every(e => existsSync(new URL(`../public${e.asset}`, import.meta.url))), "Every evidence sheet image exists");
+// Accent bases: split only along supported runs; gross totals unchanged.
+assert.deepEqual(wallBaseBreakdown.filter(b => b.accents.length).map(b => [b.floorId, b.grossLf, b.field.lf, b.accents.map(a => `${a.tag} ${a.lf}`).join()]),
+  [["floor-office-105", 76.24, 59.2, "WB-02 17.04"], ["floor-office-104", 67.58, 49.99, "WB-02 17.59"], ["l2-mpr-1-band", 41.57, 26.4, "WB-03 15.17"]]);
+for (const b of wallBaseBreakdown) {
+  const floor = find(b.floorId);
+  assert.deepEqual([b.grossLf, b.field.tag], [floor.dimensions.perimeterFt, floor.baseTag], `${b.floorId}: gross and field base from the floor`);
+  assert(Math.abs(b.field.lf + b.accents.reduce((a, x) => a + x.lf, 0) - b.grossLf) < 0.011, `${b.floorId}: parts add up to the gross run`);
+}
+assert.equal(wallBaseBreakdown.length, objects.filter(o => o.kind === "floor" && o.baseTag).length);
+assert(wallBaseBreakdown.filter(b => b.field.tag !== "WB-01").every(b => b.accents.length === 0), "Gym VWB-01 and tile bases aren't split");
+assert.deepEqual(wallBaseBreakdown.find(b => b.floorId === "floor-fitness").accents, [], "A partial WB-03 (no width) doesn't split");
+const fakeRun = (id, level, room, extent) => ({ ...wfById("wf-l2-210-west"), id, level, room, extent: extent.map(point) });
+const splitOf = (run, floorId) => M.baseBreakdown(objects, [run]).find(x => x.floorId === floorId).accents;
+assert.deepEqual(splitOf(fakeRun("fake-open-edge", "L2", "210", [[1463.4, 1129.8], [1520.9, 1263.8]]), "l2-mpr-1-band"), [], "No base along a finish line inside a room");
+assert.deepEqual(splitOf(fakeRun("fake-angled", "L1", "105", [[1062, 1060], [1072, 1080]]), "floor-office-105"), [], "No base split from a run that crosses an edge");
+assert.deepEqual(splitOf(fakeRun("fake-along", "L1", "105", [[1067, 1020], [1067, 1060]]), "floor-office-105").map(a => a.lf), [5.59], "A run along the edge splits its length");
+// resolveWallFinishes refuses what the sources don't support.
+const wIn = wallFinishData.find(d => d.id === "wf-l2-206-east");
+const asFeet = d => ({ ...d, toward: d.toward && point(d.toward), extent: d.extent && d.extent.map(point) });
+const resolveWf = patch => M.resolveWallFinishes([asFeet({ ...wIn, ...patch })], objects, finishScheduleRows);
+assert.equal(resolveWf({})[0].lengthFt, 11.03);
+assert.throws(() => resolveWf({ wallIds: ["l2-mpr-storefront"] }), /is a glass, not a wall face/);
+assert.throws(() => resolveWf({ extent: [[1417, 1001], [1440, 1080]] }), /is not on its wall/);
+assert.throws(() => resolveWf({ bands: [{ ...wIn.bands[0], tags: ["PT-09"] }] }), /PT-09 is not on the finish schedule/);
+assert.throws(() => resolveWf({ status: "wall-not-traced" }), /status wall-not-traced with 1 traced walls/);
+assert.throws(() => resolveWf({ extent: null }), /an extent only and always on an assigned face/);
+assert.throws(() => resolveWf({ toward: [1417, 1040] }), /the finished side lies on l2-elevator-west/);
+assert.throws(() => resolveWf({ bands: [{ ...wIn.bands[0], height: "8 ft" }] }), /can't read "8 ft"/);
+// Walls and model objects are untouched by wall finishes.
+assert.deepEqual(M.parseFeetInches("4\""), 4 / 12);
+assert.equal(objects.length, elements.length + interiorTransitions.length + level2Elements.length + level2Transitions.length + doorInputs.length + ceilingInputs.length + systemElements.length, "No objects added for finishes");
 
 // Voids: no Level 02 floor sits in a double-height volume.
 assert.deepEqual(planVoids.map(v => [v.id, v.level]), [["void-gym", "L2"], ["void-yard", "L2"], ["void-lobby", "L2"]]);
