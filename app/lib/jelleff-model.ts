@@ -2,9 +2,10 @@
 // illustrative structural, MEP and roof objects for the four views. Types and measuring rules are
 // in lib/model.ts.
 
-import { resolveObjects, type FinishScheduleRow, type PartitionSchedule, type PartitionTypeRow, type LevelId, type MaterialInfo, type ModelElement, type ModelInput, type ModelObject, type ModelReviewState, type Point, type SourceRef } from "./model";
+import { parseFeetInches, resolveObjects, type FinishScheduleRow, type PartitionSchedule, type PartitionTypeRow, type LevelId, type MaterialInfo, type ModelElement, type ModelInput, type ModelObject, type ModelReviewState, type Point, type SourceRef } from "./model";
 import { SAMPLE_PROJECT_ID } from "./project-scope";
 import { doorMaterialFor, doorMaterials, doorSchedule, doorScheduleRows, doorTraces } from "./jelleff-doors";
+import { RCP_OFFSETS, ceilingDetails, ceilingSchedule, ceilingZones, rcpL1, rcpL2 } from "./jelleff-ceilings";
 
 export type { MaterialInfo, ModelElement, Point, SourceRef } from "./model";
 
@@ -388,6 +389,11 @@ export const finishScheduleRows: FinishScheduleRow[] = [
   row("FAF-01", "09 67 00", "Fluid applied flooring", "Fluid applied flooring", "Tarkett Sports Indoor", "Polyturf Plus Pad + Pour", "Base - Desert, line 1 - grey, line 2 - white", "", "At gyms, logo and lettering included, see plans"),
   row("CPT-01", "09 68 00", "Carpet", "Carpet", "Shaw Contract", "Observe color 5T309", "Radiant Nature 05326", "9\" x 36\"", "Install: ashlar"),
   row("WOG-01", "12 48 16", "Entrance floor grilles", "Walk off grilles", "Construction Specialties", "Gridline G6", "Stainless steel", "", "At vestibules"),
+  row("ACP-01", "09 51 00", "Acoustic ceiling tile", "Standard ceiling tile", "Armstrong", "Ultima 1912LEC, 9/16 beveled tegular", "Bright white", "2x2", ""),
+  row("ACP-02", "09 51 00", "Acoustic ceiling tile", "Scrubable NSF", "Armstrong", "Kitchen Zone square lay-in 15/16", "Bright white", "2x2", "At kitchen"),
+  row("PT-01", "09 90 00", "Painting", "Field paint", "Sherwin Williams", "SW 7042", "Shoji White; eggshell finish", "", ""),
+  row("PT-05", "09 90 00", "Painting", "Ceiling paint", "Sherwin Williams", "Low VOC, premium paint", "Color TBD; flat finish", "", ""),
+  row("PT-08", "09 90 00", "Painting", "Accent ceiling paint (green)", "Sherwin Williams", "SW 6719", "Gecko; flat finish", "", ""),
 ];
 
 // ── Floor transitions at the traced openings (A1.1), typed from A12.1 ────────
@@ -513,7 +519,7 @@ const level2Floors: Level2Floor[] = [
   { id: "l2-closet", name: "Closet", number: "206A", finish: "l2-floor", pixels: [[1289, 1003], [1348, 1003], [1348, 1032], [1289, 1032]], note: "No floor tag, and no finish mark at its door." },
   { id: "l2-office", name: "Office / reception", number: "206", finish: "l2-floor", pixels: [[1352, 1003], [1415, 1003], [1415, 1088], [1352, 1088]],
     note: "No floor tag. The door mark reads RF, so the floor is resilient, but A12.3 doesn't say which product." },
-  { id: "l2-kitchen", name: "Kitchen", number: "208", finish: "quarry-tile", pixels: [[1279, 1140], [1342, 1140], [1342, 1213], [1426, 1213], [1460, 1299], [1279, 1302]] },
+  { id: "l2-kitchen", name: "Kitchen", number: "208", finish: "quarry-tile", pixels: [[1279, 1140], [1342, 1140], [1342, 1213], [1426, 1213], [1457.2, 1291.8], [1270.4, 1371.7], [1252.2, 1371.7], [1252.2, 1327.6], [1279, 1327.6]] },
   { id: "l2-storage", name: "Storage", number: "209", finish: "lvt-wood", pixels: [[1346, 1140], [1394, 1140], [1425, 1211], [1346, 1211]] },
   { id: "l2-mpr-1", name: "Multipurpose room 1", number: "210", finish: "lvt-wood", pixels: [[1463.4, 1129.8], [1543, 1094], [1600, 1218], [1520.9, 1263.8]], openEdges: [3] },
   { id: "l2-mpr-1-band", name: "Multipurpose room 1", number: "210", zone: "LVT-03 band", finish: "lvt-green",
@@ -536,7 +542,9 @@ export const level2Elements: ModelInput[] = [
   wall2("l2-east", "Level 02 - east wall, activity and game rooms", [1725, 720], [1725, 975], "envelope"),
   wall2("l2-mpr-east", "Level 02 - multipurpose room 2 east wall", [1708, 995], [1770, 1168], "envelope", undefined, "211"),
   wall2("l2-south", "Level 02 - angled south wall, multipurpose rooms", [1770, 1168], [1455, 1302], "envelope"),
-  wall2("l2-kitchen-south", "Level 02 - kitchen south wall", [1455, 1302], [1277, 1305], "envelope", undefined, "208"),
+  wall2("l2-kitchen-south", "Level 02 - kitchen south wall (angled)", [1455, 1302], [1277, 1378], "envelope", undefined, "208"),
+  wall2("l2-kitchen-southwest", "Level 02 - kitchen south wall (west return)", [1277, 1378], [1249, 1378], "envelope", undefined, "208"),
+  wall2("l2-kitchen-west-exterior", "Level 02 - kitchen west wall at the lobby", [1249, 1378], [1249, 1325], "envelope", undefined, "208"),
   wall2("l2-yard-east", "Level 02 - wall along the mechanical yard (east)", [1362, 720], [1362, 995], "envelope"),
   wall2("l2-yard-south", "Level 02 - wall along the mechanical yard (south)", [1140, 997], [1420, 997], "envelope"),
   // Partitions.
@@ -559,7 +567,7 @@ export const level2Elements: ModelInput[] = [
   wall2("l2-elevator-west", "Office 206 / elevator 207 partition", [1417, 997], [1417, 1080], "partition-sa3-21", "SA. 3. 21", "206"),
   wall2("l2-elevator-south", "Elevator 207 - south shaft wall", [1417, 1080], [1502, 1080], "partition"),
   wall2("l2-kitchen-north", "Kitchen 208 - north partition", [1277, 1138], [1395, 1138], "partition", undefined, "208"),
-  wall2("l2-kitchen-west", "Kitchen 208 - west partition", [1277, 1138], [1277, 1305], "partition-sa6-20", "SA. 6. 20", "208"),
+  wall2("l2-kitchen-west", "Kitchen 208 - west partition", [1277, 1138], [1277, 1325], "partition-sa6-20", "SA. 6. 20", "208"),
   wall2("l2-kitchen-east", "Kitchen 208 / multipurpose room 1 partition", [1420, 1198], [1460, 1299], "partition-sa6-20", "SA. 6. 20", "210"),
   // Corridor storefronts, operable partitions, guardrail.
   glass2("l2-game-storefront-west", "Game room 213 - storefront at the corridor (west)", [1548, 985], [1548, 1043], "213"),
@@ -607,7 +615,7 @@ export const allRooms = [...rooms, ...level2Rooms];
 export const planVoids: { id: string; level: LevelId; name: string; points: Point[]; source: SourceRef }[] = [
   { id: "void-gym", level: "L2", name: "Open to gym below", points: ([[460, 725], [970, 725], [970, 1445], [460, 1445]] as Point[]).map(point), source: planL2 },
   { id: "void-yard", level: "L2", name: "Open to mechanical yard below", points: ([[1045, 725], [1362, 725], [1362, 995], [1045, 995]] as Point[]).map(point), source: planL2 },
-  { id: "void-lobby", level: "L2", name: "Open to lobby below", points: ([[977, 1180], [1072, 1180], [1072, 1141], [1275, 1141], [1275, 1330], [977, 1330]] as Point[]).map(point), source: planL2 },
+  { id: "void-lobby", level: "L2", name: "Open to lobby below", points: ([[977, 1180], [1072, 1180], [1072, 1141], [1275, 1141], [1275, 1322], [1249, 1322], [1249, 1330], [977, 1330]] as Point[]).map(point), source: planL2 },
 ];
 
 // ── Doors (A8.2), traced on A1.1 / A1.2 ──────────────────────────────────────
@@ -650,6 +658,45 @@ export const doorInputs: ModelInput[] = doorTraces.map((t, i) => {
   };
 });
 
+// ── Ceilings (A3.1 / A3.2), zones traced in each level's plan viewBox ──────────
+// One object per ceiling zone. Its height is above the room's floor; its elevation adds the level.
+// Walls keep their own heights (they run to the deck, A3.1 general note I); nothing is cut or capped.
+
+const manualSection = (section: string, title: string, page: number): SourceRef => ({ drawing: "Jelleff project manual", sheet: section, page, detail: title, asset: "" });
+const ceilingAssembly = (id: string, name: string, color: string, extra: Partial<MaterialInfo> & Pick<MaterialInfo, "description" | "sources">): MaterialInfo => ({
+  id, name, color, status: "Documented", discipline: "architectural", division: "09", specSection: null, unit: "SF", views: ["interior"], properties: [], ...extra,
+});
+export const ceilingMaterials: MaterialInfo[] = [
+  ceilingAssembly("ceiling-apc-1", "APC-1 - acoustical panel ceiling", "#e9ecef", { tag: "ACP-01", specSection: "09 51 00",
+    description: "Tagged APC-1 on A3.1 / A3.2, read as the legend's ACP-1 (2x2) and A12.1's ACP-01: Armstrong Ultima 1912LEC, 9/16 beveled tegular, bright white. The project manual's section 09 51 13 covers acoustical panel ceilings.",
+    sources: [finishSchedule, manualSection("09 51 13", "Acoustical panel ceilings", 451), ceilingDetails] }),
+  ceilingAssembly("ceiling-apc-2", "APC-2 - acoustical panel ceiling (kitchen)", "#dfe5e8", { tag: "ACP-02", specSection: "09 51 00",
+    description: "Tagged APC-2 in kitchen 208 on A3.2, read as A12.1's ACP-02: Armstrong Kitchen Zone, 2x2. The plan legend gives ACP-2 as 4x4; the two disagree and neither is chosen.",
+    sources: [finishSchedule, manualSection("09 51 13", "Acoustical panel ceilings", 451), ceilingDetails] }),
+  ceilingAssembly("ceiling-gwb-1", "GWB-1 - painted gypsum board ceiling", "#f1eee6", { specSection: "09 29 00",
+    description: "Tagged GWB-1 on A3.1 / A3.2 (painted gypsum board in the legend). There is no A12.1 row for GWB-1; the project manual's section 09 29 00 covers gypsum board. Paint is PT-08 or PT-01 where the plan tags it; otherwise A12.1's ceiling paint PT-05, whose color is TBD.",
+    sources: [manualSection("09 29 00", "Gypsum board", 434), finishSchedule, ceilingDetails] }),
+  ceilingAssembly("ceiling-mpc", "MPC - metal panel ceiling (wood look)", "#b98f61", { status: "Illustrative",
+    description: "Tagged MPC on A3.1 (metal panel ceiling, wood look, in the legend). Unscheduled: no A12.1 row and no project manual section.",
+    sources: [rcpL1] }),
+  ceilingAssembly("ceiling-untagged", "Ceiling zone - not tagged", "#d9d4cc", { status: "Illustrative",
+    description: "A ceiling zone drawn on the plan with no tag reaching it. Its type and height are not assigned.",
+    sources: [rcpL1, rcpL2] }),
+];
+const ceilingMaterialFor: Record<string, string> = { "APC-1": "ceiling-apc-1", "APC-2": "ceiling-apc-2", "GWB-1": "ceiling-gwb-1", MPC: "ceiling-mpc" };
+export const ceilingInputs: ModelInput[] = ceilingZones.map(z => {
+  const sheet = z.level === "L2" ? rcpL2 : rcpL1, floorLevel = z.level === "L2" ? L2 : 0;
+  const elevation = z.height === null ? null : floorLevel + (parseFeetInches(z.height) ?? 0);
+  return {
+    id: z.id, name: `${z.name} - ceiling`, kind: "ceiling", materialId: z.tag ? ceilingMaterialFor[z.tag] : "ceiling-untagged",
+    points: z.points.map(point), base: elevation ?? floorLevel, height: 0.05, level: z.level, room: z.room ?? undefined, source: sheet,
+    ceiling: { tag: z.tag, height: z.height, status: z.status, paintTag: z.paintTag ?? null, note: z.note },
+    properties: [{ label: "Outline", value: z.outline.startsWith("clip") ? `Drawn on ${sheet.sheet} (${z.outline})` : `Traced: no outline drawn on ${sheet.sheet}` }],
+    geometryStatus: `Ceiling zone from ${sheet.sheet}, placed with the measured sheet offset. Height is above the room's floor as printed; walls run to the deck and are not cut.`,
+    description: z.tag ? `${z.tag}${z.height ? ` at ${z.height} above the floor` : ", height not resolved"} on ${sheet.sheet}.` : `Ceiling zone drawn on ${sheet.sheet} with no tag.`,
+  };
+});
+
 // ── Sheet coordinates ───────────────────────────────────────────────────────
 
 /**
@@ -664,6 +711,8 @@ export const sheetTransforms: SheetTransform[] = [
   { sheet: "A1.2", asset: "/models/jelleff/a1-2.png", ...planTransform, levels: ["L2"] },
   { sheet: "A12.2", asset: "/models/jelleff/a12-2.png", ...planTransform, origin: [planTransform.origin[0] + 97.6, planTransform.origin[1] + 102.4], levels: ["L1"] },
   { sheet: "A12.3", asset: "/models/jelleff/a12-3.png", ...planTransform, origin: [planTransform.origin[0] + 150.4, planTransform.origin[1] + 86.4], levels: ["L2"] },
+  { sheet: "A3.1", asset: "/models/jelleff/a3-1.png", ...planTransform, origin: [planTransform.origin[0] + RCP_OFFSETS["A3.1"][0], planTransform.origin[1] + RCP_OFFSETS["A3.1"][1]], levels: ["L1"] },
+  { sheet: "A3.2", asset: "/models/jelleff/a3-2.png", ...planTransform, origin: [planTransform.origin[0] + RCP_OFFSETS["A3.2"][0], planTransform.origin[1] + RCP_OFFSETS["A3.2"][1]], levels: ["L2"] },
 ];
 export const sheetTransformFor = (sheet: string): SheetTransform | null => sheetTransforms.find(t => t.sheet === sheet) ?? null;
 /** A plan point (feet) on a sheet's viewBox, or null when there is no transform for that sheet. */
@@ -673,10 +722,10 @@ export function toSheetPoint(sheet: string, [x, z]: Point): Point | null {
 }
 
 /** Every assembly: the studio's first-floor materials, the transitions, Level 02, then the illustrative system ones. */
-export const allMaterials: MaterialInfo[] = [...materials, ...transitionMaterials, ...level2Materials, ...doorMaterials, ...systemMaterials];
+export const allMaterials: MaterialInfo[] = [...materials, ...transitionMaterials, ...level2Materials, ...doorMaterials, ...ceilingMaterials, ...systemMaterials];
 
 /** Every selectable object in the four views, resolved with quantities and sources. */
-export const modelObjects: ModelObject[] = resolveObjects([...elements, ...interiorTransitions, ...level2Elements, ...level2Transitions, ...doorInputs, ...systemElements], allMaterials, finishScheduleRows, partitionSchedule, doorSchedule);
+export const modelObjects: ModelObject[] = resolveObjects([...elements, ...interiorTransitions, ...level2Elements, ...level2Transitions, ...doorInputs, ...ceilingInputs, ...systemElements], allMaterials, finishScheduleRows, partitionSchedule, doorSchedule, ceilingSchedule);
 
 /** The model for a project: Jelleff has one; other projects have none yet. */
 export const modelForProject = (projectId: string): ModelObject[] => projectId === SAMPLE_PROJECT_ID ? modelObjects : [];

@@ -25,7 +25,7 @@ export type ModelSource = SourceRef & { drawing: string };
 
 export type ModelView = "interior" | "mep" | "structural" | "exterior";
 export type Discipline = "architectural" | "structural" | "mechanical" | "plumbing" | "electrical" | "fire-protection";
-export type ObjectKind = "wall" | "glass" | "door" | "floor" | "transition" | "slab" | "roof" | "column" | "beam" | "duct" | "pipe" | "equipment" | "fixture";
+export type ObjectKind = "wall" | "glass" | "door" | "floor" | "ceiling" | "transition" | "slab" | "roof" | "column" | "beam" | "duct" | "pipe" | "equipment" | "fixture";
 export type Shape = "segment" | "polygon" | "box";
 export type QuantityUnit = "SF" | "LF" | "EA" | "CY";
 export type LevelId = "L1" | "L2" | "roof";
@@ -33,7 +33,7 @@ export type ModelProperty = { label: string; value: string };
 
 export const SHAPES: Record<ObjectKind, Shape> = {
   wall: "segment", glass: "segment", door: "segment", transition: "segment", beam: "segment", duct: "segment", pipe: "segment",
-  floor: "polygon", slab: "polygon", roof: "polygon", column: "box", equipment: "box", fixture: "box",
+  floor: "polygon", ceiling: "polygon", slab: "polygon", roof: "polygon", column: "box", equipment: "box", fixture: "box",
 };
 
 /** Levels from building section A5.1: first floor 0 ft, second floor 14 ft, low roof 28 ft. */
@@ -117,6 +117,53 @@ export type ModelInput = Omit<ModelElement, "kind"> & {
   leaves?: [Point, Point][];
   /** For a door: what's unusual about the trace ("leaf drawn at 45°", "read manually"). */
   traceNote?: string;
+  /** For a ceiling zone: its tag and height as printed on the reflected ceiling plan, and how they're known. */
+  ceiling?: CeilingInput;
+};
+
+/** A ceiling type as printed on the reflected ceiling plans, kept apart from its interpreted schedule link. */
+export type CeilingType = {
+  /** As printed in the plan tags ("APC-1"). */
+  tag: string;
+  /** The plan legend's entry for it ("ACP-1 (2X2)"), or null when the legend doesn't list it. */
+  legend: string | null;
+  /** The A12.1 row it is read as ("ACP-01"), and why; null when nothing on the schedule matches. */
+  scheduleLink: { tag: string; basis: string } | null;
+  /** Where the sources disagree, as found; nothing here is resolved. */
+  conflicts: string[];
+};
+export type CeilingSchedule = { types: CeilingType[] };
+
+/**
+ * How a ceiling zone's tag is known: "tagged" (tag and height in or leading into the zone), "height-unresolved"
+ * (the type is clear but more than one height tag ends at its edges), "untagged" (a zone is drawn but no tag reaches it).
+ */
+export type CeilingStatus = "tagged" | "height-unresolved" | "untagged";
+export type CeilingInput = {
+  /** As printed ("APC-1"); null when untagged. */
+  tag: string | null;
+  /** As printed ("9' - 0\""), above the room's finished floor; null when unknown. */
+  height: string | null;
+  status: CeilingStatus;
+  /** A paint tag printed on the zone ("PT-08"), or null. */
+  paintTag?: string | null;
+  note?: string;
+};
+export type CeilingDetail = {
+  tag: string | null; type: CeilingType | null; status: CeilingStatus;
+  heightText: string | null;
+  /** Above the room's finished floor (A3.1 general note C). */
+  heightAffFt: number | null;
+  /** The level's floor elevation plus the height: where the ceiling is. Walls keep their own heights. */
+  elevationFt: number | null;
+  paint: { tag: string; basis: "tagged" | "ceiling-paint-default" } | null;
+  note: string | null;
+};
+
+/** "9' - 0\"", "10' - 10\"", "7' - 10\"" → feet; anything else → null. */
+export const parseFeetInches = (text: string): number | null => {
+  const m = text.match(/^(\d+)' - (\d+)(?: (\d+)\/(\d+))?"$/);
+  return m ? +m[1] + (+m[2] + (m[3] ? +m[3] / +m[4] : 0)) / 12 : null;
 };
 
 /** One row of the door and frame schedule (A8.2), as printed. Sizes are per panel. */
@@ -237,7 +284,10 @@ export type FinishScheduleRow = {
   source: SourceRef;
 };
 
-/** perimeterFt is a floor's edge run along walls, the base line: its open edges (finish lines inside a room) are left out. */
+/**
+ * perimeterFt is a floor's edge run along walls, the base line: its open edges (finish lines inside a
+ * room) are left out. For a ceiling zone it is the gross zone boundary, not a wall-angle or trim quantity.
+ */
 export type Dimensions = { lengthFt: number | null; areaSf: number | null; perimeterFt: number | null; heightFt: number | null; thicknessIn: number | null; volumeCy: number | null };
 
 /** One selectable object, resolved for the views and the inspector. */
@@ -257,6 +307,8 @@ export type ModelObject = {
   partitionType: PartitionTypeRow | null; partitionBasis: PartitionBasis | null;
   /** For a door: its A8.2 row, leaves, width check and hardware. points are the opening; quantity is 1 opening. */
   door: DoorDetail | null;
+  /** For a ceiling zone: printed tag, type, height above floor, elevation, paint and status. */
+  ceiling: CeilingDetail | null;
   /** The takeoff quantity in the assembly's unit. */
   quantity: { value: number; unit: QuantityUnit };
   /** Only the dimensions that mean something for the kind; the rest are null. */
@@ -278,7 +330,7 @@ export type ModelObject = {
 const round = (v: number) => Math.round(v * 100) / 100;
 const DIMENSIONS: Record<ObjectKind, (keyof Dimensions)[]> = {
   wall: ["lengthFt", "areaSf", "heightFt", "thicknessIn"], glass: ["lengthFt", "areaSf", "heightFt"], door: ["lengthFt", "heightFt"],
-  floor: ["areaSf", "perimeterFt"], transition: ["lengthFt"], slab: ["areaSf", "thicknessIn", "volumeCy"], roof: ["areaSf", "thicknessIn"],
+  floor: ["areaSf", "perimeterFt"], ceiling: ["areaSf", "perimeterFt"], transition: ["lengthFt"], slab: ["areaSf", "thicknessIn", "volumeCy"], roof: ["areaSf", "thicknessIn"],
   beam: ["lengthFt", "heightFt"], duct: ["lengthFt"], pipe: ["lengthFt"], column: ["heightFt"], equipment: ["heightFt"], fixture: ["heightFt"],
 };
 
@@ -343,7 +395,7 @@ const dist = (a: Point, b: Point) => Math.hypot(b[0] - a[0], b[1] - a[1]);
  * resolved as traced, with the difference in its width check.
  */
 export function resolveObjects(inputs: ModelInput[], materials: MaterialInfo[], schedule: FinishScheduleRow[] = [], partitions: PartitionSchedule = { types: [], defaultType: "", defaultNote: "" },
-  doors: DoorSchedule = { rows: [], hardwareSets: [], widthToleranceFt: 0 }): ModelObject[] {
+  doors: DoorSchedule = { rows: [], hardwareSets: [], widthToleranceFt: 0 }, ceilings: CeilingSchedule = { types: [] }): ModelObject[] {
   const rowOf = (tag: string | undefined, id: string): FinishScheduleRow | null => {
     if (!tag) return null;
     return schedule.find(r => r.tag === tag) ?? (() => { throw new Error(`${id}: ${tag} is not on the finish schedule`); })();
@@ -365,6 +417,7 @@ export function resolveObjects(inputs: ModelInput[], materials: MaterialInfo[], 
       throw new Error(`${input.id}: modeled ${round((input.thickness ?? 0) * 12)} in. thick, ${partition.tag} is ${partition.modeledThicknessIn} in.`);
     }
     const door = doorDetail(input, doors);
+    const ceiling = ceilingDetail(input, ceilings);
     const thickness = input.thickness ?? 0, depth = input.depth ?? thickness;
     if (input.openEdges?.some(i => input.kind !== "floor" || !Number.isInteger(i) || i < 0 || i >= input.points.length)) throw new Error(`${input.id}: open edges must be edges of a floor`);
     const all = measures(input.kind, input.points, input.height, thickness, depth, input.openEdges);
@@ -382,7 +435,7 @@ export function resolveObjects(inputs: ModelInput[], materials: MaterialInfo[], 
       discipline: material.discipline, division: material.division, divisionName: CSI_DIVISIONS[material.division] ?? "",
       specSection: material.specSection, materialId: material.id, assembly: material.name,
       tag: material.tag ?? null, schedule: row, baseTag: material.base ?? null, adjoins: input.adjoins ?? null,
-      partitionType: partition, partitionBasis, door,
+      partitionType: partition, partitionBasis, door, ceiling,
       quantity: { value: round(raw), unit: material.unit }, dimensions,
       properties: [
         ...(row ? scheduleProperties(row) : []),
@@ -391,10 +444,61 @@ export function resolveObjects(inputs: ModelInput[], materials: MaterialInfo[], 
         ...(partitionBasis ? [{ label: "Type basis", value: partitionBasis === "tag" ? `Tagged ${planTag} on ${input.source.sheet}`
           : partitionBasis === "unverified" ? `Unverified: ${input.partitionUnverified}. Modeled as ${partitions.defaultType} by the general note.` : partitions.defaultNote }] : []),
         ...(door ? doorProperties(door.row) : []),
+        ...(ceiling ? ceilingProperties(ceiling) : []),
         ...material.properties, ...(input.properties ?? []),
       ],
       sources, basis, confidence: confidenceFor(basis),
       description: input.description, caution: input.geometryStatus,
+    };
+  });
+}
+
+/** A ceiling zone's printed tag and height checked against the ceiling types; null for anything else. */
+function ceilingDetail(input: ModelInput, ceilings: CeilingSchedule): CeilingDetail | null {
+  const c = input.ceiling;
+  if (!c) {
+    if (input.kind === "ceiling") throw new Error(`${input.id}: a ceiling zone without its tag record`);
+    return null;
+  }
+  if (input.kind !== "ceiling") throw new Error(`${input.id}: a ceiling tag on a ${input.kind}`);
+  const type = c.tag === null ? null : ceilings.types.find(t => t.tag === c.tag) ?? (() => { throw new Error(`${input.id}: ceiling tag ${c.tag} is not a ceiling type`); })();
+  const heightAffFt = c.height === null ? null : parseFeetInches(c.height) ?? (() => { throw new Error(`${input.id}: can't read the height "${c.height}"`); })();
+  const shape = c.status === "tagged" ? !!c.tag && heightAffFt !== null : c.status === "height-unresolved" ? !!c.tag && heightAffFt === null : !c.tag && heightAffFt === null;
+  if (!shape) throw new Error(`${input.id}: status ${c.status} doesn't match tag ${c.tag ?? "none"} and height ${c.height ?? "none"}`);
+  if (planArea(input.points) <= 0) throw new Error(`${input.id}: a ceiling zone with no area`);
+  const floor = LEVELS.find(l => l.id === (input.level ?? "L1"))!.elevation;
+  return {
+    tag: c.tag, type, status: c.status, heightText: c.height, heightAffFt, elevationFt: heightAffFt === null ? null : floor + heightAffFt,
+    paint: c.tag !== "GWB-1" ? null : c.paintTag ? { tag: c.paintTag, basis: "tagged" } : { tag: "PT-05", basis: "ceiling-paint-default" },
+    note: c.note ?? null,
+  };
+}
+
+function ceilingProperties(c: CeilingDetail): ModelProperty[] {
+  return ([["Ceiling tag (plan)", c.tag ?? "Not tagged"], ["Legend", c.type?.legend ?? ""], ["Schedule link", c.type?.scheduleLink ? `${c.type.scheduleLink.tag} (${c.type.scheduleLink.basis})` : c.type ? "Not on the finish schedule" : ""],
+    ["Height above floor", c.heightText ?? "Not resolved"], ["Paint", c.paint ? `${c.paint.tag}${c.paint.basis === "tagged" ? " (tagged on the plan)" : " (A12.1 ceiling paint; not tagged on the plan)"}` : ""],
+    ...(c.type?.conflicts ?? []).map(text => ["Source conflict", text] as [string, string]), ["Ceiling note", c.note ?? ""]] as [string, string][])
+    .filter(([, value]) => value.trim()).map(([label, value]) => ({ label, value }));
+}
+
+/** One row per room with ceiling zones: each zone's printed tag, height and area, and the room's total. */
+export type RoomCeilingRow = {
+  /** null for zones with no room number on the plan. */
+  room: string | null; level: LevelId;
+  zones: { id: string; tag: string | null; heightText: string | null; elevationFt: number | null; areaSf: number; status: CeilingStatus }[];
+  areaSf: number; heights: string[]; unresolved: number;
+};
+export function roomCeilingSchedule(objects: ModelObject[]): RoomCeilingRow[] {
+  const zones = objects.filter(o => o.kind === "ceiling" && o.ceiling);
+  const keys = [...new Set(zones.map(o => `${o.level}|${o.room ?? ""}`))].sort();
+  return keys.map(key => {
+    const [level, room] = key.split("|") as [LevelId, string], mine = zones.filter(o => o.level === level && (o.room ?? "") === room);
+    return {
+      room: room || null, level,
+      zones: mine.map(o => ({ id: o.id, tag: o.ceiling!.tag, heightText: o.ceiling!.heightText, elevationFt: o.ceiling!.elevationFt, areaSf: o.quantity.value, status: o.ceiling!.status })),
+      areaSf: round(mine.reduce((a, o) => a + o.quantity.value, 0)),
+      heights: [...new Set(mine.map(o => o.ceiling!.heightText).filter((h): h is string => !!h))],
+      unresolved: mine.filter(o => o.ceiling!.status !== "tagged").length,
     };
   });
 }
