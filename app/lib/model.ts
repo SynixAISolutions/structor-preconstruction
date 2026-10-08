@@ -163,7 +163,9 @@ export type CeilingDetail = {
 /** "9' - 0\"", "10' - 10\"", "7' - 10\"" → feet; anything else → null. */
 export const parseFeetInches = (text: string): number | null => {
   const m = text.match(/^(\d+)' - (\d+)(?: (\d+)\/(\d+))?"$/);
-  return m ? +m[1] + (+m[2] + (m[3] ? +m[3] / +m[4] : 0)) / 12 : null;
+  if (m) return +m[1] + (+m[2] + (m[3] ? +m[3] / +m[4] : 0)) / 12;
+  const inches = text.match(/^(\d+)"$/);
+  return inches ? +inches[1] / 12 : null;
 };
 
 /** One row of the door and frame schedule (A8.2), as printed. Sizes are per panel. */
@@ -307,6 +309,8 @@ export type ModelObject = {
   partitionType: PartitionTypeRow | null; partitionBasis: PartitionBasis | null;
   /** For a door: its A8.2 row, leaves, width check and hardware. points are the opening; quantity is 1 opening. */
   door: DoorDetail | null;
+  /** For a floor: the edges that are finish lines inside a room (no base). */
+  openEdges: number[];
   /** For a ceiling zone: printed tag, type, height above floor, elevation, paint and status. */
   ceiling: CeilingDetail | null;
   /** The takeoff quantity in the assembly's unit. */
@@ -435,7 +439,7 @@ export function resolveObjects(inputs: ModelInput[], materials: MaterialInfo[], 
       discipline: material.discipline, division: material.division, divisionName: CSI_DIVISIONS[material.division] ?? "",
       specSection: material.specSection, materialId: material.id, assembly: material.name,
       tag: material.tag ?? null, schedule: row, baseTag: material.base ?? null, adjoins: input.adjoins ?? null,
-      partitionType: partition, partitionBasis, door, ceiling,
+      partitionType: partition, partitionBasis, door, ceiling, openEdges: input.openEdges ?? [],
       quantity: { value: round(raw), unit: material.unit }, dimensions,
       properties: [
         ...(row ? scheduleProperties(row) : []),
@@ -488,6 +492,164 @@ export type RoomCeilingRow = {
   zones: { id: string; tag: string | null; heightText: string | null; elevationFt: number | null; areaSf: number; status: CeilingStatus }[];
   areaSf: number; heights: string[]; unresolved: number;
 };
+// ── Wall finishes: printed tags and elevation views, by wall face ─────────────
+
+/**
+ * One vertical band of finish on a wall face as printed: tile below paint, a mirror, wall pads. Heights are
+ * above the floor. A band is quantified only from cited dimensions: its height (or from / to) and either its
+ * own printed width or the face's traced extent when it runs the full face.
+ */
+export type FinishBand = {
+  /** Usually one tag; a tile field whose top course is another tile lists both ("WT-01", "WT-02"). */
+  tags: string[];
+  from: string | null; to: string | null; height: string | null; width: string | null;
+  fullRun: boolean;
+  note?: string;
+};
+/** The base printed on a face. tag is null for "wall base as scheduled". */
+export type FaceBase = { tag: string | null; printed: string; basis: string; fullRun: boolean };
+/**
+ * assigned: on a traced wall, side and extent supported. face-unresolved: the face can't be tied to a traced
+ * wall with confidence. extent-unresolved: the wall is known but not where the finish runs along it.
+ * wall-not-traced: the face isn't a wall in the model (untraced, or modeled as storefront). graphic: a painted
+ * graphic recorded as listed finishes, not quantified.
+ */
+export type WallFinishStatus = "assigned" | "face-unresolved" | "extent-unresolved" | "wall-not-traced" | "graphic";
+export type WallFinishInput = {
+  id: string; level: LevelId;
+  /** From the evidence (an elevation title or a tag printed in the room); null when the source doesn't say. */
+  room: string | null;
+  title: string;
+  evidence: SourceRef[];
+  /** Traced walls the face runs along; [] when none. */
+  wallIds: string[];
+  /** A plan point on the finished side (the tag position or the room named by the view). */
+  toward: Point | null;
+  /** Where the finish runs along the wall, in plan feet; null when the source doesn't tie it down. */
+  extent: [Point, Point] | null;
+  bands: FinishBand[];
+  base: FaceBase | null;
+  status: WallFinishStatus;
+  conflicts: string[];
+  note?: string;
+};
+export type ResolvedBand = FinishBand & { rows: FinishScheduleRow[]; heightFt: number | null; areaSf: number | null };
+export type WallFinishRecord = Omit<WallFinishInput, "bands"> & {
+  bands: ResolvedBand[];
+  /** Along the extent; null without one. */
+  lengthFt: number | null;
+  /** Which side of each wall (left / right of its first-to-second point) is finished. */
+  sides: { wallId: string; side: "left" | "right" }[];
+  baseRow: FinishScheduleRow | null;
+};
+
+const sideOf = ([ax, az]: Point, [bx, bz]: Point, [px, pz]: Point): "left" | "right" | null => {
+  const cross = (bx - ax) * (pz - az) - (bz - az) * (px - ax);
+  return Math.abs(cross) < 1e-9 ? null : cross > 0 ? "left" : "right";
+};
+/** Distance from p to segment a–b and where along it p projects (0..1, may fall outside). */
+const toSegment = (p: Point, [a, b]: [Point, Point]) => {
+  const dx = b[0] - a[0], dz = b[1] - a[1], len2 = dx * dx + dz * dz;
+  const t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / len2;
+  const c = Math.max(0, Math.min(1, t));
+  return { dist: Math.hypot(p[0] - a[0] - c * dx, p[1] - a[1] - c * dz), t, along: Math.sqrt(len2) };
+};
+/** How far a face's extent may sit off its traced wall line (the wall traces are centerlines; faces aren't). */
+export const FACE_TOLERANCE_FT = 1.5;
+
+/**
+ * Checks each wall-finish record against the model and the finish schedule and measures what the sources
+ * support. Throws on a tag not on the schedule, a wall that isn't a traced wall, an extent off its wall, a
+ * finished side that differs between the walls of one face, or a status its fields don't fit.
+ */
+export function resolveWallFinishes(inputs: WallFinishInput[], objects: ModelObject[], schedule: FinishScheduleRow[]): WallFinishRecord[] {
+  const rowOf = (tag: string, id: string) => schedule.find(r => r.tag === tag) ?? (() => { throw new Error(`${id}: ${tag} is not on the finish schedule`); })();
+  return inputs.map(input => {
+    const walls = input.wallIds.map(id => objects.find(o => o.id === id) ?? (() => { throw new Error(`${input.id}: no object ${id}`); })());
+    for (const w of walls) if (w.kind !== "wall") throw new Error(`${input.id}: ${w.id} is a ${w.kind}, not a wall face`);
+    const needsWall = input.status === "assigned" || input.status === "extent-unresolved" || input.status === "graphic";
+    if (needsWall !== walls.length > 0) throw new Error(`${input.id}: status ${input.status} with ${walls.length} traced walls`);
+    if ((input.status === "assigned") !== !!input.extent) throw new Error(`${input.id}: an extent only and always on an assigned face`);
+    if (walls.length && !input.toward) throw new Error(`${input.id}: no finished side`);
+    const sides = walls.map(w => ({ wallId: w.id, side: sideOf(w.points[0], w.points[1], input.toward!) ?? (() => { throw new Error(`${input.id}: the finished side lies on ${w.id}`); })() }));
+    if (input.extent) {
+      for (const p of input.extent) {
+        const fits = walls.some(w => { const s = toSegment(p, [w.points[0], w.points[1]]); return s.dist <= FACE_TOLERANCE_FT && s.t * s.along >= -0.5 && s.t * s.along <= s.along + 0.5; });
+        if (!fits) throw new Error(`${input.id}: extent point ${p.map(v => round(v)).join(", ")} is not on its wall`);
+      }
+    }
+    const lengthFt = input.extent ? round(Math.hypot(input.extent[1][0] - input.extent[0][0], input.extent[1][1] - input.extent[0][1])) : null;
+    const bands = input.bands.map(b => {
+      const rows = b.tags.map(t => rowOf(t, input.id));
+      const parse = (v: string | null) => v === null ? null : parseFeetInches(v) ?? (() => { throw new Error(`${input.id}: can't read "${v}"`); })();
+      const from = parse(b.from), to = parse(b.to), height = parse(b.height), width = parse(b.width);
+      const heightFt = height ?? (from !== null && to !== null ? to - from : null);
+      if (heightFt !== null && heightFt <= 0) throw new Error(`${input.id}: a band with no height`);
+      const runFt = width ?? (b.fullRun ? lengthFt : null);
+      return { ...b, rows, heightFt: heightFt === null ? null : round(heightFt), areaSf: heightFt !== null && runFt !== null ? round(heightFt * runFt) : null };
+    });
+    return { ...input, bands, lengthFt, sides, baseRow: input.base?.tag ? rowOf(input.base.tag, input.id) : null };
+  });
+}
+
+/** Both faces of every traced wall, with the records on each; a face with none is "not noted". */
+export type WallFace = { wallId: string; side: "left" | "right"; level: LevelId; recordIds: string[]; rooms: string[]; status: "noted" | "not noted" };
+export function wallFaces(objects: ModelObject[], records: WallFinishRecord[]): WallFace[] {
+  return objects.filter(o => o.kind === "wall").flatMap(w => (["left", "right"] as const).map(side => {
+    const mine = records.filter(r => r.sides.some(s => s.wallId === w.id && s.side === side));
+    return { wallId: w.id, side, level: w.level, recordIds: mine.map(r => r.id), rooms: [...new Set(mine.map(r => r.room).filter((x): x is string => !!x))], status: mine.length ? "noted" : "not noted" } as WallFace;
+  }));
+}
+
+/**
+ * A floor zone's gross base run split by the accent bases printed or scheduled on faces along it. Only a
+ * WB-01 field base is split, only by an assigned face whose base runs its full extent, in the same room and
+ * level, and only where that extent lies along one of the floor's base edges. Everything else stays field.
+ */
+export type BaseBreakdownRow = {
+  floorId: string; room: string | null; level: LevelId; grossLf: number;
+  field: { tag: string; lf: number }; accents: { tag: string; lf: number; recordId: string }[];
+};
+export function baseBreakdown(objects: ModelObject[], records: WallFinishRecord[]): BaseBreakdownRow[] {
+  const accentOf = (r: WallFinishRecord) => r.status === "assigned" && r.base?.fullRun && (r.base.tag === "WB-02" || r.base.tag === "WB-03") && r.extent;
+  return objects.filter(o => o.kind === "floor" && o.baseTag).map(f => {
+    const gross = f.dimensions.perimeterFt ?? 0;
+    const edges = f.points.map((p, i) => [p, f.points[(i + 1) % f.points.length]] as [Point, Point]).filter((_, i) => !f.openEdges.includes(i));
+    const accents = f.baseTag !== "WB-01" ? [] : records.filter(r => accentOf(r) && r.level === f.level && r.room === f.room).map(r => {
+      const [p, q] = r.extent!;
+      const lf = edges.reduce((sum, e) => {
+        const ex = e[1][0] - e[0][0], ez = e[1][1] - e[0][1], len = Math.hypot(ex, ez), rx = q[0] - p[0], rz = q[1] - p[1], rlen = Math.hypot(rx, rz);
+        const parallel = Math.abs(ex * rz - ez * rx) / (len * rlen) < Math.sin(5 * Math.PI / 180);
+        const near = [p, q].every(pt => Math.abs(ex * (pt[1] - e[0][1]) - ez * (pt[0] - e[0][0])) / len <= FACE_TOLERANCE_FT);
+        if (!parallel || !near) return sum;
+        const t = (pt: Point) => ((pt[0] - e[0][0]) * ex + (pt[1] - e[0][1]) * ez) / len;
+        const lo = Math.max(0, Math.min(t(p), t(q))), hi = Math.min(len, Math.max(t(p), t(q)));
+        return sum + Math.max(0, hi - lo);
+      }, 0);
+      return { tag: r.base!.tag!, lf: round(lf), recordId: r.id };
+    }).filter(a => a.lf > 0);
+    const accentLf = accents.reduce((a, x) => a + x.lf, 0);
+    return { floorId: f.id, room: f.room, level: f.level, grossLf: gross, field: { tag: f.baseTag!, lf: round(gross - accentLf) }, accents };
+  });
+}
+
+/** Records grouped by level and room (null: the source names no room). */
+export type RoomWallFinishRow = { level: LevelId; room: string | null; recordIds: string[]; tags: string[]; areaSf: { tags: string; sf: number }[]; unresolved: number };
+export function roomWallFinishSchedule(records: WallFinishRecord[]): RoomWallFinishRow[] {
+  const keys = [...new Set(records.map(r => `${r.level}|${r.room ?? ""}`))].sort();
+  return keys.map(key => {
+    const [level, room] = key.split("|") as [LevelId, string], mine = records.filter(r => r.level === level && (r.room ?? "") === room);
+    const areas = new Map<string, number>();
+    for (const b of mine.flatMap(r => r.bands)) if (b.areaSf !== null) areas.set(b.tags.join(" / "), (areas.get(b.tags.join(" / ")) ?? 0) + b.areaSf);
+    return {
+      level, room: room || null, recordIds: mine.map(r => r.id),
+      tags: [...new Set(mine.flatMap(r => [...r.bands.flatMap(b => b.tags), ...(r.base?.tag ? [r.base.tag] : [])]))].sort(),
+      areaSf: [...areas].map(([tags, sf]) => ({ tags, sf: round(sf) })),
+      unresolved: mine.filter(r => r.status !== "assigned").length,
+    };
+  });
+}
+
 export function roomCeilingSchedule(objects: ModelObject[]): RoomCeilingRow[] {
   const zones = objects.filter(o => o.kind === "ceiling" && o.ceiling);
   const keys = [...new Set(zones.map(o => `${o.level}|${o.room ?? ""}`))].sort();

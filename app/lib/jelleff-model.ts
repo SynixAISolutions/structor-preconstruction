@@ -2,10 +2,11 @@
 // illustrative structural, MEP and roof objects for the four views. Types and measuring rules are
 // in lib/model.ts.
 
-import { parseFeetInches, resolveObjects, type FinishScheduleRow, type PartitionSchedule, type PartitionTypeRow, type LevelId, type MaterialInfo, type ModelElement, type ModelInput, type ModelObject, type ModelReviewState, type Point, type SourceRef } from "./model";
+import { baseBreakdown, parseFeetInches, resolveObjects, resolveWallFinishes, wallFaces, type FinishScheduleRow, type PartitionSchedule, type PartitionTypeRow, type LevelId, type MaterialInfo, type ModelElement, type ModelInput, type ModelObject, type ModelReviewState, type Point, type SourceRef } from "./model";
 import { SAMPLE_PROJECT_ID } from "./project-scope";
 import { doorMaterialFor, doorMaterials, doorSchedule, doorScheduleRows, doorTraces } from "./jelleff-doors";
 import { RCP_OFFSETS, ceilingDetails, ceilingSchedule, ceilingZones, rcpL1, rcpL2 } from "./jelleff-ceilings";
+import { wallFinishData } from "./jelleff-wall-finishes";
 
 export type { MaterialInfo, ModelElement, Point, SourceRef } from "./model";
 
@@ -372,6 +373,8 @@ export const finishScheduleRows: FinishScheduleRow[] = [
   row("FT-01", "09 30 00", "Tiling", "Floor tile", "Tilebar", "Nashville", "Taupe, matte finish", "12\" x 24\"", "Install: soldier course; see plans"),
   row("QT-01", "09 30 00", "Tiling", "Quarry tile", "Daltile", "Quarry Tile", "Ashen grey, abrasive", "6\" x 6\"", ""),
   row("TB-01", "09 30 00", "Tiling", "Tile base", "Tilebar", "Nashville", "Beige, matte finish", "6\" x TBD", ""),
+  row("WT-01", "09 30 00", "Tiling", "Wall tile", "Tilebar", "Nashville", "Beige, matte finish", "12\" x 24\"", "Install: soldier course; see elevations; trim where applicable"),
+  row("WT-02", "09 30 00", "Tiling", "Wall tile", "Tilebar", "Nashville", "Beige, matte finish", "12\" x 12\"", "Install: soldier course; see elevations; trim where applicable"),
   row("TB-02", "09 30 00", "Tiling", "Tile base", "Daltile", "Quarry Tile Round Top Cove Base Q3565", "Ashen grey", "5\" x 6\"", "Include outside and inside corner profiles as needed"),
   row("LVT-01", "09 65 00", "Resilient flooring", "Resilient flooring (wood-look)", "Interface", "Northern Grain A025", "A02611 Oak Satin", "3 mm; 25 cm x 1 m", ""),
   row("LVT-02", "09 65 00", "Resilient flooring", "Resilient flooring (yellow)", "Interface", "Studioset A007", "A00712 Marigold", "3 mm; 25 cm x 1 m", ""),
@@ -386,13 +389,28 @@ export const finishScheduleRows: FinishScheduleRow[] = [
   row("TS-08", "09 65 00", "Resilient flooring", "Tile transition", "Schluter", "Schiene", "Stainless steel V2A", "", ""),
   row("VWB-01", "09 65 00", "Resilient flooring", "Vented wall base", "Johnsonite", "TBD", "47 Brown", "", "At gym"),
   row("WB-01", "09 65 00", "Resilient flooring", "Resilient base (field)", "Roppe", "", "694 Parchment", "4\" H base", "Cove base at hard surfaces, straight base at carpet"),
+  row("WB-02", "09 65 00", "Resilient flooring", "Resilient base (tan)", "Johnsonite", "", "Beige WB", "4\" H base", "Cove base at hard, straight base at carpet; at PT-02 locations"),
+  row("WB-03", "09 65 00", "Resilient flooring", "Resilient base (green)", "Allstate", "", "D24", "4\" H base", "Cove base at hard, straight base at carpet; at PT-03 locations"),
+  row("FRP-01", "06 64 00", "Plastic paneling", "Food service walls", "Crane Composites", "Glassboard Class A", "White", "4' x 8'", "At kitchen"),
+  row("SAW-01", "09 84 33", "Sound absorbing wall units", "Tectum panels", "Armstrong", "Direct attach", "Paint to match adjacent wall", "23-3/4\" x 48\" x 2\"", "At gym, see elevations"),
+  row("MP-03", "10 26 00", "Wall protection", "Decorative metal panel", "Amico", "3/8\" diameter 1/2\" staggered center, 4.62 holes psi, 51.01% open area", "Grey", "72\" x 48\"", ""),
+  row("MR-01", "10 26 00", "Wall protection", "Wall mirror", "Dulles Glass", "Rectangle annealed mirror", "Clear mirror", "3' x 8', 1/4\" thk, eased edges", "Or equal"),
+  row("CGD-01", "10 26 13", "Corner guards", "Corner guard", "Inpro", "130FR fire rated corner guard", "Clam Shell 0154", "3\" x 8'", ""),
+  row("GWP-01", "11 66 23", "Gymnasium equipment", "Gymnasium wall pads", "Draper Inc", "Ecovision", "Grey", "2' x 7'6\"", "At gyms, see elevations"),
+  row("WF-01", "08 80 00", "Glazing", "Window film", "3M", "Fasara SH2FGSE", "Fabric / washi", "", "At fitness center"),
   row("FAF-01", "09 67 00", "Fluid applied flooring", "Fluid applied flooring", "Tarkett Sports Indoor", "Polyturf Plus Pad + Pour", "Base - Desert, line 1 - grey, line 2 - white", "", "At gyms, logo and lettering included, see plans"),
   row("CPT-01", "09 68 00", "Carpet", "Carpet", "Shaw Contract", "Observe color 5T309", "Radiant Nature 05326", "9\" x 36\"", "Install: ashlar"),
   row("WOG-01", "12 48 16", "Entrance floor grilles", "Walk off grilles", "Construction Specialties", "Gridline G6", "Stainless steel", "", "At vestibules"),
   row("ACP-01", "09 51 00", "Acoustic ceiling tile", "Standard ceiling tile", "Armstrong", "Ultima 1912LEC, 9/16 beveled tegular", "Bright white", "2x2", ""),
   row("ACP-02", "09 51 00", "Acoustic ceiling tile", "Scrubable NSF", "Armstrong", "Kitchen Zone square lay-in 15/16", "Bright white", "2x2", "At kitchen"),
   row("PT-01", "09 90 00", "Painting", "Field paint", "Sherwin Williams", "SW 7042", "Shoji White; eggshell finish", "", ""),
+  row("PT-02", "09 90 00", "Painting", "Accent paint (neutral)", "Sherwin Williams", "SW 6093", "Familiar Beige; eggshell finish", "", ""),
+  row("PT-03", "09 90 00", "Painting", "Accent paint (green)", "Sherwin Williams", "SW 6719", "Gecko; eggshell finish", "", ""),
+  row("PT-03B", "09 90 00", "Painting", "Accent paint (lighter green)", "Sherwin Williams", "SW 9032", "Stay In Lime; eggshell finish", "", ""),
+  row("PT-04", "09 90 00", "Painting", "Accent paint (yellow)", "Sherwin Williams", "SW 6689", "Overjoy; eggshell finish", "", ""),
+  row("PT-04B", "09 90 00", "Painting", "Accent paint (yellow under green)", "Sherwin Williams", "SW 9030", "Limon Fresco; eggshell finish", "", ""),
   row("PT-05", "09 90 00", "Painting", "Ceiling paint", "Sherwin Williams", "Low VOC, premium paint", "Color TBD; flat finish", "", ""),
+  row("PT-07", "09 90 00", "Painting", "Column paint", "Sherwin Williams", "SW 7042", "Shoji White; high gloss finish", "", ""),
   row("PT-08", "09 90 00", "Painting", "Accent ceiling paint (green)", "Sherwin Williams", "SW 6719", "Gecko; flat finish", "", ""),
 ];
 
@@ -726,6 +744,15 @@ export const allMaterials: MaterialInfo[] = [...materials, ...transitionMaterial
 
 /** Every selectable object in the four views, resolved with quantities and sources. */
 export const modelObjects: ModelObject[] = resolveObjects([...elements, ...interiorTransitions, ...level2Elements, ...level2Transitions, ...doorInputs, ...ceilingInputs, ...systemElements], allMaterials, finishScheduleRows, partitionSchedule, doorSchedule, ceilingSchedule);
+
+/** Wall finishes by face, from the finish plans, elevations and enlarged plans (lib/jelleff-wall-finishes.ts). */
+export const wallFinishRecords = resolveWallFinishes(wallFinishData.map(d => ({
+  ...d, toward: d.toward && point(d.toward), extent: d.extent && [point(d.extent[0]), point(d.extent[1])] as [Point, Point],
+})), modelObjects, finishScheduleRows);
+/** Both faces of every traced wall: noted by a record, or not noted. */
+export const wallFinishFaces = wallFaces(modelObjects, wallFinishRecords);
+/** Each floor zone's gross base split by supported accent-base runs. */
+export const wallBaseBreakdown = baseBreakdown(modelObjects, wallFinishRecords);
 
 /** The model for a project: Jelleff has one; other projects have none yet. */
 export const modelForProject = (projectId: string): ModelObject[] => projectId === SAMPLE_PROJECT_ID ? modelObjects : [];
