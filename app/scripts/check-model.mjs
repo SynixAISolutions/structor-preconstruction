@@ -3,8 +3,10 @@ import { existsSync } from "node:fs";
 import { register } from "node:module";
 
 register("./ts-resolver.mjs", import.meta.url);
-const { elements, materials, rooms, planTransform, systemElements, systemMaterials, allMaterials, modelObjects, modelForProject, sampleModelReview, interiorTransitions, transitionMaterials, finishScheduleRows, level2Elements, level2Transitions, level2Rooms, allRooms, planVoids, sheetTransforms, sheetTransformFor, toSheetPoint, partitionTypes, partitionSchedule } = await import("../lib/jelleff-model.ts");
+const { elements, materials, rooms, planTransform, systemElements, systemMaterials, allMaterials, modelObjects, modelForProject, sampleModelReview, interiorTransitions, transitionMaterials, finishScheduleRows, level2Elements, level2Transitions, doorInputs, doorAssociations, level2Rooms, allRooms, planVoids, sheetTransforms, sheetTransformFor, toSheetPoint, partitionTypes, partitionSchedule } = await import("../lib/jelleff-model.ts");
 const M = await import("../lib/model.ts");
+const { doorScheduleRows, doorSchedule, doorTraces, scheduleOnlyDoors, doorPanelTypes, doorMaterials, DOOR_WIDTH_TOLERANCE_FT } = await import("../lib/jelleff-doors.ts");
+const { hardwareSets, hardwareManufacturers, hardwareFinishes } = await import("../lib/data/jelleff-hardware.ts");
 const { ALL_SCREENS } = await import("../lib/screens.ts");
 const { startingDraft } = await import("../lib/project-scope.ts");
 
@@ -23,6 +25,7 @@ for (const element of elements) {
   if (element.kind !== "floor") assert(Math.hypot(element.points[1][0] - element.points[0][0], element.points[1][1] - element.points[0][1]) > 0.1, `${element.id}: zero-length segment`);
 }
 for (const source of [...elements.map(e => e.source), ...allMaterials.flatMap(m => m.sources), ...systemElements.map(e => e.source)]) {
+  if (source.drawing === "Jelleff project manual") { assert(/^\d\d \d\d \d\d$/.test(source.sheet) && source.page > 0 && source.asset === "", `${source.sheet}: a manual section and page, no sheet image`); continue; }
   assert(existsSync(new URL(`../public${source.asset}`, import.meta.url)), `Source image missing: ${source.asset}`);
   assert.equal(source.drawing, "Jelleff drawing set", `${source.sheet}: names its drawing set`);
 }
@@ -50,7 +53,7 @@ for (const s of [...systemElements].filter(e => M.SHAPES[e.kind] === "polygon"))
 
 // ── Every object: complete metadata for the inspector ──
 const objects = modelObjects;
-assert.equal(objects.length, elements.length + interiorTransitions.length + level2Elements.length + level2Transitions.length + systemElements.length);
+assert.equal(objects.length, elements.length + interiorTransitions.length + level2Elements.length + level2Transitions.length + doorInputs.length + systemElements.length);
 assert.equal(new Set(objects.map(o => o.id)).size, objects.length, "Object IDs must be unique across the model");
 assert.equal(new Set(allMaterials.map(m => m.id)).size, allMaterials.length, "Assembly IDs must be unique");
 const levels = new Set(M.LEVELS.map(l => l.id));
@@ -79,8 +82,8 @@ assert.equal(M.planArea([...gymFloor.points].reverse()), M.planArea(gymFloor.poi
 assert.deepEqual(gymNorth.quantity, { value: 1993.95, unit: "SF" }, "Wall counted by face area");
 assert.deepEqual(gymNorth.dimensions, { lengthFt: 71.21, areaSf: 1993.95, perimeterFt: null, heightFt: 28, thicknessIn: 12, volumeCy: null }, "Wall: length, face area, height, thickness");
 assert.deepEqual([partition.dimensions.thicknessIn, partition.specSection, partition.sources.map(s => s.sheet)], [4.88, "09 21 16", ["A1.1", "A8.1"]], "SA3.20 partition: 4 7/8 in., own source then assembly sources");
-assert.deepEqual(find("office-105-door").quantity, { value: 1, unit: "EA" });
-assert.deepEqual(find("office-105-door").dimensions, { lengthFt: 4.47, areaSf: null, perimeterFt: null, heightFt: 7, thicknessIn: null, volumeCy: null });
+assert.deepEqual(find("door-105").quantity, { value: 1, unit: "EA" }, "A door counts as one opening");
+assert.deepEqual(find("door-105").dimensions, { lengthFt: 2.97, areaSf: null, perimeterFt: null, heightFt: 7, thicknessIn: null, volumeCy: null }, "Opening width as traced, scheduled height");
 const slab = find("slab-gym");
 assert.deepEqual([slab.quantity, slab.dimensions.thicknessIn, slab.dimensions.areaSf], [{ value: 110.48, unit: "CY" }, 5, 7159.39], "Slab: concrete in CY");
 assert.equal(Math.round(slab.dimensions.areaSf * 5 / 12 / 27 * 100) / 100, slab.quantity.value);
@@ -115,23 +118,22 @@ assert.throws(() => M.resolveObjects([elements.find(e => e.id === "floor-gym")],
 
 const transitions = objects.filter(o => o.kind === "transition" && o.level === "L1");
 assert.deepEqual(transitions.map(t => [t.id, t.tag, t.quantity.value, t.quantity.unit, t.room, t.adjoins]), [
-  ["ts-gym-lobby-north", "TS-06", 7.26, "LF", "103", "102"], ["ts-gym-lobby-south", "TS-06", 5.72, "LF", "103", "102"],
-  ["ts-office-105", "TS-04", 5.31, "LF", "105", "102"], ["ts-office-104", "TS-04", 5.72, "LF", "104", "102"], ["ts-fitness", "TS-06", 4.88, "LF", "106", "102B"],
-], "Strips at the traced openings, typed from A12.1");
+  ["ts-gym-lobby-north", "TS-06", 5.96, "LF", "103", "102"], ["ts-gym-lobby-south", "TS-06", 5.95, "LF", "103", "102"],
+  ["ts-office-105", "TS-04", 2.97, "LF", "105", "102"], ["ts-office-104", "TS-04", 2.97, "LF", "104", "102"], ["ts-fitness", "TS-06", 6.04, "LF", "106", "102B"],
+], "Strips on the doors' traced openings, typed from A12.1");
 assert(transitions.every(t => t.shape === "segment" && t.views.join() === "interior" && t.dimensions.lengthFt === t.quantity.value && t.dimensions.areaSf === null), "LF only, interior view");
 assert.deepEqual(transitions.map(t => t.sources[1].detail), ["Transition detail E: concrete to fitness flooring", "Transition detail E: concrete to fitness flooring", "Transition detail A: carpet to concrete", "Transition detail A: carpet to concrete", "Transition detail E: concrete to fitness flooring"], "Each cites its A12.1 detail");
 assert.deepEqual([transitions[0].confidence, prop(transitions[0], "Comments"), prop(transitions[0], "Between")], [0.75, "Concrete to gym floor", "103 Gym (FAF-01) / 102 Lobby (PLC-01)"]);
-for (const t of transitions) {
-  const doorway = elements.filter(e => e.kind !== "floor" && e.points.some(p => p[0] === t.points[0][0] && p[1] === t.points[0][1]));
-  assert(doorway.length, `${t.id}: starts at a traced wall end or door`);
-}
+const strips = { "ts-gym-lobby-north": "103A", "ts-gym-lobby-south": "103B", "ts-office-105": "105", "ts-office-104": "104", "ts-fitness": "106",
+  "ts2-activity": "215", "ts2-game": "213", "ts2-mpr-1": "210", "ts2-mpr-2": "211", "ts2-storage": "209", "ts2-office": "206", "ts2-toilet-203": "203", "ts2-toilet-204": "204", "ts2-toilet-205": "205", "ts2-kitchen": "208" };
+for (const [strip, number] of Object.entries(strips)) assert.deepEqual(find(strip).points, find(`door-${number.toLowerCase()}`).points, `${strip}: on door ${number}'s traced opening`);
 
 const schedule = M.roomFinishSchedule(objects);
 assert.equal(schedule.length, 33, "One row per room with a floor zone: 16 on Level 01, 17 on Level 02");
 const roomRow = (r) => schedule.find(x => x.room === r);
 assert.deepEqual(roomRow("103"), {
   room: "103", level: "L1", floors: [{ id: "floor-gym", tag: "FAF-01", assembly: gymFloor.assembly, areaSf: 6841.23 }], areaSf: 6841.23,
-  baseTags: ["VWB-01"], baseLf: 335.96, transitions: [{ id: "ts-gym-lobby-north", tag: "TS-06", lengthFt: 7.26, to: "102" }, { id: "ts-gym-lobby-south", tag: "TS-06", lengthFt: 5.72, to: "102" }],
+  baseTags: ["VWB-01"], baseLf: 335.96, transitions: [{ id: "ts-gym-lobby-north", tag: "TS-06", lengthFt: 5.96, to: "102" }, { id: "ts-gym-lobby-south", tag: "TS-06", lengthFt: 5.95, to: "102" }],
   doors: 3, wallLf: roomRow("103").wallLf,
 });
 assert.deepEqual(roomRow("102").transitions.map(t => [t.id, t.to]), [["ts-gym-lobby-north", "103"], ["ts-gym-lobby-south", "103"], ["ts-office-105", "105"], ["ts-office-104", "104"]], "Both sides list the strip");
@@ -142,12 +144,13 @@ assert.equal(M.roomFinishSchedule(objects.filter(o => o.kind !== "floor")).lengt
 
 // ── Level 02 (A1.2): floors, walls, storefront, operable partitions, voids, labels, sheet transforms ──
 const l2 = objects.filter(o => o.level === "L2");
-assert.equal(l2.length, level2Elements.length + level2Transitions.length);
+assert.equal(l2.length, level2Elements.length + level2Transitions.length + doorInputs.filter(d => d.level === "L2").length);
 assert.deepEqual(Object.fromEntries(["floor", "wall", "glass", "transition"].map(k => [k, l2.filter(o => o.kind === k).length])), { floor: 19, wall: 30, glass: 3, transition: 12 });
+assert.equal(l2.filter(o => o.kind === "door").length, 17);
 assert(l2.every(o => o.sources[0].sheet === (["floor", "transition"].includes(o.kind) ? "A12.3" : "A1.2") && o.caution.includes("A1.2")), "Walls cite A1.2; floors and strips cite A12.3, traced from A1.2");
 assert(objects.filter(o => ["A1.2", "A12.3"].includes(o.sources[0].sheet)).every(o => o.level === "L2"), "…and only Level 02 objects do");
 assert(l2.filter(o => o.kind === "floor").every(o => Math.abs(o.base + o.height - 14) < 1e-9), "Floors at 14 ft");
-assert(l2.filter(o => o.kind !== "floor").every(o => o.base === 14), "Walls and storefront stand on the second floor");
+assert(l2.filter(o => o.kind !== "floor" && o.id !== "door-209a").every(o => o.base === 14), "Walls, storefront and doors stand on the second floor (209A sits on its counter)");
 const operables = l2.filter(o => o.materialId === "operable-partition");
 assert.deepEqual(operables.map(o => [o.id, o.quantity.unit, o.height, prop(o, "Height (A1.2)")]), [["l2-operable-activity", "LF", 10, "10'-0\" high"], ["l2-operable-mpr", "LF", 9 + 8 / 12, "9'-8\" high"]]);
 assert(operables.every(o => o.quantity.value === o.dimensions.lengthFt && o.quantity.value > 15), "Counted by length");
@@ -208,6 +211,79 @@ for (const [strip, zone, edge] of [["ts2-game-band", "l2-game", 2], ["ts2-mpr-1-
 assert.deepEqual(roomRow("200").transitions.map(t => t.to), ["215", "213", "210", "211", "206", "203", "204", "205", "208"], "The corridor lists every door strip");
 assert.deepEqual(roomRow("210").transitions.map(t => [t.tag, t.to]), [["TS-02", "200"], ["TS-07", "210"], ["TS-07", "209"]]);
 assert.deepEqual(["201", "217", "218", "221", "S202", "206A"].map(r => roomRow(r).transitions.length), [0, 0, 0, 0, 0, 0], "No strip where A12.3 marks none or the pair has no detail");
+
+// ── Doors: A8.2 schedule, 08 71 00 hardware, traced openings, counts ──
+const nums = doorScheduleRows.map(r => r.number);
+assert.equal(new Set(nums).size, 50, "50 door numbers on A8.2, none twice");
+assert.deepEqual([nums.slice(0, 4), nums.slice(-4)], [["101A", "101B", "103A", "103B"], ["G102", "P101", "S102", "S202"]]);
+const drow = n => doorScheduleRows.find(r => r.number === n);
+assert.deepEqual(["101A", "101B", "115", "209A", "P101"].map(n => [drow(n).widthIn, drow(n).heightIn, drow(n).thicknessIn]), [[36, 118.75, 1.75], [36, 96.375, 1.75], [30, 84, 1.75], [null, null, null], [48, 84, 1.75]], "Sizes parsed as printed");
+assert.deepEqual([drow("219").fireRating, doorScheduleRows.filter(r => r.fireRating).length, drow("209A").panels, drow("209A").comments], ["45 MIN", 1, null, "4'0\" high by 8'-0\" wide coiling counter door"]);
+assert(doorScheduleRows.every(r => r.glass === "" && r.source.sheet === "A8.2" && r.source.page === 65), "The glazing column is blank on every row");
+assert(doorScheduleRows.every(r => !r.panelType || doorPanelTypes[r.panelType] || r.panelType === "ELEV"), "Panel types from the A8.2 legend");
+assert.deepEqual([drow("G101").panelTypeName, drow("104").panelTypeName], ["Not in the A8.2 panel type legend", "Narrow lite glass"]);
+// Hardware: the manual's sets as stated.
+assert.deepEqual([hardwareSets.length, hardwareSets.reduce((n, s) => n + s.items.length, 0), new Set(hardwareSets.map(s => s.number)).size], [32, 239, 32]);
+assert(hardwareSets.every(s => s.source.sheet === "08 71 00" && s.source.page >= 386 && s.source.page <= 396 && s.items.every(i => i.qty > 0 && i.item)), "Every set and line cites 08 71 00");
+assert(hardwareSets.flatMap(s => s.items).every(i => (!i.manufacturer || hardwareManufacturers[i.manufacturer]) && (!i.finish || hardwareFinishes[i.finish] || i.finish === "US32D")), "Codes from the section's own lists");
+assert.deepEqual(hardwareSets.find(s => s.number === "920").items.map(i => [i.qty, i.item]), [[3, "Hinge"], [1, "Mortise Lock"], [1, "Door Closer"], [1, "Protection Plate"], [1, "Protection Plate"], [1, "Wall Stop"], [3, "Silencer"]]);
+assert.deepEqual(hardwareSets.find(s => s.number === "920").doors, ["109", "113", "203", "204", "205"]);
+assert.match(hardwareSets.find(s => s.number === "100").notes[0], /^Doors normally closed, latched, and secure\./);
+// A8.2 against the manual, door by door: conflicts kept, never aliased.
+const hw = Object.fromEntries(doorScheduleRows.map(r => [r.number, M.doorHardware(r.number, r.hardwareSet, hardwareSets)]));
+assert.deepEqual(Object.fromEntries(Object.entries(hw).filter(([, h]) => h.status !== "match").map(([n, h]) => [n, [h.status, h.drawingSet, h.manualSets.join("/")]])), {
+  "101A": ["different-set", "101", "100"], "106": ["different-set", "800", "500"], "110B": ["in-several-sets", "300", "300/480"], "117A": ["different-set", "900", "910"],
+  "118A": ["different-set", "360", "350"], "119A": ["not-in-manual", "800", ""], "120": ["not-in-manual", "650", ""], "206A": ["not-in-manual", "600", ""],
+}, "Eight A8.2 / manual conflicts, as found");
+assert.deepEqual(Object.entries(hw).filter(([, h]) => !h.drawingSetInManual).map(([n]) => n), ["101A"], "Only 101A's A8.2 set (101) isn't in the manual");
+assert.deepEqual([hw["106"].sets.map(s => s.number), hw["110B"].sets.map(s => s.number), hw["119A"].sets.map(s => s.number)], [["500", "800"], ["300", "480"], ["800"]], "Both sides' sets are attached");
+assert.deepEqual(M.hardwareDoorsNotOnSchedule(doorScheduleRows, hardwareSets), [{ door: "120A", set: "650" }, { door: "119B", set: "800" }], "Manual-only door numbers kept as they are");
+// Traced vs schedule-only.
+const traced = doorTraces.map(t => t.number), only = scheduleOnlyDoors.map(d => d.number);
+assert.deepEqual([traced.length, doorTraces.filter(t => t.level === "L1").length, doorTraces.filter(t => t.level === "L2").length, only], [46, 29, 17, ["G101", "G102", "P101", "S102"]]);
+assert.deepEqual([...traced, ...only].sort(), [...nums].sort(), "Every A8.2 door is traced or listed as schedule-only, once");
+assert.deepEqual(doorTraces.filter(t => t.note).map(t => t.number), ["112", "115", "119A", "209A", "213"], "Doors read by hand say so");
+assert.deepEqual(M.doorCounts(doorScheduleRows, objects), { openings: { scheduled: 50, modeled: 46, scheduleOnly: 4 }, leaves: { scheduled: 59, modeled: 55, scheduleOnly: 4 } }, "A pair is one opening, two leaves; 209A has none");
+// Door objects: one per traced opening, leaves as drawn, schedule height, checks against the schedule.
+const doorObjs = objects.filter(o => o.door);
+assert.deepEqual([doorObjs.length, objects.filter(o => o.kind === "door").length, new Set(doorObjs.map(o => o.door.row.number)).size], [46, 46, 46]);
+for (const d of doorObjs) {
+  const r = d.door.row;
+  assert.deepEqual([d.id, d.quantity, d.door.leaves.length, d.views], [`door-${r.number.toLowerCase()}`, { value: 1, unit: "EA" }, r.panels ?? 0, ["interior"]]);
+  assert(d.door.leaves.every(l => Math.min(...d.points.map(p => Math.hypot(p[0] - l.hinge[0], p[1] - l.hinge[1]))) < 0.25), `${d.id}: hinged at a jamb`);
+  assert.equal(d.door.openingFt, d.dimensions.lengthFt);
+  if (r.panels !== null) {
+    assert.deepEqual([d.height, d.base, d.door.widthCheck.toleranceFt], [r.heightIn / 12, d.level === "L2" ? 14 : 0, DOOR_WIDTH_TOLERANCE_FT]);
+    assert(d.door.widthCheck.within && Math.abs(d.door.widthCheck.openingDeltaFt) <= 0.25 && d.door.widthCheck.leafDeltaFt <= 0.25, `${d.id}: within 3 in. of A8.2`);
+  }
+  assert.equal(d.materialId, r.frameType === "6" ? "door-coiling" : { HM: "door-hm", WD: "door-wd", ALUM: "door-alum" }[r.material]);
+  assert.deepEqual(d.door.hardware, hw[r.number]);
+}
+assert.deepEqual(Object.fromEntries(doorObjs.filter(d => Math.abs(d.door.widthCheck.openingDeltaFt ?? 0) > 0.1).map(d => [d.door.row.number, d.door.widthCheck.openingDeltaFt])), { "103C": 0.19, "103D": 0.17, "118B": 0.12 }, "Largest differences from the schedule, all within tolerance");
+const coil = find("door-209a");
+assert.deepEqual([coil.door.scheduledFt, coil.door.widthCheck.within, coil.door.openingFt, coil.base, coil.height, coil.materialId, coil.specSection], [null, null, 7.96, 17, 4, "door-coiling", "08 33 13"], "209A: 4 ft high over a 3 ft counter, no panels to check");
+assert.deepEqual(["Door", "Panels", "Panel size", "Glass", "Panel type", "Frame", "Hardware set (A8.2)"].map(l => prop(find("door-219"), l)), ["219", "2", "3' - 0\" x 7' - 0\" x 1 3/4\"", "Not scheduled", "F - Flush panel", "HM, type 1", "800"]);
+assert.equal(prop(find("door-219"), "Fire rating"), "45 MIN");
+assert.deepEqual(doorMaterials.map(m => [m.id, m.specSection, m.sources[1].page]), [["door-hm", "08 11 13", 336], ["door-wd", "08 14 16", 345], ["door-alum", "08 41 13", 361], ["door-coiling", "08 33 13", 354]], "Sections confirmed in the manual");
+// A width outside tolerance resolves as traced, flagged; structural problems throw.
+const d203 = doorInputs.find(d => d.doorNumber === "203");
+const wide = M.resolveObjects([{ ...d203, points: [d203.points[0], [d203.points[0][0] + 4, d203.points[0][1]]] }], allMaterials, [], undefined, doorSchedule)[0];
+assert.deepEqual([wide.door.widthCheck.within, wide.door.widthCheck.openingDeltaFt, wide.points[1][0] - wide.points[0][0]], [false, 1, 4], "Not moved to fit: flagged");
+const [h203, t203] = d203.leaves[0], short = [h203, [h203[0] + (t203[0] - h203[0]) * 2 / 3, h203[1] + (t203[1] - h203[1]) * 2 / 3]];
+const shortLeaf = M.resolveObjects([{ ...d203, leaves: [short] }], allMaterials, [], undefined, doorSchedule)[0].door.widthCheck;
+assert.deepEqual([shortLeaf.within, Math.abs(shortLeaf.openingDeltaFt) <= 0.25, shortLeaf.leafDeltaFt > 0.9], [false, true, true], "A leaf off the schedule is flagged even when the opening fits");
+assert.throws(() => M.resolveObjects([{ ...d203, doorNumber: "999" }], allMaterials, [], undefined, doorSchedule), /door 999 is not on the door schedule/);
+assert.throws(() => M.resolveObjects([{ ...d203, leaves: [...d203.leaves, d203.leaves[0]] }], allMaterials, [], undefined, doorSchedule), /2 leaves drawn, door 203 has 1 panels/);
+assert.throws(() => M.resolveObjects([{ ...d203, leaves: [[[0, 0], d203.leaves[0][1]]] }], allMaterials, [], undefined, doorSchedule), /a leaf is not hinged at a jamb/);
+assert.throws(() => M.resolveObjects([{ ...d203, doorNumber: undefined }], allMaterials, [], undefined, doorSchedule), /leaves without a door number/);
+assert.throws(() => M.resolveObjects([{ ...elements.find(e => e.id === "gym-north"), doorNumber: "105" }], allMaterials, [], undefined, doorSchedule), /a door number on a wall/);
+// Rooms from the floor zones either side; a side with no zone stays null.
+assert.equal(doorAssociations.length, 46);
+const assoc = Object.fromEntries(doorAssociations.map(a => [a.number, [a.swingSide, a.otherSide]]));
+assert.deepEqual([assoc["203"], assoc["219"], assoc["209A"], assoc["105"], assoc["103A"], assoc["S202"]], [["203", "200"], ["218", "200"], ["208", "210"], ["105", "102"], ["102", "103"], ["S202", "200"]]);
+assert.deepEqual(doorAssociations.filter(a => !a.swingSide && !a.otherSide).map(a => a.number), ["110B", "115", "118B"], "No traced floor zone on either side");
+assert(doorObjs.every(d => d.room === (assoc[d.door.row.number][0] ?? assoc[d.door.row.number][1])), "A door's room is its swing side");
+assert.deepEqual(roomRow("200").doors, 4, "Corridor 200: the four doors that swing into it (210, 211, 213, 215)");
 
 // Voids: no Level 02 floor sits in a double-height volume.
 assert.deepEqual(planVoids.map(v => [v.id, v.level]), [["void-gym", "L2"], ["void-yard", "L2"], ["void-lobby", "L2"]]);
@@ -294,7 +370,7 @@ for (const v of M.MODEL_VIEWS) {
 }
 assert.equal(M.modelViewForScreen("budget"), null);
 const inView = (view) => M.filterObjects(objects, { view }).length;
-assert.deepEqual([inView("interior"), inView("mep"), inView("structural"), inView("exterior")], [146, 11, 11, 44]);
+assert.deepEqual([inView("interior"), inView("mep"), inView("structural"), inView("exterior")], [183, 11, 11, 44]);
 assert.deepEqual(M.filterObjects(objects, { view: "exterior", level: "L2" }).map(o => o.materialId), Array(7).fill("envelope"), "Level 02 envelope is exterior; the corridor storefront is interior only");
 assert(M.filterObjects(objects, { view: "exterior" }).every(o => ["envelope", "storefront", "roof-membrane"].includes(o.materialId)), "Exterior: envelope, storefront, roof");
 assert.deepEqual(modelForProject("jelleff"), objects);
@@ -305,14 +381,14 @@ assert.deepEqual(M.filterObjects(objects, { level: "roof" }).map(o => o.id), ["g
 assert.deepEqual(M.filterObjects(objects, { discipline: "electrical" }).map(o => o.id), ["panel-119a", "light-hb-1", "light-hb-2", "light-hb-3", "light-hb-4"]);
 assert.deepEqual(M.filterObjects(objects, { division: "21" }).map(o => o.id), ["sprinkler-gym"]);
 assert.deepEqual(M.filterObjects(objects, { kind: "column" }).length, 6);
-assert.deepEqual(M.filterObjects(objects, { room: "104" }).map(o => o.id), ["office-east", "office-104-south", "office-104-door", "floor-office-104", "ts-office-104"]);
+assert.deepEqual(M.filterObjects(objects, { room: "104" }).map(o => o.id), ["office-east", "office-104-south", "floor-office-104", "ts-office-104", "door-104"]);
 assert.deepEqual(M.filterObjects(objects, { query: "tarkett" }).map(o => o.id), ["floor-gym"], "Searches property values");
 assert.deepEqual(M.filterObjects(objects, { query: "09 68 00" }).map(o => o.id), ["floor-office-105", "floor-office-104", "floor-office-108"], "Searches spec sections");
 assert.deepEqual(M.filterObjects(objects, { review: "flagged" }, sampleModelReview).map(o => o.id), ["gym-north"]);
 assert.deepEqual(M.filterObjects(objects, { view: "interior", division: "09", kind: "floor", level: "L1" }).length, 10);
 assert.deepEqual(M.divisionsIn(objects, "structural"), [{ division: "03", name: "Concrete", count: 2 }, { division: "05", name: "Metals", count: 9 }]);
 assert.deepEqual(M.divisionsIn(objects, "interior").map(d => d.division), ["03", "04", "05", "08", "09", "10", "12"]);
-assert.deepEqual(M.reviewSummary(objects, sampleModelReview), { objects: 169, verified: 1, flagged: 1, unreviewed: 167, lowConfidence: 23 });
+assert.deepEqual(M.reviewSummary(objects, sampleModelReview), { objects: 206, verified: 1, flagged: 1, unreviewed: 204, lowConfidence: 23 });
 assert.deepEqual(M.reviewSummary(objects, sampleModelReview, "mep"), { objects: 11, verified: 0, flagged: 0, unreviewed: 11, lowConfidence: 11 });
 
 // ── Selection ──

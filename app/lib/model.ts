@@ -111,7 +111,96 @@ export type ModelInput = Omit<ModelElement, "kind"> & {
   partitionUnverified?: string;
   /** For a floor: edges (edge i runs from point i to the next) that are a finish line inside a room, not a wall. No base runs along them. */
   openEdges?: number[];
+  /** For a door: its number on the door schedule. Its points are the opening, jamb to jamb, as traced. */
+  doorNumber?: string;
+  /** For a door: each leaf as drawn on the plan, hinge to open tip (feet). A pair has two. */
+  leaves?: [Point, Point][];
+  /** For a door: what's unusual about the trace ("leaf drawn at 45°", "read manually"). */
+  traceNote?: string;
 };
+
+/** One row of the door and frame schedule (A8.2), as printed. Sizes are per panel. */
+export type DoorScheduleRow = {
+  number: string;
+  /** Blank on the schedule for the coiling counter door (209A). */
+  panels: number | null;
+  width: string; height: string; thickness: string;
+  widthIn: number | null; heightIn: number | null; thicknessIn: number | null;
+  material: string;
+  /** The glazing column. Blank on every A8.2 row: no glass type is scheduled. */
+  glass: string;
+  /** The panel type code and its name from A8.2's legend ("N", "Narrow lite glass"). */
+  panelType: string; panelTypeName: string;
+  frameMaterial: string; frameType: string;
+  fireRating: string;
+  /** As printed on A8.2. The project manual may list the door under another set. */
+  hardwareSet: string;
+  details: { head: string; jambLeft: string; jambRight: string; sill: string };
+  comments: string;
+  source: SourceRef;
+};
+
+/** One line of a hardware set, as stated in the project manual. */
+export type HardwareItem = { qty: number; item: string; product: string; finish: string; manufacturer: string };
+/** A door hardware set from the project manual (08 71 00), with the doors it lists. */
+export type HardwareSet = { number: string; name: string; doors: string[]; items: HardwareItem[]; notes: string[]; source: SourceRef };
+
+/**
+ * How A8.2's hardware set for a door compares with the manual: the manual lists the door under that
+ * set, under a different one, under several, or nowhere. Door numbers are compared exactly.
+ */
+export type HardwareStatus = "match" | "different-set" | "in-several-sets" | "not-in-manual";
+export type DoorHardware = {
+  drawingSet: string; manualSets: string[]; status: HardwareStatus;
+  /** Whether A8.2's set number exists in the manual at all. */
+  drawingSetInManual: boolean;
+  /** The manual sets for A8.2's number and for every set listing the door, without repeats. */
+  sets: HardwareSet[];
+};
+
+/** The door schedule, the manual's hardware sets, and how far a traced opening may differ from the schedule. */
+export type DoorSchedule = { rows: DoorScheduleRow[]; hardwareSets: HardwareSet[]; widthToleranceFt: number };
+
+export type DoorLeaf = { hinge: Point; tip: Point; lengthFt: number };
+/** A traced door: its schedule row, leaves, the width check against the schedule, and its hardware. */
+export type DoorDetail = {
+  row: DoorScheduleRow;
+  leaves: DoorLeaf[];
+  /** Traced jamb to jamb. */
+  openingFt: number;
+  /** Panels x panel width; null when the schedule gives no panels (209A). */
+  scheduledFt: number | null;
+  /** The traced opening and each leaf against the schedule, within toleranceFt or not. Nothing is moved to fit. */
+  widthCheck: { openingDeltaFt: number | null; leafDeltaFt: number | null; toleranceFt: number; within: boolean | null };
+  hardware: DoorHardware;
+  traceNote: string | null;
+};
+
+/** A8.2's set for a door against the sets that list it in the manual. */
+export function doorHardware(number: string, drawingSet: string, sets: HardwareSet[]): DoorHardware {
+  const manualSets = sets.filter(s => s.doors.includes(number)).map(s => s.number);
+  const status: HardwareStatus = !manualSets.length ? "not-in-manual" : manualSets.length > 1 ? "in-several-sets" : manualSets[0] === drawingSet ? "match" : "different-set";
+  return {
+    drawingSet, manualSets, status, drawingSetInManual: sets.some(s => s.number === drawingSet),
+    sets: sets.filter(s => s.number === drawingSet || manualSets.includes(s.number)),
+  };
+}
+
+/** Door numbers the manual's hardware sets list that aren't on the schedule (e.g. 119B, 120A). */
+export const hardwareDoorsNotOnSchedule = (rows: DoorScheduleRow[], sets: HardwareSet[]): { door: string; set: string }[] =>
+  sets.flatMap(s => s.doors.filter(d => !rows.some(r => r.number === d)).map(door => ({ door, set: s.number })));
+
+/** Openings and leaves, scheduled vs modeled. A pair is one opening with two leaves; 209A has no leaves. */
+export type DoorCounts = { openings: { scheduled: number; modeled: number; scheduleOnly: number }; leaves: { scheduled: number; modeled: number; scheduleOnly: number } };
+export function doorCounts(rows: DoorScheduleRow[], objects: ModelObject[]): DoorCounts {
+  const modeled = new Set(objects.filter(o => o.door).map(o => o.door!.row.number));
+  const leaves = (list: DoorScheduleRow[]) => list.reduce((n, r) => n + (r.panels ?? 0), 0);
+  const inModel = rows.filter(r => modeled.has(r.number)), only = rows.filter(r => !modeled.has(r.number));
+  return {
+    openings: { scheduled: rows.length, modeled: inModel.length, scheduleOnly: only.length },
+    leaves: { scheduled: leaves(rows), modeled: leaves(inModel), scheduleOnly: leaves(only) },
+  };
+}
 
 /** One partition type from the A8.1 schedules, with its tag decoded through the A8.1 legend. */
 export type PartitionTypeRow = {
@@ -148,7 +237,6 @@ export type FinishScheduleRow = {
   source: SourceRef;
 };
 
-/** `perimeterFt` is a floor zone's edge: the gross base run, door openings not deducted. */
 /** perimeterFt is a floor's edge run along walls, the base line: its open edges (finish lines inside a room) are left out. */
 export type Dimensions = { lengthFt: number | null; areaSf: number | null; perimeterFt: number | null; heightFt: number | null; thicknessIn: number | null; volumeCy: number | null };
 
@@ -167,6 +255,8 @@ export type ModelObject = {
   adjoins: string | null;
   /** For a partition: its A8.1 type row, and how the type is known. */
   partitionType: PartitionTypeRow | null; partitionBasis: PartitionBasis | null;
+  /** For a door: its A8.2 row, leaves, width check and hardware. points are the opening; quantity is 1 opening. */
+  door: DoorDetail | null;
   /** The takeoff quantity in the assembly's unit. */
   quantity: { value: number; unit: QuantityUnit };
   /** Only the dimensions that mean something for the kind; the rest are null. */
@@ -234,12 +324,26 @@ function partitionProperties(row: PartitionTypeRow): ModelProperty[] {
     ["Stud width", row.unitWidth], ["Gypsum board", row.gypsum], ["Unique condition", row.uniqueCondition], ["Rough thickness", row.roughThickness], ["Fire rating", row.fireRating]] as [string, string][]).map(([label, value]) => ({ label, value }));
 }
 
+/** A door's schedule row as inspector properties. */
+function doorProperties(row: DoorScheduleRow): ModelProperty[] {
+  return ([["Door", row.number], ["Panels", row.panels === null ? "" : String(row.panels)], ["Panel size", [row.width, row.height, row.thickness].filter(Boolean).join(" x ")],
+    ["Panel material", row.material], ["Glass", row.glass || "Not scheduled"], ["Panel type", [row.panelType, row.panelTypeName].filter(Boolean).join(" - ")], ["Frame", [row.frameMaterial, row.frameType && `type ${row.frameType}`].filter(Boolean).join(", ")],
+    ["Fire rating", row.fireRating], ["Hardware set (A8.2)", row.hardwareSet],
+    ["Details", `head ${row.details.head}, jambs ${row.details.jambLeft} / ${row.details.jambRight}, sill ${row.details.sill}`], ["Comments", row.comments]] as [string, string][])
+    .filter(([, value]) => value.trim()).map(([label, value]) => ({ label, value }));
+}
+
+const dist = (a: Point, b: Point) => Math.hypot(b[0] - a[0], b[1] - a[1]);
+
 /**
  * Resolves the data into selectable objects. Throws on a missing assembly, a unit the shape can't
- * measure, a tag that isn't on its schedule, or a partition whose plan tag or thickness disagrees
- * with its assembly's A8.1 type.
+ * measure, a tag that isn't on its schedule, a partition whose plan tag or thickness disagrees
+ * with its assembly's A8.1 type, or a door that isn't on the schedule, has the wrong number of
+ * leaves, or has a leaf not hinged at a jamb. A door whose width differs from the schedule is
+ * resolved as traced, with the difference in its width check.
  */
-export function resolveObjects(inputs: ModelInput[], materials: MaterialInfo[], schedule: FinishScheduleRow[] = [], partitions: PartitionSchedule = { types: [], defaultType: "", defaultNote: "" }): ModelObject[] {
+export function resolveObjects(inputs: ModelInput[], materials: MaterialInfo[], schedule: FinishScheduleRow[] = [], partitions: PartitionSchedule = { types: [], defaultType: "", defaultNote: "" },
+  doors: DoorSchedule = { rows: [], hardwareSets: [], widthToleranceFt: 0 }): ModelObject[] {
   const rowOf = (tag: string | undefined, id: string): FinishScheduleRow | null => {
     if (!tag) return null;
     return schedule.find(r => r.tag === tag) ?? (() => { throw new Error(`${id}: ${tag} is not on the finish schedule`); })();
@@ -260,6 +364,7 @@ export function resolveObjects(inputs: ModelInput[], materials: MaterialInfo[], 
     if (partition && Math.abs((input.thickness ?? 0) * 12 - partition.modeledThicknessIn) > 0.01) {
       throw new Error(`${input.id}: modeled ${round((input.thickness ?? 0) * 12)} in. thick, ${partition.tag} is ${partition.modeledThicknessIn} in.`);
     }
+    const door = doorDetail(input, doors);
     const thickness = input.thickness ?? 0, depth = input.depth ?? thickness;
     if (input.openEdges?.some(i => input.kind !== "floor" || !Number.isInteger(i) || i < 0 || i >= input.points.length)) throw new Error(`${input.id}: open edges must be edges of a floor`);
     const all = measures(input.kind, input.points, input.height, thickness, depth, input.openEdges);
@@ -277,7 +382,7 @@ export function resolveObjects(inputs: ModelInput[], materials: MaterialInfo[], 
       discipline: material.discipline, division: material.division, divisionName: CSI_DIVISIONS[material.division] ?? "",
       specSection: material.specSection, materialId: material.id, assembly: material.name,
       tag: material.tag ?? null, schedule: row, baseTag: material.base ?? null, adjoins: input.adjoins ?? null,
-      partitionType: partition, partitionBasis,
+      partitionType: partition, partitionBasis, door,
       quantity: { value: round(raw), unit: material.unit }, dimensions,
       properties: [
         ...(row ? scheduleProperties(row) : []),
@@ -285,12 +390,37 @@ export function resolveObjects(inputs: ModelInput[], materials: MaterialInfo[], 
         ...(partition ? partitionProperties(partition) : []),
         ...(partitionBasis ? [{ label: "Type basis", value: partitionBasis === "tag" ? `Tagged ${planTag} on ${input.source.sheet}`
           : partitionBasis === "unverified" ? `Unverified: ${input.partitionUnverified}. Modeled as ${partitions.defaultType} by the general note.` : partitions.defaultNote }] : []),
+        ...(door ? doorProperties(door.row) : []),
         ...material.properties, ...(input.properties ?? []),
       ],
       sources, basis, confidence: confidenceFor(basis),
       description: input.description, caution: input.geometryStatus,
     };
   });
+}
+
+/** A door input's schedule row, leaves and checks; null for anything that isn't a numbered door. */
+function doorDetail(input: ModelInput, doors: DoorSchedule): DoorDetail | null {
+  if (!input.doorNumber) {
+    if (input.leaves?.length) throw new Error(`${input.id}: leaves without a door number`);
+    return null;
+  }
+  if (input.kind !== "door") throw new Error(`${input.id}: a door number on a ${input.kind}`);
+  const row = doors.rows.find(r => r.number === input.doorNumber) ?? (() => { throw new Error(`${input.id}: door ${input.doorNumber} is not on the door schedule`); })();
+  const leaves = (input.leaves ?? []).map(([hinge, tip]) => ({ hinge, tip, lengthFt: round(dist(hinge, tip)) }));
+  if (leaves.length !== (row.panels ?? 0)) throw new Error(`${input.id}: ${leaves.length} leaves drawn, door ${row.number} has ${row.panels ?? 0} panels`);
+  const [jambA, jambB] = input.points;
+  for (const leaf of leaves) if (Math.min(dist(leaf.hinge, jambA), dist(leaf.hinge, jambB)) > 0.25) throw new Error(`${input.id}: a leaf is not hinged at a jamb`);
+  const openingFt = dist(jambA, jambB), panelFt = row.widthIn === null ? null : row.widthIn / 12;
+  const scheduledFt = panelFt === null || row.panels === null ? null : panelFt * row.panels;
+  const openingDeltaFt = scheduledFt === null ? null : round(openingFt - scheduledFt);
+  const leafDeltaFt = panelFt === null || !leaves.length ? null : round(Math.max(...leaves.map(l => Math.abs(dist(l.hinge, l.tip) - panelFt))));
+  const within = openingDeltaFt === null ? null : Math.abs(openingDeltaFt) <= doors.widthToleranceFt && (leafDeltaFt ?? 0) <= doors.widthToleranceFt;
+  return {
+    row, leaves, openingFt: round(openingFt), scheduledFt: scheduledFt === null ? null : round(scheduledFt),
+    widthCheck: { openingDeltaFt, leafDeltaFt, toleranceFt: doors.widthToleranceFt, within },
+    hardware: doorHardware(row.number, row.hardwareSet, doors.hardwareSets), traceNote: input.traceNote ?? null,
+  };
 }
 
 // ── Contractor review and show/hide (project-scoped browser storage) ─────────
