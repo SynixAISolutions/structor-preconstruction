@@ -38,6 +38,10 @@ export function WallFaceCard({ object, records, onSource }: { object: ModelObjec
   return <section className="ms-finish-schedule ms-wall-face-card" aria-label="Wall finishes by face"><span className="ms-section-label">FINISH EVIDENCE · BOTH FACES</span><h3>Wall finishes</h3><p>Left and right are relative to the wall's first-to-second plan point.</p>{faces.map(face => <div className="ms-wall-face" key={face.side}><h4>{face.side === "left" ? "Left" : "Right"} face{face.rooms.length ? ` · Room ${face.rooms.join(" / ")}` : ""}</h4>{!face.recordIds.length ? <p>Not noted · no paint or finish assumed.</p> : face.recordIds.map(id => { const record = records.find(item => item.id === id)!; return <details key={id}><summary>{record.title}<small>{record.bands.flatMap(band => band.tags).join(" / ")} · {wallFinishStatus[record.status]}</small></summary><FinishDetails record={record} onSource={onSource}/></details>; })}</div>)}</section>;
 }
 
+export function WallFinishEvidenceCard({ record, onSource }: { record: WallFinishRecord; onSource: SourceAction }) {
+  return <section className="ms-finish-schedule" aria-label="Selected wall finish evidence"><span className="ms-section-label">SOURCE RECORD · NO TRACED WALL</span><h3>{record.title}</h3><FinishDetails record={record} onSource={onSource}/></section>;
+}
+
 export function BaseRuns({ row, records, onSource }: { row: BaseBreakdownRow; records: WallFinishRecord[]; onSource: SourceAction }) {
   return <div className="ms-base-runs"><span><strong>{row.field.tag}</strong> · {number.format(row.field.lf)} LF{row.accents.length > 0 && <small>Remaining field base</small>}</span>{row.accents.map((accent, index) => { const record = records.find(item => item.id === accent.recordId)!; return <button key={index} onClick={() => onSource(record, sourceOf(record.evidence[0]))}><strong>{accent.tag} · {number.format(accent.lf)} LF</strong><small>{record.title}</small><ArrowUpRight size={12}/></button>; })}</div>;
 }

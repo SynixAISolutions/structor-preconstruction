@@ -14,6 +14,7 @@ import { SAMPLE_PROJECT_ID, selectProject, useActiveProject } from "../lib/proje
 import { useSampleRefresh } from "../lib/use-sample-refresh";
 import { SampleDataSettings, SampleRefreshBanner } from "./ui/sample-data-settings";
 import { modelViewForScreen } from "../lib/model";
+import { DEFAULT_QUANTITY_FILTERS, type ModelInspection, type ModelQuantityFilters } from "./ui/model-quantity-rows";
 import "./ui/product.css";
 import dynamic from "next/dynamic";
 const ModelStudio = dynamic(() => import("./ui/model-studio"), { ssr: false, loading: () => <div className="ui-empty">Opening model studio…</div> });
@@ -26,15 +27,19 @@ function BuildingModel({small=false}:{small?:boolean}) { return <div className={
 
 export default function StructorApp(){
  const [screen,setScreen]=useState<Screen>(DEFAULT_SCREEN); const [menuOpen,setMenuOpen]=useState(false); const [searchOpen,setSearchOpen]=useState(false); const [search,setSearch]=useState(""); const [helpOpen,setHelpOpen]=useState(false); const [notifications,setNotifications]=useState(false); const [toast,setToast]=useState(""); const [projects,setProjects]=useState<Project[]>(sampleProjectRecords); const activeId=useActiveProject(); const sampleRefresh=useSampleRefresh(); const [newProject,setNewProject]=useState(false); const [ready,setReady]=useState(false); const [reduced,setReduced]=useState(false); const scrollRef=useRef<HTMLDivElement>(null);
+ const [modelInspection,setModelInspection]=useState<ModelInspection|null>(null);
+ const [quantityFilters,setQuantityFilters]=useState<ModelQuantityFilters>(DEFAULT_QUANTITY_FILTERS);
+ useEffect(()=>{setModelInspection(null);setQuantityFilters(DEFAULT_QUANTITY_FILTERS);},[activeId]);
  const project=projects.find(p=>p.id===activeId)||projects[0];
  const modelView=modelViewForScreen(screen);
  const notify=useCallback((message:string)=>setToast(message),[]);
- const navigate=useCallback((next:Screen)=>{setScreen(next);setMenuOpen(false);setSearchOpen(false); window.location.hash=next;scrollRef.current?.scrollTo({top:0});},[]);
+ const navigate=useCallback((next:Screen)=>{setScreen(next);setModelInspection(null);setMenuOpen(false);setSearchOpen(false); window.location.hash=next;scrollRef.current?.scrollTo({top:0});},[]);
  useEffect(()=>{const sync=()=>{const value=location.hash.slice(1);const next=resolveScreen(value);if(next){setScreen(next);if(value!==next)history.replaceState(null,"",`#${next}`);}};sync();window.addEventListener("hashchange",sync);const saved=loadProjects();if(saved)setProjects(saved);setReady(true);return()=>window.removeEventListener("hashchange",sync);},[]);
  useEffect(()=>{if(ready)saveProjects(projects);},[projects,ready]);
  useEffect(()=>{if(!toast)return;const id=setTimeout(()=>setToast(""),4500);return()=>clearTimeout(id);},[toast]);
  useEffect(()=>{const handler=(e:KeyboardEvent)=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();setSearchOpen(v=>!v);}};window.addEventListener("keydown",handler);return()=>window.removeEventListener("keydown",handler);},[]);
  const props={navigate,notify,projectName:project.name};
+ function inspectModel(target:ModelInspection){navigate("model");setModelInspection(target);}
  function createProject(p:Project){setProjects(v=>[...v,p]);selectProject(p.id);setNewProject(false);navigate("information");notify("Project draft created.");}
  return <div className={`product-app ${reduced?"motion-off":""}`}>
   {menuOpen&&<button className="mobile-scrim" aria-label="Close navigation" onClick={()=>setMenuOpen(false)}/>}
@@ -51,10 +56,10 @@ export default function StructorApp(){
     <div className="page-enter" key={screen}>
       {activeId===SAMPLE_PROJECT_ID&&<SampleRefreshBanner refresh={sampleRefresh}/>}
      {screen==="overview"&&<Overview project={project} navigate={navigate} onNew={()=>setNewProject(true)}/>}
-     {modelView&&<ModelStudio view={modelView} projectId={project.id} projectName={project.name} navigate={navigate} notify={notify}/>}
+     {modelView&&<ModelStudio view={modelView} projectId={project.id} projectName={project.name} navigate={navigate} notify={notify} inspection={modelView==="interior"?modelInspection:null}/>}
      {screen==="projects"&&<Projects projects={projects} onNew={()=>setNewProject(true)} onOpen={p=>{selectProject(p.id);navigate("information");}}/>}
      {screen==="information"&&<ProjectInformation project={project} cover={<BuildingModel/>} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Project information saved locally.");}} navigate={navigate}/>}
-      {['documents','scopes','drawing-flip','takeoffs','specs','checks','drawings','specifications','revisions'].includes(screen)&&<IntelligenceView {...props} screen={screen}/>}
+      {['documents','scopes','drawing-flip','takeoffs','specs','checks','drawings','specifications','revisions'].includes(screen)&&<IntelligenceView {...props} screen={screen} quantityFilters={quantityFilters} onQuantityFilters={setQuantityFilters} onInspectModel={inspectModel}/>}
      {['packages','bidders','ratings','prequalification','portal','budget','allowances','value-engineering','contracts','schedule','turnover'].includes(screen)&&<CommercialView {...props} screen={screen} project={project}/>}
      {screen==="leveling"&&<><PageHeader eyebrow="BID & AWARD" title="Bid leveling" description="A complete scope. A comparable price. A confident decision." actions={<Button onClick={()=>navigate("budget")}><Wallet size={16}/>Budget summary<ArrowRight size={16}/></Button>}/><div className="legacy-leveling"><BidLevelingPage projectName={project.name}/></div></>}
      {screen==="settings"&&<WorkspaceSettings notify={notify} reduced={reduced} setReduced={setReduced} navigate={navigate} sampleRefresh={sampleRefresh}/>}
