@@ -19,17 +19,24 @@ export const sampleFiles: LibraryFile[] = [
   { id: "d7", name: "Subcontract agreement template.docx", category: "Contracts", type: "DOCX", size: "268 KB", date: "2026-08-28", sample: true, revision: "Template" },
 ];
 
-export type TakeoffRow = { id: string; division: string; item: string; unit: string; quantity: number; rate: number; source: string; reviewed: boolean };
+/** Where an estimate line's quantity came from, when not typed in: a model quantity row or an accepted AI finding. */
+export type TakeoffOrigin = { kind: "model"; rowId: string; measured: number } | { kind: "ai"; draftId: string };
+/**
+ * One line of MCN's own estimate (Quantity takeoffs → Manual quantities). `packageId` is the trade it
+ * belongs to (Marcel, 7 Oct: takeoffs by trade, like Scopes & bid forms); rows saved before it existed
+ * are placed by lib/estimate.ts. `division` is the older trade label, kept for those rows.
+ */
+export type TakeoffRow = { id: string; division: string; item: string; unit: string; quantity: number; rate: number; source: string; reviewed: boolean; packageId?: string | null; origin?: TakeoffOrigin };
 export const initialTakeoffs: TakeoffRow[] = [
-  { id: "q1", division: trades[0], item: "Interior partition demolition", unit: "LF", quantity: 1240, rate: 14, source: "AD-101", reviewed: true },
-  { id: "q2", division: trades[0], item: "Floor finish removal", unit: "SF", quantity: 18650, rate: 2.75, source: "AD-101", reviewed: true },
-  { id: "q3", division: trades[0], item: "Door & frame removal", unit: "EA", quantity: 38, rate: 185, source: "AD-101", reviewed: false },
-  { id: "q4", division: trades[1], item: "Cast-in-place concrete slab", unit: "CY", quantity: 286, rate: 265, source: "S-101", reviewed: false },
-  { id: "q5", division: trades[2], item: "8-inch reinforced CMU wall", unit: "SF", quantity: 4280, rate: 32, source: "A-101", reviewed: false },
-  { id: "q6", division: trades[3], item: "Structural steel framing", unit: "TON", quantity: 46.5, rate: 3800, source: "S-101", reviewed: true },
-  { id: "q7", division: trades[4], item: "Single-ply membrane roofing", unit: "SF", quantity: 22500, rate: 12.5, source: "A-102", reviewed: false },
-  { id: "q8", division: trades[5], item: "Hollow metal door assemblies", unit: "EA", quantity: 42, rate: 1650, source: "A-601", reviewed: false },
-  { id: "q9", division: trades[6], item: "Painted gypsum wall finish", unit: "SF", quantity: 32400, rate: 2.2, source: "A-101", reviewed: false },
+  { id: "q1", division: trades[0], packageId: "demolition", item: "Interior partition demolition", unit: "LF", quantity: 1240, rate: 14, source: "AD-101", reviewed: true },
+  { id: "q2", division: trades[0], packageId: "demolition", item: "Floor finish removal", unit: "SF", quantity: 18650, rate: 2.75, source: "AD-101", reviewed: true },
+  { id: "q3", division: trades[0], packageId: "demolition", item: "Door & frame removal", unit: "EA", quantity: 38, rate: 185, source: "AD-101", reviewed: false },
+  { id: "q4", division: trades[1], packageId: "concrete", item: "Cast-in-place concrete slab", unit: "CY", quantity: 286, rate: 265, source: "S-101", reviewed: false },
+  { id: "q5", division: trades[2], packageId: "masonry", item: "8-inch reinforced CMU wall", unit: "SF", quantity: 4280, rate: 32, source: "A-101", reviewed: false },
+  { id: "q6", division: trades[3], packageId: "steel", item: "Structural steel framing", unit: "TON", quantity: 46.5, rate: 3800, source: "S-101", reviewed: true },
+  { id: "q7", division: trades[4], packageId: "thermal", item: "Single-ply membrane roofing", unit: "SF", quantity: 22500, rate: 12.5, source: "A-102", reviewed: false },
+  { id: "q8", division: trades[5], packageId: "openings", item: "Hollow metal door assemblies", unit: "EA", quantity: 42, rate: 1650, source: "A-601", reviewed: false },
+  { id: "q9", division: trades[6], packageId: "drywall", item: "Painted gypsum wall finish", unit: "SF", quantity: 32400, rate: 2.2, source: "A-101", reviewed: false },
 ];
 
 export type SpecItem = { id: string; section: string; title: string; product: string; manufacturer: string; submittal: string; source: string; reviewed: boolean };
