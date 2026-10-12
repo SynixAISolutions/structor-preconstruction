@@ -258,7 +258,7 @@ export const pageGuides = [
   {
     id: "prequalification",
     group: "Workspace",
-    title: "Prequalification",
+    title: "Subcontractor prequalification",
     purpose: "Check whether invited subcontractors are prequalified with your company, and let the ones who are not fill in the prequalification form and upload the required documents.",
     steps: [
       "See which companies invited to a project are already prequalified.",
@@ -273,7 +273,7 @@ export const pageGuides = [
   },
   {
     id: "portal",
-    group: "Preconstruction",
+    group: "Subcontractor view",
     title: "Subcontractor portal",
     purpose: "Run the bidder side of the demo: act as an invited company, review its package, submit a price, and return to the estimator review.",
     steps: [

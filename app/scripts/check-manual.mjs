@@ -77,7 +77,21 @@ for (const group of SCREEN_GROUPS) {
   const runs = group.items.map(item => item.section ?? "").filter((section, i, all) => section && section !== all[i - 1]);
   unique(runs, `${group.label}: items in one section must be adjacent`);
 }
-for (const [former, id] of [["spec matrix", "specs"], ["drawing register", "drawings"], ["bidder directory", "bidders"], ["project turnover", "turnover"], ["conversations", "packages"], ["documents", "documents"]]) {
+// Marcel's 7 October order: to-do first, 3D model studio last, budget and contract sections, the portal outside the sidebar.
+const { SUBCONTRACTOR_VIEW, PORTAL_PREVIEW_SCREEN } = load("lib/screens.ts");
+const precon = SCREEN_GROUPS.find(group => group.label === "PRECONSTRUCTION").items;
+assert.equal(precon[0].id, "turnover", "Preconstruction to-do opens the Preconstruction group");
+assert.deepEqual(precon.slice(-4).map(item => item.id), ["model", "model-mep", "model-structural", "model-exterior"], "The 3D model studio closes the Preconstruction group");
+const sectionIds = section => precon.filter(item => item.section === section).map(item => item.id);
+assert.deepEqual(sectionIds("Subcontractor outreach"), ["packages", "leveling"]);
+assert.deepEqual(sectionIds("Preconstruction budget"), ["takeoffs", "budget", "allowances", "value-engineering"]);
+assert.deepEqual(sectionIds("Compliance and contracts"), ["contracts", "drawings", "specifications"]);
+assert(!SCREEN_GROUPS.some(group => group.items.some(item => item.id === "portal")), "The Subcontractor portal is not in the contractor's sidebar");
+assert.equal(SUBCONTRACTOR_VIEW.scope, "subcontractor");
+assert.equal(PORTAL_PREVIEW_SCREEN.id, "portal");
+assert.equal(screenGroup("portal")?.label, "SUBCONTRACTOR VIEW", "The portal keeps a group for breadcrumbs and the manual");
+assert.equal(ALL_SCREENS.find(screen => screen.id === "prequalification").label, "Subcontractor prequalification");
+for (const [former, id] of [["prequalification", "prequalification"], ["preview as subcontractor", "portal"], ["spec matrix", "specs"], ["drawing register", "drawings"], ["bidder directory", "bidders"], ["project turnover", "turnover"], ["conversations", "packages"], ["documents", "documents"]]) {
   assert(searchScreens(former).some(screen => screen.id === id), `Quick find must still reach ${id} by its former name "${former}"`);
 }
 // The manual follows the navigation: same group, and each title starts with the nav label.

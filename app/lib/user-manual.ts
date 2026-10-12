@@ -39,7 +39,7 @@ const workspaceGuides: ManualGuide[] = [
     steps: [
       "Understand the job. In Project information, record the building, dates, and planning value. Documents holds the reference files: drawings show layout; specifications describe materials and quality; an RFP describes what the client is asking for.",
       "Work out what must be included. Use Scopes & bid forms to list each trade’s requirements. Submittal packages (currently the spec matrix) organizes written requirements. Quantity takeoffs records how much work there is. List of drawings, Revision comparison, and Structor Check help organize drawing changes and questions.",
-      "Ask companies to price the same job. Scopes & bid forms is where estimators approve each trade’s checklist and publish it. Bid packages lists each trade’s owner, due date, invited companies, and follow-up log. Subcontractor directory is the company contact list shared by every project. The Subcontractor portal shows the trade partner’s response experience; it is still a fixed example and does not yet receive published bid forms.",
+      "Ask companies to price the same job. Scopes & bid forms is where estimators approve each trade’s checklist and publish it. Bid packages lists each trade’s owner, due date, invited companies, and follow-up log. Subcontractor directory is the company contact list shared by every project. The Subcontractor portal is what an invited company sees: the published bid form, its answers and price, RFIs and, once awarded, submittals. It is not in the contractor’s sidebar; the contractor opens it as a preview.",
       "Collect and review offers. A bid contains a price plus inclusions, exclusions, and qualifications. The configured Gmail Proposal inbox can list emails and attachments. You still read the proposal and enter or verify its answers manually.",
       "Compare like for like in Bid leveling. Start from the supported Excel template or the demo, check each bidder’s Y/N/P answers, add notes and justified adjustments, and resolve exceptions. Only fully eligible reviewed bids appear in the reviewed ranking.",
       "Plan the overall cost. Budget summary shows the intended cost-center rollup and trade breakdown. Allowances reserves money for undefined work. These screens currently use their own preview values rather than automatically reading the live bid-leveling results.",
@@ -245,7 +245,7 @@ const workspaceGuides: ManualGuide[] = [
 ];
 
 export const manualGuides: ManualGuide[] = [...workspaceGuides, ...pageGuides];
-export const manualGroups = ["Start here", "Workspace", "Preconstruction", "Operations", "Reference"];
+export const manualGroups = ["Start here", "Workspace", "Preconstruction", "Operations", "Subcontractor view", "Reference"];
 export const glossary = [
   { name: "Addendum", meaning: "An official clarification or revision to the bid documents. Confirm which version each bidder priced." },
   { name: "Alternate", meaning: "A separately priced option that can be accepted or rejected. Do not silently add it to the base scope." },
