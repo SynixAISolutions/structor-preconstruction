@@ -367,6 +367,24 @@ function measures(kind: ObjectKind, points: Point[], height: number, thickness: 
 export const confidenceFor = (basis: ModelObject["basis"]): number =>
   basis.geometry === "illustrative" ? 0.25 : basis.material === "documented" ? 0.75 : 0.5;
 
+export type EvidenceLevel = "flagged" | "reviewed" | "documented" | "assembly-unverified" | "illustrative";
+export type Evidence = { level: EvidenceLevel; label: string; detail: string };
+
+/**
+ * What to show instead of a confidence percentage (Marcel, 7 Oct, asked why a measured object said
+ * 75%). Measurement, interpretation and review are separate facts: a trace from a scaled sheet gives
+ * the size, the schedule or legend gives the assembly, and only the contractor's review confirms both.
+ * The contractor's flag or verification outranks the basis. `confidence` stays for sorting only.
+ */
+export function evidenceFor(object: Pick<ModelObject, "basis">, review: ObjectReviewStatus = "unreviewed"): Evidence {
+  if (review === "flagged") return { level: "flagged", label: "Flagged in review", detail: "The contractor has flagged this object; read the review note before using its quantity." };
+  if (review === "verified") return { level: "reviewed", label: "Reviewed", detail: "The contractor checked this object against the drawings." };
+  if (object.basis.geometry === "illustrative") return { level: "illustrative", label: "Illustrative placement", detail: "Position and size show the idea; they are not measured from the drawings." };
+  return object.basis.material === "documented"
+    ? { level: "documented", label: "Measured, assembly documented", detail: "Traced from the scaled sheet, with its assembly or product from the drawings or schedule. Not yet reviewed." }
+    : { level: "assembly-unverified", label: "Measured, assembly unverified", detail: "Traced from the scaled sheet; which assembly or product it is still needs checking." };
+}
+
 /** A schedule row as inspector properties, skipping empty columns. */
 function scheduleProperties(row: FinishScheduleRow): ModelProperty[] {
   return ([["Tag", row.tag], ["Description", row.description], ["Manufacturer", row.manufacturer], ["Product", row.product],

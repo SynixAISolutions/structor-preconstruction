@@ -98,6 +98,12 @@ assert.deepEqual([find("col-gw-n").shape, find("col-gw-n").dimensions.heightFt, 
 assert.throws(() => M.resolveObjects([{ ...systemElements[0], materialId: "nope" }], allMaterials), /no assembly nope/);
 assert.throws(() => M.resolveObjects([{ ...systemElements.find(e => e.kind === "column"), kind: "column", materialId: "ductwork" }], allMaterials), /can't be counted in LF/);
 assert.deepEqual([M.confidenceFor({ geometry: "traced", material: "documented" }), M.confidenceFor({ geometry: "traced", material: "illustrative" }), M.confidenceFor({ geometry: "illustrative", material: "documented" })], [0.75, 0.5, 0.25]);
+// Evidence labels replace the percentage (Marcel, 7 Oct): review outranks basis; geometry before assembly.
+const ev = (geometry, material, review) => M.evidenceFor({ basis: { geometry, material } }, review).level;
+assert.deepEqual([ev("traced", "documented"), ev("traced", "illustrative"), ev("illustrative", "documented"), ev("illustrative", "illustrative")],
+  ["documented", "assembly-unverified", "illustrative", "illustrative"]);
+assert.deepEqual([ev("illustrative", "illustrative", "verified"), ev("traced", "documented", "flagged"), ev("traced", "documented", "unreviewed")], ["reviewed", "flagged", "documented"]);
+assert(objects.every(o => { const e = M.evidenceFor(o); return e.label && e.detail && !/%/.test(e.label + e.detail); }), "Every object has an evidence label and no percentage");
 
 // ── Interior phase 1: the A12.1 finish schedule, transitions, base, room finish schedule ──
 assert.equal(new Set(finishScheduleRows.map(r => r.tag)).size, finishScheduleRows.length, "Schedule tags are unique");
