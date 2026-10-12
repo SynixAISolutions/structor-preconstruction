@@ -476,6 +476,17 @@ const sa321 = partitionTypes.find(r => r.tag === "SA3.21");
 assert.deepEqual([sa321.construction, sa321.ratingHeight, sa321.unitWidth, sa321.gypsum, sa321.uniqueCondition, sa321.fireRating, sa321.source.sheet],
   ["Steel (metal studs)", "Full height / underside of structure (not rated)", '3 5/8" metal', "One layer, each side", "Sound attenuation full height", "Not rated (NR)", "A8.1"]);
 assert.equal(partitionTypes.find(r => r.tag === "SA2.13").uniqueCondition, "3 (not in the A8.1 legend)", "A code the legend doesn't list stays explicit");
+// Each type points at the typical section above its A8.1 schedule (Marcel, 7 Oct: "show you a section of it").
+for (const r of partitionTypes) {
+  const { title, source, crop, shows } = r.detail;
+  assert.equal(title, r.schedule, `${r.tag}: the section is its own schedule's`);
+  assert.deepEqual([source.sheet, source.page, source.asset], ["A8.1", 64, "/models/jelleff/a8-1.png"], `${r.tag}: on A8.1`);
+  assert(crop.x >= 0 && crop.y >= 0 && crop.width > 0 && crop.height > 0 && crop.x + crop.width <= 1 && crop.y + crop.height <= 1, `${r.tag}: crop inside the sheet`);
+  assert(shows.includes(r.gypsum.startsWith("One layer, each") ? "each side" : "tag side"), `${r.tag}: the section shows its own gypsum layers`);
+}
+assert.deepEqual([...new Set(partitionTypes.map(r => r.detail.title))], ["S_-_-1 non-rated stud partition", "S_-_-2 non-rated stud partition"]);
+const [c1, c2] = ["SA3.10", "SA3.20"].map(t => partitionTypes.find(r => r.tag === t).detail.crop);
+assert(c1.y + c1.height <= c2.y, "The two sections don't overlap: S_-_-1 sits above S_-_-2");
 assert.deepEqual(["SA. 3. 10", "sa 3.21", "SA3.20", "SA.1.21"].map(M.normalizePartitionTag), ["SA3.10", "SA3.21", "SA3.20", "SA1.21"]);
 
 const studWalls = objects.filter(o => o.partitionType);

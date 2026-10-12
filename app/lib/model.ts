@@ -263,7 +263,18 @@ export type PartitionTypeRow = {
   modeledThicknessIn: number;
   fireRating: string;
   source: SourceRef;
+  /** The typical section drawn above the type's schedule on A8.1 — the "section" of the wall Marcel asked for (7 Oct). */
+  detail: PartitionDetail;
 };
+
+/** A box on a sheet image, 0–1 from the top-left corner, so the UI can show part of a sheet. */
+export type SheetCrop = { x: number; y: number; width: number; height: number };
+
+/**
+ * A8.1 has no detail numbers: each partition schedule carries one typical section, so the schedule
+ * title identifies the drawing. `crop` frames that section and its schedule on the sheet image.
+ */
+export type PartitionDetail = { title: string; source: SourceRef; crop: SheetCrop; shows: string };
 
 /** The partition schedule and the plan's default type ("interior partitions are SA3.20 unless noted"). */
 export type PartitionSchedule = { types: PartitionTypeRow[]; defaultType: string; defaultNote: string };

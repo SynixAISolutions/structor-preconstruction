@@ -2,7 +2,7 @@
 // illustrative structural, MEP and roof objects for the four views. Types and measuring rules are
 // in lib/model.ts.
 
-import { baseBreakdown, parseFeetInches, resolveObjects, resolveWallFinishes, wallFaces, type FinishScheduleRow, type PartitionSchedule, type PartitionTypeRow, type LevelId, type MaterialInfo, type ModelElement, type ModelInput, type ModelObject, type ModelReviewState, type Point, type SourceRef } from "./model";
+import { baseBreakdown, parseFeetInches, resolveObjects, resolveWallFinishes, wallFaces, type FinishScheduleRow, type PartitionDetail, type PartitionSchedule, type PartitionTypeRow, type SheetCrop, type LevelId, type MaterialInfo, type ModelElement, type ModelInput, type ModelObject, type ModelReviewState, type Point, type SourceRef } from "./model";
 import { SAMPLE_PROJECT_ID } from "./project-scope";
 import { doorMaterialFor, doorMaterials, doorSchedule, doorScheduleRows, doorTraces } from "./jelleff-doors";
 import { RCP_OFFSETS, ceilingDetails, ceilingSchedule, ceilingZones, rcpL1, rcpL2 } from "./jelleff-ceilings";
@@ -54,6 +54,15 @@ const partitionScheduleRows: [tag: string, schedule: string, rough: string][] = 
   ["SA6.20", "S_-_-2 non-rated stud partition", "<varies>"], ["SA6.21", "S_-_-2 non-rated stud partition", "7 1/4\""],
   ["SA8.20", "S_-_-2 non-rated stud partition", "9 1/4\""],
 ];
+// The typical section above each A8.1 schedule. Its T.O. and B.O. wall detail columns are blank on every row.
+const partitionDetail = (title: string, crop: SheetCrop, sides: string): PartitionDetail => ({
+  title, crop, source: { ...partitions, detail: `${title}: typical section and schedule` },
+  shows: `Metal framing with gypsum wall board ${sides}, and sound attenuation blanket insulation where the unique condition calls for it. The schedule references no top- or bottom-of-wall detail.`,
+});
+const partitionDetails: Record<string, PartitionDetail> = {
+  "S_-_-1 non-rated stud partition": partitionDetail("S_-_-1 non-rated stud partition", { x: 0.318, y: 0.03, width: 0.232, height: 0.128 }, "on the tag side"),
+  "S_-_-2 non-rated stud partition": partitionDetail("S_-_-2 non-rated stud partition", { x: 0.318, y: 0.172, width: 0.232, height: 0.138 }, "on each side"),
+};
 const inches = (v: string) => { const m = v.match(/^(\d+)(?: (\d+)\/(\d+))?"$/); return m ? +m[1] + (m[2] ? +m[2] / +m[3] : 0) : null; };
 export const partitionTypes: PartitionTypeRow[] = partitionScheduleRows.map(([tag, schedule, rough]) => {
   const [c, r, w, g, u] = [tag[0], tag[1], tag.slice(2, -3), tag.at(-2)!, tag.at(-1)!];
@@ -63,7 +72,7 @@ export const partitionTypes: PartitionTypeRow[] = partitionScheduleRows.map(([ta
     tag, schedule, construction: partitionLegend.construction[c], ratingHeight: partitionLegend.rating[r], unitWidth: width[1], gypsum: gypsum[1],
     uniqueCondition: partitionLegend.unique[u] ?? `${u} (not in the A8.1 legend)`,
     roughThickness: rough, roughThicknessIn: inches(rough), modeledThicknessIn: inches(rough) ?? width[0] + gypsum[0] * 5 / 8,
-    fireRating: "Not rated (NR)", source: partitions,
+    fireRating: "Not rated (NR)", source: partitions, detail: partitionDetails[schedule],
   };
 });
 export const partitionSchedule: PartitionSchedule = {
