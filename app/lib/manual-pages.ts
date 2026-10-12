@@ -427,7 +427,7 @@ export const pageGuides = [
   },
 ] satisfies {
   id: string;
-  group: "Workspace" | "Preconstruction" | "Operations";
+  group: "Workspace" | "Preconstruction" | "Operations" | "Subcontractor view";
   title: string;
   purpose: string;
   steps: string[];
