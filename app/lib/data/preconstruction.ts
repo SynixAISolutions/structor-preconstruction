@@ -6,7 +6,9 @@
 export const trades = ["02 · Existing conditions", "03 · Concrete", "04 · Masonry", "05 · Metals", "07 · Thermal & moisture", "08 · Openings", "09 · Finishes", "22 · Plumbing", "23 · HVAC", "26 · Electrical"];
 
 export type LibraryFile = { id: string; name: string; category: string; type: string; size: string; date: string; sample?: boolean; revision: string };
-export const categories = ["All files", "Drawings", "Specifications", "Reports", "RFP", "Contracts", "Bid scopes"];
+// No "Bid scopes" folder (Marcel, 7 Oct): it existed in BuildingConnected only because scopes were
+// exported to PDF and uploaded; Structor's bid forms live in Scopes & bid forms.
+export const categories = ["All files", "Drawings", "Specifications", "Reports", "RFP", "Contracts"];
 export const sampleFiles: LibraryFile[] = [
   { id: "d1", name: "Architectural drawing set.pdf", category: "Drawings", type: "PDF", size: "24.8 MB", date: "2026-09-08", sample: true, revision: "Rev 02" },
   { id: "d2", name: "Structural drawing set.pdf", category: "Drawings", type: "PDF", size: "12.4 MB", date: "2026-09-08", sample: true, revision: "Rev 02" },
@@ -15,7 +17,6 @@ export const sampleFiles: LibraryFile[] = [
   { id: "d5", name: "Geotechnical investigation report.pdf", category: "Reports", type: "PDF", size: "4.1 MB", date: "2026-08-29", sample: true, revision: "Final" },
   { id: "d6", name: "Invitation to bid — Jelleff.pdf", category: "RFP", type: "PDF", size: "1.2 MB", date: "2026-08-28", sample: true, revision: "Original" },
   { id: "d7", name: "Subcontract agreement template.docx", category: "Contracts", type: "DOCX", size: "268 KB", date: "2026-08-28", sample: true, revision: "Template" },
-  { id: "d8", name: "02 41 00 — Demolition scope.xlsx", category: "Bid scopes", type: "XLSX", size: "86 KB", date: "2026-09-09", sample: true, revision: "Draft 03" },
 ];
 
 export type TakeoffRow = { id: string; division: string; item: string; unit: string; quantity: number; rate: number; source: string; reviewed: boolean };
