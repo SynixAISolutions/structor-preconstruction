@@ -3,15 +3,17 @@
 import { useState, type FormEvent } from "react";
 import { ArrowRight, Check, FileText, Link2, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import {
-  addAllowance, addBudgetLine, applyLevelingValue, approveBudgetLine, budgetTotals,
-  costPerSquareFoot, editAllowance, editBudgetLine, levelingCandidates, parseAmount, removeAllowance,
+  addAllowance, addBudgetLine, applyEstimateValue, applyLevelingValue, approveBudgetLine, budgetTotals,
+  costPerSquareFoot, editAllowance, editBudgetLine, linkBudgetLine, parseAmount, removeAllowance,
   removeBudgetLine, reopenBudgetLine, totalsByCostCenter, totalsByDivision,
-  type BudgetAllowance, type BudgetErrors, type BudgetLine, type LevelingBasis, type LevelingCandidate,
+  type BudgetAllowance, type BudgetErrors, type BudgetLine, type LevelingBasis,
 } from "../../lib/budget";
-import type { BidProvenance, LevelingBidder, LevelingScopeItem } from "../../lib/leveling-import";
 import { useBudget } from "../../lib/use-budget";
-import { useLocalDraft } from "../../lib/use-local-draft";
-import { loadWorkspace } from "../../lib/workspace-storage";
+import { useEstimate } from "../../lib/use-estimate";
+import { budgetLinesForTrade } from "../../lib/estimate";
+import { useLevelingComparison } from "./use-leveling-comparison";
+import { EstimateBasisLabel, EstimateBudgetChoice, estimateForecastError } from "./estimate-budget-choice";
+import { TradeVarianceReport } from "./trade-variance";
 import { Badge, Button, Empty, ExportButton, Modal, PageHeader, Panel, PreviewNote, Source, Stats, Tabs, exportRows, usd, type ViewProps } from "./shared";
 
 const actor = "Marcel Khoury";
@@ -50,18 +52,19 @@ function LineForm({ line, costCenters, errors, onSubmit, onCancel }: { line: Bud
 
 export function BudgetView({ notify, navigate }: ViewProps) {
   const { state, run } = useBudget();
+  const estimate = useEstimate();
+  const comparison = useLevelingComparison();
+  const { candidates, loading: levelingLoading, message: levelingMessage } = comparison;
+  const [view, setView] = useState("Budget lines");
   const [tab, setTab] = useState("All costs");
   const [centerFilter, setCenterFilter] = useState("All cost centers");
   const [edit, setEdit] = useState<BudgetLine | "new" | null>(null);
   const [errors, setErrors] = useState<BudgetErrors>({});
   const [levelingLine, setLevelingLine] = useState<BudgetLine | null>(null);
-  const [candidates, setCandidates] = useState<LevelingCandidate[]>([]);
   const [candidateId, setCandidateId] = useState("");
-  const [basis, setBasis] = useState<LevelingBasis>("reviewed");
-  const [levelingMessage, setLevelingMessage] = useState("");
-  const [levelingLoading, setLevelingLoading] = useState(false);
-  const [provenance] = useLocalDraft<Record<string, BidProvenance>>("leveling-submission-provenance", {});
-  const [loadedPackageId] = useLocalDraft("leveling-submission-package", "");
+  const [basis, setBasis] = useState<LevelingBasis | "estimate">("reviewed");
+  const [estimatePackageId, setEstimatePackageId] = useState("");
+  const [linkEstimate, setLinkEstimate] = useState(false);
   const totals = budgetTotals(state);
   const centers = totalsByCostCenter(state);
   const divisions = totalsByDivision(state);
@@ -75,6 +78,12 @@ export function BudgetView({ notify, navigate }: ViewProps) {
   const contractorLines = lines.filter(line => !line.byOwner);
   const ownerLines = lines.filter(line => line.byOwner);
   const approved = state.lines.filter(line => line.status === "approved").length;
+  const estimatePackage = estimate.procurement.packages.find(pkg => pkg.id === estimatePackageId);
+  const selectedEstimate = estimate.byTrade.trades.find(trade => trade.packageId === estimatePackageId);
+  const estimateMatch = estimatePackage ? budgetLinesForTrade(state, estimatePackage) : null;
+  const canLinkEstimate = !levelingLine?.packageId && (estimateMatch?.basis === "ambiguous" || estimateMatch?.basis === "none");
+  const estimateError = levelingLine ? estimateForecastError(state, levelingLine, estimatePackage, selectedEstimate, canLinkEstimate && linkEstimate) : null;
+  const selectedCandidate = candidates.find(candidate => candidate.levelingBidderId === candidateId) ?? candidates.find(candidate => candidate.eligible && !candidate.stale) ?? candidates[0];
 
   function closeLine() { setEdit(null); setErrors({}); }
   function saveLine(event: FormEvent<HTMLFormElement>) {
@@ -100,20 +109,22 @@ export function BudgetView({ notify, navigate }: ViewProps) {
     if (nextErrors) { setErrors(nextErrors); return; }
     closeLine(); notify("Budget line removed.");
   }
-  async function openLeveling(line: BudgetLine) {
-    setLevelingLine(line); setLevelingLoading(true); setLevelingMessage(""); setCandidates([]); setCandidateId(""); setErrors({});
-    try {
-      const workspace = await loadWorkspace<unknown, LevelingScopeItem, LevelingBidder>();
-      const next = workspace ? levelingCandidates({ packageId: loadedPackageId || null, items: workspace.items, bidders: workspace.bidders, provenance }) : [];
-      setCandidates(next);
-      setCandidateId(next.find(candidate => candidate.eligible && !candidate.stale)?.levelingBidderId ?? next[0]?.levelingBidderId ?? "");
-      if (!next.length) setLevelingMessage("No saved leveling bids are available yet. Open Bid leveling and load or import bids first.");
-    } catch (error) { setLevelingMessage(error instanceof Error ? error.message : "The saved leveling workspace could not be read."); }
-    finally { setLevelingLoading(false); }
+  function openLeveling(line: BudgetLine) {
+    setLevelingLine(line); setCandidateId(""); setErrors({}); setLinkEstimate(false);
+    setBasis(line.estimateSource ? "estimate" : line.forecastSource?.basis ?? "reviewed");
+    const matches = estimate.procurement.packages.filter(pkg => budgetLinesForTrade(state, pkg).lines.some(l => l.id === line.id));
+    setEstimatePackageId(line.packageId ?? (matches.length === 1 ? matches[0].id : ""));
+    comparison.refresh();
   }
   function applyForecast() {
     if (!levelingLine) return;
-    const candidate = candidates.find(item => item.levelingBidderId === candidateId);
+    if (basis === "estimate") {
+      if (estimateError || !estimatePackage || !selectedEstimate) { setErrors({ forecast: estimateError ?? "Choose a trade." }); return; }
+      const nextErrors = run(current => applyEstimateValue(canLinkEstimate && linkEstimate ? linkBudgetLine(current, levelingLine.id, estimatePackage.id) : current, levelingLine.id, estimatePackage, selectedEstimate, actor));
+      if (nextErrors) { setErrors(nextErrors); return; }
+      setLevelingLine(null); setErrors({}); notify(`MCN estimate applied to ${levelingLine.description}'s forecast.`); return;
+    }
+    const candidate = selectedCandidate;
     if (!candidate) { setErrors({ forecast: "Choose a bidder." }); return; }
     const nextErrors = run(current => applyLevelingValue(current, levelingLine.id, candidate, basis, actor));
     if (nextErrors) { setErrors(nextErrors); return; }
@@ -124,13 +135,15 @@ export function BudgetView({ notify, navigate }: ViewProps) {
     const forecast = line.forecast ?? line.budget;
     const variance = line.budget - forecast;
     const perSquareFoot = costPerSquareFoot(line.budget, centerAreas.get(line.costCenter));
-    return <tr key={line.id}><td><div className="cm-table-primary"><strong>{line.description}</strong><small>{line.classification === "direct" ? line.csiCode ? `CSI ${line.csiCode}` : "Direct · CSI not recorded" : "Indirect cost"}</small>{line.forecastSource && <small className="cm-budget-source"><Link2 size={11}/>{basisLabels[line.forecastSource.basis]} · {line.forecastSource.bidderName}</small>}</div></td><td>{line.costCenter}<small className="cm-cell-note">{line.owner || "No owner"}</small></td><td className="cm-money">{usd(line.budget)}</td><td className="cm-money">{usdPerSquareFoot(perSquareFoot)}</td><td><strong>{usd(forecast)}</strong>{line.forecast === null && <small className="cm-cell-note">Budget baseline</small>}</td><td>{usd(line.committed)}</td><td><span className={variance >= 0 ? "cm-positive" : "cm-negative"}>{usd(variance)}</span></td><td><Badge tone={line.status === "approved" ? "green" : "amber"}>{line.status === "approved" ? "Approved" : "Draft"}</Badge></td><td><div className="cm-budget-actions">{line.classification === "direct" && !line.byOwner && <button className="cm-text-button" onClick={() => void openLeveling(line)}>Use leveled bid</button>}<button className="ui-icon-btn" aria-label={`Edit ${line.description}`} onClick={() => { setEdit(line); setErrors({}); }}><Pencil size={15}/></button></div></td></tr>;
+    return <tr key={line.id}><td><div className="cm-table-primary"><strong>{line.description}</strong><small>{line.classification === "direct" ? line.csiCode ? `CSI ${line.csiCode}` : "Direct · CSI not recorded" : "Indirect cost"}</small><EstimateBasisLabel line={line} trades={estimate.byTrade.trades}/>{line.forecastSource && <small className="cm-budget-source"><Link2 size={11}/>{basisLabels[line.forecastSource.basis]} · {line.forecastSource.bidderName}</small>}</div></td><td>{line.costCenter}<small className="cm-cell-note">{line.owner || "No owner"}</small></td><td className="cm-money">{usd(line.budget)}</td><td className="cm-money">{usdPerSquareFoot(perSquareFoot)}</td><td><strong>{usd(forecast)}</strong>{line.forecast === null && <small className="cm-cell-note">Budget baseline</small>}</td><td>{usd(line.committed)}</td><td><span className={variance >= 0 ? "cm-positive" : "cm-negative"}>{usd(variance)}</span></td><td><Badge tone={line.status === "approved" ? "green" : "amber"}>{line.status === "approved" ? "Approved" : "Draft"}</Badge></td><td><div className="cm-budget-actions">{line.classification === "direct" && !line.byOwner && <button className="cm-text-button" onClick={() => void openLeveling(line)}>Choose forecast basis</button>}<button className="ui-icon-btn" aria-label={`Edit ${line.description}`} onClick={() => { setEdit(line); setErrors({}); }}><Pencil size={15}/></button></div></td></tr>;
   }
 
   const totalVariance = totals.totalBudget - totals.totalForecast;
   return <div className="cm-view">
-    <PageHeader eyebrow="COST CONTROL" title="Project budget" description="Review direct and indirect costs, carry allowances once, and update forecasts from leveled bids." actions={<><ExportButton onClick={() => exportRows("project-budget.csv", [["Cost center", "Class", "CSI", "Description", "Owner", "By owner", "Budget", "Cost / SF", "Forecast", "Committed", "Variance", "Status"], ...state.lines.map(line => [line.costCenter, line.classification, line.csiCode ?? "", line.description, line.owner, line.byOwner ? "Yes" : "No", line.budget, costPerSquareFoot(line.budget, centerAreas.get(line.costCenter)) ?? "", line.forecast ?? "", line.committed, line.budget - (line.forecast ?? line.budget), line.status])])}/><Button variant="primary" onClick={() => { setEdit("new"); setErrors({}); }}><Plus size={16}/>Add line</Button></>}/>
+    <PageHeader eyebrow="COST CONTROL" title="Project budget" description="Review direct and indirect costs, and choose a forecast from MCN estimates or leveled bids." actions={<><ExportButton onClick={() => exportRows("project-budget.csv", [["Cost center", "Class", "CSI", "Description", "Owner", "By owner", "Budget", "Cost / SF", "Forecast", "Committed", "Variance", "Status"], ...state.lines.map(line => [line.costCenter, line.classification, line.csiCode ?? "", line.description, line.owner, line.byOwner ? "Yes" : "No", line.budget, costPerSquareFoot(line.budget, centerAreas.get(line.costCenter)) ?? "", line.forecast ?? "", line.committed, line.budget - (line.forecast ?? line.budget), line.status])])}/><Button variant="primary" onClick={() => { setEdit("new"); setErrors({}); }}><Plus size={16}/>Add line</Button></>}/>
     <PreviewNote>{state.lines.length ? "Browser-only demo · Owner-carried costs stay visible and are excluded from contractor totals." : "Browser-only demo · This project starts with an empty budget and saves additions in this browser."}</PreviewNote>
+    <Tabs tabs={["Budget lines", "Trade variance"]} value={view} onChange={setView}/>
+    {view === "Trade variance" ? <TradeVarianceReport estimate={estimate} budget={state} candidates={candidates} loading={levelingLoading} message={levelingMessage} onRefresh={comparison.refresh}/> : <>
     {!state.lines.length && !state.allowances.length ? <Panel><Empty title="This project has no budget yet" description="Add the first direct or indirect cost line to start the cost plan." action={<Button variant="primary" onClick={() => setEdit("new")}><Plus size={16}/>Add budget line</Button>}/></Panel> : <>
       <Stats items={[
         { label: "Total budget", value: usd(totals.totalBudget), detail: `${usd(totals.direct)} direct · ${usd(totals.indirect)} indirect` },
@@ -152,16 +165,15 @@ export function BudgetView({ notify, navigate }: ViewProps) {
         <Panel title="Direct cost by CSI division" subtitle="Forecast share across direct construction work."><div className="cm-distribution">{divisions.map((division, index) => { const percent = totals.direct ? Math.round(division.forecast / totals.direct * 100) : 0; return <div key={division.division}><div><span><i style={{ background: palette[index % palette.length] }}/>{division.division ? `${division.division} · ${division.name}` : division.name}</span><strong>{usd(division.forecast)}</strong></div><div className="cm-distribution-bar"><i style={{ width: `${Math.min(100, percent)}%`, background: palette[index % palette.length] }}/></div></div>; })}<Button onClick={() => navigate("allowances")}>Review allowances<ArrowRight size={15}/></Button></div></Panel>
       </div>
     </>}
+    </>}
     {edit && <Modal title={edit === "new" ? "Add budget line" : `Edit ${edit.description}`} subtitle={edit === "new" ? "Add a direct construction or indirect project cost." : `${edit.costCenter} · ${edit.status}`} onClose={closeLine} wide>
       <LineForm line={edit === "new" ? null : edit} costCenters={costCenterNames} errors={errors} onSubmit={saveLine} onCancel={closeLine}/>
       {edit !== "new" && <div className="cm-record-actions"><Button onClick={() => changeApproval(edit)}>{edit.status === "approved" ? <><RotateCcw size={15}/>Reopen approval</> : <><Check size={15}/>Approve line</>}</Button><Button onClick={() => deleteLine(edit)}><Trash2 size={15}/>Remove line</Button></div>}
     </Modal>}
-    {levelingLine && <Modal title={`Update ${levelingLine.description} forecast`} subtitle="Choose the bidder and value. Structor never awards or commits a contract from this action." onClose={() => { setLevelingLine(null); setErrors({}); }} wide>
-      {levelingLoading ? <div className="cm-inline-empty">Reading the saved Bid leveling workspace…</div> : candidates.length ? <>
-        <div className="cm-leveling-grid">{candidates.map(candidate => <label className={`cm-leveling-choice ${candidateId === candidate.levelingBidderId ? "selected" : ""}`} key={candidate.levelingBidderId}><input type="radio" name="candidate" value={candidate.levelingBidderId} checked={candidateId === candidate.levelingBidderId} onChange={() => setCandidateId(candidate.levelingBidderId)}/><span><strong>{candidate.bidderName}</strong><small>{candidate.submissionId ? `Portal submission · revision ${candidate.revisionNumber}` : "Workbook or demo bidder"}</small></span><Badge tone={candidate.stale || !candidate.eligible ? "amber" : "green"}>{candidate.stale ? "Older form" : candidate.eligible ? "Reviewed" : "Review open"}</Badge><div className="cm-leveling-values"><span>Base<strong>{candidate.baseBid === null ? "—" : usd(candidate.baseBid)}</strong></span><span>Provisional<strong>{candidate.provisionalTotal === null ? "—" : usd(candidate.provisionalTotal)}</strong></span><span>Reviewed<strong>{candidate.reviewedTotal === null ? "—" : usd(candidate.reviewedTotal)}</strong></span></div>{candidate.eligibilityReasons.length > 0 && <small className="cm-leveling-reasons">{candidate.eligibilityReasons.join(" · ")}</small>}</label>)}</div>
-        <label className="ui-field"><span>Forecast basis</span><select value={basis} onChange={event => setBasis(event.target.value as LevelingBasis)}>{(Object.keys(basisLabels) as LevelingBasis[]).map(value => <option key={value} value={value}>{basisLabels[value]}</option>)}</select></label>
-        <FieldError error={errors.forecast}/><div className="cm-form-footer"><Button onClick={() => navigate("leveling")}>Open Bid leveling</Button><Button variant="primary" onClick={applyForecast}>Apply selected value</Button></div>
-      </> : <div className="cm-inline-empty"><p>{levelingMessage}</p><Button onClick={() => navigate("leveling")}>Open Bid leveling<ArrowRight size={15}/></Button></div>}
+    {levelingLine && <Modal title={`Update ${levelingLine.description} forecast`} subtitle="Choose MCN's estimate or a bidder's value for this line's forecast." onClose={() => { setLevelingLine(null); setErrors({}); }} wide>
+      <label className="ui-field"><span>Forecast basis</span><select value={basis} onChange={event => { setBasis(event.target.value as typeof basis); setErrors({}); }}><option value="estimate">MCN estimate</option>{(Object.keys(basisLabels) as LevelingBasis[]).map(value => <option key={value} value={value}>{basisLabels[value]}</option>)}</select></label>
+      {basis === "estimate" ? <EstimateBudgetChoice budget={state} line={levelingLine} packages={estimate.procurement.packages} trades={estimate.byTrade.trades} packageId={estimatePackageId} onPackage={id => { setEstimatePackageId(id); setLinkEstimate(false); setErrors({}); }} link={linkEstimate} onLink={setLinkEstimate}/> : levelingLoading ? <div className="cm-inline-empty" role="status">Reading the saved Bid leveling workspace…</div> : candidates.length ? <div className="cm-leveling-grid">{candidates.map(candidate => <label className={`cm-leveling-choice ${selectedCandidate?.levelingBidderId === candidate.levelingBidderId ? "selected" : ""}`} key={candidate.levelingBidderId}><input type="radio" name="candidate" value={candidate.levelingBidderId} checked={selectedCandidate?.levelingBidderId === candidate.levelingBidderId} onChange={() => setCandidateId(candidate.levelingBidderId)}/><span><strong>{candidate.bidderName}</strong><small>{candidate.submissionId ? `Portal submission · revision ${candidate.revisionNumber}` : "Workbook or demo bidder"}</small></span><Badge tone={candidate.stale || !candidate.eligible ? "amber" : "green"}>{candidate.stale ? "Older form" : candidate.eligible ? "Reviewed" : "Review open"}</Badge><div className="cm-leveling-values"><span>Base<strong>{candidate.baseBid === null ? "—" : usd(candidate.baseBid)}</strong></span><span>Provisional<strong>{candidate.provisionalTotal === null ? "—" : usd(candidate.provisionalTotal)}</strong></span><span>Reviewed<strong>{candidate.reviewedTotal === null ? "—" : usd(candidate.reviewedTotal)}</strong></span></div>{candidate.eligibilityReasons.length > 0 && <small className="cm-leveling-reasons">{candidate.eligibilityReasons.join(" · ")}</small>}</label>)}</div> : <div className="cm-inline-empty"><p>{levelingMessage}</p></div>}
+      <FieldError error={errors.forecast}/><FieldError error={errors.line}/><div className="cm-form-footer"><Button onClick={() => navigate(basis === "estimate" ? "takeoffs" : "leveling")}>{basis === "estimate" ? "Open trade estimates" : "Open Bid leveling"}</Button><Button variant="primary" disabled={basis === "estimate" ? !!estimateError : levelingLoading || !candidates.length} onClick={applyForecast}>Apply selected value</Button></div>
     </Modal>}
   </div>;
 }

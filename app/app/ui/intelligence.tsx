@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDownToLine, ArrowRight, BookOpenText, Check, ChevronDown, ChevronRight, CircleCheck, CloudUpload, File, FileSpreadsheet, FileText, Folder, GitCompareArrows, Layers, Maximize2, Plus, Ruler, ShieldCheck, X, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowDownToLine, ArrowRight, BookOpenText, Check, ChevronDown, ChevronRight, CloudUpload, File, FileSpreadsheet, FileText, Folder, GitCompareArrows, Layers, Maximize2, Plus, Ruler, ShieldCheck, X, ZoomIn, ZoomOut } from "lucide-react";
 import { Badge, Button, Empty, ExportButton, Modal, PageHeader, Panel, PreviewNote, Screen, SearchBox, Source, Stats, Tabs, ViewProps, exportRows, usd } from "./shared";
 import { useLocalDraft } from "../../lib/use-local-draft";
-import { trades, categories, sampleFiles, initialTakeoffs, initialSpecs, initialSpecSections, initialDrawings, initialChanges,
-  type LibraryFile, type TakeoffRow, type SpecItem, type Drawing, type DrawingChange } from "../../lib/data/preconstruction";
+import { trades, categories, sampleFiles, initialSpecs, initialSpecSections, initialDrawings, initialChanges,
+  type LibraryFile, type SpecItem, type Drawing, type DrawingChange } from "../../lib/data/preconstruction";
 import { displayDate } from "../../lib/format";
 import { CSI_DIVISIONS, csiDivision } from "../../lib/csi";
 import { screenLabel } from "../../lib/screens";
@@ -13,7 +13,8 @@ import { ProcurementScopesView } from "./procurement";
 import { RfiWorkspace } from "./rfi-ui";
 import { DrawingFlipWorkspace } from "./drawing-flip-ui";
 import { SubmittalLogWorkspace } from "./submittal-log-ui";
-import { ModelQuantityTakeoffs, type ModelQuantityProps } from "./model-quantity-takeoffs";
+import { type ModelQuantityProps } from "./model-quantity-takeoffs";
+import { TradeEstimatesView } from "./trade-estimates";
 import "./intelligence.css";
 
 // Local UI drafts only; sample suggestions are never derived from uploaded files.
@@ -70,24 +71,6 @@ function DocumentsScreen({ projectName, notify, navigate }: ViewProps) {
   </div>;
 }
 
-function TakeoffsScreen({ projectName, notify, quantityFilters, onQuantityFilters, onInspectModel }: ViewProps & ModelQuantityProps) {
-  const [rows, setRows] = useLocalDraft("takeoffs", initialTakeoffs);
-  const [division, setDivision] = useState("All divisions");
-  const [query, setQuery] = useState("");
-  const [mode, setMode] = useState("Model quantities");
-  const [selected, setSelected] = useState("q1");
-  const [adding, setAdding] = useState(false);
-  const [newItem, setNewItem] = useState({ item: "", division: trades[0], quantity: "1", rate: "0", unit: "EA", source: "" });
-  const visible = rows.filter(r => (division === "All divisions" || r.division === division) && r.item.toLowerCase().includes(query.toLowerCase()));
-  const total = rows.reduce((sum, r) => sum + r.quantity * r.rate, 0);
-  const selectedRow = rows.find(r => r.id === selected);
-  function updateNumber(id: string, key: "quantity" | "rate", value: string) { setRows(previous => previous.map(r => r.id === id ? { ...r, [key]: Math.max(0, Number(value) || 0), reviewed: false } : r)); }
-  if (mode === "Model quantities") return <div className="intel-view"><PageHeader eyebrow={`${projectName} / Project intelligence`} title="Quantity takeoffs" description="Inspect prepared model measurements by room, material and trade, with their drawing evidence."/><Tabs tabs={["Model quantities", "Manual quantities", "Drawing workspace"]} value={mode} onChange={setMode}/><ModelQuantityTakeoffs quantityFilters={quantityFilters} onQuantityFilters={onQuantityFilters} onInspectModel={onInspectModel}/></div>;
-  const table = <Panel title="Quantity workbook" subtitle="Edit quantities and unit rates to build your estimate." action={<Button onClick={() => setAdding(true)}><Plus size={15}/>Add item</Button>}><div className="ui-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search takeoff items…"/><select className="intel-select" aria-label="Filter takeoffs by division" value={division} onChange={e => setDivision(e.target.value)}><option>All divisions</option>{trades.map(t => <option key={t}>{t}</option>)}</select></div><div className="ui-table-wrap"><table className="ui-table intel-takeoff-table"><thead><tr><th>Item / Division</th><th>Unit</th><th>Quantity</th><th>Unit rate</th><th>Amount</th><th>Review</th></tr></thead><tbody>{visible.map(r => <tr className={r.id === selected ? "intel-selected-row" : ""} key={r.id}><td><button className="intel-text-link" onClick={() => setSelected(r.id)}>{r.item}</button><small className="intel-table-sub">{r.division} · {r.source || "Manual"}</small></td><td><Badge>{r.unit}</Badge></td><td><input className="intel-number-input" type="number" min="0" step="any" aria-label={`Quantity for ${r.item}`} value={r.quantity} onChange={e => updateNumber(r.id, "quantity", e.target.value)}/></td><td><div className="intel-money-input"><span>$</span><input type="number" min="0" step="any" aria-label={`Unit rate for ${r.item}`} value={r.rate} onChange={e => updateNumber(r.id, "rate", e.target.value)}/></div></td><td className="intel-amount">{usd(r.quantity * r.rate)}</td><td><button className={`intel-review-toggle ${r.reviewed ? "reviewed" : ""}`} aria-label={`${r.reviewed ? "Unreview" : "Review"} ${r.item}`} onClick={() => setRows(previous => previous.map(row => row.id === r.id ? { ...row, reviewed: !row.reviewed } : row))}>{r.reviewed ? <CircleCheck size={17}/> : <span className="intel-review-circle"/>}</button></td></tr>)}</tbody><tfoot><tr><td colSpan={4}>Filtered quantity total</td><td colSpan={2}>{usd(visible.reduce((sum, r) => sum + r.quantity * r.rate, 0))}</td></tr></tfoot></table></div>{!visible.length && <Empty title="No matching takeoffs" description="Try another division or search term."/>}</Panel>;
-  return <div className="intel-view"><PageHeader eyebrow={`${projectName} / Project intelligence`} title="Quantity takeoffs" description="Trace every count, length, and area back to the drawing." actions={<ExportButton onClick={() => exportRows("quantity-takeoffs.csv", [["Division", "Item", "Unit", "Quantity", "Unit rate", "Total", "Source", "Reviewed"], ...rows.map(r => [r.division, r.item, r.unit, r.quantity, r.rate, r.quantity * r.rate, r.source, r.reviewed ? "Yes" : "No"])])}/>}/><Stats items={[{ label: "Takeoff items", value: rows.length, detail: "Counts, lengths, and areas" }, { label: "Trade divisions", value: new Set(rows.map(r => r.division)).size, detail: "Included in this workbook" }, { label: "Reviewed", value: `${rows.filter(r => r.reviewed).length}/${rows.length}`, detail: "Quantities checked" }, { label: "Estimated amount", value: usd(total), detail: "Quantity × unit rate", tone: "orange" }]}/><Tabs tabs={["Model quantities", "Manual quantities", "Drawing workspace"]} value={mode} onChange={setMode}/><div className={mode === "Drawing workspace" ? "intel-takeoff-split" : ""}>{table}{mode === "Drawing workspace" && <PlanPanel title="Quantity source" sheet={selectedRow?.source || "A-101"}><div className="intel-detail-body"><span className="intel-detail-eyebrow">SELECTED MEASUREMENT</span><h3>{selectedRow?.item}</h3><div className="intel-measurement"><Ruler size={20}/><strong>{selectedRow?.quantity.toLocaleString()} <small>{selectedRow?.unit}</small></strong></div><p>Sample drawing annotations illustrate how measurements link to the quantity workbook.</p></div></PlanPanel>}</div><PreviewNote>Sample quantities and rates · These are editable planning values, not measurements from uploaded drawings.</PreviewNote>
-    {adding && <Modal title="Add takeoff item" subtitle="Record a quantity and a unit rate." onClose={() => setAdding(false)}><form onSubmit={e => { e.preventDefault(); const row = { ...newItem, id: crypto.randomUUID(), quantity: Number(newItem.quantity), rate: Number(newItem.rate), reviewed: false }; setRows(previous => [...previous, row]); setSelected(row.id); setAdding(false); setNewItem({ item: "", division: trades[0], quantity: "1", rate: "0", unit: "EA", source: "" }); notify("Takeoff item added."); }}><label className="ui-field">Item description<input required value={newItem.item} onChange={e => setNewItem({ ...newItem, item: e.target.value })}/></label><label className="ui-field">Division<select value={newItem.division} onChange={e => setNewItem({ ...newItem, division: e.target.value })}>{trades.map(t => <option key={t}>{t}</option>)}</select></label><div className="ui-form-grid"><label className="ui-field">Quantity<input required type="number" min="0" step="any" value={newItem.quantity} onChange={e => setNewItem({ ...newItem, quantity: e.target.value })}/></label><label className="ui-field">Unit<select value={newItem.unit} onChange={e => setNewItem({ ...newItem, unit: e.target.value })}>{["EA", "LF", "SF", "CY", "TON", "LS"].map(u => <option key={u}>{u}</option>)}</select></label><label className="ui-field">Unit rate ($)<input required type="number" min="0" step="any" value={newItem.rate} onChange={e => setNewItem({ ...newItem, rate: e.target.value })}/></label><label className="ui-field">Drawing reference<input value={newItem.source} onChange={e => setNewItem({ ...newItem, source: e.target.value })} placeholder="A-101"/></label></div><div className="intel-dialog-actions"><Button onClick={() => setAdding(false)}>Cancel</Button><Button type="submit" variant="primary">Add item</Button></div></form></Modal>}
-  </div>;
-}
 
 function SpecsScreen({ projectName, notify, navigate }: ViewProps) {
   const [rows, setRows] = useLocalDraft("specifications", initialSpecs);
@@ -164,7 +147,7 @@ export function IntelligenceView(props: ViewProps & ModelQuantityProps & { scree
     case "documents": return <DocumentsScreen {...props}/>;
     case "scopes": return <ProcurementScopesView {...props}/>;
     case "drawing-flip": return <DrawingFlipWorkspace {...props}/>;
-    case "takeoffs": return <TakeoffsScreen {...props}/>;
+    case "takeoffs": return <TradeEstimatesView {...props}/>;
     case "specs": return <SubmittalLogWorkspace {...props}/>;
     case "specifications": return <SpecificationsScreen {...props}/>;
     case "checks": return <RfiWorkspace {...props}/>;
