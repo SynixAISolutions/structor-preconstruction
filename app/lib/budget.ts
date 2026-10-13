@@ -13,6 +13,8 @@
 // added to the totals a second time.
 
 import { CSI_DIVISIONS, csiDivision } from "./csi";
+import { budgetLinesForTrade, type TradeEstimate } from "./estimate";
+import type { TradePackage } from "./procurement";
 import { bidderTotals } from "./leveling.mjs";
 import type { BidProvenance, LevelingBidder, LevelingScopeItem } from "./leveling-import";
 
@@ -49,8 +51,15 @@ export type BudgetLine = {
   approval: { by: string; at: string } | null;
   source: LineSource;
   forecastSource: ForecastSource | null;
+  /** Set when the forecast is MCN's own estimate for the trade (applyEstimateValue); cleared like forecastSource. */
+  estimateSource?: EstimateSource | null;
+  /** The trade package this line budgets, once linked or confirmed (estimate.ts budgetLinesForTrade). */
+  packageId?: string | null;
   updatedAt: string;
 };
+
+/** The forecast came from MCN's estimate for a trade rather than a bid (Marcel, 7 Oct: "override to MCN budget"). */
+export type EstimateSource = { kind: "estimate"; packageId: string; value: number; lines: number; unreviewed: number; appliedAt: string; appliedBy: string };
 
 export type AllowanceStatus = "review" | "included" | "excluded";
 export type BudgetAllowance = {
@@ -201,7 +210,7 @@ export function editBudgetLine(state: BudgetState, id: string, patch: Partial<Bu
   const updated: BudgetLine = {
     ...next,
     ...(approvedFieldsChanged ? { status: "draft" as const, approval: null } : {}),
-    ...(forecastEdited ? { forecastSource: null } : {}),
+    ...(forecastEdited ? { forecastSource: null, estimateSource: null } : {}),
     source: line.source.kind === "sample" ? line.source : { kind: "manual", by, at },
   };
   return checked({ ...state, lines: state.lines.map(l => l.id === id ? updated : l) });
@@ -390,5 +399,36 @@ export function applyLevelingValue(state: BudgetState, lineId: string, candidate
     kind: "leveling", basis, value: value as number, packageId: candidate.packageId, levelingBidderId: candidate.levelingBidderId,
     bidderName: candidate.bidderName, submissionId: candidate.submissionId, revisionNumber: candidate.revisionNumber, appliedAt: at, appliedBy: by,
   };
-  return { ...state, lines: state.lines.map(l => l.id === lineId ? { ...l, forecast: value as number, forecastSource, updatedAt: at } : l) };
+  return { ...state, lines: state.lines.map(l => l.id === lineId ? { ...l, forecast: value as number, forecastSource, estimateSource: null, updatedAt: at } : l) };
+}
+
+// ── MCN's estimate ──────────────────────────────────────────────────────────
+
+/** Ties a direct line to a trade package, or unties it (null). The budget and forecast are not touched. */
+export function linkBudgetLine(state: BudgetState, lineId: string, packageId: string | null, at = now()): BudgetState {
+  const line = findLine(state, lineId);
+  if (line.classification !== "direct" || line.byOwner) fail({ line: "Only direct construction lines belong to a trade." });
+  if ((line.packageId ?? null) === packageId) return state;
+  return { ...state, lines: state.lines.map(l => l.id === lineId ? { ...l, packageId, updatedAt: at } : l) };
+}
+
+/**
+ * Sets a line's forecast to MCN's estimate for the trade instead of a bid. The line must be the
+ * trade's only budget line (linked, or suggested by its CSI code — applying confirms the link);
+ * a trade spread over several cost centers can't be split from one estimate total. The bid stays
+ * in Bid leveling, and the variance report keeps showing both.
+ */
+export function applyEstimateValue(state: BudgetState, lineId: string, pkg: TradePackage, estimate: TradeEstimate, by: string, at = now()): BudgetState {
+  const line = findLine(state, lineId);
+  if (line.classification !== "direct" || line.byOwner) fail({ forecast: "MCN's estimate applies to direct construction lines only." });
+  if (estimate.packageId !== pkg.id) fail({ forecast: "That estimate belongs to another trade." });
+  if (!estimate.items.length || !(estimate.total > 0)) fail({ forecast: `${pkg.name} has no priced estimate lines yet.` });
+  const trade = budgetLinesForTrade(state, pkg);
+  if (trade.basis === "ambiguous" || trade.basis === "none") fail({ forecast: `Link ${pkg.name} to its budget line first.` });
+  if (trade.lines.length > 1) fail({ forecast: `${pkg.name} is budgeted on ${trade.lines.length} lines (${trade.lines.map(l => l.costCenter).join(", ")}); one estimate total can't be split between them.` });
+  if (trade.lines[0].id !== lineId) fail({ forecast: `${line.description} (${line.costCenter}) isn't ${pkg.name}'s budget line.` });
+  const error = amountError(estimate.total, "forecast");
+  if (error) fail({ forecast: error });
+  const estimateSource: EstimateSource = { kind: "estimate", packageId: pkg.id, value: estimate.total, lines: estimate.items.length, unreviewed: estimate.unreviewed, appliedAt: at, appliedBy: by };
+  return { ...state, lines: state.lines.map(l => l.id === lineId ? { ...l, forecast: estimate.total, forecastSource: null, estimateSource, packageId: pkg.id, updatedAt: at } : l) };
 }
