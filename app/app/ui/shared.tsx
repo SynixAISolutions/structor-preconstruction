@@ -2,6 +2,7 @@
 
 import { X, ArrowUpRight, Download, Search, Sparkles } from "lucide-react";
 import { ReactNode, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 // The navigation contract, formatting and CSV export live in lib/ (functionality side).
 // They are re-exported here so existing UI imports keep working unchanged.
@@ -17,7 +18,8 @@ export function SearchBox({ value, onChange, placeholder = "Search…" }: { valu
 export function Empty({ title, description, action }: { title: string; description?: string; action?: ReactNode }) { return <div className="ui-empty"><Search size={28}/><h3>{title}</h3><p>{description}</p>{action}</div>; }
 export function Modal({ title, subtitle, onClose, children, wide = false }: { title: string; subtitle?: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
   useEffect(() => { const last = document.activeElement as HTMLElement | null; const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); if(e.key === "Tab") { const items = Array.from(document.querySelectorAll<HTMLElement>('.ui-modal button:not(:disabled), .ui-modal input, .ui-modal select, .ui-modal textarea, .ui-modal a[href]')); if(!items.length)return; const first=items[0],end=items[items.length-1]; if(e.shiftKey && document.activeElement===first){e.preventDefault();end.focus();} else if(!e.shiftKey && document.activeElement===end){e.preventDefault();first.focus();} } }; document.addEventListener("keydown", handler); document.querySelector<HTMLElement>('.ui-modal button')?.focus(); return () => { document.removeEventListener("keydown", handler); last?.focus(); }; }, [onClose]);
-  return <div className="ui-modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><section className={`ui-modal ${wide ? "wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}><header><div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div><button className="ui-icon-btn" onClick={onClose} aria-label="Close dialog"><X size={20}/></button></header><div className="ui-modal-body">{children}</div></section></div>;
+  // Animated pages change the containing block of fixed overlays.
+  return typeof document === "undefined" ? null : createPortal(<div className="ui-modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><section className={`ui-modal ${wide ? "wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}><header><div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div><button className="ui-icon-btn" onClick={onClose} aria-label="Close dialog"><X size={20}/></button></header><div className="ui-modal-body">{children}</div></section></div>, document.querySelector(".product-app") ?? document.body);
 }
 export function PreviewNote({ children = "Sample workspace · Generated suggestions are ready for your review." }: { children?: ReactNode }) { return <div className="ui-preview-note"><Sparkles size={15}/>{children}</div>; }
 export function Source({ children, onClick }: { children: ReactNode; onClick?: () => void }) { return <button className="ui-source" onClick={onClick}>{children}<ArrowUpRight size={12}/></button>; }

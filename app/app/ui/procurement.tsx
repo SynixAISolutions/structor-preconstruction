@@ -48,6 +48,11 @@ import {
 } from "../../lib/procurement";
 import { useSubmissions } from "../../lib/use-submissions";
 import { useProcurement } from "../../lib/use-procurement";
+import { useDrawingFlip } from "../../lib/use-drawing-flip";
+import { initialSpecSections } from "../../lib/data/preconstruction";
+import { scopeSources } from "../../lib/scope-sources";
+import { tradeColors } from "./drawing-flip-ui";
+import { ScopeSourceDialog } from "./scope-source-dialog";
 import { useLocalDraft } from "../../lib/use-local-draft";
 import { conversations, initialBidders, type Bidder } from "../../lib/data/commercial";
 import { displayDate } from "../../lib/format";
@@ -113,6 +118,9 @@ function historyLabel(event: ScopeItem["history"][number], packages: Procurement
 
 export function ProcurementScopesView({ projectName, notify, navigate }: ViewProps) {
   const { state, run } = useProcurement();
+  const { state: drawingFlip } = useDrawingFlip();
+  const [specSections] = useLocalDraft("specification-sections", initialSpecSections);
+  const [sourceKind, setSourceKind] = useState<"drawings" | "spec" | null>(null);
   const [packageId, setPackageId] = useState("demolition");
   const [selectedId, setSelectedId] = useState("");
   const [query, setQuery] = useState("");
@@ -124,6 +132,8 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
   const form = activePackage ? bidForm(state, activePackage.id) : [];
   const visible = form.filter(item => `${item.title} ${item.detail} ${item.source}`.toLowerCase().includes(query.toLowerCase()));
   const selected = form.find(item => item.id === selectedId) ?? form[0];
+  const sources = selected ? scopeSources(selected, drawingFlip, specSections) : null;
+  const sourceColors = new Map(state.packages.map((pkg, index) => [pkg.id, tradeColors[index % tradeColors.length]]));
   const blockers = activePackage ? publishBlockers(state, activePackage.id) : [];
   const packageState = activePackage ? packageStatus(state, activePackage.id) : "draft";
   const unread = unreadFor(state, CURRENT_USER);
@@ -162,12 +172,13 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
         <div className="proc-publish-bar"><div><strong>{form.filter(item => item.status === "approved").length} of {form.length} approved</strong>{blockers.map(reason => <span key={reason}>{reason}</span>)}</div><Button variant="primary" disabled={blockers.length > 0} onClick={() => runAndNotify(run, current => publishPackage(current, activePackage.id, CURRENT_USER), notify, activePackage.published ? "Revision published and bidder notifications recorded. No email was sent." : "Bid form published and bidder notifications recorded. No email was sent.")}><Send size={15}/>{activePackage.published ? "Publish revision" : "Publish to subcontractors"}</Button></div>
       </Panel>
       <div className="proc-detail-column">{selected ? <Panel title="Requirement detail" action={<Badge>{selected.origin}</Badge>}><div className="proc-detail">
-        <span className="proc-label">SOURCE REFERENCE</span><strong>{selected.source || "No source linked"}</strong><p>{selected.detail || "No coordination notes recorded."}</p>
-        <div className="proc-detail-actions"><Button onClick={() => { sessionStorage.setItem("drawing-flip-scope", selected.id); navigate("drawing-flip"); }}><LocateFixed size={14}/>View on drawings</Button><Button onClick={() => { setMoveItem(selected); setMoveTo(state.packages.find(pkg => pkg.id !== selected.packageId)?.id ?? ""); }}><MoveRight size={14}/>{selected.allTrades ? "Assign to one trade" : "Move trade"}</Button>{!selected.allTrades && <Button onClick={() => runAndNotify(run, current => applyScopeToAllTrades(current, selected.id, CURRENT_USER), notify, "Scope item applied to every trade for review.")}><Share2 size={14}/>Apply to all trades</Button>}</div>
+        <span className="proc-label">SOURCE REFERENCE</span>{sources?.spec ? <button className="proc-spec-link" onClick={() => setSourceKind("spec")}><FileText size={14}/>{selected.source}<ArrowRight size={13}/></button> : <strong>{selected.source || "No source linked"}</strong>}<p>{selected.detail || "No coordination notes recorded."}</p>
+        <div className="proc-detail-actions"><Button onClick={() => setSourceKind("drawings")}><LocateFixed size={14}/>View on drawings</Button><Button onClick={() => { setMoveItem(selected); setMoveTo(state.packages.find(pkg => pkg.id !== selected.packageId)?.id ?? ""); }}><MoveRight size={14}/>{selected.allTrades ? "Assign to one trade" : "Move trade"}</Button>{!selected.allTrades && <Button onClick={() => runAndNotify(run, current => applyScopeToAllTrades(current, selected.id, CURRENT_USER), notify, "Scope item applied to every trade for review.")}><Share2 size={14}/>Apply to all trades</Button>}</div>
         <div className="proc-history"><span className="proc-label"><History size={12}/>HISTORY</span>{selected.history.slice().reverse().map((event, index) => <div key={`${event.at}-${index}`}><i/><span><strong>{historyLabel(event, state.packages)}</strong><small>{event.by} · {eventTime(event.at)}</small></span></div>)}</div>
       </div></Panel> : <Panel><Empty title="Select a scope item" description="Choose an item to see its source, notes, and history."/></Panel>}</div>
     </div>
     <PreviewNote>The scope checklist is the bidder’s bid form. Only approved items can be published.</PreviewNote>
+    {sourceKind && selected && sources && <ScopeSourceDialog key={selected.id + sourceKind} title={selected.title} sources={sources} kind={sourceKind} colors={sourceColors} onClose={() => setSourceKind(null)}/>}
     {editor && <ScopeEditor draft={editor} packages={state.packages} onClose={() => setEditor(null)} onSave={saveScope}/>}
     {moveItem && <Modal title={moveItem.allTrades ? "Assign to one trade" : "Move scope item"} subtitle={moveItem.title} onClose={() => setMoveItem(null)}><label className="ui-field">Destination trade<select value={moveTo} onChange={event => setMoveTo(event.target.value)}>{state.packages.filter(pkg => pkg.id !== moveItem.packageId || moveItem.allTrades).map(pkg => <option key={pkg.id} value={pkg.id}>{pkg.code} · {pkg.name} · {pkg.owner}</option>)}</select></label><p className="proc-modal-note">The item returns to draft and the receiving estimator is tagged for review.</p><div className="proc-form-actions"><Button onClick={() => setMoveItem(null)}>Cancel</Button><Button variant="primary" disabled={!moveTo} onClick={() => { if (runAndNotify(run, current => moveScope(current, moveItem.id, moveTo, CURRENT_USER), notify, "Scope item moved and the receiving estimator was tagged.")) { setPackageId(moveTo); setSelectedId(moveItem.id); setMoveItem(null); } }}><MoveRight size={15}/>Move item</Button></div></Modal>}
     {notificationsOpen && <Modal title="Your notifications" subtitle={`${unread.length} unread for ${CURRENT_USER}`} onClose={() => setNotificationsOpen(false)}><div className="proc-notifications">{unread.map(item => <div key={item.id}><Bell size={15}/><span>{item.text}</span></div>)}</div><div className="proc-form-actions"><Button onClick={() => setNotificationsOpen(false)}>Close</Button><Button variant="primary" onClick={() => { run(current => markNotificationsRead(current, unread.map(item => item.id))); setNotificationsOpen(false); notify("Notifications marked read."); }}>Mark all read</Button></div></Modal>}

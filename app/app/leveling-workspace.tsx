@@ -618,9 +618,9 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
         <header className="topbar">
           <div><div className="project-title"><h1>{project.name}</h1>{project.isDemo && <span>Demo data</span>}</div><p>{message}<small className={`save-state ${saveState.includes("failed") || saveState.includes("unavailable") ? "error" : ""}`}>{saveState}</small></p></div>
           <div className="submission-load-controls">
-            <label className="trade-select"><span>Leveling trade</span><select value={project.trade} disabled title="Load another portal package or import a workbook to change the active trade"><option>{project.trade}</option></select><ChevronDown /></label>
-            <label className="trade-select"><span>Portal submissions</span><select aria-label="Portal submission package" value={sourcePackageId} disabled={!procurement.packages.length} onChange={(event) => setSourcePackageId(event.target.value)}>{!procurement.packages.length && <option value="">No packages</option>}{procurement.packages.map((pkg) => <option key={pkg.id} value={pkg.id}>{pkg.name} · {submissionCounts.get(pkg.id) ?? 0} submitted</option>)}</select><ChevronDown /></label>
-            <button className="button primary submission-load-button" disabled={!sourcePackageId} onClick={() => loadSubmittedBids()}><RefreshCw />{loadedPackageId === sourcePackageId ? "Refresh bids" : "Load bids"}</button>
+            <div className="active-leveling-trade" aria-label="Active trade"><span>Active trade</span><strong>{project.trade}</strong></div>
+            <label className="trade-select"><span>Switch trade</span><select aria-label="Trade package to load" value={sourcePackageId} disabled={!procurement.packages.length} onChange={(event) => setSourcePackageId(event.target.value)}>{!procurement.packages.length && <option value="">No packages</option>}{procurement.packages.map((pkg) => <option key={pkg.id} value={pkg.id}>{pkg.name} · {submissionCounts.get(pkg.id) ?? 0} submitted</option>)}</select><ChevronDown /></label>
+            <button className="button primary submission-load-button" disabled={!sourcePackageId} onClick={() => loadSubmittedBids()}><RefreshCw />{loadedPackageId === sourcePackageId ? "Refresh bids" : "Load selected trade"}</button>
           </div>
         </header>
 

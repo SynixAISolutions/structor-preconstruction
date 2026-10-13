@@ -51,7 +51,7 @@ import { Badge, Button, Empty, Modal, PageHeader, Panel, PreviewNote, Stats, typ
 import "./drawing-flip-ui.css";
 
 const CURRENT_USER = "Marcel Khoury";
-const tradeColors = ["#e27f4b", "#4e8ca6", "#8b70aa", "#54a078", "#c99a46", "#c76464", "#657eae", "#8b9870"];
+export const tradeColors = ["#e27f4b", "#4e8ca6", "#8b70aa", "#54a078", "#c99a46", "#c76464", "#657eae", "#8b9870"];
 const firstError = (errors: DrawingFlipErrors) => Object.values(errors)[0] ?? "Review the highlighted fields.";
 const activityDate = (value: string | null) => value ? displayDate(value.slice(0, 10)) : "Not set";
 const eventLabel = (kind: FlipRegion["history"][number]["kind"]) => ({
@@ -83,12 +83,13 @@ function DrawingBackdrop({ page }: { page: DrawingPage }) {
   </g>;
 }
 
-function DrawingCanvas({ page, regions, selectedId, colors, onSelect }: {
+export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, expandable = true }: {
   page: DrawingPage;
   regions: FlipRegion[];
   selectedId: string;
   colors: Map<string, string>;
   onSelect: (id: string) => void;
+  expandable?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const drawing = <svg viewBox="0 0 1000 667" role="img" aria-label={`${page.sheet} with ${regions.length} trade regions`}>
@@ -98,7 +99,7 @@ function DrawingCanvas({ page, regions, selectedId, colors, onSelect }: {
       const centerX = region.polygon.reduce((sum, point) => sum + point.x, 0) / region.polygon.length * 1000;
       const centerY = region.polygon.reduce((sum, point) => sum + point.y, 0) / region.polygon.length * 667;
       const color = colors.get(region.packageId) ?? "#697b8c";
-      return <g key={region.id} role="button" tabIndex={0} aria-label={`${region.number}: ${region.label}`} className={`${selectedId === region.id ? "selected" : ""} ${region.status === "pending-review" ? "pending" : ""}`} onClick={() => onSelect(region.id)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") onSelect(region.id); }}>
+      return <g key={region.id} role="button" tabIndex={0} aria-label={`${region.number}: ${region.label}`} className={`${selectedId === region.id ? "selected" : ""} ${region.status === "pending-review" ? "pending" : ""}`} onClick={() => onSelect(region.id)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(region.id); } }}>
         <polygon points={points} fill={`${color}30`} stroke={color}/>
         <circle cx={centerX} cy={centerY} r="16" fill={color}/>
         <text x={centerX} y={centerY + 4}>{region.number.replace("R-", "")}</text>
@@ -108,7 +109,7 @@ function DrawingCanvas({ page, regions, selectedId, colors, onSelect }: {
   return <>
     <div className="flip-canvas-wrap">
       <div className="flip-sheet">{drawing}</div>
-      <button className="flip-expand" onClick={() => setExpanded(true)} aria-label="Expand drawing"><Maximize2 size={16}/></button>
+      {expandable && <button className="flip-expand" onClick={() => setExpanded(true)} aria-label="Expand drawing"><Maximize2 size={16}/></button>}
       {!page.image && <span className="flip-image-state"><PencilRuler size={13}/>Diagram preview</span>}
     </div>
     {expanded && <Modal title={`${page.sheet} · ${page.title}`} subtitle="Trade regions stay linked as the drawing scales." wide onClose={() => setExpanded(false)}><div className="flip-expanded">{drawing}</div></Modal>}
