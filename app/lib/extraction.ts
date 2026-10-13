@@ -132,7 +132,7 @@ function text(value: unknown, field: keyof typeof LIMITS, what: string, optional
   return t;
 }
 
-function cleanCitations(citations: unknown, documents: { name: string; pages: number }[] | null): Citation[] {
+export function cleanCitations(citations: unknown, documents: { name: string; pages: number }[] | null): Citation[] {
   if (!Array.isArray(citations) || !citations.length) fail("Every finding needs at least one citation.");
   return (citations as Citation[]).map((c, i) => {
     const what = `Citation ${i + 1}`;
