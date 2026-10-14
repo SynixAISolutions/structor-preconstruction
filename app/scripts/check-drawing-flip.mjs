@@ -17,13 +17,13 @@ const numbers = (regions) => regions.map(r => r.number);
 const byNumber = (s, n) => s.regions.find(r => r.number === n);
 const box = F.rectangle(0.2, 0.2, 0.1, 0.1);
 
-// Sample: eight real sheets from the project files, twelve regions on trades and scope items that exist.
-assert.deepEqual(base.pages.map(p => p.sheet), ["AD-101", "A-101", "A-102", "A-601", "S-101", "M-101", "P-101", "E-101"]);
+// Sample: nine sheets from the project files, sixteen regions on trades and scope items that exist.
+assert.deepEqual(base.pages.map(p => p.sheet), ["AD-101", "A-101", "A-102", "A-121", "A-601", "S-101", "M-101", "P-101", "E-101"]);
 for (const p of base.pages) {
   assert(initialDrawings.some(d => d.id === p.sheet), `${p.sheet} is on the List of drawings`);
   assert(sampleFiles.some(f => f.id === p.documentId && f.name === p.documentName), `${p.sheet} comes from a project file`);
 }
-assert.equal(base.regions.length, 12);
+assert.equal(base.regions.length, 16);
 for (const r of base.regions) {
   assert(base.pages.some(p => p.id === r.pageId), `${r.number}: page`);
   assert(r.polygon.length >= 3 && r.polygon.every(p => p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1) && F.polygonArea(r.polygon) >= 0.0001, `${r.number}: polygon`);
@@ -43,19 +43,21 @@ assert.deepEqual(F.bounds(byNumber(base, "R-010").polygon), { x: 0.1, y: 0.4, wi
 
 // Reading: filters, scope highlight, missing scope, legend, counts, correction log.
 assert.deepEqual(numbers(F.filterRegions(base, proc, { pageId: "pg-ad-101" })), ["R-001", "R-002", "R-003"]);
-assert.deepEqual(numbers(F.filterRegions(base, proc, { division: "09" })), ["R-005", "R-006"]);
-assert.deepEqual(numbers(F.filterRegions(base, proc, { packageId: "drywall" })), ["R-005"]);
-assert.deepEqual(numbers(F.filterRegions(base, proc, { status: "pending-review" })), ["R-002", "R-004", "R-006", "R-007", "R-008", "R-010", "R-011"]);
+assert.deepEqual(numbers(F.filterRegions(base, proc, { division: "09" })), ["R-005", "R-006", "R-013", "R-014", "R-015", "R-016"]);
+assert.deepEqual(numbers(F.filterRegions(base, proc, { packageId: "drywall" })), ["R-005", "R-013", "R-014", "R-015", "R-016"], "Drywall on the plan and the reflected ceiling plan");
+assert.deepEqual(numbers(F.filterRegions(base, proc, { status: "pending-review" })), ["R-002", "R-004", "R-006", "R-014", "R-007", "R-016", "R-008", "R-010", "R-011"]);
 assert.deepEqual(numbers(F.filterRegions(base, proc, { origin: "estimator" })), ["R-012"]);
 assert.deepEqual(numbers(F.filterRegions(base, proc, { corrected: true })), ["R-003"]);
 assert.deepEqual(numbers(F.filterRegions(base, proc, { query: "tpo" })), ["R-007"]);
 assert.deepEqual(numbers(F.filterRegions(base, proc, { query: "masonry" })), ["R-004"], "Searches the trade name");
-assert.deepEqual(numbers(F.filterRegions(base, proc)), base.regions.map(r => r.number), "Page order, then number");
+assert.deepEqual(numbers(F.filterRegions(base, proc)), ["R-001", "R-002", "R-003", "R-004", "R-005", "R-006", "R-013", "R-014", "R-007", "R-015", "R-016", "R-008", "R-009", "R-010", "R-011", "R-012"], "Page order, then number");
 assert.deepEqual(numbers(F.regionsForScope(base, "scope-4")), ["R-003"]);
 assert.deepEqual(F.unlocatedScopes(base, proc).map(s => s.id), ["scope-3", "scope-6", "scope-8", "scope-9", "scope-10"]);
 assert.deepEqual(F.tradeLegend(base, proc, "pg-ad-101"), [{ packageId: "demolition", name: "Demolition", division: "02", regions: 3 }]);
 assert.deepEqual(F.tradeLegend(base, proc, "pg-a-101").map(t => t.packageId), ["masonry", "drywall", "flooring"], "By division, then name");
-assert.deepEqual(F.flipSummary(base), { regions: 12, pendingReview: 7, approved: 5, corrected: 1, withoutScope: 1 });
+assert.deepEqual(F.flipSummary(base), { regions: 16, pendingReview: 9, approved: 7, corrected: 1, withoutScope: 1 });
+assert.deepEqual(F.tradeLegend(base, proc, "pg-a-121"), [{ packageId: "drywall", name: "Drywall", division: "09", regions: 2 }], "The reflected ceiling plan carries drywall ceilings");
+assert(proc.scopes.filter(x => x.packageId === "drywall").every(x => F.regionsForScope(base, x.id).length), "Every drywall bid-form item is located on a drawing");
 assert.deepEqual(F.flipSummary(base, "pg-ad-101"), { regions: 3, pendingReview: 1, approved: 2, corrected: 1, withoutScope: 0 });
 assert.deepEqual(F.corrections(base).map(c => [c.number, c.from, c.to, c.by]), [["R-003", "openings", "demolition", "Safi"]]);
 
@@ -88,9 +90,9 @@ fails(() => F.addRegion(base, proc, { ...input, scopeIds: ["scope-99"] }, "Naija
 let s = freeze(F.addRegion(base, proc, { ...input, confidence: 0.4 }, "Naija", at));
 const drawn = s.regions.at(-1);
 assert.deepEqual([drawn.number, drawn.label, drawn.origin, drawn.status, drawn.reviewedBy, drawn.reviewedAt, drawn.confidence, drawn.scopeIds, drawn.polygon[0]],
-  ["R-013", "Roof hatch and ladder", "estimator", "approved", "Naija", at, null, ["scope-9"], { x: 0.7, y: 0.1 }], "Estimator's region: reviewed, no confidence, 4-decimal points");
+  ["R-017", "Roof hatch and ladder", "estimator", "approved", "Naija", at, null, ["scope-9"], { x: 0.7, y: 0.1 }], "Estimator's region: reviewed, no confidence, 4-decimal points");
 assert.deepEqual(drawn.history.map(e => e.kind), ["created", "linked"]);
-assert.deepEqual(numbers(F.filterRegions(s, proc)), ["R-001", "R-002", "R-003", "R-004", "R-005", "R-006", "R-007", "R-013", "R-008", "R-009", "R-010", "R-011", "R-012"], "A later region sorts with its page");
+assert.deepEqual(numbers(F.filterRegions(s, proc)), ["R-001", "R-002", "R-003", "R-004", "R-005", "R-006", "R-013", "R-014", "R-007", "R-017", "R-015", "R-016", "R-008", "R-009", "R-010", "R-011", "R-012"], "A later region sorts with its page");
 assert.equal(F.addRegion(base, proc, { ...input, polygon: [...input.polygon].reverse() }, "Naija", at).regions.at(-1).polygon.length, 3, "Counter-clockwise points are fine");
 assert.equal(F.addRegion({ ...base, lastRegionNumber: 20 }, proc, input, "Naija", at).regions.at(-1).number, "R-021", "Numbers follow the counter, never reused");
 const aiInput = { pageId: "pg-p-101", label: "Floor drains", polygon: box, packageId: "plumbing", origin: "ai", evidence: "FD-1 tags", confidence: 0.58 };
@@ -104,7 +106,7 @@ assert.deepEqual([proposal.origin, proposal.status, proposal.reviewedBy, proposa
 fails(() => F.importRegions(base, proc, [], "Structor AI", at), "region", /no regions/);
 fails(() => F.importRegions(base, proc, [aiInput, { ...aiInput, packageId: "glazing" }], "Structor AI", at), "packageId", /^Region 2: Choose the responsible trade/);
 const imported = F.importRegions(base, proc, [aiInput, { ...aiInput, label: "Hose bibbs" }], "Structor AI", at);
-assert.deepEqual(numbers(imported.regions.slice(-2)), ["R-013", "R-014"]);
+assert.deepEqual(numbers(imported.regions.slice(-2)), ["R-017", "R-018"]);
 
 // Linking scope items: only the region's trade, or an all-trades item.
 const r2 = byNumber(s, "R-002").id;

@@ -10,12 +10,13 @@
 // organization-wide directory and portal profile, the project list, the open project, and the
 // bid-leveling workspace (IndexedDB).
 
+import { initialBidders } from "./data/commercial";
 import { GLOBAL_DRAFT_KEYS } from "./project-scope";
 
 /** Bump when the Jelleff sample changes in a way returning browsers should be offered. */
-export const SAMPLE_VERSION = "2026-10-02";
+export const SAMPLE_VERSION = "2026-10-14";
 /** What changed, for the offer to load it. */
-export const SAMPLE_CHANGES = "Concrete now runs from the published bid form through District Concrete's bid, award, Exhibit A and executed subcontract to its submittals, and the schedule has linked activities.";
+export const SAMPLE_CHANGES = "Drywall, Marcel's pilot trade, now runs end to end like Concrete: a six-item bid form on the drawings, three invited companies (two bids, one decline), an award against the drywall budget line, an executed subcontract and its submittals, plus MCN's drywall estimate and AI findings to review.";
 
 export const SAMPLE_VERSION_KEY = "structor-sample-version";
 const BACKUP_PREFIX = "structor-sample-backup:";
@@ -85,8 +86,27 @@ function backup(storage: StorageLike, at: string): string {
 export function loadUpdatedSample(storage: StorageLike, at = new Date().toISOString()): string {
   const saved = backup(storage, at);
   for (const k of jelleffDraftKeys(storage)) storage.removeItem(k);
+  addMissingSampleCompanies(storage);
   storage.setItem(SAMPLE_VERSION_KEY, SAMPLE_VERSION);
   return saved;
+}
+
+/**
+ * The subcontractor directory is shared by every project, so loading the sample never replaces it.
+ * A saved directory only gains the sample companies it lacks (by id), so the sample's invitations
+ * name real directory entries; every company the user added or edited stays as it is.
+ */
+export function addMissingSampleCompanies(storage: StorageLike): void {
+  const key = `${PREFIX}directory`;
+  const raw = storage.getItem(key);
+  if (raw === null) return;
+  let saved: unknown;
+  try { saved = JSON.parse(raw); } catch { return; }
+  if (!Array.isArray(saved)) return;
+  const have = new Set(saved.map(c => (c as { id?: unknown })?.id));
+  const missing = initialBidders.filter(c => !have.has(c.id));
+  if (!missing.length) return;
+  try { storage.setItem(key, JSON.stringify([...saved, ...missing])); } catch { /* The sample still loads; those invitations show the company id. */ }
 }
 
 function readBackup(storage: StorageLike, key: string): { at: string; version: string | null; entries: Record<string, string> } {

@@ -36,7 +36,7 @@ const returning = () => memoryStorage({
   "structor-ui-active-project": "jelleff",
   "unrelated": "x",
 });
-const untouched = ["structor-ui-p2:procurement", "structor-ui-directory", "structor-ui-portal-profile", "structor-ui-projects", "structor-ui-active-project", "unrelated"];
+const untouched = ["structor-ui-p2:procurement", "structor-ui-portal-profile", "structor-ui-projects", "structor-ui-active-project", "unrelated"];
 
 let s = returning();
 assert.deepEqual(R.jelleffDraftKeys(s), ["structor-ui-awards", "structor-ui-procurement", "structor-ui-submittal-log"], "Only Jelleff's own drafts");
@@ -68,6 +68,13 @@ assert.equal(backupKey, `structor-sample-backup:${at}`);
 assert.deepEqual(R.jelleffDraftKeys(s), [], "Jelleff screens now start from the new sample");
 for (const k of untouched) assert.equal(s.getItem(k), old[k], `${k} untouched`);
 assert.deepEqual(R.sampleStatus(s), { current: R.SAMPLE_VERSION, applied: R.SAMPLE_VERSION, savedKeys: [], needsChoice: false });
+// The shared directory keeps its own entries as they are and only gains the sample companies it lacks.
+const { initialBidders } = await import("../lib/data/commercial.ts");
+assert.deepEqual(JSON.parse(s.getItem("structor-ui-directory")), [{ id: "b1" }, ...initialBidders.filter(c => c.id !== "b1")], "Edited b1 kept; missing sample companies added");
+const dirOf = (raw) => { const t = memoryStorage(raw === undefined ? {} : { "structor-ui-directory": raw }); R.addMissingSampleCompanies(t); return t.getItem("structor-ui-directory"); };
+assert.deepEqual([dirOf(undefined), dirOf("not json"), dirOf('{"id":"b1"}')], [null, "not json", '{"id":"b1"}'], "No saved directory, or one that can't be read: left alone");
+const full = JSON.stringify(initialBidders.map(c => ({ ...c, name: "Edited" })));
+assert.equal(dirOf(full), full, "Nothing missing: unchanged, edits kept");
 assert.deepEqual(R.listSampleBackups(s), [{ key: backupKey, at, version: null, keys: ["structor-ui-awards", "structor-ui-procurement", "structor-ui-submittal-log"], bytes: s.getItem(backupKey).length }]);
 const file = R.sampleBackupFile(s, backupKey);
 assert.equal(file.name, "structor-jelleff-backup-2026-10-02-15-00-00.json");
@@ -127,4 +134,4 @@ R.deleteSampleBackup(s, second);
 assert.deepEqual(R.listSampleBackups(s).map(b => b.key), [backupKey]);
 fails(() => R.deleteSampleBackup(s, second), /no longer exists/);
 
-console.log(`Sample refresh checked: version ${R.SAMPLE_VERSION}; Jelleff drafts only, fresh vs returning browsers, keep my data, backup-then-load, restore (itself backed up), quota failures roll back, bad backups refused.`);
+console.log(`Sample refresh checked: version ${R.SAMPLE_VERSION}; Jelleff drafts only, fresh vs returning browsers, keep my data, backup-then-load, directory gains missing sample companies, restore (itself backed up), quota failures roll back, bad backups refused.`);

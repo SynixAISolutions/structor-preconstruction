@@ -6,7 +6,7 @@
 
 import type { Screen } from "../screens";
 
-export const trades = ["Demolition", "Concrete", "Structural steel", "Carpentry", "Mechanical", "Electrical", "Site work"];
+export const trades = ["Demolition", "Concrete", "Structural steel", "Carpentry", "Drywall", "Mechanical", "Electrical", "Site work"];
 
 export type Bidder = { id: string; company: string; name: string; email: string; trade: string; location: string; status: string };
 export const initialBidders: Bidder[] = [
@@ -16,6 +16,9 @@ export const initialBidders: Bidder[] = [
   { id: "b4", company: "Metro Mechanical", name: "Alex Rivera", email: "alex@example.com", trade: "Mechanical", location: "Washington, DC", status: "Qualified" },
   { id: "b5", company: "Precision Electric", name: "Taylor Reed", email: "taylor@example.com", trade: "Electrical", location: "Bethesda, MD", status: "Invited" },
   { id: "b6", company: "Greenline Civil", name: "Jordan Davis", email: "jordan@example.com", trade: "Site work", location: "Fairfax, VA", status: "Qualified" },
+  { id: "b7", company: "Capitol Wall Systems", name: "Avery Morgan", email: "avery@example.com", trade: "Drywall", location: "Washington, DC", status: "Qualified" },
+  { id: "b8", company: "Rock Creek Interiors", name: "Dana Brooks", email: "dana@example.com", trade: "Drywall", location: "Silver Spring, MD", status: "Qualified" },
+  { id: "b9", company: "Anacostia Partitions", name: "Riley Shaw", email: "riley@example.com", trade: "Drywall", location: "Hyattsville, MD", status: "Qualified" },
 ];
 
 export const portalScope=["Site protection and dust control","Selective demolition per demolition plans","Debris removal and disposal","Existing utilities coordination","Include required permits and inspections","Include all addenda through September 8"];

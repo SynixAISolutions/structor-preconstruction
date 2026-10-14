@@ -2,9 +2,10 @@
 // invitations and outreach. Illustrative preview content, not read from the documents.
 // Bidder ids refer to the organization-wide directory (initialBidders).
 //
-// Concrete is the one trade carried all the way through the sample: its bid form is approved and
-// published here, District Concrete's bid is in lib/data/sample-award.ts, and so are the award,
-// Exhibit A and executed subcontract its submittals hang off.
+// Concrete and drywall are carried all the way through the sample: their bid forms are approved
+// and published here; the bids, awards, Exhibit A and executed subcontracts are in
+// lib/data/sample-award.ts, and their submittals in lib/data/submittals.ts. Drywall (Marcel's pilot
+// trade) has three invited companies: two bid, one declined. Its wording is illustrative.
 
 import { approveScope, bidForm, markInvitationSubmitted, publishPackage, type Procurement, type ScopeItem, type ScopeOrigin, type TradePackage } from "../procurement";
 import { stableIds } from "./stable-ids";
@@ -49,6 +50,12 @@ const scopes: ScopeItem[] = [
   item("plumbing", "Install plumbing fixtures and domestic water connections.", "Confirm fixture schedule, accessible mounting heights, and testing requirements.", "P-101 · Notes", "drawing", false),
   item("mechanical", "Provide supply and return air ductwork, insulation, and air devices.", "Include balancing, vibration isolation, controls coordination, and access panels.", "M-101 · Plan", "drawing", false),
   item("electrical", "Furnish and install lighting fixtures and associated controls.", "Include fixture support, branch wiring, occupancy controls, and commissioning.", "E-101 · Lighting plan", "drawing", false),
+  // Drywall's bid form beyond its first item (scope-12); appended so earlier ids stay put.
+  item("drywall", "Provide cold-formed metal stud framing for interior partitions to the heights shown.", "Include deflection track, bracing, and in-wall blocking for wall-mounted items.", "A-101 · Partition types", "drawing", false),
+  item("drywall", "Provide sound attenuation blankets where partition types require them.", "Full height, friction fit between studs.", "09 29 00 · §2.5", "specification", false),
+  item("drywall", "Provide shaft wall assemblies at the elevator and stair enclosures.", "Include liner panels, C-H studs, and rated joints.", "A-101 · Elevator / stair", "drawing", false),
+  item("drywall", "Provide suspended acoustical panel ceilings where shown on the reflected ceiling plan.", "Include suspension system, edge trim, and hold-down clips.", "A-121 · Ceiling legend", "drawing", false),
+  item("drywall", "Provide gypsum board ceilings and soffits where shown.", "Include framing, control joints, and access panels furnished by others.", "A-121 · Ceiling legend", "drawing", false),
 ];
 
 const listed: Procurement = {
@@ -60,16 +67,24 @@ const listed: Procurement = {
     { id: "inv-3", packageId: "steel", bidderId: "b3", status: "invited", invitedAt: "2026-09-17T13:00:00.000Z", by: "Naija" },
     { id: "inv-4", packageId: "mechanical", bidderId: "b4", status: "declined", invitedAt: "2026-09-17T13:10:00.000Z", by: "Vijay" },
     { id: "inv-5", packageId: "electrical", bidderId: "b5", status: "invited", invitedAt: "2026-09-17T13:20:00.000Z", by: "Naija" },
+    { id: "inv-6", packageId: "drywall", bidderId: "b7", status: "bidding", invitedAt: "2026-10-05T16:00:00.000Z", by: "Safi" },
+    { id: "inv-7", packageId: "drywall", bidderId: "b8", status: "bidding", invitedAt: "2026-10-05T16:05:00.000Z", by: "Safi" },
+    { id: "inv-8", packageId: "drywall", bidderId: "b9", status: "declined", invitedAt: "2026-10-05T16:10:00.000Z", by: "Safi" },
   ],
   outreach: [
     { id: "out-1", packageId: "demolition", bidderId: "b1", kind: "call", text: "Called Michael — confirmed they will bid. Asked about slab removal.", at: "2026-09-17T14:10:00.000Z", by: "Safi" },
     { id: "out-2", packageId: "concrete", bidderId: "b2", kind: "call", text: "Called District Concrete — no answer, left a voicemail.", at: "2026-09-18T15:00:00.000Z", by: "Vijay" },
     { id: "out-3", packageId: "mechanical", bidderId: "b4", kind: "note", text: "Declined: at capacity until spring.", at: "2026-09-18T16:20:00.000Z", by: "Vijay" },
+    { id: "out-4", packageId: "drywall", bidderId: "b7", kind: "call", text: "Called Avery — bidding; asked whether acoustical ceilings are in this package. Yes.", at: "2026-10-06T14:00:00.000Z", by: "Safi" },
+    { id: "out-5", packageId: "drywall", bidderId: "b9", kind: "note", text: "Declined: no crew available before March.", at: "2026-10-06T15:30:00.000Z", by: "Safi" },
   ],
   notifications: [],
 };
 
-const concrete = bidForm(listed, "concrete").filter(i => i.status === "draft").reduce((next, i) => approveScope(next, i.id, "Vijay", "2026-09-17T13:00:00.000Z"), listed);
-const published = publishPackage(concrete, "concrete", "Vijay", "2026-09-17T15:00:00.000Z");
+const approveAll = (state: Procurement, packageId: string, by: string, at: string) =>
+  bidForm(state, packageId).filter(i => i.status === "draft").reduce((next, i) => approveScope(next, i.id, by, at), state);
+const concrete = publishPackage(approveAll(listed, "concrete", "Vijay", "2026-09-17T13:00:00.000Z"), "concrete", "Vijay", "2026-09-17T15:00:00.000Z");
+const drywall = publishPackage(approveAll(concrete, "drywall", "Safi", "2026-10-05T13:00:00.000Z"), "drywall", "Safi", "2026-10-05T15:00:00.000Z");
+const submitted = ["inv-2", "inv-6", "inv-7"].reduce(markInvitationSubmitted, drywall);
 
-export const sampleProcurement: Procurement = stableIds(markInvitationSubmitted(published, "inv-2"), "pn");
+export const sampleProcurement: Procurement = stableIds(submitted, "pn");

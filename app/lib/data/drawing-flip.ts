@@ -1,4 +1,4 @@
-// Sample Drawing Flip for the Jelleff project: eight sheets from the drawing sets in Project files
+// Sample Drawing Flip for the Jelleff project: nine sheets from the drawing sets in Project files
 // and the regions Structor proposed on them. Illustrative demo data — nothing was read from the
 // drawings. Package and scope ids are the sample procurement's (lib/data/procurement.ts).
 
@@ -12,6 +12,7 @@ const pages: DrawingPage[] = [
   page("AD-101", "First floor demolition plan", "Architectural", "d1", ARCH, 2, "02"),
   page("A-101", "First floor plan", "Architectural", "d1", ARCH, 3, "02"),
   page("A-102", "Roof plan", "Architectural", "d1", ARCH, 4, "02"),
+  page("A-121", "First floor reflected ceiling plan", "Architectural", "d1", ARCH, 5, "02"),
   page("A-601", "Door & frame schedules", "Architectural", "d1", ARCH, 6, "02"),
   page("S-101", "Foundation & framing plan", "Structural", "d2", STRUCT, 1, "02"),
   page("M-101", "First floor mechanical plan", "Mechanical", "d3", MEP, 1, "01"),
@@ -57,6 +58,11 @@ const regions: FlipRegion[] = [
   region({ number: "R-010", sheet: "M-101", label: "Main supply duct run", polygon: [{ x: 0.1, y: 0.4 }, { x: 0.86, y: 0.4 }, { x: 0.86, y: 0.46 }, { x: 0.52, y: 0.46 }, { x: 0.52, y: 0.8 }, { x: 0.46, y: 0.8 }, { x: 0.46, y: 0.46 }, { x: 0.1, y: 0.46 }], packageId: "mechanical", scopeIds: ["scope-15"], evidence: "Supply duct from RTU-1, sized 24×14 to 12×10.", confidence: 0.83 }),
   region({ number: "R-011", sheet: "P-101", label: "Restroom plumbing fixtures", polygon: rectangle(0.58, 0.16, 0.22, 0.2), packageId: "plumbing", scopeIds: ["scope-14"], evidence: "Fixture tags WC-1, LAV-1 and UR-1 in restrooms 104 and 105.", confidence: 0.69 }),
   region({ number: "R-012", sheet: "E-101", label: "Gym lighting", polygon: rectangle(0.16, 0.18, 0.4, 0.46), packageId: "electrical", scopeIds: ["scope-16"], evidence: "", confidence: null, review: "Naija", notes: "High-bay fixtures; confirm the gym lighting controls with the architect." }),
+  // Drywall, Marcel's pilot trade: framing and shaft wall on the plan, ceilings on the reflected ceiling plan.
+  region({ number: "R-013", sheet: "A-101", label: "Metal stud partitions, community wing", polygon: rectangle(0.38, 0.56, 0.22, 0.26), packageId: "drywall", scopeIds: ["scope-17", "scope-18"], evidence: "Partition type tags on the community room walls; sound-rated types around rooms 110–112.", confidence: 0.81, review: "Safi" }),
+  region({ number: "R-014", sheet: "A-101", label: "Shaft walls at elevator and stair", polygon: rectangle(0.72, 0.18, 0.12, 0.16), packageId: "drywall", scopeIds: ["scope-19"], evidence: "Shaft wall type at the elevator hoistway and stair B enclosure.", confidence: 0.74 }),
+  region({ number: "R-015", sheet: "A-121", label: "Acoustical panel ceilings", polygon: rectangle(0.36, 0.2, 0.42, 0.34), packageId: "drywall", scopeIds: ["scope-20"], evidence: "Ceiling tag ACT-1 (2x2 lay-in) in the community rooms and corridors.", confidence: 0.88, review: "Safi" }),
+  region({ number: "R-016", sheet: "A-121", label: "Gypsum board ceilings and soffits", polygon: rectangle(0.1, 0.6, 0.3, 0.22), packageId: "drywall", scopeIds: ["scope-21"], evidence: "Ceiling tag GWB-1 in restrooms and the lobby soffit.", confidence: 0.67 }),
 ];
 
-export const sampleDrawingFlip: DrawingFlipState = { pages, regions, lastRegionNumber: 12 };
+export const sampleDrawingFlip: DrawingFlipState = { pages, regions, lastRegionNumber: 16 };

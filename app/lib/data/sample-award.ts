@@ -1,7 +1,12 @@
-// Concrete, carried from bid to executed subcontract for the Jelleff sample, built by running the
-// real actions over the published sample bid form: District Concrete bids in the portal, the bid
-// is leveled, awarded against the concrete budget line, Exhibit A is agreed and the subcontract is
-// signed and executed. Illustrative amounts and people; ids are fixed (see stable-ids).
+// Concrete and drywall, carried from bid to executed subcontract for the Jelleff sample, built by
+// running the real actions over the published sample bid forms: companies bid in the portal, the
+// bids are leveled, awarded against the trade's budget line, Exhibit A is agreed and the subcontract
+// is signed and executed. Illustrative amounts and people; ids are fixed (see stable-ids).
+//
+// Drywall (Marcel's pilot trade): Capitol Wall Systems answers every item Y and is awarded on its
+// base bid against budget line nc-09200. Rock Creek Interiors bids lower but excludes the acoustical
+// ceilings (N) and offers a partial finish level (P), so it stays open in Bid leveling until an
+// estimator resolves it — the reason leveling exists. Anacostia Partitions declined.
 
 import { agreeExhibit, createAward, executeSubcontract, generateSubcontract, sendSubcontract, shareExhibit, signSubcontract, type AwardState } from "../award";
 import { levelingCandidates } from "../budget";
@@ -47,7 +52,54 @@ awards = executeSubcontract(awards, awardId, at("2026-09-25", "16:00"));
 
 const stable = stableIds({ submissions, awards }, "s");
 
-/** District Concrete's submitted bid for the published concrete form. */
-export const sampleSubmissions: Submission[] = stable.submissions;
-/** Concrete awarded to District Concrete, Exhibit A agreed, subcontract executed. */
-export const sampleAwards: AwardState = stable.awards;
+// ── Drywall ──
+const drywallForm = procurement.packages.find(p => p.id === "drywall")!.published!;
+type Answer = { item: string; answer: "Y" | "N" | "P"; note?: string };
+function bid(state: Submission[], invitationId: string, answers: Answer[], content: { baseBid: number; exclusions: string[]; clarifications: string[] }, file: string, who: { name: string; email: string }, day: string): Submission[] {
+  let next = openSubmission(state, procurement, { projectId: project.id, invitationId }, at(day, "10:00"));
+  const sid = next.find(x => x.invitationId === invitationId)!.id;
+  next = drywallForm.items.reduce((acc, item) => {
+    const a = answers.find(x => x.item === item.id);
+    return setResponse(acc, sid, item.id, a?.answer ?? "Y", a?.note ?? "", at(day, "11:00"));
+  }, next);
+  next = updateDraft(next, sid, content, at(day, "11:30"));
+  next = addAttachment(next, sid, { name: file, size: 1_120_000, type: "application/pdf" }, at(day, "12:00"));
+  return submitBid(next, procurement, sid, who, at(day, "15:00"));
+}
+let drywallSubmissions = bid(stable.submissions, "inv-6", [], {
+  baseBid: 1012400,
+  exclusions: ["Painting of gypsum board (by the painting trade)", "Firestopping of penetrations made by other trades"],
+  clarifications: ["Level 4 finish throughout; Level 5 only where the finish schedule calls for it.", "Acoustical ceilings included per the reflected ceiling plans."],
+}, "Capitol Wall Systems proposal.pdf", { name: "Avery Morgan", email: "avery@example.com" }, "2026-10-07");
+drywallSubmissions = bid(drywallSubmissions, "inv-7", [
+  { item: "scope-20", answer: "N", note: "Acoustical ceilings by a separate ceiling contractor." },
+  { item: "scope-12", answer: "P", note: "Level 4 in public areas; Level 3 in back-of-house rooms." },
+], {
+  baseBid: 968750,
+  exclusions: ["Acoustical panel ceilings", "Painting", "Bond"],
+  clarifications: ["Price holds for 30 days."],
+}, "Rock Creek Interiors proposal.pdf", { name: "Dana Brooks", email: "dana@example.com" }, "2026-10-08");
+
+const drywallImport = buildLevelingImport({ projectId: project.id, projectName: project.name, packageId: "drywall", procurement, submissions: drywallSubmissions, directory: initialBidders });
+const drywallCandidates = levelingCandidates({ packageId: "drywall", items: drywallImport.items, bidders: drywallImport.bidders, provenance: drywallImport.provenance });
+const capitol = drywallCandidates.find(c => c.bidderName === "Capitol Wall Systems")!;
+let drywallAwards: AwardState = createAward(stable.awards, {
+  projectId: project.id, projectName: project.name, procurement, submissions: drywallSubmissions, candidates: drywallCandidates, budget: sampleBudget, directory: initialBidders,
+  owner: "DC Department of General Services", projectAddress: project.location, projectStart: project.start,
+}, { levelingBidderId: capitol.levelingBidderId, basis: "base", budgetLineId: "nc-09200" }, "Safi", at("2026-10-09"));
+const drywallAwardId = drywallAwards.awards.at(-1)!.id;
+drywallAwards = shareExhibit(drywallAwards, drywallAwardId, at("2026-10-09", "15:00"));
+drywallAwards = agreeExhibit(drywallAwards, drywallAwardId, "Avery Morgan", "subcontractor", at("2026-10-10"));
+drywallAwards = generateSubcontract(drywallAwards, drywallAwardId, "MCN Build, Inc.", "Safi", at("2026-10-10", "15:00"));
+drywallAwards = sendSubcontract(drywallAwards, drywallAwardId, at("2026-10-10", "16:00"));
+drywallAwards = signSubcontract(drywallAwards, drywallAwardId, "subcontractor", { name: "Avery Morgan", title: "Owner", email: "avery@example.com" }, at("2026-10-12", "13:00"));
+drywallAwards = signSubcontract(drywallAwards, drywallAwardId, "contractor", { name: "Marcel Khoury", title: "Estimator", email: "marcel@example.com" }, at("2026-10-12", "15:00"));
+drywallAwards = executeSubcontract(drywallAwards, drywallAwardId, at("2026-10-12", "16:00"));
+
+// Concrete keeps its "s-" ids; everything drywall added gets "dw-" ids.
+const withDrywall = stableIds({ submissions: drywallSubmissions, awards: drywallAwards }, "dw");
+
+/** Every submitted bid: District Concrete for concrete; Capitol Wall Systems and Rock Creek Interiors for drywall. */
+export const sampleSubmissions: Submission[] = withDrywall.submissions;
+/** Concrete to District Concrete and drywall to Capitol Wall Systems: Exhibit A agreed, subcontracts executed. */
+export const sampleAwards: AwardState = withDrywall.awards;
