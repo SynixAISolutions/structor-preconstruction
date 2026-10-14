@@ -16,9 +16,10 @@ function load(path, require = (id) => { throw new Error(`Unexpected manual depen
 }
 
 const pages = load("lib/manual-pages.ts");
+const screensModule = load("lib/screens.ts");
 const { manualGuides, manualGroups, glossary, searchManual, manualMarkdown } = load("lib/user-manual.ts", (id) => {
-  assert.equal(id, "./manual-pages", "The manual must use the extensionless local page-guide import");
-  return pages;
+  assert(["./manual-pages", "./screens"].includes(id), `The manual imports only its page guides and the navigation, extensionless (got ${id})`);
+  return id === "./screens" ? screensModule : pages;
 });
 const screenType = read("lib/screens.ts").match(/export type Screen\s*=\s*([^;]+);/);
 assert(screenType, "Screen type was not found");
@@ -99,6 +100,12 @@ for (const screen of ALL_SCREENS) {
   const guide = manualGuides.find(g => g.id === screen.id);
   assert(guide.title.startsWith(screen.label), `${screen.id}: manual title "${guide.title}" must start with nav label "${screen.label}"`);
   assert.equal(guide.group.toUpperCase(), screenGroup(screen.id)?.label ?? "WORKSPACE", `${screen.id}: manual group must match its navigation group`);
+}
+// The manual's contents follow the menu: within each group, screen guides in navigation order.
+for (const group of manualGroups) {
+  const ids = manualGuides.filter(g => g.group === group).map(g => g.id).filter(id => ALL_SCREENS.some(screen => screen.id === id));
+  const menu = ALL_SCREENS.map(screen => screen.id).filter(id => ids.includes(id));
+  assert.deepEqual(ids, menu, `${group}: guides must follow the menu order`);
 }
 assert(glossary.length, "The glossary must contain terms");
 // Glossary names are the entries' identities; the data does not define a separate id.

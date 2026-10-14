@@ -1,4 +1,5 @@
 import { pageGuides } from "./manual-pages";
+import { ALL_SCREENS } from "./screens";
 
 export type ManualGuide = {
   id: string;
@@ -18,6 +19,7 @@ const workspaceGuides: ManualGuide[] = [
     purpose: "Structor helps a construction team prepare a project before building starts. The team reads drawings and written requirements, lists the work each trade must price, compares subcontractor bids, and prepares a budget and handover. Think of it as a shared checklist and comparison desk—not an automatic decision-maker.",
     steps: [
       "Use the left navigation to choose a page. On a phone, open the menu at the top left. Quick find (Ctrl+K on Windows or Command+K on Mac) searches page names, not document contents.",
+      "The menu follows what you are doing. From All projects it shows only the workspace tools: All projects, Subcontractor directory, Subcontractor ratings, and Subcontractor prequalification. Opening a project adds its Preconstruction and Operations pages, with Back to All projects at the top and Preview as subcontractor at the bottom.",
       "Start with All projects and Project information to understand which building, deadlines, and estimate you are looking at. Sample project information is illustrative and should be checked against the actual documents.",
       "Follow the Full workflow guide below to understand the order of work. You do not have to fill every preview screen before using Bid leveling.",
       "Click the floating question mark on any page to open that page’s instructions. Search this manual by a word such as bidder, Gmail, floor plan, or allowance. Browse Start here for the big picture, or Glossary for unfamiliar terms.",
@@ -38,11 +40,11 @@ const workspaceGuides: ManualGuide[] = [
     purpose: "The basic chain is documents → scope → bids → comparison → budget → award → turnover. Each stage answers a different question. The intended workflow below explains how the screens fit together; automatic transfer between all of them is not implemented.",
     steps: [
       "Understand the job. In Project information, record the building, dates, and planning value. Documents holds the reference files: drawings show layout; specifications describe materials and quality; an RFP describes what the client is asking for.",
-      "Work out what must be included. Use Scopes & bid forms to list each trade’s requirements. Submittal packages (currently the spec matrix) organizes written requirements. Quantity takeoffs records how much work there is. List of drawings, Revision comparison, and Structor Check help organize drawing changes and questions.",
+      "Work out what must be included. Use Scopes & bid forms to list each trade’s requirements; Structor’s AI can propose items from the documents, each citing its page, for an estimator to accept or reject. Quantity takeoffs builds MCN’s own estimate trade by trade. List of drawings, List of specifications, Revision comparison, and Structor Check help organize the documents, their changes, and questions.",
       "Ask companies to price the same job. Scopes & bid forms is where estimators approve each trade’s checklist and publish it. Bid packages lists each trade’s owner, due date, invited companies, and follow-up log. Subcontractor directory is the company contact list shared by every project. The Subcontractor portal is what an invited company sees: the published bid form, its answers and price, RFIs and, once awarded, submittals. It is not in the contractor’s sidebar; the contractor opens it as a preview.",
-      "Collect and review offers. A bid contains a price plus inclusions, exclusions, and qualifications. The configured Gmail Proposal inbox can list emails and attachments. You still read the proposal and enter or verify its answers manually.",
+      "Collect and review offers. A bid contains a price plus inclusions, exclusions, and qualifications. Companies answer in the Subcontractor portal, or email a proposal: the AI reads it against the bid form, and an estimator checks the reading under Review proposals in Bid packages before it becomes a bid revision. The configured Gmail Proposal inbox can list emails and attachments.",
       "Compare like for like in Bid leveling. Start from the supported Excel template or the demo, check each bidder’s Y/N/P answers, add notes and justified adjustments, and resolve exceptions. Only fully eligible reviewed bids appear in the reviewed ranking.",
-      "Plan the overall cost. Budget summary shows the intended cost-center rollup and trade breakdown. Allowances reserves money for undefined work. These screens currently use their own preview values rather than automatically reading the live bid-leveling results.",
+      "Plan the overall cost. Budget summary holds the cost plan by cost center and CSI code; each trade’s forecast can be MCN’s estimate or a leveled bid, and Trade variance shows the difference between them. Allowances reserves money for undefined work and is counted once.",
       "Prepare the award and handover. Contracts & exhibits describes what the selected company will deliver. Project schedule records milestones. Each Bid package keeps its own messages with the invited companies, and Preconstruction to-do checks that the delivery team gets the right records. These are draft/preview tools, not executed contracts or delivered communications.",
       "Keep a copy. Export reviewed mapped work to Excel from Bid leveling, and download a JSON backup before replacing or resetting the active workspace. Other screens provide their own CSV or draft downloads where offered.",
     ],
@@ -74,7 +76,7 @@ const workspaceGuides: ManualGuide[] = [
       "Click a project card to select it and open its Project information page.",
       "Choose New project or Your next project. Enter a name, location, type, internal project value, and brief description, then choose Create project.",
       "Review the new record using Edit information. Size, architect, and dates begin with sample defaults and must be updated for your actual project.",
-      "Return to All projects to switch projects. Each project keeps its own files, scopes, takeoffs, budget, bid leveling workbook, and other saved screen data; the subcontractor directory is shared by every project. Keep exports of important work.",
+      "Choose Back to All projects at the top of the menu to switch projects. Each project keeps its own files, scopes, takeoffs, budget, bid leveling workbook, and other saved screen data; the subcontractor directory is shared by every project. Keep exports of important work.",
     ],
     terms: [{ name: "Design development", meaning: "A stage where the design is being refined before final construction details are complete." }, { name: "Bidding", meaning: "The stage when companies are being asked to submit prices." }],
     example: "Create a school modernization project to demonstrate its project brief and dates. A new project starts with empty lists and an unchecked to-do list. It does not generate scopes or costs from its documents, and the 3D model remains the Jelleff reconstruction.",
@@ -105,6 +107,7 @@ const workspaceGuides: ManualGuide[] = [
       "Click a visible model element or choose one from the element list. Read the inspector for its material or assembly, evidence, and assumptions. Inspect the gym floor is a quick way to start.",
       "For a floor finish the inspector shows the architect's finish schedule row (tag, manufacturer, product, color, size, comments, and specification section) and its gross base. A transition strip shows its type, the A12.1 detail, and the two rooms it sits between. A floor with no product tag on the finish plan, such as office 206 and closet 206A, shows an amber No product tag card instead: what A12.3 shows for that room and a button to open A12.3. Its area is counted, with no finish or base.",
       "Select a stud partition to see its Architect's partition schedule card: the A8.1 type and schedule, and a badge for how the type is known. Plan tag read means the tag on A1.1 or A1.2 points to that wall; General note 3 means it is untagged and so SA3.20; Type unverified, in amber, means a tag sits nearby but can't be tied to the wall, and the reason is shown. Below are construction, height and rating, stud width, gypsum board, unique condition, rough thickness, modeled thickness, and fire rating. Where A8.1 says <varies>, the modeled thickness is the legend's nominal. Select A8.1 · page 64 to open the partition sheet beside the model.",
+      "The partition card also shows the type's typical section from A8.1, the drawing above its schedule (S_-_-1 with gypsum board on one side, or S_-_-2 on both). A8.1 numbers no details and references no top- or bottom-of-wall detail, so the section is the schedule's own drawing. Every selected object shows its evidence label: Measured, assembly documented, Measured, assembly unverified, or Illustrative placement, unless you have reviewed or flagged it.",
       "Above the model, choose Both levels, Level 01, or Level 02. The choice limits the model, the interior takeoff totals, and the room labels to that level, and clears the current selection.",
       "Level 02 has no floor over the gym, the mechanical yard, or the lobby. While Both levels or Level 02 is showing, Open-to-below areas outlines them on Level 02, labelled \"Level 02 · no floor\". Select it again to hide the outlines.",
       "Open Room finish schedule for every room on both levels: floor finish and area, base tag and gross length, transition strips, doors, and wall run. Where the finish plan draws a finish line inside a room, as in game room 213 and multipurpose room 1, the room lists each finish zone with its own SF, and the base column gives each zone's base tag and gross LF. A strip along that line reads Within this room; a strip between two rooms reads To room and appears under both rooms, so count it once. Choose a room to select its objects in the model.",
@@ -133,13 +136,13 @@ const workspaceGuides: ManualGuide[] = [
       "Open MEP coordination to see ductwork, piping, sprinklers, electrical equipment and fixtures over the building outline.",
       "Select an object in the model or the list. The inspector shows what it is, its level and room, quantity and dimensions, CSI division and specification section, properties, and the drawing sources it comes from.",
       "Use the division controls to show or hide trades in this view; the choice is kept for the project.",
-      "Verify an object once its quantities and properties can be relied on, or flag it with a note saying what needs checking. Confidence shows how much of the object comes from the documents.",
+      "Verify an object once its quantities and properties can be relied on, or flag it with a note saying what needs checking. The evidence label above the caution says what the object rests on: Measured, assembly documented; Measured, assembly unverified; Illustrative placement; or, after your review, Reviewed or Flagged in review.",
       "Select several objects, or every object of the same assembly, to total their quantities by unit.",
       "Choose Walk through for the same fixed-height, first-person tour as Interior finishes: drag to look, W A S D or arrows to move, Q and E to turn, R and F to look up or down, Esc to exit.",
     ],
-    terms: [{ name: "Confidence", meaning: "How much of an object comes from the documents: traced geometry with a documented assembly is high, traced geometry with an unverified assembly is medium, an illustrative placement is low." }, { name: "Verified / flagged", meaning: "The contractor's review of an object: verified can be relied on; flagged needs checking, with a note." }],
+    terms: [{ name: "Evidence label", meaning: "What an object rests on, instead of a percentage: measured from a scaled sheet with its assembly documented, measured with its assembly still unverified, or placed for illustration. A traced measurement follows the drawn lines; only your review confirms it." }, { name: "Verified / flagged", meaning: "The contractor's review of an object: verified can be relied on; flagged needs checking, with a note." }],
     example: "Select the gym supply duct to read its length and size, then check how it runs past the sprinkler main and the light fixtures below the roof.",
-    reality: "Every object in this view is an illustrative placement on the traced Jelleff plan: positions, sizes and products are not taken from the mechanical, plumbing, electrical or fire-protection drawings, and its confidence is low. Reviews and show/hide choices save in this browser for the open project.",
+    reality: "Every object in this view is an illustrative placement on the traced Jelleff plan: positions, sizes and products are not taken from the mechanical, plumbing, electrical or fire-protection drawings, so each is labelled Illustrative placement. Reviews and show/hide choices save in this browser for the open project.",
     related: ["model", "model-structural", "drawings"],
   },
   {
@@ -149,13 +152,13 @@ const workspaceGuides: ManualGuide[] = [
       "Open Structural model to see the concrete slabs, steel columns and roof girders.",
       "Select an object in the model or the list. The inspector shows what it is, its level and room, quantity and dimensions, CSI division and specification section, properties, and the drawing sources it comes from.",
       "Use the division controls to show or hide trades in this view; the choice is kept for the project.",
-      "Verify an object once its quantities and properties can be relied on, or flag it with a note saying what needs checking. Confidence shows how much of the object comes from the documents.",
+      "Verify an object once its quantities and properties can be relied on, or flag it with a note saying what needs checking. The evidence label above the caution says what the object rests on: Measured, assembly documented; Measured, assembly unverified; Illustrative placement; or, after your review, Reviewed or Flagged in review.",
       "Select several objects, or every object of the same assembly, to total their quantities by unit.",
       "Choose Walk through for the same fixed-height, first-person tour as Interior finishes: drag to look, W A S D or arrows to move, Q and E to turn, R and F to look up or down, Esc to exit.",
     ],
-    terms: [{ name: "Confidence", meaning: "How much of an object comes from the documents: traced geometry with a documented assembly is high, traced geometry with an unverified assembly is medium, an illustrative placement is low." }, { name: "Verified / flagged", meaning: "The contractor's review of an object: verified can be relied on; flagged needs checking, with a note." }],
+    terms: [{ name: "Evidence label", meaning: "What an object rests on, instead of a percentage: measured from a scaled sheet with its assembly documented, measured with its assembly still unverified, or placed for illustration. A traced measurement follows the drawn lines; only your review confirms it." }, { name: "Verified / flagged", meaning: "The contractor's review of an object: verified can be relied on; flagged needs checking, with a note." }],
     example: "Select a gym slab to read its area, thickness and concrete volume in cubic yards.",
-    reality: "Every object in this view is an illustrative placement on the traced Jelleff plan: positions, sizes and products are not taken from the structural drawings, and its confidence is low. Reviews and show/hide choices save in this browser for the open project.",
+    reality: "Every object in this view is an illustrative placement on the traced Jelleff plan: positions, sizes and products are not taken from the structural drawings, so each is labelled Illustrative placement. Reviews and show/hide choices save in this browser for the open project.",
     related: ["model", "model-mep", "model-exterior"],
   },
   {
@@ -165,11 +168,11 @@ const workspaceGuides: ManualGuide[] = [
       "Open Exterior model to see the envelope, storefront glazing and roof.",
       "Select an object in the model or the list. The inspector shows what it is, its level and room, quantity and dimensions, CSI division and specification section, properties, and the drawing sources it comes from.",
       "Use the division controls to show or hide trades in this view; the choice is kept for the project.",
-      "Verify an object once its quantities and properties can be relied on, or flag it with a note saying what needs checking. Confidence shows how much of the object comes from the documents.",
+      "Verify an object once its quantities and properties can be relied on, or flag it with a note saying what needs checking. The evidence label above the caution says what the object rests on: Measured, assembly documented; Measured, assembly unverified; Illustrative placement; or, after your review, Reviewed or Flagged in review.",
       "Select several objects, or every object of the same assembly, to total their quantities by unit.",
       "Choose Walk through for the same fixed-height, first-person tour as Interior finishes: drag to look, W A S D or arrows to move, Q and E to turn, R and F to look up or down, Esc to exit.",
     ],
-    terms: [{ name: "Confidence", meaning: "How much of an object comes from the documents: traced geometry with a documented assembly is high, traced geometry with an unverified assembly is medium, an illustrative placement is low." }, { name: "Verified / flagged", meaning: "The contractor's review of an object: verified can be relied on; flagged needs checking, with a note." }],
+    terms: [{ name: "Evidence label", meaning: "What an object rests on, instead of a percentage: measured from a scaled sheet with its assembly documented, measured with its assembly still unverified, or placed for illustration. A traced measurement follows the drawn lines; only your review confirms it." }, { name: "Verified / flagged", meaning: "The contractor's review of an object: verified can be relied on; flagged needs checking, with a note." }],
     example: "Select the gym roof to read its area and the insulation R-value; select a storefront panel to read its glazed area.",
     reality: "Exterior walls and storefront are traced from A1.1, but their layers are not verified. The roof is an illustrative placement at the low-roof level from A5.1, and its products are from the demo's specification list, not the Jelleff roof details. Reviews and show/hide choices save in this browser for the open project.",
     related: ["model", "model-structural", "drawings"],
@@ -178,6 +181,7 @@ const workspaceGuides: ManualGuide[] = [
     id: "leveling", group: "Preconstruction", title: "Bid leveling",
     purpose: "Compare companies against the same checklist of work. Each scope row has a response, note, and adjustment for each bidder. A low price is only comparable after you have checked what it includes.",
     steps: [
+      "Active trade, at the top, names the trade in the comparison. To compare another trade's submitted bids, pick it under Switch trade (each shows how many bids are submitted) and choose Load selected trade; Refresh bids reloads the same trade. If it has no usable bids the current comparison stays and a notice says why.",
       "For real workbook work, choose Import Excel and select a supported .xlsx trade template. Read the import preview and warnings before Import this trade. This replaces the active workspace; download a backup first. Arbitrary Excel layouts and PDFs are not supported imports.",
       "Choose Add bidder, or click a bidder’s name to edit it. Enter company, contact, base bid, bond rate, and workbook level status. Blank price means no quote; an intentional $0 quote needs confirmation. NO — do not level keeps that bidder out of the ranking. The template has a limited number of bidder slots.",
       "Read each requirement and the actual proposal. Choose Y for included, N for excluded, P for partial, or N/A for not applicable. Leave an unclear answer blank instead of guessing. Add a note explaining exclusions, assumptions, or clarification needed.",
@@ -189,7 +193,7 @@ const workspaceGuides: ManualGuide[] = [
     ],
     terms: [{ name: "Y / N / P / N/A", meaning: "Yes, No, Partial, and Not applicable. There is no L response in this app; leveled describes a reviewed comparison, not a scope answer." }, { name: "Bond rate", meaning: "The percentage applied to base bid plus adjustments in this calculation. Verify the appropriate rate; do not assume the demo’s rate applies to every trade." }, { name: "Rank-ready", meaning: "A bidder has a valid price, valid costs, an allowed workbook level status, and no open required review checks." }],
     example: "A bidder excludes anchors: mark N, describe the omission, enter a supported adjustment, approve that amount, and resolve the scope gap after review. Other unresolved rows still prevent that bidder from appearing as the reviewed low.",
-    reality: "This comparison, manual bidder editing, supported Excel import/export, and browser saving work now. It is one locally saved trade workspace per project, separate from the sample Budget summary. Choose a package under Portal submissions and Load bids to fill it from bids submitted in the Subcontractor portal; their N, P, and N/A answers arrive open for review, and a bid priced against an older bid form is shown but never ranked. Emails and PDFs do not fill its rows automatically. Check exports and source documents before using the figures commercially.",
+    reality: "This comparison, manual bidder editing, supported Excel import/export, and browser saving work now. It is one locally saved trade workspace per project, separate from the sample Budget summary. Active trade names the trade being compared; choose another under Switch trade and Load selected trade (Refresh bids for the same trade) to fill the workspace from bids submitted in the Subcontractor portal or confirmed from proposal readings; their N, P, and N/A answers arrive open for review, and a bid priced against an older bid form is shown but never ranked. Emails and PDFs do not fill its rows automatically. Check exports and source documents before using the figures commercially.",
     related: ["gmail", "saving", "bidders", "budget", "glossary"],
   },
   {
@@ -244,9 +248,15 @@ const workspaceGuides: ManualGuide[] = [
   },
 ];
 
-export const manualGuides: ManualGuide[] = [...workspaceGuides, ...pageGuides];
+/** Screen guides in menu order (Marcel's 7 Oct navigation); guides that aren't screens (Start here, Reference) keep their place. */
+const menuOrder = (id: string) => { const i = ALL_SCREENS.findIndex(screen => screen.id === id); return i < 0 ? Number.MAX_SAFE_INTEGER : i; };
+export const manualGuides: ManualGuide[] = [...workspaceGuides, ...pageGuides]
+  .map((guide, i) => ({ guide, i }))
+  .sort((a, b) => (menuOrder(a.guide.id) - menuOrder(b.guide.id)) || a.i - b.i)
+  .map(({ guide }) => guide);
 export const manualGroups = ["Start here", "Workspace", "Preconstruction", "Operations", "Subcontractor view", "Reference"];
 export const glossary = [
+  { name: "AI finding", meaning: "Something Structor's AI proposed from the project documents: a scope item, a drawing region, or a quantity, with its citation. An estimator accepts, corrects, or rejects it; nothing is used until accepted." },
   { name: "Addendum", meaning: "An official clarification or revision to the bid documents. Confirm which version each bidder priced." },
   { name: "Alternate", meaning: "A separately priced option that can be accepted or rejected. Do not silently add it to the base scope." },
   { name: "Allowance", meaning: "Money reserved for work or a selection that is not fully defined yet." },
@@ -257,10 +267,12 @@ export const glossary = [
   { name: "Bidder", meaning: "A company submitting an offer to carry out part of the construction work." },
   { name: "BIM", meaning: "Building Information Modeling: coordinated model geometry and information. This prepared 3D preview is not a complete BIM model." },
   { name: "Bond", meaning: "Financial security for performance or payment; its premium is a cost that may need to be included in a bid." },
+  { name: "Citation", meaning: "The document, page, and exact words an AI finding or proposal reading relies on. Structor drops any finding whose quote is not actually on the page it names." },
   { name: "Cost center", meaning: "A budget grouping such as modernization, addition, or site work." },
   { name: "Cost plug / adjustment", meaning: "A reviewed amount added or deducted to account for a scope difference. It needs a reason and a reliable cost basis." },
   { name: "CSI division", meaning: "A standard work category, for example 03 Concrete, 05 Metals, or 26 Electrical." },
   { name: "Drawing register", meaning: "The list of drawing numbers, titles, dates, disciplines, and revisions." },
+  { name: "Evidence label", meaning: "What a 3D model object rests on: measured from a scaled sheet with its assembly documented or still unverified, an illustrative placement, or your own review. It replaces a confidence percentage, which would suggest an accuracy nobody measured." },
   { name: "EA / LF / SF / CY", meaning: "Each (count), linear feet (length), square feet (area), and cubic yards (volume). Quantities and unit prices must use matching units." },
   { name: "Elevation / section / floor plan", meaning: "A side view, a cut-through view, and a top-down layout. A floor plan alone does not prove all heights or hidden construction." },
   { name: "Exception", meaning: "An answer or cost that still needs attention before a bid is ready for comparison." },
@@ -269,9 +281,11 @@ export const glossary = [
   { name: "GMP", meaning: "Guaranteed Maximum Price: a contractual pricing arrangement. A filename containing GMP is not evidence that a current app estimate is guaranteed." },
   { name: "Inclusion / qualification", meaning: "An inclusion says work is covered. A qualification limits or conditions what the offer covers." },
   { name: "Leveled low", meaning: "The lowest eligible reviewed comparison total, not simply the smallest submitted price." },
+  { name: "MCN estimate", meaning: "The contractor's own direct-cost estimate for a trade, built in Quantity takeoffs. It can become the trade's budget forecast and is compared with the leveled bids in Trade variance." },
   { name: "MEP", meaning: "Mechanical, electrical, and plumbing systems." },
   { name: "N/A", meaning: "Not applicable. In Bid leveling, record a reason and resolve the response. It does not mean unknown." },
   { name: "Procurement / award", meaning: "Procuring means selecting and arranging a trade partner. Award is the decision to give that company the work." },
+  { name: "Proposal reading", meaning: "The AI's reading of an emailed proposal against the published bid form: base bid, item answers, exclusions, clarifications, and alternates, each cited. An estimator confirms it into a bid revision." },
   { name: "Provisional total", meaning: "The current calculated amount before all eligibility and review checks are necessarily complete." },
   { name: "RFI", meaning: "Request for Information: a question to clarify a missing, conflicting, or unclear project requirement." },
   { name: "RFP", meaning: "Request for Proposal: the client’s invitation and requirements for an offer." },
