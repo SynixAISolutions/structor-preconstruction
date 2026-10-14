@@ -24,7 +24,7 @@ export async function deepseekJson(key: string, messages: ChatMessage[], options
       response = await call(ENDPOINT, {
         method: "POST",
         headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: options.model, messages, response_format: { type: "json_object" }, max_tokens: options.maxTokens, stream: false }),
+        body: JSON.stringify({ model: options.model, messages, thinking: { type: "disabled" }, response_format: { type: "json_object" }, max_tokens: options.maxTokens, stream: false }),
         signal: AbortSignal.timeout(left),
       });
     } catch (error) {

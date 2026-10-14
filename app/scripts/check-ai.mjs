@@ -152,6 +152,7 @@ const ask = (s) => D.deepseekJson("sk-test", [{ role: "user", content: "json" }]
 let s = scripted(reply('{"findings":[]}'));
 assert.deepEqual(await ask(s), { findings: [] });
 assert.deepEqual([s.calls[0].url, s.calls[0].auth, s.calls[0].body.model, s.calls[0].body.response_format, s.calls[0].body.stream], ["https://api.deepseek.com/chat/completions", "Bearer sk-test", "deepseek-flash", { type: "json_object" }, false]);
+assert.deepEqual(s.calls[0].body.thinking, { type: "disabled" }, "Readings reserve their output budget for cited JSON, rather than extra reasoning");
 s = scripted(reply(""), reply('{"ok":1}'));
 assert.deepEqual([await ask(s), s.calls.length], [{ ok: 1 }, 2], "An empty answer is asked once more");
 s = scripted(new Response("busy", { status: 429 }), reply('{"ok":2}'));
