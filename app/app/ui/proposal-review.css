@@ -1,0 +1,23 @@
+.proposal-status { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:16px 0; font-size:11px; color:#778895; overflow-wrap:anywhere; }
+.proposal-layout { display:grid; grid-template-columns:1fr 1fr; gap:22px; align-items:start; }
+.proposal-layout > * { min-width:0; }
+.proposal-layout h3 { color:#4c6476; font-size:13px; margin:20px 0 10px; }
+.proposal-layout h3:first-child { margin-top:0; }
+.proposal-answer { border:1px solid #e0e7eb; padding:12px; margin:12px 0; border-radius:7px; }
+.proposal-answer > strong { display:block; margin-bottom:12px; font-size:12px; line-height:1.6; color:#526578; }
+.proposal-source { border-left:1px solid #e1e8ed; padding-left:20px; position:sticky; top:0; }
+.proposal-source > p { font-size:11px; line-height:1.6; color:#7e8d99; overflow-wrap:anywhere; }
+.proposal-source .proc-manual-frame { height:48dvh; }
+.proposal-correction { display:block; font-size:10px; color:#827151; margin:8px 0 14px; }
+.proposal-confirm { margin-top:18px; border-top:1px solid #e0e7eb; padding-top:15px; font-size:12px; line-height:1.7; color:#667c89; }
+.proposal-confirm ul { color:#a3633e; padding-left:18px; }
+.proposal-alternate { border:1px solid #e0e7eb; padding:12px; border-radius:7px; margin:12px 0; }
+.proposal-snapshot { font-size:12px; line-height:1.7; color:#657888; overflow-wrap:anywhere; }
+.proposal-discard { padding:15px; background:#fcf4ee; margin-top:15px; border-radius:7px; }
+.proposal-discard .ui-btn { margin-right:8px; }
+.proposal-reading-list { display:grid; gap:12px; padding:16px; }
+.proposal-reading-list article { border:1px solid #e1e7eb; border-radius:7px; padding:14px; }
+.proposal-reading-list strong,.proposal-reading-list small { display:block; font-size:11px; color:#526578; margin-bottom:8px; overflow-wrap:anywhere; }
+.proposal-reading-list small { font-size:10px; color:#8a98a3; }
+.proposal-reading-list .ui-badge { margin-bottom:10px; }
+@media(max-width:700px) { .proposal-layout { grid-template-columns:1fr; }.proposal-source { position:static; border-left:0; border-top:1px solid #e1e8ed; padding:18px 0 0; }.proposal-confirm .proc-form-actions { flex-wrap:wrap; }.proposal-confirm .proc-form-actions .ui-btn { flex:1; justify-content:center; } }

@@ -67,9 +67,9 @@ type Filters = { query: string; packageId: string; status: "" | RegionStatus; or
 type PageDraft = { sheet: string; title: string; discipline: string; revision: string; documentId: string; documentName: string; pageNumber: string };
 type RegionDraft = { label: string; packageId: string; x: string; y: string; width: string; height: string; notes: string };
 
-function DrawingBackdrop({ page }: { page: DrawingPage }) {
-  if (page.image) return <image href={page.image} x="0" y="0" width="1000" height="667" preserveAspectRatio="xMidYMid meet"/>;
-  return <g className="flip-linework">
+function DrawingBackdrop({ page, height }: { page: DrawingPage; height: number }) {
+  if (page.image) return <image href={page.image} x="0" y="0" width="1000" height={height} preserveAspectRatio="xMidYMid meet"/>;
+  return <g className="flip-linework" transform={`scale(1 ${height / 667})`}>
     <defs><pattern id={`flip-grid-${page.id}`} width="28" height="28" patternUnits="userSpaceOnUse"><path d="M28 0H0V28"/></pattern></defs>
     <rect width="1000" height="667" fill="#fbfcfb"/>
     <rect x="18" y="18" width="964" height="631" fill={`url(#flip-grid-${page.id})`} stroke="#b9c4cb"/>
@@ -83,21 +83,24 @@ function DrawingBackdrop({ page }: { page: DrawingPage }) {
   </g>;
 }
 
+export type CanvasRegion = Pick<FlipRegion, "id" | "number" | "label" | "polygon" | "packageId" | "status">;
+
 export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, expandable = true }: {
   page: DrawingPage;
-  regions: FlipRegion[];
+  regions: CanvasRegion[];
   selectedId: string;
   colors: Map<string, string>;
   onSelect: (id: string) => void;
   expandable?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const drawing = <svg viewBox="0 0 1000 667" role="img" aria-label={`${page.sheet} with ${regions.length} trade regions`}>
-    <DrawingBackdrop page={page}/>
+  const height = 1000 / page.aspect;
+  const drawing = <svg viewBox={`0 0 1000 ${height}`} role="img" aria-label={`${page.sheet} with ${regions.length} trade regions`}>
+    <DrawingBackdrop page={page} height={height}/>
     <g className="flip-region-layer">{regions.map(region => {
-      const points = region.polygon.map(point => `${point.x * 1000},${point.y * 667}`).join(" ");
+      const points = region.polygon.map(point => `${point.x * 1000},${point.y * height}`).join(" ");
       const centerX = region.polygon.reduce((sum, point) => sum + point.x, 0) / region.polygon.length * 1000;
-      const centerY = region.polygon.reduce((sum, point) => sum + point.y, 0) / region.polygon.length * 667;
+      const centerY = region.polygon.reduce((sum, point) => sum + point.y, 0) / region.polygon.length * height;
       const color = colors.get(region.packageId) ?? "#697b8c";
       return <g key={region.id} role="button" tabIndex={0} aria-label={`${region.number}: ${region.label}`} className={`${selectedId === region.id ? "selected" : ""} ${region.status === "pending-review" ? "pending" : ""}`} onClick={() => onSelect(region.id)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(region.id); } }}>
         <polygon points={points} fill={`${color}30`} stroke={color}/>

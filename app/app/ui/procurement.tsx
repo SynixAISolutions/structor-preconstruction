@@ -48,11 +48,13 @@ import {
 } from "../../lib/procurement";
 import { useSubmissions } from "../../lib/use-submissions";
 import { useProcurement } from "../../lib/use-procurement";
-import { useDrawingFlip } from "../../lib/use-drawing-flip";
+import { useExtraction } from "../../lib/use-extraction";
 import { initialSpecSections } from "../../lib/data/preconstruction";
 import { scopeSources } from "../../lib/scope-sources";
 import { tradeColors } from "./drawing-flip-ui";
 import { ScopeSourceDialog } from "./scope-source-dialog";
+import { ExtractionReview } from "./extraction-review";
+import { ProposalWorkspace } from "./proposal-review";
 import { useLocalDraft } from "../../lib/use-local-draft";
 import { conversations, initialBidders, type Bidder } from "../../lib/data/commercial";
 import { displayDate } from "../../lib/format";
@@ -117,8 +119,9 @@ function historyLabel(event: ScopeItem["history"][number], packages: Procurement
 }
 
 export function ProcurementScopesView({ projectName, notify, navigate }: ViewProps) {
-  const { state, run } = useProcurement();
-  const { state: drawingFlip } = useDrawingFlip();
+  const review = useExtraction();
+  const { procurement: state, runProcurement: run, flip: drawingFlip } = review;
+  const [mode, setMode] = useState("Bid form");
   const [specSections] = useLocalDraft("specification-sections", initialSpecSections);
   const [sourceKind, setSourceKind] = useState<"drawings" | "spec" | null>(null);
   const [packageId, setPackageId] = useState("demolition");
@@ -159,8 +162,10 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
   return <div className="proc-view">
     <PageHeader eyebrow={`${projectName} / Project intelligence`} title="Scopes & bid forms" description="Review each requirement, correct its trade, and publish one clear bid form." actions={<><ExportButton onClick={() => exportRows("scope-and-bid-forms.csv", [["Package", "CSI section", "Scope", "Detail", "Source", "Origin", "Status", "All trades"], ...state.scopes.map(item => { const pkg = state.packages.find(candidate => candidate.id === item.packageId); return [pkg?.name ?? item.packageId, pkg?.code ?? "", item.title, item.detail, item.source, item.origin, item.status, item.allTrades ? "Yes" : "No"]; })])}/>{unread.length > 0 && <Button onClick={() => setNotificationsOpen(true)}><Bell size={15}/>{unread.length} notification{unread.length === 1 ? "" : "s"}</Button>}<Button variant="primary" onClick={() => setEditor({ packageId: activePackage.id, title: "", detail: "", source: "", origin: "estimator" })}><Plus size={16}/>Add scope item</Button></>}/>
     <Stats items={[{ label: "Trade packages", value: state.packages.length, detail: "One bid form per trade" }, { label: "Scope items", value: state.scopes.length, detail: "Project requirements" }, { label: "Approved", value: state.scopes.filter(item => item.status === "approved").length, detail: "Reviewed by an estimator", tone: "green" }, { label: "Published", value: state.packages.filter(pkg => packageStatus(state, pkg.id) === "published").length, detail: "Current with bidders" }]}/>
+    <div className="proc-mode-tabs"><Tabs tabs={["Bid form", "AI findings"]} value={mode} onChange={setMode}/></div>
     <div className="proc-scope-layout">
-      <aside className="ui-panel proc-trades"><div className="proc-aside-title">TRADE PACKAGES</div>{state.packages.map(pkg => { const items = bidForm(state, pkg.id); const status = packageStatus(state, pkg.id); return <button className={pkg.id === activePackage.id ? "active" : ""} key={pkg.id} onClick={() => { setPackageId(pkg.id); setSelectedId(""); }}><span className="proc-division">{pkg.division}</span><span><strong>{pkg.name}</strong><small>{items.filter(item => item.status === "approved").length}/{items.length} approved</small></span><Badge tone={statusTone(status)}>{statusLabels[status]}</Badge></button>; })}<button className="proc-aside-link" onClick={() => navigate("packages")}>Manage bidders<ArrowRight size={14}/></button></aside>
+      <aside className="ui-panel proc-trades"><div className="proc-aside-title">TRADE PACKAGES</div>{state.packages.map(pkg => { const items = bidForm(state, pkg.id); const status = packageStatus(state, pkg.id); const pending = review.extraction.drafts.filter(d => d.packageId === pkg.id && d.status === "pending-review").length; return <button className={pkg.id === activePackage.id ? "active" : ""} key={pkg.id} onClick={() => { setPackageId(pkg.id); setSelectedId(""); }}><span className="proc-division">{pkg.division}</span><span><strong>{pkg.name}</strong><small>{items.filter(item => item.status === "approved").length}/{items.length} approved{pending > 0 && ` · ${pending} AI findings`}</small></span><Badge tone={statusTone(status)}>{statusLabels[status]}</Badge></button>; })}<button className="proc-aside-link" onClick={() => navigate("packages")}>Manage bidders<ArrowRight size={14}/></button></aside>
+      {mode === "AI findings" ? <ExtractionReview key={activePackage.id} review={review} packageId={activePackage.id} sections={specSections} colors={sourceColors} by={CURRENT_USER} notify={notify} onOpenScope={id => { setSelectedId(id); setMode("Bid form"); }}/> : <>
       <Panel title={activePackage.name} subtitle={`${activePackage.code} · Owner: ${activePackage.owner} · Due ${displayDate(activePackage.due)}`} action={<Badge tone={statusTone(packageState)}>{statusLabels[packageState]}{activePackage.published ? ` · v${activePackage.published.version}` : ""}</Badge>} className="proc-scope-panel">
         <div className="ui-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search this bid form…"/><Button onClick={approveAll}><CheckCheck size={15}/>Approve visible form</Button></div>
         <div className="proc-scope-list">{visible.map((item, index) => <article className={`proc-scope-row ${selected?.id === item.id ? "selected" : ""}`} key={item.id}>
@@ -175,7 +180,7 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
         <span className="proc-label">SOURCE REFERENCE</span>{sources?.spec ? <button className="proc-spec-link" onClick={() => setSourceKind("spec")}><FileText size={14}/>{selected.source}<ArrowRight size={13}/></button> : <strong>{selected.source || "No source linked"}</strong>}<p>{selected.detail || "No coordination notes recorded."}</p>
         <div className="proc-detail-actions"><Button onClick={() => setSourceKind("drawings")}><LocateFixed size={14}/>View on drawings</Button><Button onClick={() => { setMoveItem(selected); setMoveTo(state.packages.find(pkg => pkg.id !== selected.packageId)?.id ?? ""); }}><MoveRight size={14}/>{selected.allTrades ? "Assign to one trade" : "Move trade"}</Button>{!selected.allTrades && <Button onClick={() => runAndNotify(run, current => applyScopeToAllTrades(current, selected.id, CURRENT_USER), notify, "Scope item applied to every trade for review.")}><Share2 size={14}/>Apply to all trades</Button>}</div>
         <div className="proc-history"><span className="proc-label"><History size={12}/>HISTORY</span>{selected.history.slice().reverse().map((event, index) => <div key={`${event.at}-${index}`}><i/><span><strong>{historyLabel(event, state.packages)}</strong><small>{event.by} · {eventTime(event.at)}</small></span></div>)}</div>
-      </div></Panel> : <Panel><Empty title="Select a scope item" description="Choose an item to see its source, notes, and history."/></Panel>}</div>
+      </div></Panel> : <Panel><Empty title="Select a scope item" description="Choose an item to see its source, notes, and history."/></Panel>}</div></>}
     </div>
     <PreviewNote>The scope checklist is the bidder’s bid form. Only approved items can be published.</PreviewNote>
     {sourceKind && selected && sources && <ScopeSourceDialog key={selected.id + sourceKind} title={selected.title} sources={sources} kind={sourceKind} colors={sourceColors} onClose={() => setSourceKind(null)}/>}
@@ -227,7 +232,12 @@ function OutreachDialog({ state, target, directory, run, notify, onClose }: {
   </Modal>;
 }
 
-export function ProcurementPackagesView({ projectName, notify, navigate }: ViewProps) {
+export function ProcurementPackagesView(props: ViewProps) {
+  const [proposalPackage, setProposalPackage] = useState<string | null>(null);
+  return proposalPackage ? <ProposalWorkspace {...props} initialPackageId={proposalPackage} onBack={() => setProposalPackage(null)}/> : <PackagesWorkspace {...props} onProposals={setProposalPackage}/>;
+}
+
+function PackagesWorkspace({ projectName, notify, navigate, onProposals }: ViewProps & { onProposals: (packageId: string) => void }) {
   const { procurement: state, runProcurement: run, submissions } = useSubmissions();
   const [directory] = useLocalDraft("directory", initialBidders);
   const [messageDrafts, setMessageDrafts] = useLocalDraft<MessageDraft[]>("messages", []);
@@ -255,7 +265,7 @@ export function ProcurementPackagesView({ projectName, notify, navigate }: ViewP
   if (!activePackage) return <div className="proc-view"><PageHeader eyebrow={`${projectName} / Bid management`} title="Bid packages" description="Assign trade owners, invite bidders, and keep outreach with each package."/><Empty title="No bid packages yet" description="This project starts empty. Add package setup to the project record before inviting bidders."/></div>;
 
   return <div className="proc-view">
-    <PageHeader eyebrow={`${projectName} / Bid management`} title="Bid packages" description="Assign trade owners, invite bidders, and keep every follow-up with the package." actions={<Button variant="primary" onClick={() => setInvitePackage(activePackage.id)}><UserPlus size={16}/>Invite bidders</Button>}/>
+    <PageHeader eyebrow={`${projectName} / Bid management`} title="Bid packages" description="Assign trade owners, invite bidders, and keep every follow-up with the package." actions={<><Button onClick={() => onProposals(activePackage.id)}><FileText size={16}/>Review proposals</Button><Button variant="primary" onClick={() => setInvitePackage(activePackage.id)}><UserPlus size={16}/>Invite bidders</Button></>}/>
     <PreviewNote>Project scoped package workflow · Invitations and outreach are saved with the open project.</PreviewNote>
     <Stats items={[{ label: "Trade packages", value: state.packages.length, detail: "Across the project" }, { label: "Published", value: state.packages.filter(pkg => packageStatus(state, pkg.id) === "published").length, detail: "Current bid forms", tone: "green" }, { label: "Invitations", value: state.invitations.length, detail: "Companies contacted" }, { label: "Proposals received", value: state.invitations.filter(item => item.status === "submitted").length, detail: "Ready for leveling" }]}/>
     <div className="proc-package-layout">
