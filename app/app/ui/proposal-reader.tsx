@@ -48,6 +48,6 @@ export function ProposalReader({ pkg, invitations, proposals, companies, onRead 
     </>}
     {busy && <p role="status">Reading the proposal against bid form v{pkg.published?.version}…</p>}
     {error && <p role="alert" className="proc-source-error">{error}</p>}
-    {dropped.length > 0 && <details className="ai-run-result"><summary>{dropped.length} unsupported values discarded</summary><ul>{dropped.map((drop, i) => <li key={i}>{drop.what}: {drop.reason}</li>)}</ul></details>}
+    {dropped.length > 0 && <details className="ai-run-result"><summary>Screening notes ({dropped.length}) · check omitted values</summary><ul>{dropped.map((drop, i) => <li key={i}>{drop.what}: {drop.reason}</li>)}</ul></details>}
   </div>;
 }

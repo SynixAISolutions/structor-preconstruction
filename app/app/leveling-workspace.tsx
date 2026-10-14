@@ -303,17 +303,14 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
     if (!storageReady || !storageEnabled) return;
     const sequence = ++saveSequenceRef.current;
     setSaveState("Saving…");
-    const timer = window.setTimeout(() => {
-      void saveWorkspace({ project, items, bidders }).then(({ savedAt }) => {
-        if (sequence === saveSequenceRef.current) setSaveState(`Saved ${new Date(savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`);
-      }).catch((error) => {
-        if (sequence !== saveSequenceRef.current) return;
-        setStorageEnabled(false);
-        setSaveState("Save failed");
-        setMessage(error instanceof Error ? error.message : "The workspace could not be saved. Download a JSON backup before leaving.");
-      });
-    }, 350);
-    return () => window.clearTimeout(timer);
+    void saveWorkspace({ project, items, bidders }).then(({ savedAt }) => {
+      if (sequence === saveSequenceRef.current) setSaveState(`Saved ${new Date(savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`);
+    }).catch((error) => {
+      if (sequence !== saveSequenceRef.current) return;
+      setStorageEnabled(false);
+      setSaveState("Save failed");
+      setMessage(error instanceof Error ? error.message : "The workspace could not be saved. Download a JSON backup before leaving.");
+    });
   }, [bidders, items, project, storageEnabled, storageReady]);
 
   useEffect(() => {
