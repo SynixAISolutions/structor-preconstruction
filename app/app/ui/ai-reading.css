@@ -1,0 +1,17 @@
+.ai-reader { padding:18px; min-width:0; color:#607789; font-size:12px; line-height:1.7; border-bottom:1px solid #e0e7eb; }
+.ai-reader h3 { margin:0 0 7px; color:#3f5669; font-size:15px; }
+.ai-reader p,.ai-pdf-picker p { overflow-wrap:anywhere; }
+.ai-reader .ui-field { margin:12px 0; }
+.ai-reader .ui-field input,.ai-reader .ui-field select { width:100%; min-width:0; }
+.ai-section-actions { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; }
+.ai-section-list { max-height:300px; overflow:auto; border:1px solid #dde5eb; border-radius:7px; margin-bottom:14px; }
+.ai-section-list > label { display:flex; align-items:flex-start; gap:10px; padding:12px; cursor:pointer; border-bottom:1px solid #e7edf1; }
+.ai-section-list > label:last-child { border-bottom:0; }
+.ai-section-list input[type=checkbox] { margin-top:4px; width:16px; height:16px; flex-shrink:0; accent-color:#527b80; }
+.ai-section-list span { min-width:0; overflow-wrap:anywhere; }
+.ai-section-list small { display:block; color:#7e8e9b; }
+.ai-reader .ai-privacy { font-size:11px; color:#738693; }
+.ai-run-result { margin-top:14px; padding:12px; background:#f4f7f9; border-radius:7px; overflow-wrap:anywhere; }
+.ai-run-result summary { cursor:pointer; }
+.ai-run-result ul { padding-left:18px; }
+@media(max-width:680px) { .ai-reader { padding:14px; }.ai-reader .ui-btn { max-width:100%; white-space:normal; } }

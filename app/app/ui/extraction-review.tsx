@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Check, FileText, Pencil, RotateCcw, X } from "lucide-react";
-import { editDraft, filterDrafts, isEdited, REJECT_REASONS, rejectDraft, reopenDraft, runSummary, type Citation, type Draft, type DraftKind, type DraftStatus, type RejectReason } from "../../lib/extraction";
+import { editDraft, filterDrafts, isEdited, recordRun, REJECT_REASONS, rejectDraft, reopenDraft, runSummary, type Citation, type Draft, type DraftKind, type DraftStatus, type RejectReason } from "../../lib/extraction";
 import type { useExtraction } from "../../lib/use-extraction";
 import type { SpecSection } from "../../lib/data/preconstruction";
 import { Badge, Button, Empty, Modal, Panel, PreviewNote, type ViewProps } from "./shared";
 import { ScopeSourceDialog } from "./scope-source-dialog";
 import { findingCitationSources, findingTitle } from "./extraction-citations";
+import { SpecificationReader } from "./specification-reader";
+import { useActiveProject } from "../../lib/project-scope";
 import "./extraction-review.css";
 
 type Review = ReturnType<typeof useExtraction>;
@@ -60,6 +62,11 @@ export function ExtractionReview({ review, packageId, sections, colors, by, noti
   review: Review; packageId: string; sections: SpecSection[]; colors: Map<string, string>; by: string; notify: ViewProps["notify"]; onOpenScope: (id: string) => void;
 }) {
   const { extraction } = review;
+  const projectId = useActiveProject();
+  const latest = useRef(review);
+  latest.current = review;
+  const pkg = review.procurement.packages.find(p => p.id === packageId);
+  const [source, setSource] = useState<{ runId: string; file: File } | null>(null);
   const runs = extraction.runs.filter(run => run.packageIds.includes(packageId) || extraction.drafts.some(d => d.runId === run.id && d.packageId === packageId));
   const [runId, setRunId] = useState("");
   const [kind, setKind] = useState<DraftKind | "">("");
@@ -83,8 +90,16 @@ export function ExtractionReview({ review, packageId, sections, colors, by, noti
     const outcome = `${accepted} finding${accepted === 1 ? "" : "s"} accepted.${messages.length ? ` ${messages.length} still ${messages.length === 1 ? "needs" : "need"} review. ${messages.join(" ")}` : ""}`;
     setResult(outcome); notify(outcome);
   }
-  if (!activeRun) return <Panel className="ext-review"><Empty title="No AI findings for this trade" description="Completed extraction runs will appear here with their source citations. Choose another trade to review its findings."/></Panel>;
   return <Panel className="ext-review" title="AI findings" subtitle="Check the cited source before accepting a finding.">
+    {pkg && <SpecificationReader key={`${projectId}:${pkg.id}`} pkg={pkg} onRun={(outcome, file) => {
+      let id = "";
+      const message = latest.current.run(current => { const next = recordRun(current, latest.current.procurement, outcome.input); id = next.runs.at(-1)!.id; return next; });
+      if (message) return message;
+      setRunId(id); setSource({ runId: id, file }); setKind(""); setStatus("pending-review"); setSelected([]); setResult("");
+      notify(outcome.input.error ? "The specification run failed. Check the reported pages and try again." : `${outcome.input.drafts.length} findings are ready for review${outcome.failures.length ? "; some pages could not be read" : ""}.`);
+      return null;
+    }}/>}
+    {!activeRun ? <Empty title="No AI findings for this trade" description="Choose a project manual and read the relevant sections to start a review."/> : <>
     {activeRun.engine.mode === "sample" && <PreviewNote>Illustrative sample — no documents were read. These findings demonstrate the review workflow.</PreviewNote>}
     <div className="ext-filters">
       <label className="ui-field">Extraction run<select value={activeRun.id} onChange={e => { setRunId(e.target.value); setSelected([]); setResult(""); }}>{runs.map(run => <option key={run.id} value={run.id}>{new Date(run.finishedAt).toLocaleDateString("en-US")} · {run.engine.mode} · {run.engine.model}</option>)}</select></label>
@@ -108,8 +123,9 @@ export function ExtractionReview({ review, packageId, sections, colors, by, noti
       </article>)}</div>
       {!drafts.length && <Empty title="No findings match" description="Change the type or review status to see other findings from this run."/>}
     </>}
+    </>}
     {dialog?.kind === "edit" && <DraftEditor draft={dialog.draft} review={review} by={by} onClose={() => setDialog(null)} notify={notify}/>}
     {dialog?.kind === "reject" && <RejectDialog draft={dialog.draft} review={review} by={by} onClose={() => setDialog(null)} notify={notify}/>}
-    {dialog?.kind === "citation" && <ScopeSourceDialog title={findingTitle(dialog.draft)} sources={findingCitationSources(dialog.draft, dialog.citation, review.flip, sections)} kind={dialog.citation.sheet ? "drawings" : "spec"} colors={colors} citation={dialog.citation} proposedRegion={dialog.draft.kind === "region" && dialog.draft.status !== "accepted" ? dialog.draft : undefined} sample={extraction.runs.find(run => run.id === dialog.draft.runId)?.engine.mode === "sample"} onClose={() => setDialog(null)}/>}
+    {dialog?.kind === "citation" && <ScopeSourceDialog title={findingTitle(dialog.draft)} sources={findingCitationSources(dialog.draft, dialog.citation, review.flip, sections)} kind={dialog.citation.sheet ? "drawings" : "spec"} colors={colors} citation={dialog.citation} sourceFile={source?.runId === dialog.draft.runId ? source.file : undefined} proposedRegion={dialog.draft.kind === "region" && dialog.draft.status !== "accepted" ? dialog.draft : undefined} sample={extraction.runs.find(run => run.id === dialog.draft.runId)?.engine.mode === "sample"} onClose={() => setDialog(null)}/>}
   </Panel>;
 }

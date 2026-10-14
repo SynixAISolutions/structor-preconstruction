@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { FileText, Plus, Trash2 } from "lucide-react";
-import { applyBlockers, discardReading, editReading, readingCorrections, setReadAnswer, type ProposalReading, type ReadingContent } from "../../lib/proposal-extraction";
+import { applyBlockers, discardReading, editReading, recordReading, readingCorrections, setReadAnswer, type ProposalReading, type ReadingContent } from "../../lib/proposal-extraction";
 import { useProposals } from "../../lib/use-proposals";
 import { useLocalDraft } from "../../lib/use-local-draft";
 import { initialBidders } from "../../lib/data/commercial";
@@ -11,6 +11,7 @@ import type { Citation } from "../../lib/extraction";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, PreviewNote, usd, type ViewProps } from "./shared";
 import { EstimatorSubmissions } from "./submission-ui";
 import { SourcePdf } from "./source-pdf";
+import { ProposalReader } from "./proposal-reader";
 import "./proposal-review.css";
 
 type Review = ReturnType<typeof useProposals>;
@@ -19,6 +20,9 @@ const editable = (c: ReadingContent) => ({ baseBid: c.baseBid, responses: c.resp
 
 export function ProposalWorkspace({ projectName, notify, navigate, initialPackageId, onBack }: ViewProps & { initialPackageId: string; onBack: () => void }) {
   const review = useProposals();
+  const latest = useRef(review);
+  latest.current = review;
+  const [source, setSource] = useState<{ readingId: string; file: File } | null>(null);
   const [directory] = useLocalDraft("directory", initialBidders);
   const [packageId, setPackageId] = useState(initialPackageId);
   const [readingId, setReadingId] = useState<string | null>(null);
@@ -27,10 +31,18 @@ export function ProposalWorkspace({ projectName, notify, navigate, initialPackag
   const reading = review.proposals.readings.find(r => r.id === readingId);
   return <div className="proc-view"><PageHeader eyebrow={`${projectName} / Bid management`} title="Proposal review" description="Check proposal readings before they become submitted bids." actions={<Button onClick={onBack}>Back to bid packages</Button>}/>
     {pkg ? <><label className="ui-field">Trade package<select value={pkg.id} onChange={e => setPackageId(e.target.value)}>{review.procurement.packages.map(p => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}</select></label>
+      <Panel><ProposalReader key={`${review.projectId}:${pkg.id}`} pkg={pkg} invitations={review.procurement.invitations} proposals={review.proposals} companies={new Map(directory.map(b => [b.id, b.company]))} onRead={(outcome, file) => {
+        let id = "";
+        const message = latest.current.run(current => { const next = recordReading(current, latest.current.procurement, outcome.input); id = next.readings.at(-1)!.id; return next; });
+        if (message) return message;
+        setSource({ readingId: id, file }); setReadingId(id);
+        notify("The proposal reading is ready. Check the source and correct the answers before confirming a revision.");
+        return null;
+      }}/></Panel>
       <Panel title={`${pkg.name} · Proposal readings`}><div className="proposal-reading-list">{readings.map(r => <article key={r.id}><strong>{directory.find(b => b.id === r.bidderId)?.company ?? r.bidderId}</strong><small>{r.document.name} · Bid form v{r.formVersion}</small><Badge tone={r.status === "pending-review" ? "amber" : r.status === "applied" ? "green" : "neutral"}>{r.status === "pending-review" ? "Needs review" : r.status === "applied" ? `Applied · revision ${r.applied?.revisionNumber}` : "Discarded"}</Badge>{r.engine.mode === "sample" && <PreviewNote>Illustrative sample — no proposal was read.</PreviewNote>}<Button onClick={() => setReadingId(r.id)}><FileText size={14}/>{r.status === "pending-review" ? "Review proposal" : "View reviewed proposal"}</Button></article>)}</div>{!readings.length && <Empty title="No proposal readings for this trade" description="Completed proposal readings will appear here for review before submission."/>}</Panel>
       <Panel title="Submitted bid revisions" subtitle="Confirmed proposals appear here immediately."><EstimatorSubmissions packageId={pkg.id} procurement={review.procurement} submissions={review.submissions} directory={directory}/></Panel>
     </> : <Empty title="No bid packages yet" description="Proposal review begins after a trade form is published and a company is invited."/>}
-    {reading && <ProposalReview key={reading.id} reading={reading} review={review} company={directory.find(b => b.id === reading.bidderId)?.company ?? reading.bidderId} by="Marcel Khoury" notify={notify} onClose={() => setReadingId(null)} onLeveling={() => navigate("leveling")}/>}
+    {reading && <ProposalReview key={reading.id} reading={reading} review={review} company={directory.find(b => b.id === reading.bidderId)?.company ?? reading.bidderId} by="Marcel Khoury" notify={notify} sourceFile={source?.readingId === reading.id ? source.file : undefined} onClose={() => setReadingId(null)} onLeveling={() => navigate("leveling")}/>}
   </div>;
 }
 
@@ -38,7 +50,7 @@ function ReadingSnapshot({ content, titles }: { content: ReadingContent; titles:
   return <div className="proposal-snapshot"><strong>Base bid: {content.baseBid === null ? "Not stated" : usd(content.baseBid)}</strong>{content.responses.map(row => <p key={row.scopeItemId}>{titles.get(row.scopeItemId) ?? row.scopeItemId}: <b>{row.answer ?? "Not stated"}</b>{row.note && ` · ${row.note}`}</p>)}{content.exclusions.map((line, i) => <p key={`e${i}`}>Exclusion: {line.text}</p>)}{content.clarifications.map((line, i) => <p key={`c${i}`}>Clarification: {line.text}</p>)}{content.alternates.map((a, i) => <p key={`a${i}`}>{a.kind} alternate: {a.description} · {usd(a.amount)}</p>)}<p>Contact: {content.submitter?.name} · {content.submitter?.email}</p></div>;
 }
 
-export function ProposalReview({ reading, review, company, by, notify, onClose, onLeveling }: { reading: ProposalReading; review: Review; company: string; by: string; notify: ViewProps["notify"]; onClose: () => void; onLeveling: () => void }) {
+export function ProposalReview({ reading, review, company, by, notify, onClose, onLeveling, sourceFile }: { reading: ProposalReading; review: Review; company: string; by: string; notify: ViewProps["notify"]; onClose: () => void; onLeveling: () => void; sourceFile?: File }) {
   const [content, setContent] = useState(reading.content);
   const [exclusions, setExclusions] = useState(reading.content.exclusions.map(l => l.text).join("\n"));
   const [clarifications, setClarifications] = useState(reading.content.clarifications.map(l => l.text).join("\n"));
@@ -87,7 +99,7 @@ export function ProposalReview({ reading, review, company, by, notify, onClose, 
       </form> : <><ReadingSnapshot content={reading.content} titles={titles}/>{reading.discardReason && <p>Discarded: {reading.discardReason}</p>}{citations(reading.content.baseBidCitations)}{[...reading.content.responses, ...reading.content.exclusions, ...reading.content.clarifications, ...reading.content.alternates].map((item, i) => <div key={i}>{citations(item.citations)}</div>)}</>}
       {reading.original && <details className="ext-original"><summary>Original AI reading</summary><ReadingSnapshot content={reading.original} titles={titles}/></details>}
       <details className="ext-history"><summary>Review history</summary><ul>{reading.history.map((event, i) => <li key={i}>{event.kind}{event.kind === "edited" ? `: ${event.fields.join(", ")}` : event.kind === "discarded" ? `: ${event.reason}` : ""}<small>{event.by} · {new Date(event.at).toLocaleString("en-US")}</small></li>)}</ul></details>
-    </div><aside className="proposal-source"><h3>Source document</h3><p>{reading.document.name} · page {page}</p>{citation && <blockquote className="proc-citation-quote"><strong>Cited text · page {citation.page}</strong><p>{citation.quote}</p></blockquote>}<SourcePdf page={page} range={{ first: 1, last: reading.document.pages }} onPageChange={setPage}/></aside></div>
+    </div><aside className="proposal-source"><h3>Source document</h3><p>{reading.document.name} · page {page}</p>{citation && <blockquote className="proc-citation-quote"><strong>Cited text · page {citation.page}</strong><p>{citation.quote}</p></blockquote>}<SourcePdf page={page} range={{ first: 1, last: reading.document.pages }} onPageChange={setPage} selectedFile={sourceFile} expectedName={reading.engine.mode !== "sample" ? reading.document.name : undefined}/></aside></div>
     {pending ? <div className="proposal-confirm">
       {dirty ? <p>Save your corrections before confirming the revision.</p> : blockers.length > 0 && <ul>{blockers.map((message, i) => <li key={i}>{message}</li>)}</ul>}
       {issues.filter(issue => !issue.scopeItemId).map((issue, i) => <p className="proc-source-error" role="alert" key={i}>{issue.message}</p>)}

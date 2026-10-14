@@ -7,7 +7,7 @@ import { DrawingCanvas, type CanvasRegion } from "./drawing-flip-ui";
 import { Badge, Empty, Modal, PreviewNote } from "./shared";
 import { SourcePdf } from "./source-pdf";
 
-export function ScopeSourceDialog({ title, sources, kind, colors, onClose, citation, proposedRegion, sample = false }: {
+export function ScopeSourceDialog({ title, sources, kind, colors, onClose, citation, proposedRegion, sample = false, sourceFile }: {
   title: string;
   sources: ScopeSources;
   kind: "drawings" | "spec";
@@ -16,6 +16,7 @@ export function ScopeSourceDialog({ title, sources, kind, colors, onClose, citat
   citation?: Citation;
   proposedRegion?: RegionDraft;
   sample?: boolean;
+  sourceFile?: File;
 }) {
   const [drawingIndex, setDrawingIndex] = useState(0);
   const [regionId, setRegionId] = useState("");
@@ -36,7 +37,7 @@ export function ScopeSourceDialog({ title, sources, kind, colors, onClose, citat
       {preview ? <p className="proc-modal-note">Proposed region: {preview.label}. It stays out of Drawing Flip until accepted.</p> : drawing.regions.length ? <ul className="proc-source-regions">{drawing.regions.map(region => <li key={region.id}><button className={(regionId || drawing.regions[0]?.id) === region.id ? "active" : ""} onClick={() => setRegionId(region.id)}>{region.number} · {region.label}</button><p>{region.evidence}</p></li>)}</ul> : <p className="proc-modal-note">This requirement references the whole sheet; no specific region is linked.</p>}
     </div> : <Empty title="No drawing linked" description={sources.unresolved || "This requirement has no linked drawing page yet."}/> : (spec || citation) ? <div className="proc-source-dialog">
       <div className="proc-source-heading"><div><strong>{citation ? citation.document : `${spec!.section} · ${spec!.title || "Specification section"}`}</strong><p>{citation ? `Cited page ${citation.page}${citation.sheet ? ` · ${citation.sheet}` : ""}` : `${spec!.paragraph || "Whole section"} · ${spec!.pages ? `Manual pages ${spec!.pages.first}–${spec!.pages.last}` : "Page range not linked"}`}</p></div><Badge>Manual reference</Badge></div>
-      <SourcePdf page={page} range={pageRange} onPageChange={setPage} label={citation ? "Source PDF" : "Project manual PDF"}/>
+      <SourcePdf page={page} range={pageRange} onPageChange={setPage} label={citation ? "Source PDF" : "Project manual PDF"} selectedFile={sourceFile} expectedName={citation && !sample ? citation.document : undefined}/>
     </div> : <Empty title="No specification linked" description={sources.unresolved || "This requirement has no specification section reference yet."}/>}
   </Modal>;
 }
