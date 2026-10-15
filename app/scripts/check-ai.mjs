@@ -85,15 +85,20 @@ const screened = J.screenScope({ findings: [
   finding({ title: "Cited on a page it wasn't given.", citations: [{ page: 999, quote: "Level 4: At panel surfaces" }] }),
   finding({ title: "x".repeat(301) }),
   finding({ title: "", citations: [] }),
-  finding({ title: "Keep the good citation only.", paragraph: "", citations: [{ page: 440, quote: "made up words entirely" }, { page: 434, quote: "SECTION 092900 - GYPSUM BOARD" }] }),
+  finding({ title: "Keep the good citation only.", paragraph: "", citations: [{ page: 440, quote: "made up words entirely" }, { page: 440, quote: "Level 4: At panel surfaces that will be exposed to view" }] }),
   "not an object",
 ] }, scopeJob);
 assert.deepEqual(screened.drafts.map(d => [d.key, d.title, d.source, d.citations.map(c => c.page)]), [
   ["09 29 00-1", "Provide Level 4 finish on gypsum board exposed to view.", "09 29 00 · §3.6.B", [440]],
-  ["09 29 00-2", "Keep the good citation only.", "09 29 00", [434]],
+  ["09 29 00-2", "Keep the good citation only.", "09 29 00", [440]],
 ]);
-assert.deepEqual(screened.dropped.map(d => d.reason), ["None of its quotes is on the page it cites.", "None of its quotes is on the page it cites.", "Too long for a bid-form line.", "No title.", "No title."]);
+assert.deepEqual(screened.dropped.map(d => d.reason), ["No matching non-heading quote was found on the cited page.", "No matching non-heading quote was found on the cited page.", "Too long for a bid-form line.", "No title.", "No title."]);
 assert.deepEqual(J.screenScope({}, scopeJob), { drafts: [], dropped: [] }, "No findings key: nothing, no crash");
+for (const quote of ["SECTION 092900 - GYPSUM BOARD", "GYPSUM BOARD 092900 - 1", "Section Includes:"]) {
+  const headingJob = { ...scopeJob, pages: [{ page: 434, text: `${quote}\nProvide interior gypsum board.` }] };
+  assert.equal(J.screenScope({ findings: [finding({ citations: [{ page: 434, quote }] })] }, headingJob).drafts.length, 0, "A heading alone cannot substantiate a priced requirement");
+  assert.equal(J.screenScope({ findings: [finding({ citations: [{ page: 434, quote: "Provide interior gypsum board." }] })] }, headingJob).drafts.length, 1);
+}
 assert.equal(J.screenScope({ findings: Array.from({ length: 30 }, () => finding()) }, scopeJob).drafts.length, 25, "At most 25 findings per request");
 // What survives screening records as a run in the review queue.
 const run = X.recordRun(X.EMPTY_EXTRACTION, sampleProcurement, { packageIds: ["drywall"], engine: { mode: "live", model: "deepseek-flash" }, documents: [{ name: "Project manual.pdf", pages: 2074 }], startedAt: "2026-10-14T10:00:00.000Z", finishedAt: "2026-10-14T10:01:00.000Z", drafts: screened.drafts });
