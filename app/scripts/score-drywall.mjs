@@ -50,16 +50,16 @@ console.log(`Bid form: ${key.trade} · ${key.sections.length} sections · ${K.sc
 let findings, readSections, runInfo = {};
 if (args.findings && args.findings !== "true") {
   const raw = JSON.parse(readFileSync(args.findings, "utf8"));
-  const drafts = Array.isArray(raw) ? raw : raw.drafts ?? [];
+  const drafts = Array.isArray(raw) ? raw : raw.findings ?? raw.drafts ?? [];
   findings = drafts.filter(d => (d.kind ?? "scope") === "scope").map((d, i) => ({ id: d.id ?? d.key ?? `f${i + 1}`, title: d.title, detail: d.detail ?? "", source: d.source ?? "", status: d.status }));
   readSections = raw.readSections;
-  runInfo = { from: basename(args.findings) };
+  runInfo = { from: basename(args.findings), status: raw.run?.status, failures: raw.run?.notes?.failures ?? raw.failures ?? [], screening: raw.run?.notes?.screening ?? raw.dropped ?? [] };
 } else {
   const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
   if (!apiKey) { console.error("DEEPSEEK_API_KEY is not set (use --env-file)."); process.exit(2); }
   const manualFile = need("manual");
   const manual = await pdfPages(manualFile);
-  const sections = M.manualSections(manual).filter(s => key.sections.some(k => k.number === s.section));
+  const sections = M.sectionsFromBidForm(M.manualSections(manual), (await pdfPages(args["bid-form"])).map(p => p.text).join("\n")).sections;
   readSections = sections.map(s => s.section);
   const missing = key.sections.filter(k => !readSections.includes(k.number)).map(k => k.number);
   const pkg = { id: args.package ?? "drywall", name: key.trade.replace(/^\d+\s*-\s*/, "") || "Drywall", code: "09 29 00" };
@@ -74,7 +74,7 @@ if (args.findings && args.findings !== "true") {
       const { section, pages } = jobs[next++];
       const where = `${section.section} pp. ${pages[0].page}–${pages.at(-1).page}`;
       try {
-        const job = J.parseScopeJob({ pkg, document: basename(manualFile), section: { section: section.section, title: section.title }, pages });
+        const job = J.parseScopeJob({ pkg, document: basename(manualFile), section: { section: section.section, title: section.title }, pages, brief: key.items.map(item => item.text).join("\n").slice(0, 20_000) });
         const output = await D.deepseekJson(apiKey, J.scopeMessages(job), { model, maxTokens: 6000, budgetMs: 55_000 });
         const screened = J.screenScope(output, job);
         drafts.push(...screened.drafts.map(d => ({ ...d, key: `${d.key}@${pages[0].page}` })));
@@ -93,6 +93,12 @@ if (args.findings && args.findings !== "true") {
   findings = drafts.map(d => ({ id: d.key, title: d.title, detail: d.detail, source: d.source }));
 }
 
+if (!findings.length) {
+  const message = `Unassessed: the reading produced no scope findings. No coverage percentage or missed-work count can be claimed.\nRun limitations: ${JSON.stringify(runInfo)}\n`;
+  writeFileSync(join(out, "report.md"), message);
+  console.log(message);
+  process.exit(0);
+}
 const report = A.scoreScope(key, findings, { readSections, includeRejected: true });
 const s = report.summary;
 const pct = (x) => `${Math.round(x * 100)}%`;
@@ -104,7 +110,8 @@ writeFileSync(join(out, "lines.csv"), csv([["Line", "Group", "Bid-form line", "V
 writeFileSync(join(out, "extras.csv"), csv([["Finding", "Source", "Closest line", "Score"],
   ...report.extras.map(e => [e.finding.title, e.finding.source, report.lines.find(l => l.item.id === e.best?.lineId)?.item.text ?? "", e.best?.score ?? ""])]));
 writeFileSync(join(out, "report.md"), [
-  `# Scope accuracy — ${key.trade}`, "",
+  `# Scope matching candidates — ${key.trade}`, "",
+  "Word matching suggests source-review candidates. It does not verify trade responsibility, exclusions or scope accuracy. Use the explicit reviewed mapping for confirmed coverage; failed or unread pages remain unassessed.", "",
   `Run: ${JSON.stringify(runInfo)}`, "",
   `- Scope lines on the bid form: ${s.scopeLines}`,
   `- Matched: ${s.matched} (${pct(s.recall)}) · possible, to confirm: ${s.possible} · missed: ${s.missed}`,
@@ -117,7 +124,7 @@ writeFileSync(join(out, "report.md"), [
   ...report.sections.map(x => `| ${x.number} | ${x.title} | ${x.read === null ? "?" : x.read ? "yes" : "NOT IN MANUAL"} | ${x.findings} |`), "",
   ...(report.conflicts.length ? ["## Conflicts with the form's exclusions", "", ...report.conflicts.map(c => `- ${c.finding.title} (${c.finding.source}) ↔ excluded: ${c.exclusion.text} (${c.exclusion.note})`), ""] : []),
   "## Missed lines", "", ...report.lines.filter(l => l.verdict === "missed").map(l => `- ${l.item.id} · ${l.item.group}: ${l.item.text}`), "",
-  "Word matching is cautious: check lines.csv for every 'possible' pairing before quoting a number.",
+  "Check every pairing in lines.csv against the original sources, including those labelled matched. Percentages here describe word matching only.",
 ].join("\n"));
 console.log(`Matched ${s.matched}/${s.scopeLines} (${pct(s.recall)}), possible ${s.possible}, missed ${s.missed}; findings ${s.findings}, extras ${s.extras}, conflicts ${s.conflicts}; sections cited ${s.sectionsCited}/${s.sectionsListed}`);
 console.log(`Report: ${join(out, "report.md")}`);

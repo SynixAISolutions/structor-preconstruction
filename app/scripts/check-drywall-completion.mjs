@@ -5,6 +5,12 @@ const A = await import("../lib/drawing-ai.ts"), X = await import("../lib/extract
 const { sampleProcurement } = await import("../lib/data/procurement.ts");
 const { drywallAccuracy } = await import("../lib/drywall-accuracy.mjs");
 const { passwordAccepted } = await import("../lib/demo-password.ts");
+const { POST } = await import("../app/api/ai/route.ts");
+const previousKey = process.env.DEEPSEEK_API_KEY;
+try {
+  process.env.DEEPSEEK_API_KEY = "test-not-a-real-key";
+  for (const body of ["null", "[]", "1"]) assert.equal((await POST(new Request("http://localhost/api/ai", { method: "POST", body }))).status, 400);
+} finally { if (previousKey === undefined) delete process.env.DEEPSEEK_API_KEY; else process.env.DEEPSEEK_API_KEY = previousKey; }
 assert.equal(passwordAccepted(null, undefined, true), false, "Hosted demos stay protected when their password is missing");
 assert.equal(passwordAccepted(null, undefined), true, "Local development remains available");
 
@@ -30,6 +36,7 @@ assert.deepEqual(selected.sections.map(s => s.section), ["06 64 00", "07 42 10.1
 const empty = { version: 1, projectId: "jelleff", finishes: [], cornerGuards: [] };
 assert.equal(P.resolveModelSupplement(empty, "jelleff").objects.length, 261);
 assert.throws(() => P.resolveModelSupplement(empty, "other"), /this project/);
+assert.equal(P.resolveModelSupplement({ ...empty, projectId: "other" }, "other").records.length, 0, "A project without a host model never resolves Jelleff's finishes");
 const guard = { id: "test-guard", name: "Illustrative physical guard", level: "L1", room: "101", point: [1, 2], source: { sheet: "A12.2", page: 1, detail: "Test physical corner", asset: "" } };
 const prepared = P.resolveModelSupplement({ ...empty, cornerGuards: [guard] }, "jelleff");
 assert.deepEqual(prepared.objects.at(-1).quantity, { value: 1, unit: "EA" });

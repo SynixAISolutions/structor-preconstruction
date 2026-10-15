@@ -1,0 +1,6 @@
+app/.ui-test-build
+app/pnpm-workspace.yaml
+.env*
+**/.env*
+outputs/
+references/

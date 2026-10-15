@@ -67,6 +67,13 @@ test("drawing highlights use the sheet aspect rather than a fixed canvas height"
   assert.match(html, /width="1000" height="500"/);
 });
 
+test("an uploaded drawing with no in-memory original asks for its file instead of showing sample linework", () => {
+  const page = { ...sampleDrawingFlip.pages[0], source: "uploaded" as const, image: null };
+  const html = renderToStaticMarkup(<DrawingCanvas page={page} regions={[]} selectedId="" colors={new Map()} onSelect={() => {}}/>);
+  assert.match(html, /Original drawing PDF/);
+  assert.ok(!html.includes("ILLUSTRATIVE LINEWORK"));
+});
+
 test("a trade remains available in the drawing filter on a sheet without its regions", () => {
   const html = renderToStaticMarkup(<DrawingFlipWorkspace projectName="Sample project" notify={() => {}} navigate={() => {}}/>);
   const filter = html.match(/<select aria-label="Filter by trade"[^>]*>([\s\S]*?)<\/select>/)?.[1];

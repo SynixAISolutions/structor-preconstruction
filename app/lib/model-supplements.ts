@@ -15,6 +15,7 @@ export function resolveModelSupplement(raw: unknown, projectId: string) {
   const baseObjects = modelForProject(projectId), data = raw as ModelSupplement;
   if (!data || data.version !== 1 || data.projectId !== projectId || !Array.isArray(data.finishes) || !Array.isArray(data.cornerGuards) || data.finishes.length > 500 || data.cornerGuards.length > 500) fail("Choose a version 1 measurement file for this project, with at most 500 finish records and 500 physical guards.");
   if (!baseObjects.length && (data.finishes.length || data.cornerGuards.length)) fail("These measurements need the project's prepared host model.");
+  if (!baseObjects.length) return { data, objects: [], records: [], bases: [], materials: [] };
   const ids = new Set<string>();
   for (const record of data.finishes) {
     if (!record || typeof record.id !== "string" || !record.id || record.id.length > 200 || ids.has(record.id) || !["L1", "L2"].includes(record.level) || !Array.isArray(record.bands) || !record.bands.length || record.bands.length > 100 || !Array.isArray(record.evidence) || !record.evidence.length || !Array.isArray(record.wallIds) || !Array.isArray(record.conflicts) || typeof record.title !== "string" || record.title.length > 300) fail("Check finish record ids, levels, bands and evidence.");

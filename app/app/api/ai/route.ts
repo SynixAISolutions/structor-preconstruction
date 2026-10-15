@@ -18,6 +18,7 @@ export async function POST(request: Request) {
   if (raw.length > MAX_BODY) return json({ error: "Too much text in one request; send fewer pages." }, 413);
   let body: { job?: unknown; input?: unknown };
   try { body = JSON.parse(raw); } catch { return json({ error: "The request isn't valid JSON." }, 400); }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return json({ error: "Choose an AI reading job and its input." }, 400);
 
   const model = body.job === "drawing" ? "deepseek-flash" : textModel();
   try {
