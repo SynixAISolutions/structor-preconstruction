@@ -53,6 +53,7 @@ export type BudgetLine = {
   forecastSource: ForecastSource | null;
   /** Set when the forecast is the contractor's own estimate for the trade (applyEstimateValue); cleared like forecastSource. */
   estimateSource?: EstimateSource | null;
+  inHouseEstimate?: EstimateSource | null;
   /** The trade package this line budgets, once linked or confirmed (estimate.ts budgetLinesForTrade). */
   packageId?: string | null;
   updatedAt: string;
@@ -79,7 +80,7 @@ export type BudgetAllowance = {
 /** A cost center (Marcel's ECC columns) and its area, for cost per square foot. */
 export type CostCenter = { name: string; squareFeet: number | null };
 
-export type BudgetState = { lines: BudgetLine[]; allowances: BudgetAllowance[]; costCenters: CostCenter[]; conceptSource?: import("./historical-budget").ConceptBudget & { appliedBy: string; appliedAt: string } };
+export type BudgetState = { lines: BudgetLine[]; allowances: BudgetAllowance[]; costCenters: CostCenter[]; lowestSubSplits?: Record<string, Record<string, number>>; conceptSource?: import("./historical-budget").ConceptBudget & { appliedBy: string; appliedAt: string } };
 
 export type BudgetLineInput = {
   costCenter: string; classification: BudgetClass; csiCode?: string | null; description: string; owner?: string;
@@ -211,6 +212,7 @@ export function editBudgetLine(state: BudgetState, id: string, patch: Partial<Bu
     ...next,
     ...(approvedFieldsChanged ? { status: "draft" as const, approval: null } : {}),
     ...(forecastEdited ? { forecastSource: null, estimateSource: null } : {}),
+    ...(next.budget !== line.budget ? { inHouseEstimate: null } : {}),
     source: line.source.kind === "sample" ? line.source : { kind: "manual", by, at },
   };
   return checked({ ...state, lines: state.lines.map(l => l.id === id ? updated : l) });
