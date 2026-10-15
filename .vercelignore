@@ -4,3 +4,6 @@ app/pnpm-workspace.yaml
 **/.env*
 outputs/
 references/
+meetings/
+work/
+/*.md
