@@ -22,6 +22,8 @@ The Overview now derives its counts, package status and activity from the select
 
 Set `DEEPSEEK_API_KEY` and, for a shared preview, `DEMO_PASSWORD` in the server environment; never commit secrets. Proposal batches default to `deepseek-v4-pro`; specification chunks use `deepseek-flash`. `AI_TEXT_MODEL` overrides either text job. Hosted previews fail closed without their demo password. New client documents, measurements, readings and historical budgets remain private runtime data. A successful request or a matching citation does not establish scope or quantity accuracy: review every result before publishing or using it commercially. Checked quantity deltas require the contractor's checked takeoff.
 
+Record feedback is available on every page: record up to three minutes, listen, then send. Messages stores a shared inbox with the original page and project, playback and downloads. Audio and message metadata use a **private Vercel Blob store** via server-only `BLOB_READ_WRITE_TOKEN`; keep the store private and protect the site with `DEMO_PASSWORD`. Everyone with that site password can access the review inbox. Unsent audio stays in the current tab and is lost if the tab is reloaded or closed.
+
 The in-app manual describes the current screens and their browser-only limits. The original milestone below is retained as project history.
 
 ### Original spreadsheet milestone
