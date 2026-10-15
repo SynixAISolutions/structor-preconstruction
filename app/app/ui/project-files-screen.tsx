@@ -13,7 +13,7 @@ import { removeProjectDocument, uploadProjectPdf, useProjectDocuments, type Uplo
 import "./project-files.css";
 
 const megabytes = (bytes: number) => bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.ceil(bytes / 1024)} KB`;
-const progressText = (p: UploadProgress) => p.stage === "uploading" ? `Uploading ${Math.round((p.done / Math.max(1, p.total)) * 100)}%` : p.stage === "reading" ? `Reading page ${p.done} of ${p.total}` : `Saving page text ${p.done + 1} of ${p.total}`;
+const progressText = (p: UploadProgress) => p.stage === "uploading" ? `Uploading ${Math.round((p.done / Math.max(1, p.total)) * 100)}%` : p.stage === "reading" ? `Reading page ${p.done} of ${p.total}` : p.stage === "title-blocks" ? `Reading title blocks ${p.done} of ${p.total}` : `Saving page text ${p.done + 1} of ${p.total}`;
 type Pending = { file: File; category: string; progress?: UploadProgress; error?: string; done?: boolean };
 
 /**

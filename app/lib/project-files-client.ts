@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { upload } from "@vercel/blob/client";
 import { manualSections } from "./manual-sections";
+import { readTitleBlock } from "./ai-more-client";
 import { useActiveProject } from "./project-scope";
 import {
   chunkFor, emptyIndex, kindForCategory, MAX_RANGE_BYTES, sourcePath, TEXT_CHUNK,
@@ -52,7 +53,7 @@ export function useProjectDocuments(projectId?: string) {
 
 // ── Upload ──────────────────────────────────────────────────────────────────
 
-export type UploadProgress = { stage: "uploading" | "reading" | "saving"; done: number; total: number };
+export type UploadProgress = { stage: "uploading" | "reading" | "saving" | "title-blocks"; done: number; total: number };
 
 type TextItem = { str: string; transform: number[] };
 const SHEET = /^[A-Z]{1,3}[-.]?\d{1,3}(?:\.\d{1,3})?[A-Z]?$/;
@@ -116,7 +117,45 @@ export async function uploadProjectPdf(args: { projectId: string; file: File; ca
     sections: kind === "manual" ? manualSections(pages).map(s => ({ section: s.section, title: s.title, first: s.firstPage, last: s.lastPage })) : [],
   };
   setIndex(await api<ProjectFileIndex>("/api/project-files", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "register", projectId, document }) }));
-  return document;
+  if (kind !== "drawings") return document;
+  // Sheet number, title and issue date from each title block (most sheets have no text layer).
+  const named = { ...document, sheets: await readTitleBlocks(file, document.sheets, (done, total) => args.onProgress?.({ stage: "title-blocks", done, total })) };
+  await updateProjectDocument(named).catch(() => null);
+  return named;
+}
+
+/** Reads every sheet's title block (right-hand strip, lower half) with the AI, six at a time. */
+async function readTitleBlocks(file: File, sheets: StoredSheet[], onProgress: (done: number, total: number) => void): Promise<StoredSheet[]> {
+  const pdfjs = await import("pdfjs-dist");
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+  const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
+  const pdf = await task.promise;
+  const out = sheets.map(s => ({ ...s }));
+  let next = 0, done = 0;
+  try {
+    await Promise.all(Array.from({ length: 6 }, async () => {
+      while (next < out.length) {
+        const sheet = out[next++];
+        try {
+          const page = await pdf.getPage(sheet.page);
+          const view = page.getViewport({ scale: 1 });
+          const scale = 2200 / Math.max(view.width, view.height);
+          const viewport = page.getViewport({ scale });
+          const strip = { x: Math.floor(viewport.width * 0.915), y: Math.floor(viewport.height * 0.5) };
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.ceil(viewport.width) - strip.x; canvas.height = Math.ceil(viewport.height) - strip.y;
+          const context = canvas.getContext("2d")!;
+          context.translate(-strip.x, -strip.y);
+          await page.render({ canvas, canvasContext: context, viewport }).promise;
+          page.cleanup();
+          const read = await readTitleBlock(canvas.toDataURL("image/jpeg", 0.8));
+          if (read.sheet) Object.assign(sheet, { sheet: read.sheet, title: read.title, date: read.date });
+        } catch { /* keep what the text layer gave; the sheet can be named in List of drawings */ }
+        onProgress(++done, out.length);
+      }
+    }));
+  } finally { await task.destroy(); }
+  return out;
 }
 
 export async function removeProjectDocument(doc: StoredDocument) {
