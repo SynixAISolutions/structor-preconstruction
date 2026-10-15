@@ -1,0 +1,11 @@
+.concept-budget { display: grid; gap: 22px; }
+.concept-budget details { margin-top: 20px; }
+.concept-budget summary { cursor: pointer; font-weight: 600; }
+.concept-budget p { color: var(--muted); line-height: 1.6; }
+.concept-budget [role="alert"] { color: #a33d25; }
+.concept-budget .ui-form-grid { margin: 16px 0; }
+.concept-budget td small { display: block; margin-top: 5px; color: var(--muted); line-height: 1.5; }
+.concept-budget td { max-width: 330px; overflow-wrap: anywhere; }
+.concept-budget .ui-table-wrap { margin: 16px 0; }
+.concept-budget input[type="file"] { max-width: 100%; }
+@media(max-width: 650px) { .concept-budget .ui-form-grid { grid-template-columns: 1fr; } .concept-budget .ui-table-wrap { max-width: 100%; overflow-x: auto; } }

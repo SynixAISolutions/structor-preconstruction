@@ -58,7 +58,7 @@ export function terms(text: string): string[] {
 
 const findingText = (f: FindingLike) => `${f.title} ${f.detail}`;
 /** "09 29 00 · §3.6" → "09 29 00"; null when the source names no section. */
-export const sectionOf = (source: string): string | null => source.match(/^(\d{2} \d{2} \d{2})/)?.[1] ?? null;
+export const sectionOf = (source: string): string | null => source.match(/^(\d{2} \d{2} \d{2}(?:\.\d{2})?)/)?.[1] ?? null;
 
 /** Pairs every key line with every finding; idf and distinctiveness come from all of them together. */
 function scorer(lines: KeyItem[], findings: FindingLike[]) {
@@ -134,8 +134,9 @@ export function scoreScope(key: BidFormKey, allFindings: FindingLike[], options:
   const cited = new Map<string, number>();
   for (const f of findings) { const s = sectionOf(f.source); if (s) cited.set(s, (cited.get(s) ?? 0) + 1); }
   const read = options.readSections ? new Set(options.readSections) : null;
-  const sections = key.sections.map(s => ({ number: s.number, title: s.title, listedWithY: s.response === "Y", read: read ? read.has(s.number) : null, findings: cited.get(s.number) ?? 0 }));
-  const otherSections = [...cited.entries()].filter(([n]) => !key.sections.some(s => s.number === n)).map(([number, n]) => ({ number, findings: n })).sort((a, b) => a.number.localeCompare(b.number));
+  const matchesSection = (actual: string, listed: string) => actual === listed || actual.startsWith(`${listed}.`);
+  const sections = key.sections.map(s => ({ number: s.number, title: s.title, listedWithY: s.response === "Y", read: read ? [...read].some(number => matchesSection(number, s.number)) : null, findings: [...cited].filter(([number]) => matchesSection(number, s.number)).reduce((sum, [, count]) => sum + count, 0) }));
+  const otherSections = [...cited.entries()].filter(([n]) => !key.sections.some(s => matchesSection(n, s.number))).map(([number, n]) => ({ number, findings: n })).sort((a, b) => a.number.localeCompare(b.number));
 
   const groupNames = [...new Set(lines.map(l => l.group))];
   const groups = groupNames.map(group => {

@@ -129,6 +129,27 @@ export function screenScope(output: unknown, job: ScopeJob): { drafts: DraftInpu
 export type ProposalJob = { form: { items: { id: string; title: string; detail: string }[] }; document: string; pages: PageText[] };
 export type ProposalReadingOutput = Pick<ReadingInput, "baseBid" | "baseBidCitations" | "responses" | "exclusions" | "clarifications" | "alternates" | "submitter">;
 
+/** Keep cited answers below the response limit even on a long contractor bid form. */
+export function proposalBatches(job: ProposalJob): ProposalJob[] {
+  return Array.from({ length: Math.ceil(job.form.items.length / 20) }, (_, i) => ({ ...job, form: { items: job.form.items.slice(i * 20, (i + 1) * 20) } }));
+}
+
+export function mergeProposalReadings(parts: { reading: ProposalReadingOutput; dropped: Dropped[] }[]): { reading: ProposalReadingOutput; dropped: Dropped[] } {
+  const readings = parts.map(part => part.reading);
+  const prices = [...new Set(readings.map(reading => reading.baseBid).filter(price => price !== null))];
+  if (prices.length > 1) fail("The proposal batches disagree on the base bid. Review the proposal and retry; nothing was saved.");
+  const unique = <T>(values: T[], key: (value: T) => string) => [...new Map(values.map(value => [key(value), value])).values()];
+  return { reading: {
+    baseBid: prices[0] ?? null,
+    baseBidCitations: unique(readings.flatMap(reading => reading.baseBidCitations ?? []), citation => JSON.stringify(citation)),
+    responses: readings.flatMap(reading => reading.responses),
+    exclusions: unique(readings.flatMap(reading => reading.exclusions ?? []), line => line.text.trim().toLowerCase()),
+    clarifications: unique(readings.flatMap(reading => reading.clarifications ?? []), line => line.text.trim().toLowerCase()),
+    alternates: unique(readings.flatMap(reading => reading.alternates ?? []), alternate => JSON.stringify([alternate.kind, alternate.description.trim().toLowerCase(), alternate.amount])),
+    submitter: readings.find(reading => reading.submitter)?.submitter ?? null,
+  }, dropped: parts.flatMap(part => part.dropped) };
+}
+
 export function parseProposalJob(raw: unknown): ProposalJob {
   const o = (raw ?? {}) as Record<string, any>;
   const items = Array.isArray(o.form?.items) ? o.form.items : [];
@@ -145,6 +166,7 @@ export function proposalMessages(job: ProposalJob): ChatMessage[] {
       "You read a subcontractor's bid proposal for a general contractor and map it onto the contractor's bid form.",
       "For every bid-form item give answer Y (clearly included), N (clearly excluded), P (partly included; say what is missing in note), N/A (the proposal says it does not apply; say why in note), or null when the proposal does not say. Never guess: null is better than an unsupported answer.",
       "Every non-null answer needs a citation {page, quote}: page from the [[page N]] marker, quote copied exactly from that page.",
+      "Use a quote with at least six letters/digits. For a short exclusion such as FRP, include adjacent printed list text to make a verifiable excerpt. A section reference alone does not prove its whole scope is included. If installation is included but furnishing is excluded, use P for a furnish-and-install item; silence is null, not N.",
       "Also give: baseBid, the lump-sum base bid in US dollars as a number, with its citation; exclusions and clarifications (qualifications, assumptions) as printed, each with a citation; alternates with kind add or deduct, description, amount in dollars, and a citation; submitter, the proposal's contact name and email exactly as printed, or null.",
       "Reply with JSON only, in exactly this format:",
       "{\"baseBid\":798303,\"baseBidCitation\":{\"page\":1,\"quote\":\"Base Bid: $798,303.00\"},\"responses\":[{\"itemId\":\"scope-12\",\"answer\":\"Y\",\"note\":\"\",\"citation\":{\"page\":1,\"quote\":\"Gypsum Board Drywall\"}}],\"exclusions\":[{\"text\":\"Bonds\",\"citation\":{\"page\":2,\"quote\":\"Bond is not included\"}}],\"clarifications\":[],\"alternates\":[],\"submitter\":{\"name\":\"Jane Doe\",\"email\":\"jane@example.com\"}}",

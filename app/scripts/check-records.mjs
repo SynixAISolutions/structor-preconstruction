@@ -11,7 +11,7 @@ const form = (fields) => {
   for (const [k, v] of Object.entries(fields)) for (const item of [].concat(v)) f.append(k, item);
   return f;
 };
-const valid = { name: "Jelleff Recreation Center", location: "Washington, DC", type: "Community & recreation", value: "$18,400,000", workType: "renovation", squareFeet: "42,500", taxStatus: "non-taxable" };
+const valid = { name: "Jelleff Recreation Center", location: "Washington, DC", type: "Community & recreation", value: "$18,400,000", workType: "renovation", squareFeet: "42,500", taxStatus: "non-taxable", estimateStage: "concept" };
 
 // Samples satisfy the record invariants.
 for (const p of sampleProjectRecords) {
@@ -58,7 +58,7 @@ assert.deepEqual(Object.keys(parseProjectForm(form({ ...valid, workType: "both" 
 // Required fields, each with its own message, and no project returned.
 const empty = parseProjectForm(form({}));
 assert.equal(empty.project, undefined);
-assert.deepEqual(Object.keys(empty.errors).sort(), ["location", "name", "squareFeet", "taxStatus", "type", "workType"]);
+assert.deepEqual(Object.keys(empty.errors).sort(), ["estimateStage", "location", "name", "squareFeet", "taxStatus", "type", "workType"]);
 assert.equal(parseProjectForm(form({ ...valid, value: "" })).project.value, 0, "Blank value is allowed");
 assert(parseProjectForm(form({ ...valid, value: "lots" })).errors.value);
 assert(parseProjectForm(form({ ...valid, squareFeet: "0" })).errors.squareFeet);
@@ -87,6 +87,7 @@ assert.equal(draftStorageKey(SAMPLE_PROJECT_ID, "budget"), "structor-ui-budget",
 assert.equal(draftStorageKey("p2", "budget"), "structor-ui-p2:budget");
 assert.equal(draftStorageKey("p2", "directory"), "structor-ui-directory", "The subcontractor directory is organization-wide");
 assert.equal(draftStorageKey("p2", "portal-profile"), "structor-ui-portal-profile");
+assert.equal(draftStorageKey("p2", "budget-history"), draftStorageKey("p3", "budget-history"), "Comparable budgets are shared while project cost plans remain isolated");
 assert.equal(startingDraft(SAMPLE_PROJECT_ID, "schedule", initialMilestones), initialMilestones, "The sample project starts from the sample data");
 assert.deepEqual(startingDraft("p2", "schedule", initialMilestones), [], "A new project must not start with Jelleff's schedule");
 assert.deepEqual([startingDraft("p2", "contract-price", 498000), startingDraft("p2", "contract-bidder", "Capital Demolition"), startingDraft("p2", "contract-created", true)], [0, "", false]);
@@ -111,3 +112,7 @@ for (const bad of ["", "9 65 19", "15 10 00", "Division 09"]) assert.equal(csiDi
 assert.equal(Object.keys(CSI_DIVISIONS).length, 35, "MasterFormat has 35 divisions in use");
 
 console.log(`Records checked: ${sampleProjectRecords.length} sample projects, form validation, area split, legacy upgrade, blank dates, project scope; ${initialDrawings.length} drawings, ${initialSpecSections.length} spec sections.`);
+
+assert.equal(legacy.estimateStage, null, "Old records keep their unknown estimate stage; status is not the stage");
+assert.equal(single.project.estimateStage, "concept");
+assert(parseProjectForm(form({ ...valid, estimateStage: "Bidding" })).errors.estimateStage);

@@ -218,6 +218,7 @@ export const pageGuides = [
       "Use the package's Messages tab for conversations with the invited companies about that trade. Threads and drafts stay with the package; nothing is emailed.",
       "Choose Review bid form to approve and publish the package in Scopes & bid forms.",
       "Choose Review proposals, select the invited company that sent the proposal and choose its PDF (up to 50 MB). The package needs a published form and an eligible invitation. Confirm or discard a pending reading before reading another for that company. Choose Read proposal for review. Review proposal shows the reading beside its source: base bid, the Y / N / P / N/A answer for every bid-form item, exclusions, clarifications, alternates, and the proposal's contact, each with the page and words it came from. Not stated means the proposal doesn't say.",
+      "Long bid forms read in batches of 20 items, with progress and Stop reading. Every batch must finish before a reading is saved; a failed or canceled batch never applies a partial proposal. Conflicting base prices require a retry and source review.",
       "Correct whatever was misread and choose Save corrections; the original AI reading stays visible. Confirm and submit revision makes it the company's next bid revision, ready in Bid leveling, with the company marked Submitted. Discard reading needs a reason.",
     ],
     terms: [
@@ -312,6 +313,7 @@ export const pageGuides = [
     title: "Budget summary",
     purpose: "Keep the project's cost plan: direct construction lines by trade and CSI code, indirect costs such as insurance, contingency and fee, and each line's forecast. A trade's forecast can come from MCN's own estimate or from a leveled bid, and Trade variance compares the two.",
     steps: [
+      "Open Historical concept budget to upload MCN Estimate Summary workbooks or flat budget CSVs. Record each historical project's gross building area, year, stage, location and profile; choose comparable projects, then review the area-weighted cost build and explicit location, cost and profile factors. Modified factors need a source explanation. Create project budget from this concept fills an empty cost plan with draft lines; export a preview when a budget already exists. No RSMeans feed or automatic tax/labor premium is assumed.",
       "Read the cards: Total budget (direct and indirect), Current forecast (lines without a forecast count at their budget), Forecast variance, and Committed.",
       "In Budget lines, choose All costs, Direct costs, or Indirect costs, and a cost center (Renovation (pool), New construction, Sitework, Project-wide). Cost centers and Direct cost by CSI division summarize the same lines.",
       "Choose Add line, or a line's pencil, to set its cost center, cost class, CSI division or section, description, owner, budget, forecast, and committed value. Carried by owner keeps a line visible but out of the contractor's totals. Changing the budget or what the line is sends an approved line back to review; Approve line confirms it.",

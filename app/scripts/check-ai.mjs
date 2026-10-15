@@ -190,6 +190,26 @@ try {
   const proposal = await C.readProposal({ invitationId: "inv-2", form, proposal: { name: "DC proposal.pdf", size: 5000, pageCount: 3, pages: [...proposalPages, { page: 3, text: " " }], emptyPages: 1 } });
   assert.deepEqual([proposal.input.invitationId, proposal.input.formVersion, proposal.input.document, proposal.input.engine.mode, proposal.input.baseBid], ["inv-2", 1, { name: "DC proposal.pdf", pages: 3, size: 5000 }, "live", 1742000]);
   await assert.rejects(C.readProposal({ invitationId: "inv-2", form, proposal: { name: "scan.pdf", size: 1, pageCount: 1, pages: [{ page: 1, text: "" }], emptyPages: 1 } }), /no text layer/);
+  const longForm = { ...form, items: Array.from({ length: 45 }, (_, i) => ({ ...form.items[0], id: `long-${i}`, title: `Scope ${i}` })) };
+  const batchSizes = [];
+  globalThis.fetch = async (_url, init) => {
+    const input = JSON.parse(init.body).input;
+    batchSizes.push(input.form.items.length);
+    return Response.json({ model: "test", dropped: [], reading: { ...read.reading, responses: input.form.items.map(item => ({ scopeItemId: item.id, answer: null, note: "", citations: [] })) } });
+  };
+  const longArgs = { invitationId: "inv-2", form: longForm, proposal: { name: "proposal.pdf", size: 1000, pageCount: 2, pages: proposalPages, emptyPages: 0 } };
+  const batched = await C.readProposal(longArgs);
+  assert.deepEqual(batchSizes, [20, 20, 5]);
+  assert.deepEqual(batched.input.responses.map(response => response.scopeItemId), longForm.items.map(item => item.id));
+  assert.equal(batched.input.exclusions.length, read.reading.exclusions.length, "Repeated proposal terms are not duplicated across batches");
+  assert.throws(() => J.mergeProposalReadings([{ reading: read.reading, dropped: [] }, { reading: { ...read.reading, baseBid: 2 }, dropped: [] }]), /disagree/);
+  let attempted = 0;
+  globalThis.fetch = async () => { attempted++; return Response.json({ error: "Service timeout" }, { status: 502 }); };
+  await assert.rejects(C.readProposal(longArgs), /Service timeout/);
+  assert.equal(attempted, 1, "A failed batch never becomes a partial reading or sends later requests");
+  const stopped = new AbortController(); stopped.abort();
+  await assert.rejects(C.readProposal({ ...longArgs, signal: stopped.signal }), error => error.name === "AbortError");
+  assert.equal(attempted, 1, "Cancellation sends no request");
 } finally {
   globalThis.fetch = realFetch;
 }

@@ -79,7 +79,7 @@ export type BudgetAllowance = {
 /** A cost center (Marcel's ECC columns) and its area, for cost per square foot. */
 export type CostCenter = { name: string; squareFeet: number | null };
 
-export type BudgetState = { lines: BudgetLine[]; allowances: BudgetAllowance[]; costCenters: CostCenter[] };
+export type BudgetState = { lines: BudgetLine[]; allowances: BudgetAllowance[]; costCenters: CostCenter[]; conceptSource?: import("./historical-budget").ConceptBudget & { appliedBy: string; appliedAt: string } };
 
 export type BudgetLineInput = {
   costCenter: string; classification: BudgetClass; csiCode?: string | null; description: string; owner?: string;

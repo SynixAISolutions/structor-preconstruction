@@ -62,8 +62,13 @@ if (args.reading && args.reading !== "true") {
   const started = Date.now();
   const model = D.textModel();
   // Same prompt, screening and token budget as the app's /api/ai proposal job; a longer wait, as nobody is watching a spinner.
-  const output = await D.deepseekJson(apiKey, J.proposalMessages(job), { model, maxTokens: 8000, budgetMs: 180_000 });
-  const { reading, dropped } = J.screenProposal(output, job);
+  const parts = [], jobs = J.proposalBatches(job);
+  for (const [i, batch] of jobs.entries()) {
+    const output = await D.deepseekJson(apiKey, J.proposalMessages(batch), { model, maxTokens: 8000, budgetMs: 55_000 });
+    parts.push(J.screenProposal(output, batch));
+    console.log(`  ${i + 1}/${jobs.length} proposal batches`);
+  }
+  const { reading, dropped } = J.mergeProposalReadings(parts);
   run = { model, proposal: basename(file), pages: pages.length, seconds: Math.round((Date.now() - started) / 1000), reading, dropped };
   const runFile = join(out, `proposal-run-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
   writeFileSync(runFile, JSON.stringify(run, null, 1));

@@ -103,6 +103,7 @@ export function missingProjectFacts(project: Project | null): string[] {
   if (!(project.squareFeet > 0)) missing.push("square footage");
   if (!project.workType) missing.push("work type");
   if (!project.taxStatus) missing.push("tax status");
+  if (!project.estimateStage) missing.push("estimate stage");
   if (!project.due) missing.push("bid due date");
   return missing;
 }

@@ -87,6 +87,7 @@ const workspaceGuides: ManualGuide[] = [
     id: "information", group: "Preconstruction", title: "Project information",
     purpose: "The project’s cover sheet: what is being built, where it is, the design contact, key dates, and internal planning value. Use it to get oriented before reviewing any trade.",
     steps: [
+      "Choose the estimate stage when creating or editing a project: Concept, Schematic design, or Design development. This records drawing/estimate maturity separately from the project status. Old records stay Not recorded until updated.",
       "Read the project brief, architect, project size, and dates. Bid deadline is when prices are due; Pre-bid RFI deadline is when clarification questions should be submitted.",
       "Choose Edit information. Update the name, location, architect, size, dates, internal project value, and brief; choose Save project.",
       "Use Budget breakdown to inspect the separate budget preview. It is not calculated from the internal value field.",
@@ -267,7 +268,7 @@ export const glossary = [
   { name: "Bidder", meaning: "A company submitting an offer to carry out part of the construction work." },
   { name: "BIM", meaning: "Building Information Modeling: coordinated model geometry and information. This prepared 3D preview is not a complete BIM model." },
   { name: "Bond", meaning: "Financial security for performance or payment; its premium is a cost that may need to be included in a bid." },
-  { name: "Citation", meaning: "The document, page, and exact words an AI finding or proposal reading relies on. Structor drops any finding whose quote is not actually on the page it names." },
+  { name: "Citation", meaning: "The document, page, and words an AI finding or proposal reading relies on. Text readings drop quotes that do not match their page. Image-only drawing citations require a visual source check; a matching quote alone does not prove the scope, geometry or quantity is correct." },
   { name: "Cost center", meaning: "A budget grouping such as modernization, addition, or site work." },
   { name: "Cost plug / adjustment", meaning: "A reviewed amount added or deducted to account for a scope difference. It needs a reason and a reliable cost basis." },
   { name: "CSI division", meaning: "A standard work category, for example 03 Concrete, 05 Metals, or 26 Electrical." },

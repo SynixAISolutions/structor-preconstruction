@@ -10,7 +10,7 @@
 //   const result = await readProposal({ invitationId, form, proposal });
 //   run(s => recordReading(s, procurement, result.input));                 // useProposals()
 
-import { LIMITS, type Dropped } from "./ai-jobs";
+import { LIMITS, parseProposalJob, proposalBatches, mergeProposalReadings, type ProposalReadingOutput, type Dropped } from "./ai-jobs";
 import type { DraftInput, RunInput } from "./extraction";
 import type { ManualSection, PageText } from "./manual-sections";
 import type { PdfText } from "./pdf-text";
@@ -104,18 +104,27 @@ export async function extractDrawingScope(args: { pkg: Pick<TradePackage, "id" |
 }
 
 /** Reads a proposal PDF's text against the published bid form and returns the reading to record. */
-export async function readProposal(args: { invitationId: string; form: PublishedForm; proposal: PdfText }): Promise<ProposalReadResult> {
+export async function readProposal(args: { invitationId: string; form: PublishedForm; proposal: PdfText; signal?: AbortSignal; onProgress?: (done: number, total: number) => void }): Promise<ProposalReadResult> {
   const pages = args.proposal.pages.filter(p => p.text.trim());
   if (!pages.length) throw new Error(`${args.proposal.name} has no text layer to read (a scanned proposal needs OCR first).`);
   if (pages.length > LIMITS.proposalPages) throw new Error(`${args.proposal.name} has ${pages.length} pages with text; the AI reads proposals of up to ${LIMITS.proposalPages}.`);
-  const result = await post<{ reading: Omit<ReadingInput, "invitationId" | "formVersion" | "document" | "engine" | "readAt">; dropped: Dropped[] }>("proposal", {
+  const jobs = proposalBatches(parseProposalJob({
     form: { items: args.form.items.map(({ id, title, detail }) => ({ id, title, detail })) }, document: args.proposal.name, pages,
-  });
+  }));
+  const parts: { reading: ProposalReadingOutput; dropped: Dropped[] }[] = [];
+  let model = "";
+  for (const [i, job] of jobs.entries()) {
+    args.signal?.throwIfAborted();
+    const part = await post<{ reading: ProposalReadingOutput; dropped: Dropped[] }>("proposal", job, args.signal);
+    args.signal?.throwIfAborted();
+    parts.push(part); model = part.model; args.onProgress?.(i + 1, jobs.length);
+  }
+  const result = mergeProposalReadings(parts);
   return {
     input: {
       ...result.reading, invitationId: args.invitationId, formVersion: args.form.version,
       document: { name: args.proposal.name, pages: args.proposal.pageCount, size: args.proposal.size },
-      engine: { mode: "live", model: result.model }, readAt: new Date().toISOString(),
+      engine: { mode: "live", model }, readAt: new Date().toISOString(),
     },
     dropped: result.dropped,
   };

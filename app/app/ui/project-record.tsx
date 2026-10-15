@@ -3,7 +3,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { ArrowRight, ArrowUpRight, Box, FileStack, FileText, HardHat, MapPin, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import {
-  CERTIFICATION_PROGRAMS, PROJECT_FORM_FIELDS, PROJECT_TYPES, TAX_STATUSES, WORK_TYPES,
+  CERTIFICATION_PROGRAMS, ESTIMATE_STAGES, estimateStageLabel, PROJECT_FORM_FIELDS, PROJECT_TYPES, TAX_STATUSES, WORK_TYPES,
   parseProjectForm, squareFeetLabel, type Project, type ProjectFormErrors, type WorkType,
 } from "../../lib/projects";
 import { displayDate } from "../../lib/format";
@@ -39,6 +39,7 @@ export function ProjectForm({ project, onSave, onCancel }: { project?: Project; 
         <label className="ui-field full">Project name<input name={f.name} defaultValue={project?.name} aria-invalid={!!errors.name} placeholder="e.g. Westside Community Center"/><FieldError errors={errors} field="name"/></label>
         <label className="ui-field">Location<input name={f.location} defaultValue={project?.location} aria-invalid={!!errors.location} placeholder="City, state"/><FieldError errors={errors} field="location"/></label>
         <label className="ui-field">Project type<select name={f.type} defaultValue={project?.type ?? ""} aria-invalid={!!errors.type}><option value="">Select a project type</option>{PROJECT_TYPES.map(type => <option key={type}>{type}</option>)}</select><FieldError errors={errors} field="type"/></label>
+        <label className="ui-field">Estimate stage<select name={f.estimateStage} defaultValue={project?.estimateStage ?? ""} aria-invalid={!!errors.estimateStage}><option value="">Select estimate stage</option>{ESTIMATE_STAGES.map(stage => <option key={stage.value} value={stage.value}>{stage.label}</option>)}</select><FieldError errors={errors} field="estimateStage"/></label>
         <label className="ui-field">Architect<input name={f.architect} defaultValue={project?.architect} placeholder="Architect or design team"/></label>
         <label className="ui-field">Internal project value<input name={f.value} type="number" min="0" step="1" defaultValue={project?.value || ""} aria-invalid={!!errors.value} placeholder="USD"/><FieldError errors={errors} field="value"/></label>
         <label className="ui-field full">Project brief<textarea name={f.description} rows={3} defaultValue={project?.description} placeholder="What are we building?"/></label>
@@ -92,7 +93,7 @@ export function ProjectInformation({ project, onSave, navigate, cover }: { proje
   const workType = WORK_TYPES.find(option => option.value === project.workType)?.label ?? "Not recorded";
   const taxStatus = TAX_STATUSES.find(option => option.value === project.taxStatus)?.label ?? "Not recorded";
   const details = [
-    ["Project type", project.type || "Not recorded"], ["Work type", workType], ["Total area", squareFeetLabel(project.squareFeet)],
+    ["Project type", project.type || "Not recorded"], ["Estimate stage", estimateStageLabel(project.estimateStage)], ["Work type", workType], ["Total area", squareFeetLabel(project.squareFeet)],
     ...(project.workType === "both" ? [["Renovation area", squareFeetLabel(project.renovationSquareFeet)], ["Addition area", squareFeetLabel(project.additionSquareFeet)]] : []),
     ["Architect", project.architect || "Not recorded"], ["Tax status", taxStatus], ["Bid deadline", displayDate(project.due)], ["Pre-bid RFI deadline", displayDate(project.rfi)],
     ["Construction start", displayDate(project.start)], ["Expected completion", displayDate(project.finish)], ["Certifications", project.certifications.join(", ") || "Not recorded"], ["RFP document", project.rfpFileName || "Not recorded"],

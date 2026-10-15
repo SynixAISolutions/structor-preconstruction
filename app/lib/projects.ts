@@ -8,6 +8,9 @@
 
 export type WorkType = "new" | "renovation" | "addition" | "both";
 export type TaxStatus = "taxable" | "non-taxable";
+export const ESTIMATE_STAGES = [{ value: "concept", label: "Concept" }, { value: "schematic", label: "Schematic design" }, { value: "dd", label: "Design development" }] as const;
+export type EstimateStage = typeof ESTIMATE_STAGES[number]["value"];
+export const estimateStageLabel = (stage: EstimateStage | null) => ESTIMATE_STAGES.find(item => item.value === stage)?.label ?? "Not recorded";
 export type TeamMember = { name: string; role: string };
 
 /** A project record. Every stored or created project has this shape. */
@@ -21,6 +24,7 @@ export type Project = {
   renovationSquareFeet: number;
   additionSquareFeet: number;
   taxStatus: TaxStatus | null;
+  estimateStage: EstimateStage | null;
   /** Local participation / certification programs, e.g. "CBE", "MBE", "First Source". */
   certifications: string[];
   team: TeamMember[];
@@ -50,7 +54,7 @@ export const CERTIFICATION_PROGRAMS = ["CBE", "MBE", "WBE", "SBE", "First Source
 export const PROJECT_FORM_FIELDS = {
   name: "name", location: "location", type: "type", value: "value", description: "description",
   squareFeet: "squareFeet", workType: "workType", renovationSquareFeet: "renovationSquareFeet", additionSquareFeet: "additionSquareFeet",
-  taxStatus: "taxStatus", certifications: "certifications", rfp: "rfp", architect: "architect",
+  taxStatus: "taxStatus", estimateStage: "estimateStage", certifications: "certifications", rfp: "rfp", architect: "architect",
   due: "due", rfi: "rfi", start: "start", finish: "finish", teamName: "teamName", teamRole: "teamRole",
 } as const;
 
@@ -59,8 +63,8 @@ export type ProjectFormErrors = Partial<Record<ProjectFormField, string>>;
 
 export const squareFeetLabel = (squareFeet: number): string => squareFeet > 0 ? `${squareFeet.toLocaleString("en-US")} SF` : "Not recorded";
 
-const sample = (p: Omit<Project, "renovationSquareFeet" | "additionSquareFeet" | "workType" | "taxStatus" | "certifications" | "team" | "rfpFileName" | "createdAt">, extra: Partial<Project> = {}): Project =>
-  ({ ...p, workType: null, renovationSquareFeet: 0, additionSquareFeet: 0, taxStatus: null, certifications: [], team: [], rfpFileName: "", createdAt: "2026-09-01", ...extra });
+const sample = (p: Omit<Project, "renovationSquareFeet" | "additionSquareFeet" | "workType" | "taxStatus" | "estimateStage" | "certifications" | "team" | "rfpFileName" | "createdAt">, extra: Partial<Project> = {}): Project =>
+  ({ ...p, workType: null, renovationSquareFeet: 0, additionSquareFeet: 0, taxStatus: null, estimateStage: null, certifications: [], team: [], rfpFileName: "", createdAt: "2026-09-01", ...extra });
 
 export const sampleProjectRecords: Project[] = [
   // Jelleff facts from Marcel's shared drive: the DD Budget (26,500 SF gross, DLR Group, DD total
@@ -91,6 +95,7 @@ export function normalizeProject(raw: Record<string, unknown>): Project {
     due: text(raw.due), rfi: text(raw.rfi), start: text(raw.start), finish: text(raw.finish),
     ...split, workType,
     taxStatus: isTaxStatus(raw.taxStatus) ? raw.taxStatus : null,
+    estimateStage: ESTIMATE_STAGES.some(stage => stage.value === raw.estimateStage) ? raw.estimateStage as EstimateStage : null,
     certifications: Array.isArray(raw.certifications) ? raw.certifications.filter((c): c is string => typeof c === "string" && !!c.trim()) : [],
     team: Array.isArray(raw.team) ? raw.team.filter((m): m is TeamMember => !!m && typeof m.name === "string" && typeof m.role === "string") : [],
     rfpFileName: text(raw.rfpFileName), createdAt: text(raw.createdAt),
@@ -170,6 +175,9 @@ export function parseProjectForm(form: FormData, existing?: Project): { project?
   const taxRaw = get(f.taxStatus);
   const taxStatus = isTaxStatus(taxRaw) ? taxRaw : null;
   if (!taxStatus) errors.taxStatus = "Choose taxable or non-taxable.";
+  const stageRaw = get(f.estimateStage);
+  const estimateStage = ESTIMATE_STAGES.some(stage => stage.value === stageRaw) ? stageRaw as EstimateStage : null;
+  if (!estimateStage) errors.estimateStage = "Choose the estimate stage.";
 
   const dates = { due: get(f.due), rfi: get(f.rfi), start: get(f.start), finish: get(f.finish) };
   for (const key of ["due", "rfi", "start", "finish"] as const) {
@@ -194,7 +202,7 @@ export function parseProjectForm(form: FormData, existing?: Project): { project?
       status: existing?.status ?? "Preconstruction",
       createdAt: existing?.createdAt ?? new Date().toISOString().slice(0, 10),
       name, location, type, value, description: get(f.description), architect: get(f.architect),
-      ...dates, ...split, workType, taxStatus, certifications, team, rfpFileName,
+      ...dates, ...split, workType, taxStatus, estimateStage, certifications, team, rfpFileName,
     },
   };
 }

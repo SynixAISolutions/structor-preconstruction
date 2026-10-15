@@ -17,8 +17,10 @@ export function ProposalReader({ pkg, invitations, proposals, companies, onRead 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [dropped, setDropped] = useState<ProposalReadResult["dropped"]>([]);
+  const [progress, setProgress] = useState("");
+  const controller = useRef<AbortController | null>(null);
   const request = useRef(0), running = useRef(false);
-  useEffect(() => () => { request.current++; }, []);
+  useEffect(() => () => { request.current++; controller.current?.abort(); }, []);
   const available = invitations.filter(i => i.packageId === pkg.id && i.status !== "declined");
   const invitation = available.find(i => i.id === invitationId);
   const pending = proposals.readings.some(r => r.invitationId === invitationId && r.status === "pending-review");
@@ -27,14 +29,15 @@ export function ProposalReader({ pkg, invitations, proposals, companies, onRead 
     running.current = true;
     const projectId = getActiveProjectId();
     const current = ++request.current;
-    setBusy(true); setError(""); setDropped([]);
+    controller.current = new AbortController();
+    setBusy(true); setError(""); setDropped([]); setProgress("");
     try {
-      const result = await readProposal({ invitationId: invitation.id, form: pkg.published, proposal: pdf.text });
+      const result = await readProposal({ invitationId: invitation.id, form: pkg.published, proposal: pdf.text, signal: controller.current.signal, onProgress: (done, total) => { if (current === request.current) setProgress(`${done} of ${total} bid-form batches read`); } });
       if (current !== request.current || projectId !== getActiveProjectId()) return;
       const message = onRead(result, pdf.file);
       if (message) throw new Error(message);
       setDropped(result.dropped);
-    } catch (failure) { if (current === request.current) setError(failure instanceof Error ? failure.message : "The proposal reading failed. Try again."); }
+    } catch (failure) { if (current === request.current) setError(failure instanceof Error && failure.name === "AbortError" ? "Proposal reading canceled. Nothing was applied." : failure instanceof Error ? failure.message : "The proposal reading failed. Try again."); }
     finally { if (current === request.current) { running.current = false; setBusy(false); } }
   }
   return <div className="ai-reader">
@@ -46,7 +49,7 @@ export function ProposalReader({ pkg, invitations, proposals, companies, onRead 
       <p className="ai-privacy">The PDF stays in this browser. Running AI sends its readable text and the published bid-form items to DeepSeek. The reading and citations are saved here; choose the PDF again after a reload.</p>
       <Button variant="primary" disabled={busy || !pdf || !invitation || pending} onClick={read}>{busy ? "Reading proposal…" : "Read proposal for review"}</Button>
     </>}
-    {busy && <p role="status">Reading the proposal against bid form v{pkg.published?.version}…</p>}
+    {busy && <p role="status">Reading the proposal against bid form v{pkg.published?.version}… {progress} <Button onClick={() => controller.current?.abort()}>Stop reading</Button></p>}
     {error && <p role="alert" className="proc-source-error">{error}</p>}
     {dropped.length > 0 && <details className="ai-run-result"><summary>Screening notes ({dropped.length}) · check omitted values</summary><ul>{dropped.map((drop, i) => <li key={i}>{drop.what}: {drop.reason}</li>)}</ul></details>}
   </div>;

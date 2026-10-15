@@ -12,6 +12,18 @@ The product name was not finalized. "Structure" was suggested during the meeting
 
 ## Working prototype
 
+### Current V2 review — October 2026
+
+The app now supports specification and drawing PDF readings through DeepSeek, cited draft review, proposal readings into reviewed bid revisions, trade estimates, MCN-versus-bid variance, and a connected illustrative drywall award/submittal workflow. Drawing images and source-page popups render locally. Long proposal forms read in batches, with cancellation and no partial proposal application.
+
+Project information records Concept, Schematic design or Design development separately from workflow status. Budget summary → Historical concept budget imports MCN Estimate Summary workbooks or flat budget CSVs into a browser-local comparable-project library. It shows area-weighted costs, explicit location/cost/profile adjustments, source coverage and exclusions, then creates draft lines only in an empty project cost plan. No RSMeans feed or automatic tax/labor premium is assumed.
+
+Set `DEEPSEEK_API_KEY` and, for a shared preview, `DEMO_PASSWORD` in the server environment; never commit secrets. Hosted previews fail closed without their demo password. New client documents, measurements, readings and historical budgets remain private runtime data. A successful request or a matching citation does not establish scope or quantity accuracy: review every result before publishing or using it commercially. Checked quantity deltas require the contractor's checked takeoff.
+
+The in-app manual describes the current screens and their browser-only limits. The original milestone below is retained as project history.
+
+### Original spreadsheet milestone
+
 The first Structor vertical slice now lives in [`app/`](app/). It uses Marcel's real Jelleff workbook structure rather than a generic mock sheet.
 
 Implemented:

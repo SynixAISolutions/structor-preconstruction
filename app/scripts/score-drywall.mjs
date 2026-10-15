@@ -44,7 +44,8 @@ async function pdfPages(file) {
   return pages;
 }
 
-const key = K.parseBidForm((await pdfPages(need("bid-form"))).map(p => p.text).join("\n"));
+const bidFormText = (await pdfPages(need("bid-form"))).map(p => p.text).join("\n");
+const key = K.parseBidForm(bidFormText);
 console.log(`Bid form: ${key.trade} · ${key.sections.length} sections · ${K.scopeLines(key).length} scope lines · ${K.exclusionLines(key).length} exclusions`);
 
 let findings, readSections, runInfo = {};
@@ -59,9 +60,10 @@ if (args.findings && args.findings !== "true") {
   if (!apiKey) { console.error("DEEPSEEK_API_KEY is not set (use --env-file)."); process.exit(2); }
   const manualFile = need("manual");
   const manual = await pdfPages(manualFile);
-  const sections = M.sectionsFromBidForm(M.manualSections(manual), (await pdfPages(args["bid-form"])).map(p => p.text).join("\n")).sections;
+  const selection = M.sectionsFromBidForm(M.manualSections(manual), bidFormText);
+  const sections = selection.sections;
   readSections = sections.map(s => s.section);
-  const missing = key.sections.filter(k => !readSections.includes(k.number)).map(k => k.number);
+  const missing = selection.missing;
   const pkg = { id: args.package ?? "drywall", name: key.trade.replace(/^\d+\s*-\s*/, "") || "Drywall", code: "09 29 00" };
   const jobs = sections.flatMap(section => chunkPages(section.pages).map(pages => ({ section, pages })));
   console.log(`Manual: ${manual.length} pages · reading ${sections.length} sections in ${jobs.length} requests · not in manual: ${missing.join(", ") || "none"}`);
@@ -74,7 +76,7 @@ if (args.findings && args.findings !== "true") {
       const { section, pages } = jobs[next++];
       const where = `${section.section} pp. ${pages[0].page}–${pages.at(-1).page}`;
       try {
-        const job = J.parseScopeJob({ pkg, document: basename(manualFile), section: { section: section.section, title: section.title }, pages, brief: key.items.map(item => item.text).join("\n").slice(0, 20_000) });
+        const job = J.parseScopeJob({ pkg, document: basename(manualFile), section: { section: section.section, title: section.title }, pages, brief: bidFormText });
         const output = await D.deepseekJson(apiKey, J.scopeMessages(job), { model, maxTokens: 6000, budgetMs: 55_000 });
         const screened = J.screenScope(output, job);
         drafts.push(...screened.drafts.map(d => ({ ...d, key: `${d.key}@${pages[0].page}` })));
@@ -86,6 +88,7 @@ if (args.findings && args.findings !== "true") {
     }
   }
   await Promise.all(Array.from({ length: Math.max(1, Number(args.concurrency ?? 3)) }, worker));
+  readSections = sections.filter(section => !failures.some(failure => failure.where.startsWith(`${section.section} pp.`))).map(section => section.section);
   runInfo = { model, requests: jobs.length, failures: failures.length, dropped: dropped.length, seconds: Math.round((Date.now() - started) / 1000), missingSections: missing };
   const runFile = join(out, `run-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
   writeFileSync(runFile, JSON.stringify({ ...runInfo, readSections, drafts, dropped, failures }, null, 1));

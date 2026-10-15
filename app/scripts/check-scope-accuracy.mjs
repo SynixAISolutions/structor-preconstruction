@@ -102,6 +102,10 @@ assert.deepEqual([A.terms("Level 5 finish"), A.terms("level 4")], [["level5", "f
 assert.deepEqual(A.terms("ﬁre-rated ﬁnish"), ["fire", "rated", "finish"], "Ligatures from PDF text are unfolded");
 assert.deepEqual(A.sectionOf("09 29 00 · §3.6"), "09 29 00");
 assert.equal(A.sectionOf("A-121 · Ceiling legend"), null);
+assert.equal(A.sectionOf("07 42 10.11 · §2.1"), "07 42 10.11");
+const decimalKey = { ...key, sections: [{ number: "07 42 10", title: "Illustrative parent section", response: "Y" }] };
+const decimalReport = A.scoreScope(decimalKey, [{ id: "child", title: "Provide support framing.", detail: "", source: "07 42 10.11" }], { readSections: ["07 42 10.11"] });
+assert.deepEqual([decimalReport.sections[0].read, decimalReport.sections[0].findings, decimalReport.otherSections.length], [true, 1, 0]);
 
 // ── Scoring ──
 const f = (id, title, detail = "", source = "09 29 00", status) => ({ id, title, detail, source, status });

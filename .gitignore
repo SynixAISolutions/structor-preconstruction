@@ -6,6 +6,8 @@ node_modules/
 .DS_Store
 Thumbs.db
 next-env.d.ts
+.ui-test-build/
+app/pnpm-workspace.yaml
 
 .vercel
 .env*
