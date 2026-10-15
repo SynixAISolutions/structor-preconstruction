@@ -33,10 +33,10 @@ assert.equal(task(empty, "setup:facts").detail, "Missing: bid due date.");
 assert.deepEqual([empty.packages.length, empty.progress], [0, { done: 1, total: 4, percent: 25 }], "Only 'allowances decided' is true on an empty project");
 assert.deepEqual(missingProjectFacts(null), ["project"]);
 
-// Jelleff as sampled: Concrete carried through to an executed subcontract; drafts in the other trades; budget partly approved.
+// Jelleff as sampled: Concrete and Drywall carried through to executed subcontracts; drafts in the other trades; budget partly approved.
 const start = derive();
-assert.equal(ids(start).filter(id => id.startsWith("scopes:approve:")).length, 10, "Every package with draft items (all but Carpentry and the finished Concrete)");
-assert.deepEqual([start.packages.find(p => p.packageId === "concrete").percent, ids(start).some(id => id.endsWith(":concrete"))], [100, false], "Concrete: every milestone done, nothing left to do");
+assert.equal(ids(start).filter(id => id.startsWith("scopes:approve:")).length, 9, "Every package with draft items (all but Carpentry and the finished Concrete and Drywall)");
+for (const trade of ["concrete", "drywall"]) assert.deepEqual([start.packages.find(p => p.packageId === trade).percent, ids(start).filter(id => id.endsWith(`:${trade}`))], [100, []], `${trade}: every milestone done, nothing left to do`);
 assert(has(start, "scopes:empty:carpentry") && !ids(start).some(id => id.startsWith("scopes:publish") || id.startsWith("outreach:")));
 assert.deepEqual(task(start, "scopes:approve:demolition").count, 2);
 assert.deepEqual([task(start, "budget:approve").count, task(start, "budget:over").count, task(start, "budget:allowances").count, has(start, "budget:forecast")], [11, 2, 2, false]);
@@ -82,8 +82,8 @@ assert.equal(task(derive({ procurement: revised, submissions: subs }), "leveling
 
 // Award → Exhibit A → subcontract: exactly one next step at each stage.
 const candidates = levelingCandidates({ packageId: "demolition", items: imported.items, bidders: imported.bidders, provenance: imported.provenance });
-let aw = A.createAward(noAwards, { projectId: "jelleff", projectName: "Jelleff", procurement: proc, submissions: subs, candidates, budget: base.budget, directory: initialBidders }, { levelingBidderId: candidates[0].levelingBidderId, basis: "reviewed" }, "Safi", at);
-const id = aw.awards[0].id;
+let aw = A.createAward(base.awards, { projectId: "jelleff", projectName: "Jelleff", procurement: proc, submissions: subs, candidates, budget: base.budget, directory: initialBidders }, { levelingBidderId: candidates[0].levelingBidderId, basis: "reviewed" }, "Safi", at);
+const id = aw.awards.at(-1).id; // after the sample's executed concrete and drywall awards
 const stageTask = (awards) => { const s = derive({ procurement: proc, submissions: subs, leveling, awards }); return s.tasks.filter(x => x.group === "award").map(x => [x.id, x.status]); };
 const expectStep = (awards, id2, status) => assert.deepEqual(stageTask(awards), [[`award:${id2}:demolition`, status]], id2);
 t = derive({ procurement: proc, submissions: subs, leveling, awards: aw });
@@ -92,7 +92,7 @@ expectStep(aw, "exhibit-draft", "todo");
 aw = A.shareExhibit(aw, id, at); expectStep(aw, "exhibit-shared", "waiting");
 aw = A.requestExhibitChanges(aw, id, { author: "Michael", text: "Slab by others." }, at); expectStep(aw, "exhibit-changes-requested", "todo");
 assert.match(derive({ procurement: proc, submissions: subs, leveling, awards: aw }).tasks.find(x => x.group === "award").detail, /1 comment unresolved/);
-aw = A.setCommentResolved(A.shareExhibit(aw, id, at), id, aw.awards[0].exhibit.comments[0].id, true, "Safi", at);
+aw = A.setCommentResolved(A.shareExhibit(aw, id, at), id, aw.awards.at(-1).exhibit.comments[0].id, true, "Safi", at);
 aw = A.agreeExhibit(aw, id, "Michael", "subcontractor", at); expectStep(aw, "exhibit-agreed", "todo");
 aw = A.generateSubcontract(aw, id, "Contractor LLC", "Safi", at); expectStep(aw, "subcontract-draft", "todo");
 aw = A.sendSubcontract(aw, id, at); expectStep(aw, "signature-pending", "waiting");

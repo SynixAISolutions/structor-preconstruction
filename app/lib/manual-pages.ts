@@ -114,7 +114,7 @@ export const pageGuides = [
       { name: "Approved as noted", meaning: "The architect accepts the submittal with comments the subcontractor must follow; no resubmission is needed." },
     ],
     example: "District Concrete submits the slab mix design. Approve it for the architect and send it; the architect asks for the fly-ash content, so return the response and District Concrete resubmits it as revision 1.",
-    reality: "The log, revisions, and notifications save in this browser for the open project. Requests, sends, responses, and reminders are recorded, not emailed, and files are listed by name only. In the Jelleff sample, the four Concrete submittals belong to District Concrete's executed award in Contracts & exhibits; the other trades wait for their awards.",
+    reality: "The log, revisions, and notifications save in this browser for the open project. Requests, sends, responses, and reminders are recorded, not emailed, and files are listed by name only. In the Jelleff sample, the Concrete submittals belong to District Concrete's executed award and the four Drywall submittals to Capitol Wall Systems', both in Contracts & exhibits; the other trades wait for their awards.",
     related: ["specifications", "contracts", "portal"],
   },
   {
@@ -389,7 +389,7 @@ export const pageGuides = [
       { name: "Award value", meaning: "The leveled amount you choose to award: the base bid, the provisional leveled total (with current adjustments), or the reviewed leveled total (every exception resolved)." },
       { name: "Executed", meaning: "Both parties have signed. The final copy is frozen; later template changes never alter it." },
     ],
-    example: "In the Jelleff sample, Concrete is awarded to District Concrete at its $1,742,000 base bid against the concrete budget line; Exhibit A revision 1 is agreed and the subcontract is executed, so its submittals run under Submittal packages.",
+    example: "In the Jelleff sample, Concrete is awarded to District Concrete at its $1,742,000 base bid against the concrete budget line, and Drywall to Capitol Wall Systems at $1,012,400 against the gypsum wallboard line, though Rock Creek Interiors bid less: its bid excludes the acoustical ceilings and stays open in Bid leveling. Both have Exhibit A agreed and the subcontract executed, so their submittals run under Submittal packages.",
     reality: "Awards, Exhibit A revisions, comments, signatures, and notifications save in this browser for the open project. Shares and signature requests are recorded, not emailed. Typed signatures are demonstration records, not legal electronic signatures, and documents download as text; no PDF or Word file is assembled.",
     related: ["leveling", "budget", "specs"],
   },

@@ -37,6 +37,14 @@ export const initialTakeoffs: TakeoffRow[] = [
   { id: "q7", division: trades[4], packageId: "thermal", item: "Single-ply membrane roofing", unit: "SF", quantity: 22500, rate: 12.5, source: "A-102", reviewed: false },
   { id: "q8", division: trades[5], packageId: "openings", item: "Hollow metal door assemblies", unit: "EA", quantity: 42, rate: 1650, source: "A-601", reviewed: false },
   { id: "q9", division: trades[6], packageId: "drywall", item: "Painted gypsum wall finish", unit: "SF", quantity: 32400, rate: 2.2, source: "A-101", reviewed: false },
+  // MCN's illustrative drywall estimate (Marcel's pilot trade): direct cost only, quantities and rates invented.
+  { id: "q10", division: trades[6], packageId: "drywall", item: "Metal stud framing, interior partitions", unit: "SF", quantity: 21400, rate: 9.5, source: "A-101 · Partition types", reviewed: true },
+  { id: "q11", division: trades[6], packageId: "drywall", item: "Gypsum board, both faces", unit: "SF", quantity: 42800, rate: 4.1, source: "A-101 · Partition types", reviewed: true },
+  { id: "q12", division: trades[6], packageId: "drywall", item: "Taping and finishing, Level 4", unit: "SF", quantity: 42800, rate: 2.4, source: "09 29 00 · §3.6", reviewed: false },
+  { id: "q13", division: trades[6], packageId: "drywall", item: "Sound attenuation blankets", unit: "SF", quantity: 18900, rate: 1.85, source: "09 29 00 · §2.5", reviewed: false },
+  { id: "q14", division: trades[6], packageId: "drywall", item: "Shaft wall at elevator and stairs", unit: "SF", quantity: 2300, rate: 16.5, source: "A-101 · Elevator / stair", reviewed: false },
+  { id: "q15", division: trades[6], packageId: "drywall", item: "Acoustical panel ceilings", unit: "SF", quantity: 14600, rate: 7.25, source: "A-121 · Ceiling legend", reviewed: true },
+  { id: "q16", division: trades[6], packageId: "drywall", item: "Gypsum board ceilings and soffits", unit: "SF", quantity: 6200, rate: 14, source: "A-121 · Ceiling legend", reviewed: false },
 ];
 
 export type SpecItem = { id: string; section: string; title: string; product: string; manufacturer: string; submittal: string; source: string; reviewed: boolean };
@@ -56,6 +64,7 @@ export const initialDrawings: Drawing[] = [
   { id: "AD-101", title: "First floor demolition plan", discipline: "Architectural", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current" },
   { id: "A-101", title: "First floor plan", discipline: "Architectural", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current" },
   { id: "A-102", title: "Roof plan", discipline: "Architectural", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current" },
+  { id: "A-121", title: "First floor reflected ceiling plan", discipline: "Architectural", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current" },
   { id: "A-501", title: "Wall sections & details", discipline: "Architectural", date: "2026-08-21", received: "2026-08-22", revision: "01", status: "Current" },
   { id: "A-601", title: "Door & frame schedules", discipline: "Architectural", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current" },
   { id: "S-101", title: "Foundation & framing plan", discipline: "Structural", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current" },

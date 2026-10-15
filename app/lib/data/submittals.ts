@@ -1,7 +1,8 @@
 // Sample submittal log for the Jelleff project, built by running the real actions (so it follows
 // every rule) and then given fixed ids. The spec-matrix requirements come from initialSpecs; the
-// four concrete submittals belong to the sample's one awarded trade (lib/data/sample-award.ts:
-// District Concrete, subcontract executed 2026-09-25). Every other trade waits for its award.
+// concrete submittals belong to District Concrete (subcontract executed 2026-09-25) and the drywall
+// ones to Capitol Wall Systems (executed 2026-10-12), both in lib/data/sample-award.ts. Every other
+// trade waits for its award.
 
 import { sampleProcurement } from "./procurement";
 import { initialSpecs } from "./preconstruction";
@@ -50,6 +51,17 @@ s = sendToArchitect(s, id("03 30 00-03"), { due: "2026-10-13" }, "Vijay", at("20
 
 // Test reports: late, and reminded.
 s = sendReminder(s, id("03 30 00-02"), "Vijay", at("2026-10-01", "16:00"));
+
+// Drywall: two more requirements beside the spec matrix's gypsum board ones, assigned from the award.
+s = addRequirement(s, procurement, { specSection: "09 22 16", title: "Shop drawings", packageId: "drywall", description: "Non-structural metal framing: partition layout, heights and deflection track" }, "Safi", at("2026-10-12", "17:00"));
+s = addRequirement(s, procurement, { specSection: "09 51 13", title: "Samples", packageId: "drywall", description: "Acoustical panel ceilings: panel and grid finish" }, "Safi", at("2026-10-12", "17:00"));
+s = assignFromAward(s, sampleAwards.awards.find(a => a.packageId === "drywall")!, "Safi", at("2026-10-12", "17:05"));
+s = requestSubmittal(s, id("09 29 00-01"), "2026-10-19", "Safi", at("2026-10-13"));
+s = requestSubmittal(s, id("09 29 00-02"), "2026-10-19", "Safi", at("2026-10-13", "14:01"));
+s = requestSubmittal(s, id("09 22 16-01"), "2026-10-21", "Safi", at("2026-10-13", "14:02"));
+s = requestSubmittal(s, id("09 51 13-01"), "2026-10-23", "Safi", at("2026-10-13", "14:03"));
+// Gypsum board product data: in, waiting for the contractor's review.
+s = submitRevision(s, id("09 29 00-01"), { files: [pdf("Type X gypsum board data.pdf", 0.9 * MB)], note: "5/8-inch Type X, UL design references attached." }, "Avery Morgan", at("2026-10-14", "10:00"));
 
 /** Fixed ids so the server and browser render the same sample. */
 function stable(state: SubmittalState): SubmittalState {

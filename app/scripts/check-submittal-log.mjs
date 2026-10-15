@@ -21,24 +21,27 @@ const pdf = (name, size = 1000) => ({ name, size, type: "application/pdf" });
 const architect = { name: "Project architect", company: "DLR Group", email: "architect@example.com" };
 const b2 = { bidderId: "b2", company: "District Concrete", contact: "Sarah Chen", email: "sarah@example.com", awardId: null };
 
-// ── Sample: 14 spec-matrix requirements + 2 more for concrete, the one awarded trade ──
+// ── Sample: 14 spec-matrix requirements + 2 more each for concrete and drywall, the awarded trades ──
 assert.deepEqual([...base.submittals].sort((x, y) => x.number.localeCompare(y.number)).map(s => [s.number, s.status]), [
   ["03 30 00-01", "contractor-review"], ["03 30 00-02", "requested"], ["03 30 00-03", "with-architect"], ["03 30 00-04", "closed"],
   ["04 22 00-01", "draft"], ["04 22 00-02", "draft"], ["07 54 23-01", "draft"], ["07 54 23-02", "draft"],
-  ["08 11 13-01", "draft"], ["08 11 13-02", "draft"], ["09 29 00-01", "draft"], ["09 29 00-02", "draft"],
-  ["09 65 19-01", "draft"], ["09 65 19-02", "draft"], ["23 73 13-01", "draft"], ["23 73 13-02", "draft"],
+  ["08 11 13-01", "draft"], ["08 11 13-02", "draft"], ["09 22 16-01", "requested"], ["09 29 00-01", "contractor-review"], ["09 29 00-02", "requested"],
+  ["09 51 13-01", "requested"], ["09 65 19-01", "draft"], ["09 65 19-02", "draft"], ["23 73 13-01", "draft"], ["23 73 13-02", "draft"],
 ]);
-// Coherent with the award records: every assigned submittal belongs to the executed Concrete award, and was requested after it.
-const concreteAward = sampleAwards.awards[0];
-assert.deepEqual([concreteAward.packageId, concreteAward.bidderId, awardStage(concreteAward)], ["concrete", "b2", "executed"]);
+// Coherent with the award records: every assigned submittal belongs to its trade's executed award, and was requested after it.
+const awardOf = (packageId) => sampleAwards.awards.find(a => a.packageId === packageId);
+assert.deepEqual(["concrete", "drywall"].map(id => [awardOf(id).bidderId, awardStage(awardOf(id))]), [["b2", "executed"], ["b7", "executed"]]);
 const assigned = base.submittals.filter(x => x.subcontractor);
-assert.deepEqual(assigned.map(x => x.number), ["03 30 00-01", "03 30 00-02", "03 30 00-03", "03 30 00-04"]);
-assert(assigned.every(x => x.subcontractor.awardId === concreteAward.id && x.subcontractor.bidderId === concreteAward.bidderId && x.subcontractor.company === concreteAward.snapshot.company.name));
-assert(assigned.every(x => x.history.filter(e => e.kind !== "created").every(e => e.at > concreteAward.subcontract.executedAt)), "Nothing happens before the subcontract is executed");
+assert.deepEqual(assigned.map(x => x.number), ["03 30 00-01", "03 30 00-02", "09 29 00-01", "09 29 00-02", "03 30 00-03", "03 30 00-04", "09 22 16-01", "09 51 13-01"]);
+for (const x of assigned) {
+  const award = awardOf(x.packageId);
+  assert(x.subcontractor.awardId === award.id && x.subcontractor.bidderId === award.bidderId && x.subcontractor.company === award.snapshot.company.name, `${x.number}: assigned from its trade's award`);
+  assert(x.history.filter(e => e.kind !== "created").every(e => e.at > award.subcontract.executedAt), `${x.number}: nothing happens before the subcontract is executed`);
+}
 assert(base.submittals.every(s => /^sub-\d{6}-\d\d$/.test(s.id)) && base.notifications.every((n, i) => n.id === `sn-${i + 1}`), "Fixed sample ids");
-assert.equal(new Set(base.submittals.flatMap(s => s.revisions.flatMap(r => r.files.map(f => f.id)))).size, 4, "Fixed, unique file ids");
+assert.equal(new Set(base.submittals.flatMap(s => s.revisions.flatMap(r => r.files.map(f => f.id)))).size, 5, "Fixed, unique file ids");
 assert.deepEqual(by(base, "03 30 00-01").revisions.map(r => [r.number, r.response?.action ?? null, !!r.returned]), [[0, "revise-and-resubmit", true], [1, null, false]], "The mix design went round once");
-assert.deepEqual([base.architect, base.sequences.length], [architect, 7]);
+assert.deepEqual([base.architect, base.sequences.length], [architect, 9]);
 assert.deepEqual(startingDraft("p2", "submittal-log", sampleSubmittals), S.EMPTY_SUBMITTALS, "A new project starts with an empty log and no architect");
 
 // ── Log, holder, next action, due state ──
@@ -54,10 +57,10 @@ assert.deepEqual([row("03 30 00-03").party, row("03 30 00-03").due, row("03 30 0
 assert.deepEqual([row("03 30 00-04").party, row("03 30 00-04").nextAction, row("03 30 00-04").architectAction], [null, "Complete", "approved-as-noted"]);
 assert.deepEqual([row("04 22 00-01").party, row("04 22 00-01").nextAction, row("04 22 00-01").subcontractor], ["contractor", "Assign the awarded subcontractor", ""]);
 assert.equal(S.isOverdue(by(base, "03 30 00-02"), "2026-09-30"), false, "Due today is not overdue");
-assert.deepEqual(S.submittalSummary(base, today), { total: 16, needsAssignment: 12, withContractor: 13, withSubcontractor: 1, withArchitect: 1, overdue: 1, closed: 1 });
+assert.deepEqual(S.submittalSummary(base, today), { total: 18, needsAssignment: 10, withContractor: 12, withSubcontractor: 4, withArchitect: 1, overdue: 1, closed: 1 });
 assert.equal(S.submittalSummary(base, "2026-10-14").overdue, 2, "The architect is late too after 10-13");
 const numbers = (rows) => rows.map(r => r.number);
-assert.deepEqual(numbers(S.filterSubmittals(base, proc, { party: "subcontractor" }, today)), ["03 30 00-02"]);
+assert.deepEqual(numbers(S.filterSubmittals(base, proc, { party: "subcontractor" }, today)), ["03 30 00-02", "09 22 16-01", "09 29 00-02", "09 51 13-01"]);
 assert.deepEqual(numbers(S.filterSubmittals(base, proc, { party: "none" }, today)), ["03 30 00-04"]);
 assert.deepEqual(numbers(S.filterSubmittals(base, proc, { overdue: true }, today)), ["03 30 00-02"]);
 const concrete4 = ["03 30 00-01", "03 30 00-02", "03 30 00-03", "03 30 00-04"];
@@ -69,7 +72,10 @@ assert.deepEqual(numbers(S.filterSubmittals(base, proc, { bidderId: "b5" }, toda
 assert.deepEqual(numbers(S.submittalLog(S.addRequirement(base, proc, { specSection: "03 30 00", title: "Curing compound data", packageId: "concrete" }, "Vijay", at), proc, today)).slice(0, 6), ["03 30 00-01", "03 30 00-02", "03 30 00-03", "03 30 00-04", "03 30 00-05", "04 22 00-01"], "The log is in number order");
 assert.deepEqual(numbers(S.filterSubmittals(base, proc, { specSection: "09 29 00" }, today)), ["09 29 00-01", "09 29 00-02"]);
 assert.deepEqual(numbers(S.filterSubmittals(base, proc, { query: "district" }, today)), concrete4, "Searches the subcontractor");
-assert.deepEqual(numbers(S.filterSubmittals(base, proc, { query: "drywall" }, today)), ["09 29 00-01", "09 29 00-02"], "Searches the trade");
+const drywall4 = ["09 22 16-01", "09 29 00-01", "09 29 00-02", "09 51 13-01"];
+assert.deepEqual(numbers(S.filterSubmittals(base, proc, { query: "drywall" }, today)), drywall4, "Searches the trade");
+assert.deepEqual([numbers(S.filterSubmittals(base, proc, { bidderId: "b7" }, today)), numbers(S.filterSubmittals(base, proc, { query: "capitol" }, today))], [drywall4, drywall4], "Drywall's submittals are Capitol Wall Systems'");
+assert.deepEqual(by(base, "09 29 00-01").revisions.map(r => [r.number, r.files.map(f => f.name)]), [[0, ["Type X gypsum board data.pdf"]]], "Gypsum board data is in, waiting for the contractor");
 
 // ── Requirements from the spec matrix and by hand ──
 const fresh = S.requirementsFromSpecs(S.EMPTY_SUBMITTALS, proc, initialSpecs, "Vijay", at);
@@ -211,9 +217,11 @@ assert.deepEqual(portal.map(p => [p.number, p.status, p.yourTurn, p.due]), [["03
 assert.deepEqual(portal[0].revisions.map(r => r.response?.action ?? null), ["revise-and-resubmit", null]);
 assert.deepEqual([portal[2].revisions[0].response, portal[3].revisions[0].response.action], [null, "approved-as-noted"], "Only returned responses are shown");
 assert.deepEqual(S.portalSubmittals(base, "b1"), [], "Drafts and other companies' submittals are not shown");
+assert.deepEqual(S.portalSubmittals(base, "b7").map(p => [p.number, p.status, p.yourTurn]).sort((a, b) => a[0].localeCompare(b[0])),
+  [["09 22 16-01", "to-submit", true], ["09 29 00-01", "in-review", false], ["09 29 00-02", "to-submit", true], ["09 51 13-01", "to-submit", true]], "Capitol Wall Systems sees its four drywall submittals");
 
 // ── Notifications ──
-assert.equal(base.notifications.length, 16);
+assert.equal(base.notifications.length, 21, "Concrete's 16, plus four drywall requests and one drywall submission");
 assert.deepEqual([...new Set(base.notifications.map(n => n.kind))].sort(), ["architect-responded", "reminder", "requested", "response-returned", "sent-to-architect", "submitted"]);
 assert(S.markSubmittalNotificationsRead(base, base.notifications.map(n => n.id)).notifications.every(n => n.read));
 
