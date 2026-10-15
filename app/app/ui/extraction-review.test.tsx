@@ -11,7 +11,7 @@ import type { useExtraction } from "../../lib/use-extraction";
 // Node does not render styles; the browser checks layout separately.
 require.extensions[".css"] = () => {};
 const { ExtractionReview } = require("./extraction-review") as typeof import("./extraction-review");
-const { DrawingCanvas } = require("./drawing-flip-ui") as typeof import("./drawing-flip-ui");
+const { DrawingCanvas, DrawingFlipWorkspace } = require("./drawing-flip-ui") as typeof import("./drawing-flip-ui");
 const region = sampleExtraction.drafts.find(d => d.kind === "region")!;
 const scope = sampleExtraction.drafts.find(d => d.kind === "scope" && d.status === "pending-review")!;
 const render = (extraction: ExtractionState, packageId = "drywall") => renderToStaticMarkup(<ExtractionReview review={{ extraction, procurement: sampleProcurement, flip: sampleDrawingFlip, run: () => null, accept: () => null, runProcurement: () => null, runFlip: () => null } as ReturnType<typeof useExtraction>} packageId={packageId} sections={[]} colors={new Map()} by="Reviewer" notify={() => {}} onOpenScope={() => {}}/>);
@@ -65,4 +65,12 @@ test("drawing highlights use the sheet aspect rather than a fixed canvas height"
   assert.match(html, /viewBox="0 0 1000 500"/);
   assert.match(html, /points="100,125 200,125 200,250"/);
   assert.match(html, /width="1000" height="500"/);
+});
+
+test("a trade remains available in the drawing filter on a sheet without its regions", () => {
+  const html = renderToStaticMarkup(<DrawingFlipWorkspace projectName="Sample project" notify={() => {}} navigate={() => {}}/>);
+  const filter = html.match(/<select aria-label="Filter by trade"[^>]*>([\s\S]*?)<\/select>/)?.[1];
+  assert.ok(filter);
+  assert.match(filter, /<option value="drywall">09 · Drywall \(0\)<\/option>/);
+  assert.match(filter, /<option value="demolition">02 · Demolition \(3\)<\/option>/);
 });

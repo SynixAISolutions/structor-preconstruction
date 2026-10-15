@@ -36,8 +36,8 @@ test("trade list retains empty trades and distinguishes unpriced from not starte
 test("legacy Finishes items remain unassigned rather than becoming drywall or flooring", () => {
   const legacy = initialTakeoffs.filter(r => r.packageId === "drywall").map(({ packageId: _package, ...row }) => row);
   const byTrade = estimateByTrade(placeRows(legacy, sampleProcurement.packages), sampleProcurement);
-  assert.equal(byTrade.unassigned.length, 1);
-  const html = renderToStaticMarkup(<TradeEstimateList trades={byTrade.trades} unassigned={1} onOpen={() => {}}/>);
+  assert.equal(byTrade.unassigned.length, legacy.length);
+  const html = renderToStaticMarkup(<TradeEstimateList trades={byTrade.trades} unassigned={legacy.length} onOpen={() => {}}/>);
   assert.match(html, /Review unassigned items/);
 });
 
@@ -45,7 +45,7 @@ test("budget choice previews the authoritative action without mutating the budge
   const before = JSON.stringify(sampleBudget);
   assert.equal(estimateForecastError(sampleBudget, line("nc-09200"), pkg("drywall"), trade("drywall"), false), null);
   const html = renderToStaticMarkup(<EstimateBudgetChoice budget={sampleBudget} line={line("nc-09200")} packages={sampleProcurement.packages} trades={trades} packageId="drywall" onPackage={() => {}} link={false} onLink={() => {}}/>);
-  assert.match(html, /Matched by CSI code/); assert.match(html, /1 unreviewed/);
+  assert.match(html, /Matched by CSI code/); assert.match(html, new RegExp(`${trade("drywall").unreviewed} unreviewed`));
   assert.ok(!html.includes('type="checkbox"'));
   assert.equal(JSON.stringify(sampleBudget), before);
 });
@@ -69,7 +69,7 @@ test("an ambiguous CSI match requires an explicit budget-line link", () => {
 test("MCN basis label exposes its snapshot, reviewer and later estimate changes", () => {
   const applied = applyEstimateValue(sampleBudget, "nc-09200", pkg("drywall"), trade("drywall"), "Safi", "2026-10-14T08:00:00Z");
   const html = renderToStaticMarkup(<EstimateBasisLabel line={applied.lines.find(l => l.id === "nc-09200")!} trades={trades.map(t => t.packageId === "drywall" ? { ...t, total: t.total + 100 } : t)}/>);
-  assert.match(html, /MCN estimate/); assert.match(html, /Safi/); assert.match(html, /1 unreviewed at application/);
+  assert.match(html, /MCN estimate/); assert.match(html, /Safi/); assert.match(html, new RegExp(`${trade("drywall").unreviewed} unreviewed at application`));
   assert.match(html, /Estimate changed since application/);
   assert.equal(applied.lines.find(l => l.id === "nc-09200")!.budget, line("nc-09200").budget);
 });
