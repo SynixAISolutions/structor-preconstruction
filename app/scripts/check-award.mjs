@@ -61,7 +61,7 @@ const v2 = publishPackage(approveAll(addScope(proc, { packageId: "demolition", t
 fails(() => A.createAward(empty, { ...ctx, procurement: v2 }, { levelingBidderId: capital.levelingBidderId, basis: "reviewed" }, "Safi", at), "candidate", /older bid form/);
 
 // Award Capital at its reviewed total, linked to the Demolition budget line with one allowance.
-// The sample layout (no customer template) is pinned here; the MCN layout is checked further down.
+// The sample layout (no customer template) is pinned here; the Contractor layout is checked further down.
 const SAMPLE_EXHIBIT = [A.generateSampleExhibit, A.SAMPLE_EXHIBIT_TEMPLATE];
 let s = freeze(A.createAward(empty, ctx, { levelingBidderId: capital.levelingBidderId, basis: "reviewed", budgetLineId: "c1", allowanceIds: ["a2", "a2"] }, "Safi", at, ...SAMPLE_EXHIBIT));
 let award = s.awards[0];
@@ -154,14 +154,14 @@ fails(() => A.cancelAward(s, id, "too late", "Safi", at), "award", /executed sub
 assert.deepEqual(s.notifications.map(n => n.kind), ["exhibit-shared", "exhibit-changes-requested", "exhibit-shared", "exhibit-agreed", "exhibit-agreed", "subcontract-sent", "subcontract-signed", "subcontract-countersigned", "subcontract-executed", "subcontract-executed"]);
 assert(A.markAwardNotificationsRead(s, s.notifications.map(n => n.id)).notifications.every(n => n.read));
 
-// The customer (MCN Build) templates are the default: MCN's Exhibit A structure and subcontract, placeholders filled.
+// The customer (Contractor) templates are the default: the contractor's Exhibit A structure and subcontract, placeholders filled.
 const mcnCtx = { ...ctx, owner: "DC Department of General Services", projectAddress: "3265 S Street NW, Washington, DC 20007", projectStart: "2026-06-01" };
 const mcn = A.createAward(empty, mcnCtx, { levelingBidderId: green.levelingBidderId, basis: "base" }, "Safi", at).awards[0];
 const mdoc = A.latestExhibit(mcn).content;
 assert.deepEqual([A.latestExhibit(mcn).template.id, A.latestExhibit(mcn).template.sample, mdoc.title], ["mcn-exhibit-a", false, "Exhibit A — Scope of Work · 02 41 19 Demolition"]);
 assert.deepEqual(section(mdoc, "Exhibit A — Scope of Work"), ["Demolition", "DC Department of General Services", "Jelleff Recreation Center", "3265 S Street NW, Washington, DC 20007"]);
 const notes = mdoc.sections.find(x => x.heading.startsWith("General notes")).lines;
-assert.deepEqual([notes.length, notes[0].startsWith("1. It is the intent of this bid package"), notes.at(-1).startsWith("32. All work hours")], [32, true, true], "MCN's 32 general notes, numbered");
+assert.deepEqual([notes.length, notes[0].startsWith("1. It is the intent of this bid package"), notes.at(-1).startsWith("32. All work hours")], [32, true, true], "the contractor's 32 general notes, numbered");
 const mscope = section(mdoc, "Scope of work");
 assert(mscope[0].startsWith("The scope of work of this Subcontract includes") && mscope.at(-1) === "Provide an ADD ALTERNATE Payment and Performance Bond.");
 assert.equal(mscope.length, 1 + (form.length - 1) + 1, "Intro, the included items (not the N item), the bond alternate");
@@ -175,12 +175,12 @@ assert.equal(A.latestExhibit(A.createAward(empty, ctx, { levelingBidderId: green
 let m = A.createAward(empty, mcnCtx, { levelingBidderId: capital.levelingBidderId, basis: "reviewed" }, "Safi", at);
 const mid = m.awards[0].id;
 m = A.shareExhibit(m, mid, at);
-m = A.generateSubcontract(A.agreeExhibit(m, mid, "Michael", "subcontractor", at), mid, "MCN Build, Inc.", "Safi", at);
+m = A.generateSubcontract(A.agreeExhibit(m, mid, "Michael", "subcontractor", at), mid, "General contractor", "Safi", at);
 const msub = m.awards[0].subcontract.content;
-assert.deepEqual([m.awards[0].subcontract.template.id, msub.title, msub.sections[0].heading], ["mcn-subcontract", "Subcontract agreement · Demolition", "MCN Build, Inc."]);
+assert.deepEqual([m.awards[0].subcontract.template.id, msub.title, msub.sections[0].heading], ["mcn-subcontract", "Subcontract agreement · Demolition", "General contractor"]);
 assert.deepEqual(section(msub, "3.1 Total Subcontract Price"), ["Contractor shall pay Subcontractor for the performance of the Work, subject to additions and deductions by change order, the sum of $507,960."]);
 assert.equal(section(msub, "Exhibits")[0], "Exhibit A: Scope of Work (revision 1)");
-assert.match(section(msub, "Terms")[0], /Articles 1 through 29 of the MCN Build, Inc\. Subcontract Agreement apply in full/);
+assert.match(section(msub, "Terms")[0], /Articles 1 through 29 of the General contractor Subcontract Agreement apply in full/);
 
 // Documents: plain text for download, and generators/templates are replaceable.
 assert.equal(A.renderDocumentText({ title: "T", sections: [{ heading: "Scope", lines: ["a", "b"] }] }), "T\n\nSCOPE\n  a\n  b\n");

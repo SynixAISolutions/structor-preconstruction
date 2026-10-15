@@ -1,10 +1,10 @@
-// MCN's own estimate, trade by trade, and how it compares with the leveled bids and the budget.
+// the contractor's own estimate, trade by trade, and how it compares with the leveled bids and the budget.
 //
 // Marcel (7 Oct):
 //   07:44–08:51  Quantity takeoffs organized like Scopes & bid forms: open Demolition, Concrete, …
 //                to see that trade's items, add items inside it, and see each trade's owner and
 //                GC estimate on the way back out. Model quantities belong in their trade too.
-//   14:55–15:55  Let the budget use MCN's in-house estimate instead of a bid, and show a variance
+//   14:55–15:55  Let the budget use the contractor's in-house estimate instead of a bid, and show a variance
 //                report between that estimate and the leveled bids, to see why they differ.
 //
 // The estimate lines are the "takeoffs" rows (data/preconstruction.ts TakeoffRow). Money is summed
@@ -182,19 +182,19 @@ export type BidFigure = { bidderName: string; value: number; basis: "base" | "pr
 
 export type VarianceRow = {
   packageId: string; name: string; owner: string;
-  /** MCN's estimate; null when the trade has no estimate lines. */
+  /** the in-house estimate; null when the trade has no estimate lines. */
   estimate: number | null; estimateLines: number; estimateUnreviewed: number;
   /** The leveled bid this trade is compared with (see varianceReport). */
   bid: BidFigure | null;
   budget: number | null; forecast: number | null; budgetBasis: TradeBudget["basis"];
-  /** bid − estimate: positive means the bid is above MCN's estimate. Percent of the estimate, one decimal. */
+  /** bid − estimate: positive means the bid is above the in-house estimate. Percent of the estimate, one decimal. */
   bidOverEstimate: { amount: number; percent: number | null } | null;
   /** budget − estimate: positive means the estimate fits inside the budget. */
   budgetOverEstimate: number | null;
 };
 
 /**
- * One row per trade: MCN's estimate beside the leveled bid and the budget. The bid is the lowest
+ * One row per trade: the in-house estimate beside the leveled bid and the budget. The bid is the lowest
  * eligible, current reviewed total among `candidates` for that trade (from the open leveling
  * workspace), else the bid already applied to the trade's budget forecast. Trade totals only:
  * leveling compares scope answers, not priced quantities, so line-by-line matching isn't possible.

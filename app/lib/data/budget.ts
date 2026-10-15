@@ -1,5 +1,5 @@
 // Jelleff Recreation Center budget, normalized from Marcel's "Jelleff - DD Budget.xlsx"
-// (MCN Build, DD Budget update 2025-02-14, estimator MK). Values are copied from the workbook,
+// (Contractor, DD Budget update 2025-02-14, estimator MK). Values are copied from the workbook,
 // not re-estimated: the lines total $33,328,991.40 exactly as its Total Cost does.
 //
 // How the workbook was read (source-data ambiguities are marked ⚠):
@@ -117,10 +117,10 @@ export const sampleBudget: BudgetState = {
     allowance("al-13", "Gym equipment", 341320.00, "New construction", "Jelleff DD Budget · Allowances · Owner allowances (per RFP) · cost center assumed", "review"),
     allowance("al-14", "Playground equipment", 510903.60, "Sitework", "Jelleff DD Budget · Allowances · Owner allowances (per RFP) · cost center assumed", "review"),
     allowance("al-15", "Site furnishings", 246515.15, "Sitework", "Jelleff DD Budget · Allowances · Owner allowances (per RFP) · cost center assumed", "review"),
-    allowance("al-16", "Salvage and install reclaimed wood (RW-01) on walls", 55000.00, "New construction", "Jelleff DD Budget · Allowances · MCN Build allowances · cost center assumed", "review"),
-    allowance("al-17", "4\" piping at exterior of foundation (assumed, not shown)", 34892.00, "New construction", "Jelleff DD Budget · Allowances · MCN Build allowances · cost center assumed", "review"),
-    allowance("al-18", "Washington Gas from main to building including meter and connection to generator", 330000.00, "Sitework", "Jelleff DD Budget · Allowances · MCN Build allowances · cost center assumed", "review"),
-    allowance("al-19", "Primary 2W duct bank with transformer and Pepco wire pulls", 242000.00, "Sitework", "Jelleff DD Budget · Allowances · MCN Build allowances · cost center assumed", "review"),
-    allowance("al-20", "Rough-in for onsite PV canopies", 82500.00, "Sitework", "Jelleff DD Budget · Allowances · MCN Build allowances · cost center assumed", "review"),
+    allowance("al-16", "Salvage and install reclaimed wood (RW-01) on walls", 55000.00, "New construction", "Jelleff DD Budget · Allowances · Contractor allowances · cost center assumed", "review"),
+    allowance("al-17", "4\" piping at exterior of foundation (assumed, not shown)", 34892.00, "New construction", "Jelleff DD Budget · Allowances · Contractor allowances · cost center assumed", "review"),
+    allowance("al-18", "Washington Gas from main to building including meter and connection to generator", 330000.00, "Sitework", "Jelleff DD Budget · Allowances · Contractor allowances · cost center assumed", "review"),
+    allowance("al-19", "Primary 2W duct bank with transformer and Pepco wire pulls", 242000.00, "Sitework", "Jelleff DD Budget · Allowances · Contractor allowances · cost center assumed", "review"),
+    allowance("al-20", "Rough-in for onsite PV canopies", 82500.00, "Sitework", "Jelleff DD Budget · Allowances · Contractor allowances · cost center assumed", "review"),
   ],
 };

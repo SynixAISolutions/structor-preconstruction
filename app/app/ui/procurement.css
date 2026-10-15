@@ -9,3 +9,5 @@
 .proc-manual-frame{overflow:auto}
 
 .proc-manual-download{color:#38654f;font-size:12px;text-decoration:underline;justify-self:start}
+
+.proc-ai-line .proc-approval{color:#3e6e83;margin-top:7px}.proc-ai-line .proc-approval.approved{color:#fff}.proc-ai-line.rejected{opacity:.75}.proc-inline-actions{display:flex;gap:2px;margin-top:3px}.proc-citation-link{display:block;border:0;background:none;padding:6px 0;color:#37637a;text-decoration:underline;font:inherit;font-size:10px;text-align:left}.proc-general-panel{grid-column:span 2}.proc-general-intro{padding:18px;line-height:1.7}.proc-general-intro p{margin:0 0 12px}.proc-general-intro details{margin-top:14px}.proc-general-intro li{margin:9px 0}.proc-general-intro small{display:block;color:#6e8189}@media(max-width:760px){.proc-general-panel{grid-column:auto}.proc-inline-actions{flex-direction:column}.proc-ai-line .proc-approval{min-width:28px;min-height:28px}}

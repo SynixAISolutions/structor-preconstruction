@@ -1,4 +1,4 @@
-// An MCN bid form, read from its PDF text into an answer key for checking what the AI proposes for
+// An Contractor bid form, read from its PDF text into an answer key for checking what the AI proposes for
 // a trade (C9). The form lists the trade's specification sections (A), the numbered scope lines it
 // must include (B), what it excludes (C), and its cost and quantity breakdown. Only the layout is
 // encoded here; the forms themselves are client documents and stay outside the repository.

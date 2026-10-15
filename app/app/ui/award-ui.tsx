@@ -71,7 +71,7 @@ function ErrorSummary({ errors }: { errors: AwardErrors }) {
 
 function DocumentPreview({ content, status }: { content: DocumentContent; status: string }) {
   return <article className="award-paper">
-    <header><span className="award-paper-brand">MCN BUILD, INC.</span><Badge tone="amber">{status}</Badge></header>
+    <header><span className="award-paper-brand">General contractor</span><Badge tone="amber">{status}</Badge></header>
     <h2>{content.title}</h2>
     {content.sections.map((section, index) => <section key={`${section.heading}-${index}`}>
       <h3>{String(index + 1).padStart(2, "0")}. {section.heading}</h3>
@@ -116,7 +116,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
   const [agreementParty, setAgreementParty] = useState<Party>("subcontractor");
   const [agreementName, setAgreementName] = useState("");
   const [contractorOpen, setContractorOpen] = useState(false);
-  const [contractorName, setContractorName] = useState("MCN Build, Inc.");
+  const [contractorName, setContractorName] = useState("General contractor");
   const [signatureParty, setSignatureParty] = useState<Party | null>(null);
   const [signer, setSigner] = useState<Signer>({ name: "", title: "", email: "" });
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -308,7 +308,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
               </Panel>
               <aside className="award-document-side"><Panel title="Signature status"><div className="award-signatures">
                 <div className={award.subcontract.subcontractorSignature ? "signed" : ""}><span><Signature size={18}/></span><div><strong>Subcontractor</strong>{award.subcontract.subcontractorSignature ? <><p>{award.subcontract.subcontractorSignature.name} · {award.subcontract.subcontractorSignature.title || "Title not recorded"}</p><small>{award.subcontract.subcontractorSignature.email} · {stamp(award.subcontract.subcontractorSignature.signedAt)}</small></> : <small>Awaiting signature</small>}</div></div>
-                <div className={award.subcontract.contractorSignature ? "signed" : ""}><span><Signature size={18}/></span><div><strong>MCN Build, Inc.</strong>{award.subcontract.contractorSignature ? <><p>{award.subcontract.contractorSignature.name} · {award.subcontract.contractorSignature.title || "Title not recorded"}</p><small>{award.subcontract.contractorSignature.email} · {stamp(award.subcontract.contractorSignature.signedAt)}</small></> : <small>Signs after the subcontractor</small>}</div></div>
+                <div className={award.subcontract.contractorSignature ? "signed" : ""}><span><Signature size={18}/></span><div><strong>General contractor</strong>{award.subcontract.contractorSignature ? <><p>{award.subcontract.contractorSignature.name} · {award.subcontract.contractorSignature.title || "Title not recorded"}</p><small>{award.subcontract.contractorSignature.email} · {stamp(award.subcontract.contractorSignature.signedAt)}</small></> : <small>Signs after the subcontractor</small>}</div></div>
               </div></Panel>{award.subcontract.status === "executed" && <div className="award-executed"><CheckCircle2 size={22}/><div><strong>Subcontract executed</strong><small>{stamp(award.subcontract.executedAt)} · Final copy is frozen</small></div></div>}</aside>
             </div>}
           </>}

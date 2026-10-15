@@ -56,7 +56,7 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "leveling", label: "Bid leveling", icon: "Gauge", section: OUTREACH },
     { id: "checks", label: "Structor Check & RFIs", icon: "ShieldCheck", keywords: ["rfi", "rfi log", "issues", "issue review", "questions", "design team"] },
     { id: "revisions", label: "Revision comparison", icon: "GitCompareArrows" },
-    { id: "takeoffs", label: "Quantity takeoffs", icon: "Ruler", section: BUDGET, keywords: ["estimate", "mcn estimate"] },
+    { id: "takeoffs", label: "Quantity takeoffs", icon: "Ruler", section: BUDGET, keywords: ["estimate", "in-house estimate", "mcn estimate"] },
     { id: "budget", label: "Budget summary", icon: "Wallet", section: BUDGET },
     { id: "allowances", label: "Allowances", icon: "ClipboardList", section: BUDGET },
     { id: "value-engineering", label: "Value engineering", icon: "Wallet", section: BUDGET, keywords: ["VE", "savings", "target reduction", "cost reduction"] },
