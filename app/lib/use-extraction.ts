@@ -6,6 +6,7 @@ import { acceptDraft, ExtractionRuleError, type ExtractionState } from "./extrac
 import { useDrawingFlip } from "./use-drawing-flip";
 import { useLocalDraft } from "./use-local-draft";
 import { useProcurement } from "./use-procurement";
+import { removeReviewedScope } from "./scope-review";
 
 /**
  * The open project's AI findings and their review, in this browser (demo), under "extraction".
@@ -49,5 +50,15 @@ export function useExtraction() {
     }
   }, [setExtraction, runProcurement, runFlip]);
 
-  return { extraction, procurement, runProcurement, flip, runFlip, run, accept };
+  const removeScope = useCallback((id: string, by: string): string | null => {
+    try {
+      const next = removeReviewedScope(latest.current, id, by);
+      latest.current = next;
+      runProcurement(() => next.procurement);
+      runFlip(() => next.flip);
+      return null;
+    } catch (error) { if (error instanceof ExtractionRuleError) return error.message; throw error; }
+  }, [runProcurement, runFlip]);
+
+  return { extraction, procurement, runProcurement, flip, runFlip, run, accept, removeScope };
 }

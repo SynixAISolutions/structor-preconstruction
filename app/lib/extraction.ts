@@ -55,6 +55,8 @@ export type DraftEvent =
 
 type DraftBase = {
   id: string;
+  /** Removed from the inline review, with the rejected finding retained for the audit. */
+  removed?: boolean;
   runId: string;
   packageId: string;
   citations: Citation[];
@@ -335,7 +337,16 @@ export function reopenDraft(state: ExtractionState, draftId: string, by: string,
   needBy(by);
   const draft = findDraft(state, draftId);
   if (draft.status !== "rejected") fail(draft.status === "accepted" ? "An accepted finding is changed where it now lives, not here." : "This finding is already waiting for review.");
-  return putDraft(state, { ...draft, status: "pending-review", reviewedBy: null, reviewedAt: null, rejection: null, history: [...draft.history, { kind: "reopened", at, by: by.trim() }] });
+  return putDraft(state, { ...draft, removed: false, status: "pending-review", reviewedBy: null, reviewedAt: null, rejection: null, history: [...draft.history, { kind: "reopened", at, by: by.trim() }] });
+}
+
+/** Delete hides a proposed line; its rejection and source remain in the run's audit. */
+export function deleteDraft(state: ExtractionState, draftId: string, by: string, at = now()): ExtractionState {
+  const draft = findDraft(state, draftId);
+  needBy(by);
+  if (draft.status === "accepted") fail("Delete an accepted scope item from its bid form.");
+  const next = draft.status === "pending-review" ? rejectDraft(state, draftId, "other", "Deleted from scope review.", by, at) : state;
+  return putDraft(next, { ...findDraft(next, draftId), removed: true });
 }
 
 /**
