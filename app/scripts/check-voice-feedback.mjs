@@ -1,0 +1,34 @@
+import assert from "node:assert/strict";
+import { register } from "node:module";
+register("./ts-resolver.mjs", import.meta.url);
+const { parseFeedback, feedbackRecord, feedbackPath, audioFormat, audioRange, MAX_VOICE_BYTES } = await import("../lib/voice-feedback.ts");
+const { POST, GET } = await import("../app/api/feedback/route.ts");
+const id = "1792051200000-12345678-abcd-4abc-8def-123456789abc";
+const valid = { id, screen: "projects", projectId: "ignored", projectName: "Ignored", author: " Marcel ", note: " Fix this ", duration: 12 };
+assert.deepEqual(parseFeedback(valid), { ...valid, projectId: null, projectName: null, author: "Marcel", note: "Fix this" });
+assert.equal(feedbackRecord(parseFeedback(valid)).pageLabel, "All projects");
+assert.ok(feedbackPath(id) > feedbackPath(id.replace("1792051200000", "1792051201000")), "newest messages sort first");
+for (const change of [{ id: "../bad" }, { screen: "bad" }, { author: " " }, { note: "x".repeat(1001) }, { duration: Infinity }, { duration: 183 }, { duration: 0 }]) assert.throws(() => parseFeedback({ ...valid, ...change }));
+assert.throws(() => parseFeedback({ ...valid, screen: "overview", projectId: null }));
+assert.throws(() => parseFeedback({ ...valid, screen: "overview", projectId: "../secret" }));
+assert.equal(parseFeedback({ ...valid, screen: "overview", projectId: "jelleff", projectName: "Jelleff" }).projectId, "jelleff");
+assert.throws(() => feedbackPath("../secret"));
+for (const [mime, magic, offset, extension] of [["audio/webm;codecs=opus", [26,69,223,163], 0, "webm"], ["audio/mp4", [...Buffer.from("ftyp")], 4, "m4a"], ["audio/ogg", [...Buffer.from("OggS")], 0, "ogg"]]) {
+  const bytes = new Uint8Array(32); bytes.set(magic, offset);
+  assert.equal(audioFormat(mime, bytes).extension, extension);
+  assert.throws(() => audioFormat("text/html", bytes));
+}
+assert.throws(() => audioFormat("audio/webm", Buffer.from("<script>not audio</script>")));
+assert.deepEqual(audioRange(null, 100), null);
+for (const [header, expected] of [["bytes=0-9", {start:0,end:9}], ["bytes=10-", {start:10,end:99}], ["bytes=-5", {start:95,end:99}], ["bytes=90-200", {start:90,end:99}], ["bytes=-200", {start:0,end:99}]]) assert.deepEqual(audioRange(header,100),expected);
+for (const header of ["bytes=-0", "bytes=100-", "bytes=5-2", "bytes=0-1,3-4", "bad", "bytes=-"]) assert.throws(() => audioRange(header,100));
+const url = "https://structor.test/api/feedback";
+assert.equal((await POST(new Request(url,{method:"POST",headers:{origin:"https://other.test"}}))).status,403);
+assert.equal((await POST(new Request(url,{method:"POST",headers:{origin:"null"}}))).status,403);
+assert.equal((await POST(new Request(url,{method:"POST",headers:{origin:"https://public.test",host:"public.test"}}))).status,415);
+assert.equal((await POST(new Request(url,{method:"POST",body:"wrong"}))).status,415);
+assert.equal((await POST(new Request(url,{method:"POST",headers:{"content-type":"multipart/form-data", "content-length":String(MAX_VOICE_BYTES+100_000)}}))).status,413);
+const form = new FormData(); form.set("details", JSON.stringify(valid)); form.set("audio",new Blob(["<script>bad audio</script>"],{type:"audio/webm"}),"message");
+assert.equal((await POST(new Request(url,{method:"POST",body:form}))).status,400);
+assert.equal((await GET(new Request(url+"?cursor="+"x".repeat(2001)))).status,400);
+console.log("Voice feedback: context, input, audio, range and upload-boundary checks passed.");
