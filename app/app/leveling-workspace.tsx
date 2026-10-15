@@ -36,6 +36,8 @@ import { useLocalDraft } from "../lib/use-local-draft";
 import { useSubmissions } from "../lib/use-submissions";
 import { clearWorkspace, loadWorkspace, saveWorkspace } from "../lib/workspace-storage";
 import "./ui/leveling-extras.css";
+import { BidGapCostDialog } from "./ui/bid-gap-cost";
+import { approveGapCost, type CostBasis } from "../lib/bid-gap-cost";
 
 type ScopeStatus = "" | "Y" | "N" | "P" | "N/A";
 type Response = {
@@ -139,7 +141,7 @@ const money = new Intl.NumberFormat("en-US", {
 });
 
 const BIDDER_SLOT_COUNT = 7;
-const demoProject: Project = { name: "Jelleff Recreation Center", trade: "02 40 00 — Demolition", budget: 320000, sheetName: "Demo", isDemo: true };
+const demoProject: Project = { name: "Jelleff Recreation Center", trade: "02 40 00 â€” Demolition", budget: 320000, sheetName: "Demo", isDemo: true };
 
 const glossaryTerms = [
   ["Scope sheet", "The trade checklist used to make every bidder price the same required work."],
@@ -148,9 +150,9 @@ const glossaryTerms = [
   ["Bidder", "A subcontractor or supplier submitting a price for the selected trade."],
   ["Proposal", "The bidder's priced offer, usually received as an email attachment or PDF."],
   ["Base bid", "The bidder's submitted price before leveling adjustments, bond, or accepted alternates."],
-  ["Y — Yes", "The bidder clearly includes the scope item."],
-  ["N — No", "The bidder excludes the item. The reviewer must resolve the gap and may add an adjustment."],
-  ["P — Partial", "The bidder includes only part of the item or adds a condition. The reviewer must clarify it."],
+  ["Y â€” Yes", "The bidder clearly includes the scope item."],
+  ["N â€” No", "The bidder excludes the item. The reviewer must resolve the gap and may add an adjustment."],
+  ["P â€” Partial", "The bidder includes only part of the item or adds a condition. The reviewer must clarify it."],
   ["N/A", "The item does not apply to that bidder, with a reviewer note explaining why."],
   ["Blank / unknown", "The proposal does not provide enough evidence. It remains an open exception."],
   ["Exception", "Any unanswered, excluded, partial, or otherwise unresolved scope item needing review."],
@@ -160,7 +162,7 @@ const glossaryTerms = [
   ["Provisional total", "Base bid plus entered adjustments and bond, even while review items remain open."],
   ["Reviewed leveled total", "The comparable total shown in ranking only after every required check is complete."],
   ["FULL SCOPE", "A workbook-level indication that the bid is intended to be considered for leveling."],
-  ["NO — do not level", "A workbook-level instruction that the bid must not enter the ranked comparison."],
+  ["NO â€” do not level", "A workbook-level instruction that the bid must not enter the ranked comparison."],
   ["Low submitted bid", "The lowest raw base bid before adjustments or scope review."],
   ["Variance to budget", "How far the reviewed leveled low bid is above or below the project budget."],
   ["RFI", "Request for Information: a formal question raised when drawings or specifications are unclear."],
@@ -168,12 +170,12 @@ const glossaryTerms = [
 ] as const;
 
 const seedItems: ScopeItem[] = [
-  { id: "general-1", number: "1", description: "Acknowledge all drawings, specifications, RFIs, bid notices and logistics requirements", section: "Section 1 — General", required: true, source: "Not linked yet", estimatorNote: "", sourceRow: 15 },
-  { id: "scope-1", number: "3", description: "Demolition of existing building structure in its entirety", section: "Section 3 — Scope of Work", required: true, source: "Not linked yet", estimatorNote: "", sourceRow: 37 },
-  { id: "scope-2", number: "4", description: "Conduct structural demolition including exterior walls, roof, floor structure, slabs and footings", section: "Section 3 — Scope of Work", required: true, source: "Not linked yet", estimatorNote: "", sourceRow: 38 },
-  { id: "scope-3", number: "8", description: "Remove existing roof drains, rooftop equipment, curbs and flashing", section: "Section 3 — Scope of Work", required: true, source: "Not linked yet", estimatorNote: "", sourceRow: 42 },
-  { id: "scope-4", number: "14", description: "Protect historic tree areas and all existing portions designated to remain", section: "Section 3 — Scope of Work", required: true, source: "Not linked yet", estimatorNote: "", sourceRow: 48 },
-  { id: "scope-5", number: "19", description: "Coordinate removal of foundation walls with excavation, layback and backfill", section: "Section 3 — Scope of Work", required: true, source: "Not linked yet", estimatorNote: "", sourceRow: 53 },
+  { id: "general-1", number: "1", description: "Acknowledge all drawings, specifications, RFIs, bid notices and logistics requirements", section: "Section 1 â€” General", required: true, source: "Not linked yet", estimatorNote: "", sourceRow: 15 },
+  { id: "scope-1", number: "3", description: "Demolition of existing building structure in its entirety", section: "Section 3 â€” Scope of Work", required: true, source: "Not linked yet", estimatorNote: "", sourceRow: 37 },
+  { id: "scope-2", number: "4", description: "Conduct structural demolition including exterior walls, roof, floor structure, slabs and footings", section: "Section 3 â€” Scope of Work", required: true, source: "Not linked yet", estimatorNote: "", sourceRow: 38 },
+  { id: "scope-3", number: "8", description: "Remove existing roof drains, rooftop equipment, curbs and flashing", section: "Section 3 â€” Scope of Work", required: true, source: "Not linked yet", estimatorNote: "", sourceRow: 42 },
+  { id: "scope-4", number: "14", description: "Protect historic tree areas and all existing portions designated to remain", section: "Section 3 â€” Scope of Work", required: true, source: "Not linked yet", estimatorNote: "", sourceRow: 48 },
+  { id: "scope-5", number: "19", description: "Coordinate removal of foundation walls with excavation, layback and backfill", section: "Section 3 â€” Scope of Work", required: true, source: "Not linked yet", estimatorNote: "", sourceRow: 53 },
   { id: "scope-6", number: "25", description: "Include multiple mobilizations required for the work", section: "Standard / General Scope", required: true, source: "Not linked yet", estimatorNote: "", sourceRow: 59 },
   { id: "scope-7", number: "26", description: "Provide traffic control required for the work", section: "Standard / General Scope", required: true, source: "Not linked yet", estimatorNote: "", sourceRow: 60 },
 ];
@@ -245,8 +247,8 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
   const [selectedId, setSelectedId] = useState(seedItems[2].id);
   const [exceptionsOnly, setExceptionsOnly] = useState(false);
   const [query, setQuery] = useState("");
-  const [message, setMessage] = useState("Loading saved workspace…");
-  const [saveState, setSaveState] = useState("Loading…");
+  const [message, setMessage] = useState("Loading saved workspaceâ€¦");
+  const [saveState, setSaveState] = useState("Loadingâ€¦");
   const [storageReady, setStorageReady] = useState(false);
   const [storageEnabled, setStorageEnabled] = useState(true);
   const [pendingImport, setPendingImport] = useState<WorkbookImport | null>(null);
@@ -302,7 +304,7 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
   useEffect(() => {
     if (!storageReady || !storageEnabled) return;
     const sequence = ++saveSequenceRef.current;
-    setSaveState("Saving…");
+    setSaveState("Savingâ€¦");
     void saveWorkspace({ project, items, bidders }).then(({ savedAt }) => {
       if (sequence === saveSequenceRef.current) setSaveState(`Saved ${new Date(savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`);
     }).catch((error) => {
@@ -375,7 +377,7 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
     setLoadedPackageId(packageId);
     setStorageEnabled(true);
     setStorageReady(true);
-    setSaveState("Saving…");
+    setSaveState("Savingâ€¦");
     const staleCount = result.issues.filter((issue) => issue.code === "stale-form").length;
     setMessage(`Loaded ${result.bidders.length} submitted bid${result.bidders.length === 1 ? "" : "s"} for ${result.project.trade}.${staleCount ? ` ${staleCount} older-form bid${staleCount === 1 ? " is" : "s are"} shown but cannot be ranked.` : " Review every exception before ranking."}`);
   }
@@ -422,6 +424,18 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
     if (!selected) return;
     const selectedItemId = selected.id;
     setItems((current) => current.map((item) => item.id === selectedItemId ? { ...item, ...patch } : item));
+  }
+
+  function applyGapAdjustment(bidderId: string, itemId: string, basis: CostBasis, reviewed: boolean): string | null {
+    const item = items.find(i => i.id === itemId);
+    const bidder = bidders.find(b => b.id === bidderId);
+    if (!item || item.includeInTotal === false || !bidder) return "Choose a current bidder and a priced scope row.";
+    try {
+      const next = approveGapCost(bidder.responses[itemId] ?? response(""), basis, reviewed);
+      setBidders(current => current.map(b => b.id === bidderId ? { ...b, responses: { ...b.responses, [itemId]: next } } : b));
+      setMessage(`Approved ${money.format(next.adjustment)} adjustment for ${bidder.name}. Review and resolve its scope coverage separately.`);
+      return null;
+    } catch (cause) { return cause instanceof Error ? cause.message : "The adjustment could not be applied."; }
   }
 
   function saveBidder(details: Pick<Bidder, "name" | "contact" | "baseBid" | "bondRate" | "zeroPriceApproved" | "sourceStatus">) {
@@ -475,7 +489,7 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
     const file = event.target.files?.[0];
     if (!file) return;
     try {
-      setMessage(`Reading ${file.name}…`);
+      setMessage(`Reading ${file.name}â€¦`);
       const { importBidWorkbook } = await import("../lib/workbook.mjs");
       const imported = importBidWorkbook(new Uint8Array(await file.arrayBuffer())) as unknown as WorkbookImport;
       setPendingImport({ ...imported, fileName: file.name });
@@ -532,7 +546,7 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
       }
       const download = document.createElement("a");
       download.href = URL.createObjectURL(new Blob([bytesToArrayBuffer(exported.bytes)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
-      download.download = `${project.name.replaceAll(/[^a-z0-9]+/gi, "-")}-${project.trade.split("—")[0].trim()}-reviewed.xlsx`;
+      download.download = `${project.name.replaceAll(/[^a-z0-9]+/gi, "-")}-${project.trade.split("â€”")[0].trim()}-reviewed.xlsx`;
       download.click();
       URL.revokeObjectURL(download.href);
       const warning = exported.warnings.length ? ` ${exported.warnings.map((item) => item.message).join(" ")}` : " Open it in Excel to recalculate formulas.";
@@ -573,7 +587,7 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
 
   async function connectGmail() {
     try {
-      setSaveState("Saving…");
+      setSaveState("Savingâ€¦");
       await saveWorkspace({ project, items, bidders });
       window.location.assign("/api/gmail/connect");
     } catch (error) {
@@ -587,7 +601,7 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
       id: `new-${Date.now()}`,
       number: String(items.length + 1),
       description: "New scope item",
-      section: selected?.section || "Section 3 — Scope of Work",
+      section: selected?.section || "Section 3 â€” Scope of Work",
       required: true,
       source: "Not linked yet",
       estimatorNote: "",
@@ -616,20 +630,20 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
           <div><div className="project-title"><h1>{project.name}</h1>{project.isDemo && <span>Demo data</span>}</div><p>{message}<small className={`save-state ${saveState.includes("failed") || saveState.includes("unavailable") ? "error" : ""}`}>{saveState}</small></p></div>
           <div className="submission-load-controls">
             <div className="active-leveling-trade" aria-label="Active trade"><span>Active trade</span><strong>{project.trade}</strong></div>
-            <label className="trade-select"><span>Switch trade</span><select aria-label="Trade package to load" value={sourcePackageId} disabled={!procurement.packages.length} onChange={(event) => setSourcePackageId(event.target.value)}>{!procurement.packages.length && <option value="">No packages</option>}{procurement.packages.map((pkg) => <option key={pkg.id} value={pkg.id}>{pkg.name} · {submissionCounts.get(pkg.id) ?? 0} submitted</option>)}</select><ChevronDown /></label>
+            <label className="trade-select"><span>Switch trade</span><select aria-label="Trade package to load" value={sourcePackageId} disabled={!procurement.packages.length} onChange={(event) => setSourcePackageId(event.target.value)}>{!procurement.packages.length && <option value="">No packages</option>}{procurement.packages.map((pkg) => <option key={pkg.id} value={pkg.id}>{pkg.name} Â· {submissionCounts.get(pkg.id) ?? 0} submitted</option>)}</select><ChevronDown /></label>
             <button className="button primary submission-load-button" disabled={!sourcePackageId} onClick={() => loadSubmittedBids()}><RefreshCw />{loadedPackageId === sourcePackageId ? "Refresh bids" : "Load selected trade"}</button>
           </div>
         </header>
 
-        {loadedPackage && <div className="submission-source-bar"><FileText/><span><strong>Portal submissions loaded</strong><small>{loadedPackage.code} · {loadedPackage.name} · {Object.keys(submissionProvenance).length} bidder revision{Object.keys(submissionProvenance).length === 1 ? "" : "s"} · browser-only demo</small></span><button onClick={() => loadSubmittedBids(undefined, loadedPackage.id)}><RefreshCw/>Refresh from portal</button></div>}
+        {loadedPackage && <div className="submission-source-bar"><FileText/><span><strong>Portal submissions loaded</strong><small>{loadedPackage.code} Â· {loadedPackage.name} Â· {Object.keys(submissionProvenance).length} bidder revision{Object.keys(submissionProvenance).length === 1 ? "" : "s"} Â· browser-only demo</small></span><button onClick={() => loadSubmittedBids(undefined, loadedPackage.id)}><RefreshCw/>Refresh from portal</button></div>}
         {!!submissionIssues.length && <div className="submission-issue-bar" role="status"><AlertTriangle/><div><strong>{submissionIssues.length} submission notice{submissionIssues.length === 1 ? "" : "s"}</strong>{submissionIssues.map((issue, index) => <span key={`${issue.code}-${issue.submissionId ?? index}`}>{issue.message}</span>)}</div><button aria-label="Dismiss submission notices" onClick={() => setSubmissionIssues([])}><X/></button></div>}
 
         <section className="summary" aria-label="Bid summary">
           <div><span>Budget</span><input aria-label="Project budget" type="number" value={project.budget} onChange={(event) => setProject({ ...project, budget: Number(event.target.value) })} /></div>
-          <div><span>Low submitted bid</span><strong>{lowSubmittedBid == null ? "—" : money.format(lowSubmittedBid)}</strong><small>Before adjustments</small></div>
-          <div><span>Reviewed leveled low</span><strong>{lowBid ? money.format(lowBid.reviewedTotal) : "—"}</strong><small>{lowBid?.bidder.name ?? "No reviewed bids yet"}</small></div>
-          <div><span>Variance to budget</span><strong className={lowBid && lowBid.reviewedTotal > project.budget ? "over" : "under"}>{lowBid ? money.format(lowBid.reviewedTotal - project.budget) : "—"}</strong><small>{lowBid && project.budget ? `${(((lowBid.reviewedTotal - project.budget) / project.budget) * 100).toFixed(1)}%` : ""}</small></div>
-          <div className="progress-summary"><span>Review progress</span><strong>{reviewPercent}%</strong><div className="progress-track" aria-label={`${reviewPercent}% of required bidder responses reviewed`}><i style={{ width: `${reviewPercent}%` }} /></div><small>{openReviewCount} open checks · {reviewedBidderCount}/{reviewBidders.length} active bidders rank-ready</small></div>
+          <div><span>Low submitted bid</span><strong>{lowSubmittedBid == null ? "â€”" : money.format(lowSubmittedBid)}</strong><small>Before adjustments</small></div>
+          <div><span>Reviewed leveled low</span><strong>{lowBid ? money.format(lowBid.reviewedTotal) : "â€”"}</strong><small>{lowBid?.bidder.name ?? "No reviewed bids yet"}</small></div>
+          <div><span>Variance to budget</span><strong className={lowBid && lowBid.reviewedTotal > project.budget ? "over" : "under"}>{lowBid ? money.format(lowBid.reviewedTotal - project.budget) : "â€”"}</strong><small>{lowBid && project.budget ? `${(((lowBid.reviewedTotal - project.budget) / project.budget) * 100).toFixed(1)}%` : ""}</small></div>
+          <div className="progress-summary"><span>Review progress</span><strong>{reviewPercent}%</strong><div className="progress-track" aria-label={`${reviewPercent}% of required bidder responses reviewed`}><i style={{ width: `${reviewPercent}%` }} /></div><small>{openReviewCount} open checks Â· {reviewedBidderCount}/{reviewBidders.length} active bidders rank-ready</small></div>
         </section>
 
         <div className="toolbar">
@@ -653,7 +667,7 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th rowSpan={2} className="number-col">#</th><th rowSpan={2} className="scope-col">Scope item</th><th rowSpan={2} className="source-col">Source</th>{bidders.map((bidder) => { const total = totalsByBidder.get(bidder.id); const provenance = submissionProvenance[bidder.id]; const reviewState = total?.sourceEligibility === "ineligible" ? "not leveled" : total?.eligible ? "reviewed" : "pending"; return <th key={bidder.id} colSpan={3} className="bidder-name"><button className="bidder-heading-button" onClick={() => provenance ? setReviewBidderId(bidder.id) : setEditingBidderId(bidder.id)} aria-label={provenance ? `Review ${bidder.name} submission` : `Edit ${bidder.name}`}><span>{bidder.name}</span>{provenance ? <FileText/> : <Pencil/>}</button><small>{bidder.baseBid == null ? "No price" : `${money.format(bidder.baseBid)} base`} · {provenance ? `rev ${provenance.revisionNumber} · ` : ""}{reviewState}</small></th>; })}</tr>
+                <tr><th rowSpan={2} className="number-col">#</th><th rowSpan={2} className="scope-col">Scope item</th><th rowSpan={2} className="source-col">Source</th>{bidders.map((bidder) => { const total = totalsByBidder.get(bidder.id); const provenance = submissionProvenance[bidder.id]; const reviewState = total?.sourceEligibility === "ineligible" ? "not leveled" : total?.eligible ? "reviewed" : "pending"; return <th key={bidder.id} colSpan={3} className="bidder-name"><button className="bidder-heading-button" onClick={() => provenance ? setReviewBidderId(bidder.id) : setEditingBidderId(bidder.id)} aria-label={provenance ? `Review ${bidder.name} submission` : `Edit ${bidder.name}`}><span>{bidder.name}</span>{provenance ? <FileText/> : <Pencil/>}</button><small>{bidder.baseBid == null ? "No price" : `${money.format(bidder.baseBid)} base`} Â· {provenance ? `rev ${provenance.revisionNumber} Â· ` : ""}{reviewState}</small></th>; })}</tr>
                 <tr>{bidders.flatMap((bidder) => [<th key={`${bidder.id}-status`}>Y/N/P</th>, <th key={`${bidder.id}-note`}>Note</th>, <th key={`${bidder.id}-adj`}>Adjustment</th>])}</tr>
               </thead>
               <tbody>
@@ -662,7 +676,7 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
                 ))}
               </tbody>
               <tfoot>
-                <tr><th colSpan={3}>Provisional total</th>{bidders.flatMap((bidder) => { const total = totalsByBidder.get(bidder.id)!; const rank = ranked.find((entry) => entry.bidder.id === bidder.id)?.rank; const notLeveled = total.sourceEligibility === "ineligible"; return [<td key={`${bidder.id}-exceptions`} className={notLeveled ? "inactive-total" : total.eligible ? "complete-total" : "exception-total"}>{notLeveled ? "Not leveled" : total.eligible ? <><Check />Reviewed</> : total.exceptions ? `${total.exceptions} open` : "Pending"}</td>, <td key={`${bidder.id}-rank`}>{rank ? `#${rank}` : "—"}</td>, <td key={`${bidder.id}-total`} className="money-total">{total.provisionalTotal == null ? "—" : money.format(total.provisionalTotal)}</td>]; })}</tr>
+                <tr><th colSpan={3}>Provisional total</th>{bidders.flatMap((bidder) => { const total = totalsByBidder.get(bidder.id)!; const rank = ranked.find((entry) => entry.bidder.id === bidder.id)?.rank; const notLeveled = total.sourceEligibility === "ineligible"; return [<td key={`${bidder.id}-exceptions`} className={notLeveled ? "inactive-total" : total.eligible ? "complete-total" : "exception-total"}>{notLeveled ? "Not leveled" : total.eligible ? <><Check />Reviewed</> : total.exceptions ? `${total.exceptions} open` : "Pending"}</td>, <td key={`${bidder.id}-rank`}>{rank ? `#${rank}` : "â€”"}</td>, <td key={`${bidder.id}-total`} className="money-total">{total.provisionalTotal == null ? "â€”" : money.format(total.provisionalTotal)}</td>]; })}</tr>
               </tfoot>
             </table>
           </div>
@@ -672,7 +686,7 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
             <label>Scope description<textarea value={selected.description} onChange={(event) => updateSelected({ description: event.target.value })} rows={5} /></label>
             <label>Section<input value={selected.section} onChange={(event) => updateSelected({ section: event.target.value })} /></label>
             <div className="source-block"><span>Source reference</span><strong>{selected.source}</strong><p>Drawing and specification citations will attach here in the document-reader phase.</p></div>
-            <label>Estimator note<textarea value={selected.estimatorNote} onChange={(event) => updateSelected({ estimatorNote: event.target.value })} rows={4} placeholder="Add a leveling decision or clarification…" /></label>
+            <label>Estimator note<textarea value={selected.estimatorNote} onChange={(event) => updateSelected({ estimatorNote: event.target.value })} rows={4} placeholder="Add a leveling decision or clarificationâ€¦" /></label>
             <label className="required-check"><input type="checkbox" checked={selected.required} onChange={(event) => updateSelected({ required: event.target.checked })} />Required for complete scope</label>
             <div className="review-state"><span><Check />Saved in this browser</span><small>{selected.sourceRow == null ? "This new row is included in JSON backups. Excel export will stop until it has a verified template row." : "This mapped source row is included in a safe Excel export."}</small></div>
           </aside>}
@@ -709,7 +723,7 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
       />}
       {glossaryOpen && <GlossaryDialog onClose={() => setGlossaryOpen(false)} />}
       {walkthroughOpen && <HowItWorksDialog onClose={() => setWalkthroughOpen(false)} />}
-      {costSuggestionsOpen && <CostSuggestionsDialog onClose={() => setCostSuggestionsOpen(false)} />}
+      {costSuggestionsOpen && <BidGapCostDialog items={items} bidders={bidders} initialItemId={selectedId} packageId={loadedPackageId} onClose={() => setCostSuggestionsOpen(false)} onApply={applyGapAdjustment}/>}
     </main>
   );
 }
@@ -732,8 +746,8 @@ function SectionRows({ section, items, bidders, selectedId, onSelect, onResponse
         const answer = bidder.responses[item.id] ?? response("");
         const needsResolution = answer.status === "N" || answer.status === "P" || answer.status === "N/A";
         return [
-          <td key={`${bidder.id}-status`} className={responseNeedsReview(item, answer) ? "review-cell open" : "review-cell"}><select aria-label={`${bidder.name} status for ${item.description}`} value={answer.status} className={`status status-${answer.status.replace("/", "") || "empty"}`} onClick={(event) => event.stopPropagation()} onChange={(event) => onResponse(bidder.id, item.id, { status: event.target.value as ScopeStatus })}><option value="">—</option><option value="Y">Y</option><option value="N">N</option><option value="P">P</option><option value="N/A">N/A</option></select>{needsResolution && <label className="mini-review" onClick={(event) => event.stopPropagation()}><input type="checkbox" checked={answer.resolved === true} onChange={(event) => onResponse(bidder.id, item.id, { resolved: event.target.checked })} />Resolved</label>}</td>,
-          <td key={`${bidder.id}-note`}><input aria-label={`${bidder.name} note for ${item.description}`} value={answer.note} placeholder="—" onClick={(event) => event.stopPropagation()} onChange={(event) => onResponse(bidder.id, item.id, { note: event.target.value })} /></td>,
+          <td key={`${bidder.id}-status`} className={responseNeedsReview(item, answer) ? "review-cell open" : "review-cell"}><select aria-label={`${bidder.name} status for ${item.description}`} value={answer.status} className={`status status-${answer.status.replace("/", "") || "empty"}`} onClick={(event) => event.stopPropagation()} onChange={(event) => onResponse(bidder.id, item.id, { status: event.target.value as ScopeStatus })}><option value="">â€”</option><option value="Y">Y</option><option value="N">N</option><option value="P">P</option><option value="N/A">N/A</option></select>{needsResolution && <label className="mini-review" onClick={(event) => event.stopPropagation()}><input type="checkbox" checked={answer.resolved === true} onChange={(event) => onResponse(bidder.id, item.id, { resolved: event.target.checked })} />Resolved</label>}</td>,
+          <td key={`${bidder.id}-note`}><input aria-label={`${bidder.name} note for ${item.description}`} value={answer.note} placeholder="â€”" onClick={(event) => event.stopPropagation()} onChange={(event) => onResponse(bidder.id, item.id, { note: event.target.value })} /></td>,
           <td key={`${bidder.id}-adjustment`} className="review-cell"><input aria-label={`${bidder.name} adjustment for ${item.description}`} className="money-input" type="number" step="0.01" value={answer.adjustment || ""} placeholder="$0" onClick={(event) => event.stopPropagation()} onChange={(event) => onResponse(bidder.id, item.id, { adjustment: event.target.value === "" ? 0 : Number(event.target.value) })} />{answer.adjustment !== 0 && <label className="mini-review" onClick={(event) => event.stopPropagation()}><input type="checkbox" checked={answer.adjustmentApproved === true} onChange={(event) => onResponse(bidder.id, item.id, { adjustmentApproved: event.target.checked })} />Approved</label>}</td>,
         ];
       })}
@@ -762,8 +776,8 @@ function SubmissionLevelingReview({ bidder, items, provenance, revisionNumbers, 
       <div className="submission-review-body">
         {provenance.stale && <div className="submission-review-warning"><AlertTriangle/><span><strong>Older bid form</strong><small>This revision answered version {provenance.formVersion}; version {provenance.currentFormVersion} is current. It remains visible but cannot be ranked.</small></span></div>}
         <div className="submission-review-summary">
-          <div><small>BASE BID</small><strong>{bidder.baseBid == null ? "—" : money.format(bidder.baseBid)}</strong></div>
-          <div><small>REVISION</small><label><select aria-label="Submission revision" value={provenance.revisionNumber} onChange={(event) => onRevision(Number(event.target.value))}>{revisionNumbers.map((number) => <option key={number} value={number}>Revision {number}{number === provenance.revisionNumber ? " · loaded" : ""}</option>)}</select><ChevronDown/></label></div>
+          <div><small>BASE BID</small><strong>{bidder.baseBid == null ? "â€”" : money.format(bidder.baseBid)}</strong></div>
+          <div><small>REVISION</small><label><select aria-label="Submission revision" value={provenance.revisionNumber} onChange={(event) => onRevision(Number(event.target.value))}>{revisionNumbers.map((number) => <option key={number} value={number}>Revision {number}{number === provenance.revisionNumber ? " Â· loaded" : ""}</option>)}</select><ChevronDown/></label></div>
           <div><small>SUBMITTED</small><strong>{submittedLabel}</strong></div>
           <div><small>SUBMITTER</small><strong>{provenance.submitter.name}</strong><span>{provenance.submitter.email}</span></div>
         </div>
@@ -773,12 +787,12 @@ function SubmissionLevelingReview({ bidder, items, provenance, revisionNumbers, 
             <SubmissionReviewList title="Exclusions" values={provenance.exclusions}/>
             <SubmissionReviewList title="Clarifications" values={provenance.clarifications}/>
             <div className="submission-review-card"><strong>Alternates</strong>{provenance.alternates.length ? provenance.alternates.map((alternate) => <p key={alternate.id}><span>{alternate.kind === "deduct" ? "Deduct" : "Add"} {money.format(alternate.amount)}</span>{alternate.description}</p>) : <small>None recorded</small>}</div>
-            <div className="submission-review-card"><strong>Attachments</strong>{provenance.attachments.length ? provenance.attachments.map((attachment) => <p key={attachment.id} className="submission-attachment"><Paperclip/><span>{attachment.name}<small>{Math.max(1, Math.ceil(attachment.size / 1024))} KB · metadata only</small></span></p>) : <small>None recorded</small>}</div>
-            {!!provenance.droppedResponses.length && <div className="submission-review-card warning"><strong>Removed scope answers</strong>{provenance.droppedResponses.map((answer) => <p key={answer.scopeItemId}><span>{answer.answer || "Blank"}</span>{answer.scopeItemId}{answer.note ? ` · ${answer.note}` : ""}</p>)}</div>}
+            <div className="submission-review-card"><strong>Attachments</strong>{provenance.attachments.length ? provenance.attachments.map((attachment) => <p key={attachment.id} className="submission-attachment"><Paperclip/><span>{attachment.name}<small>{Math.max(1, Math.ceil(attachment.size / 1024))} KB Â· metadata only</small></span></p>) : <small>None recorded</small>}</div>
+            {!!provenance.droppedResponses.length && <div className="submission-review-card warning"><strong>Removed scope answers</strong>{provenance.droppedResponses.map((answer) => <p key={answer.scopeItemId}><span>{answer.answer || "Blank"}</span>{answer.scopeItemId}{answer.note ? ` Â· ${answer.note}` : ""}</p>)}</div>}
           </aside>
         </div>
       </div>
-      <footer className="submission-review-actions"><span>Revision {provenance.revisionNumber} of {provenance.revisionCount} · saved in this browser</span>{!provenance.stale && <button className="button secondary" onClick={onEdit}><Pencil/>Edit leveling settings</button>}<button className="button primary" onClick={onClose}>Review scope grid<ArrowRight/></button></footer>
+      <footer className="submission-review-actions"><span>Revision {provenance.revisionNumber} of {provenance.revisionCount} Â· saved in this browser</span>{!provenance.stale && <button className="button secondary" onClick={onEdit}><Pencil/>Edit leveling settings</button>}<button className="button primary" onClick={onClose}>Review scope grid<ArrowRight/></button></footer>
     </section>
   </div>;
   return typeof document === "undefined" ? null : createPortal(modal, document.body);
@@ -818,14 +832,13 @@ function BidderEditor({ bidder, onClose, onSave }: {
         <label>Base bid<input min="0" step="0.01" type="number" value={baseBid} onChange={(event) => { setBaseBid(event.target.value); setZeroPriceApproved(false); }} placeholder="No price submitted" /></label>
         {baseBid !== "" && Number(baseBid) === 0 && <label className="required-check"><input type="checkbox" checked={zeroPriceApproved} onChange={(event) => setZeroPriceApproved(event.target.checked)} />Confirm this is an intentional $0 quote</label>}
         <label>Bond rate (%)<input min="0" step="0.01" type="number" value={bondPercent} onChange={(event) => setBondPercent(event.target.value)} /></label>
-        <label>Workbook level status<select value={sourceStatus} onChange={(event) => setSourceStatus(event.target.value)}><option value="">Not specified</option><option value="FULL SCOPE">FULL SCOPE</option><option value="NO">NO — do not level</option></select></label>
+        <label>Workbook level status<select value={sourceStatus} onChange={(event) => setSourceStatus(event.target.value)}><option value="">Not specified</option><option value="FULL SCOPE">FULL SCOPE</option><option value="NO">NO â€” do not level</option></select></label>
         {error && <p className="form-error" role="alert">{error}</p>}
         <footer><button className="button secondary" type="button" onClick={onClose}>Cancel</button><button className="button primary" type="submit">Save bidder</button></footer>
       </form>
     </section>
   </div>;
 }
-
 function MailboxDialog({ loading, needsConnection, error, messages, onClose, onRefresh, onConnect }: {
   loading: boolean;
   needsConnection: boolean;
@@ -837,9 +850,9 @@ function MailboxDialog({ loading, needsConnection, error, messages, onClose, onR
 }) {
   return <div className="modal-backdrop">
     <section className="modal mailbox-modal" role="dialog" aria-modal="true" aria-labelledby="mailbox-dialog-title">
-      <header><div><span>Last 30 days · messages with attachments</span><h2 id="mailbox-dialog-title">Proposal email</h2></div><div className="modal-actions"><button aria-label="Refresh Gmail" onClick={onRefresh}><RefreshCw /></button><button aria-label="Close mailbox" onClick={onClose}><X /></button></div></header>
+      <header><div><span>Last 30 days Â· messages with attachments</span><h2 id="mailbox-dialog-title">Proposal email</h2></div><div className="modal-actions"><button aria-label="Refresh Gmail" onClick={onRefresh}><RefreshCw /></button><button aria-label="Close mailbox" onClick={onClose}><X /></button></div></header>
       <p className="mailbox-notice"><strong>Current milestone:</strong> this securely lists proposal emails and attachments for human review. Automatic proposal reading and Y/N/P population are not enabled yet.</p>
-      {loading ? <p className="modal-status">Loading Gmail…</p> : error ? <div className="modal-status error"><p>{error}</p>{needsConnection && <button className="button primary" onClick={onConnect}>Connect Gmail</button>}</div> : messages.length ? <div className="mail-list">
+      {loading ? <p className="modal-status">Loading Gmailâ€¦</p> : error ? <div className="modal-status error"><p>{error}</p>{needsConnection && <button className="button primary" onClick={onConnect}>Connect Gmail</button>}</div> : messages.length ? <div className="mail-list">
         {messages.map((message) => <article key={message.id}>
           <div className="mail-summary"><strong>{message.subject}</strong><span>{message.sender}</span><small>{message.date}</small><p>{message.snippet}</p></div>
           <div className="attachments">{message.attachments.map((attachment) => <a key={attachment.id} href={attachmentHref(message.id, attachment)}><Paperclip />{attachment.name}</a>)}</div>
@@ -891,7 +904,7 @@ function HowItWorksDialog({ onClose }: { onClose: () => void }) {
     ["3", "Check the documents", "Review drawing issues, the specification matrix, the drawing register, and changes between drawing revisions.", "UI preview"],
     ["4", "Measure and plan", "Review quantities by division, required owner allowances, and the project schedule before requesting bids.", "UI preview"],
     ["5", "Invite and collect bids", "Use bid packages, trade messages, and the subcontractor portal to collect prices, scope answers, and proposal attachments. Gmail remains an additional intake channel.", "UI preview"],
-    ["6", "Review and level", "Import the supported Excel trade sheet or edit bidder responses. Resolve scope gaps, approve adjustments, and compare reviewed totals. Cost suggestions illustrate the unit-price review flow.", "Working now"],
+    ["6", "Review and level", "Import the supported Excel trade sheet or edit bidder responses. Cost suggestions applies a reviewed quantity Ã— rate adjustment to the selected bid gap; resolve its scope coverage separately, then compare reviewed totals.", "Working now"],
     ["7", "Build the budget", "Roll selected trade values into a detailed budget by cost center, including project allowances.", "UI preview"],
     ["8", "Award and hand over", "Review the subcontract agreement, Exhibit A scope, drawing-list exhibit, and turnover package.", "UI preview"],
     ["9", "Export the reviewed workbook", "Export mapped, reviewed values into a preserved copy of the source Excel workbook, or download a JSON workspace backup.", "Working now"],
@@ -902,47 +915,6 @@ function HowItWorksDialog({ onClose }: { onClose: () => void }) {
       <ol className="workflow-list">
         {steps.map(([number, title, description, status]) => <li key={number}><b>{number}</b><div><div className="workflow-title"><strong>{title}</strong><span className={status === "UI preview" ? "next" : "live"}>{status}</span></div><p>{description}</p></div></li>)}
       </ol>
-    </section>
-  </div>;
-}
-
-function CostSuggestionsDialog({ onClose }: { onClose: () => void }) {
-  const [quantity, setQuantity] = useState("30");
-  const [unitCost, setUnitCost] = useState("3000");
-  const [source, setSource] = useState("example");
-  const [reviewed, setReviewed] = useState(false);
-  const [approved, setApproved] = useState(false);
-  const amount = Number(quantity) * Number(unitCost);
-  const valid = quantity !== "" && unitCost !== "" && Number(quantity) > 0 && Number(unitCost) >= 0 && Number.isFinite(amount);
-  useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [onClose]);
-  const resetReview = () => { setReviewed(false); setApproved(false); };
-
-  return <div className="modal-backdrop">
-    <section className="modal bidder-modal cost-suggestions-modal" role="dialog" aria-modal="true" aria-labelledby="cost-suggestions-title">
-      <header><div><span>Illustrative review · structural steel</span><h2 id="cost-suggestions-title">Cost suggestions</h2></div><button autoFocus aria-label="Close cost suggestions" onClick={onClose}><X /></button></header>
-      <form onSubmit={(event) => { event.preventDefault(); if (valid && reviewed) setApproved(true); }}>
-        <div className="cost-example-notice">Example from the workflow discussion. This is separate from your active workbook and does not change its bids.</div>
-        <div className="cost-scope-gap"><span className="cost-status excluded">Excluded scope</span><h3>Fall-restraint roof anchors</h3><p>The steel proposal excludes anchors required by the scope. Review the missing quantity and unit rate to estimate a leveling adjustment.</p></div>
-        <div className="cost-inputs">
-          <label>Quantity · each<input required min="1" step="1" type="number" value={quantity} onChange={(event) => { setQuantity(event.target.value); resetReview(); }} /></label>
-          <span aria-hidden="true">×</span>
-          <label>Unit cost · USD<input required min="0" step="0.01" type="number" value={unitCost} onChange={(event) => { setUnitCost(event.target.value); resetReview(); }} /></label>
-        </div>
-        <div className="cost-calculated"><div><span>Suggested addition</span><strong>{valid ? money.format(amount) : "—"}</strong></div><span className={`cost-status ${approved ? "approved" : "pending"}`}>{approved ? "Example approved" : "Needs review"}</span></div>
-        <label>Cost basis<select value={source} onChange={(event) => { setSource(event.target.value); resetReview(); }}><option value="example">Historical-cost example</option><option value="supplier">Supplier quote</option><option value="estimator">Estimator input</option></select></label>
-        <div className="cost-evidence">
-          <strong>{source === "example" ? "Reference: September 8 workflow discussion" : source === "supplier" ? "Alternative source: supplier quote" : "Alternative source: estimator estimate"}</strong>
-          <p>{source === "example" ? "Marcel described a previous $3,000-per-anchor cost and an illustrative quantity of 30 (19:14:38–19:15:06). No supporting project quote is attached." : source === "supplier" ? "Enter a rate from a current supplier quote above. In the connected workflow, attach the quote and record its date here." : "Enter a rate based on estimator judgment above. In the connected workflow, record the assumption and its supporting evidence here."}</p>
-          <small>Evidence confidence: unverified example · estimator review required</small>
-        </div>
-        <label className="required-check"><input type="checkbox" checked={reviewed} onChange={(event) => { setReviewed(event.target.checked); setApproved(false); }} />I reviewed this example quantity and rate</label>
-        {approved && <p className="cost-approval-message" role="status"><Check />Example adjustment approved. Your workbook is unchanged.</p>}
-        <footer><button className="button secondary" type="button" onClick={onClose}>Close</button><button className="button primary" type="submit" disabled={!valid || !reviewed || approved}>{approved ? "Example approved" : "Approve example adjustment"}</button></footer>
-      </form>
     </section>
   </div>;
 }

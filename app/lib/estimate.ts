@@ -85,6 +85,7 @@ function clean(input: EstimateItemInput, procurement: Procurement) {
   const unit = input.unit?.trim() || fail("Enter the unit, e.g. SF, LF, EA.");
   if (!(typeof input.quantity === "number" && Number.isFinite(input.quantity) && input.quantity > 0)) fail("The quantity must be a number above 0.");
   if (!(typeof input.rate === "number" && Number.isFinite(input.rate) && input.rate >= 0)) fail("The unit rate must be 0 or more.");
+  if (!Number.isSafeInteger(cents(input.quantity * input.rate))) fail("The quantity and rate produce an amount that is too large.");
   const pkg = input.packageId === null ? null : procurement.packages.find(p => p.id === input.packageId) ?? fail("That trade package doesn't exist.");
   return { item, unit, quantity: input.quantity, rate: input.rate, source: input.source?.trim() ?? "", packageId: pkg?.id ?? null, division: pkg ? divisionLabel(pkg.division) : "" };
 }

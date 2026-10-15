@@ -20,7 +20,7 @@ export const sampleFiles: LibraryFile[] = [
 ];
 
 /** Where an estimate line's quantity came from, when not typed in: a model quantity row or an accepted AI finding. */
-export type TakeoffOrigin = { kind: "model"; rowId: string; measured: number } | { kind: "ai"; draftId: string };
+export type TakeoffOrigin = { kind: "model"; rowId: string; measured: number } | { kind: "ai"; draftId: string } | { kind: "scope"; draftId: string; scopeId: string };
 /**
  * One line of MCN's own estimate (Quantity takeoffs → Manual quantities). `packageId` is the trade it
  * belongs to (Marcel, 7 Oct: takeoffs by trade, like Scopes & bid forms); rows saved before it existed

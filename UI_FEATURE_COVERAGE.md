@@ -4,6 +4,8 @@ Source: **Danial Khan's Zoom Meeting, September 8, 2026**. Timestamps below are 
 
 ## Scope of this iteration
 
+**15 October 2026 update:** Overview now derives its metrics, activity and trade-package status from saved project records. Approved scope can be queued and priced under Quantity takeoffs → Scope drafts. Budget versions saves and compares stage copies with explanations. Cost suggestions now writes an approved, supported quantity × rate adjustment into the selected active bid cell. Sample inputs are sufficient to demonstrate all four features; these records remain browser-local. The original September checklist below is retained as product context.
+
 Build the complete, connected UI so the team can review the workflow before implementing the remaining backend. Marcel explicitly requested the frontend of every area at **19:21:32–19:22:03**. New AI workflows use clearly identified sample content and local interactions. They do not claim to process drawings, proposals, or schedules automatically.
 
 Preserve the working Excel trade-workbook import/export, bidder editing, inline bid leveling, review progress and exceptions, glossary, browser persistence and backup, and read-only Gmail inbox connector. The supported workbook importer accepts `.xlsx`; PDF scope import and proposal extraction are separate, unfinished capabilities.
@@ -51,7 +53,7 @@ Preserve the working Excel trade-workbook import/export, bidder editing, inline 
 
 The complete UI demonstrates navigation, sample project information, document organization, draft generation/review states, bidder submission, conversations, costs, budget, planning, document comparison, and award/turnover. New module data and generation examples remain local UI previews. Messages and invitations are not delivered externally, file-selection screens do not imply document parsing, and preview approvals do not authorize a real award.
 
-The Cost suggestions modal explicitly uses the steel-anchor example apart from the active workbook. Its quantity and rate recalculate the example total; editing the cost basis resets review. Approving that example changes only the modal state.
+Cost suggestions selects an actual excluded or partial response in the active comparison. Quantity, rate, unit and a written supporting basis are required; reviewed estimate references can supply the starting values. Editing them resets approval. Applying an approved cost replaces that cell's adjustment and retains its basis in the note. Scope coverage remains unresolved until reviewed separately.
 
 ## Evidence gaps
 

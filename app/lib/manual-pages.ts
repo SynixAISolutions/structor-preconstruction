@@ -31,6 +31,7 @@ export const pageGuides = [
       "Choose View on drawings to open the drawing page and the region linked to the item, or choose the item's source reference (such as 09 29 00 · §3.6) to read its specification section and manual pages. Closing the window returns you to the same item. To check the actual document, open the source PDF from your computer; it stays in this browser.",
       "Choose Add scope item, or an item's pencil, to write the description, source reference, notes, and origin. Saving a change sends an approved item back to Needs review.",
       "Use the circle beside an item to approve or reopen it. Approve visible form approves every draft item in the selected bid form.",
+      "For an approved requirement, choose Add to estimate in Requirement detail. Open estimate drafts takes you to Quantity takeoffs; open that trade's Scope drafts to enter a measured quantity, unit and rate. Queueing a responsibility adds no invented quantities or costs.",
       "In Requirement detail, choose Move trade to hand an item to another trade; it returns to review and that trade's owner is notified. Apply to all trades puts one item, such as dust protection, in every trade's bid form.",
       "Switch to AI findings and choose the Project manual PDF. Structor reads its text locally and shows page progress. Optionally open Use this trade's scope bid form, choose its PDF and Select bid form sections to include the listed specifications across divisions. Check unmatched numbers and add any install-only sections; the bid form's inclusions and exclusions guide trade allocation. Choose Read selected sections to send selected text and the responsibility brief to DeepSeek. New findings wait for review. Stop reading and keep completed findings cancels the remaining requests; three consecutive service failures stop a long run automatically.",
       "Filter the findings by type and review status, and check every cited page and quote. Failed requests and screening notes stay with the run so incomplete coverage stays visible.",
@@ -80,6 +81,7 @@ export const pageGuides = [
       "Read the trade list: each trade shows its assigned estimator, how many items it has, its MCN estimate, and how many items still need review. Workbook total adds every trade, including unassigned items.",
       "Choose Open trade. Estimate items lists that trade's priced lines; search narrows them. Back to trades returns to the list.",
       "Choose Add item to enter a manual line inside the trade: description, quantity, unit, unit rate, and source reference.",
+      "Open Scope drafts to price approved requirements queued from Scopes & bid forms. Enter the missing quantity, unit and rate, then Add priced item. The source stays linked and the new estimate line needs review. A changed, moved or reopened source blocks pricing until you review and queue it again.",
       "Open Model quantities to price a measurement from the 3D model, such as a floor finish area or a partition's wall area: choose Price quantity and set your unit rate. The model's quantity is copied in; if the model later changes, the line says so instead of changing your price.",
       "Open Accepted AI quantities to price quantities accepted in Scopes & bid forms. Review AI findings takes you there to accept more.",
       "Edit an item to change its quantity, unit rate, or trade. Changing the quantity or price needs a fresh review; moving it to another trade does not. Mark reviewed once you have checked it.",
@@ -320,6 +322,7 @@ export const pageGuides = [
       "On a direct line, choose Choose forecast basis. Pick MCN estimate and the trade to use that trade's estimate from Quantity takeoffs, or pick Base bid, Provisional total, or Reviewed total and a bidder from the saved Bid leveling comparison. Apply selected value sets the forecast; the budget and the bid figures keep their values.",
       "When MCN estimate is chosen, the dialog shows how the trade meets its budget line: Linked to trade, or Matched by CSI code to check before applying. A trade budgeted on several cost-center lines can't take one estimate total.",
       "Open Trade variance for one row per trade: MCN estimate, the bid it is compared with, budget, current forecast, Bid − estimate in dollars and percent, and Budget − estimate. Refresh bid comparison rereads the saved leveling workspace; Export report downloads the table.",
+      "In Budget versions, choose Save budget version, name the version, select Concept, Schematic design, Design development or Construction documents, and explain the baseline or change. Save another version after editing the cost plan to compare the retained totals and added, removed or changed lines. Earlier copies retain their values. Export the history or comparison as CSV.",
     ],
     terms: [
       { name: "Budget / Forecast", meaning: "The amount planned for a line and the amount currently expected to be spent." },
@@ -328,7 +331,7 @@ export const pageGuides = [
       { name: "Trade variance", meaning: "MCN's estimate beside the lowest eligible current reviewed bid for each trade, or the bid already applied to its forecast, to see why they differ." },
     ],
     example: "A trade's MCN estimate is $1,700,000 and its reviewed low bid is $1,785,000: Trade variance shows Bid − estimate of $85,000 (5.0%), so the estimator checks whether the bid carries scope the estimate misses before choosing the forecast basis.",
-    reality: "The Jelleff lines are Marcel's DD budget; changes save in this browser for the open project. Approval is a local review status, not an owner authorization. Trade variance compares trade totals only: MCN estimates exclude indirect costs, markups, and allowances, so confirm equivalent scope before reading a difference.",
+    reality: "The Jelleff lines are Marcel's DD budget; changes and budget versions save in this browser for the open project. Versions retain cost-plan copies and explanations; they do not restore or overwrite the working budget. Approval is a local review status, not an owner authorization. Trade variance compares trade totals only: MCN estimates exclude indirect costs, markups, and allowances, so confirm equivalent scope before reading a difference.",
     related: ["takeoffs", "leveling", "allowances", "contracts"],
   },
   {
