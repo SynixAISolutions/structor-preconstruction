@@ -60,7 +60,7 @@ if (args.reading && args.reading !== "true") {
   const pages = (await pdfPages(file)).filter(p => p.text.trim());
   const job = J.parseProposalJob({ form: { items: items.map(i => ({ id: i.id, title: i.description, detail: i.section })) }, document: basename(file), pages });
   const started = Date.now();
-  const model = D.textModel();
+  const model = D.textModel("deepseek-v4-pro");
   // Same prompt, screening and token budget as the app's /api/ai proposal job; a longer wait, as nobody is watching a spinner.
   const parts = [], jobs = J.proposalBatches(job);
   for (const [i, batch] of jobs.entries()) {

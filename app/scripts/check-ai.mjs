@@ -13,6 +13,14 @@ const { sampleProcurement } = await import("../lib/data/procurement.ts");
 const { sampleSubmissions } = await import("../lib/data/sample-award.ts");
 
 const jobFails = (fn, pattern) => assert.throws(fn, e => e instanceof J.AiJobError && pattern.test(e.message), `expected ${pattern}`);
+const previousModel = process.env.AI_TEXT_MODEL;
+try {
+  delete process.env.AI_TEXT_MODEL;
+  assert.equal(D.textModel(), "deepseek-flash");
+  assert.equal(D.textModel("deepseek-v4-pro"), "deepseek-v4-pro");
+  process.env.AI_TEXT_MODEL = "deepseek-flash";
+  assert.equal(D.textModel("deepseek-v4-pro"), "deepseek-flash", "The server model override remains available");
+} finally { if (previousModel === undefined) delete process.env.AI_TEXT_MODEL; else process.env.AI_TEXT_MODEL = previousModel; }
 
 // ── Demo password ──
 const basic = (user, pass) => `Basic ${Buffer.from(`${user}:${pass}`, "utf8").toString("base64")}`;

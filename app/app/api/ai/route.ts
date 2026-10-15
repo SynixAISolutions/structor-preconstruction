@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   try { body = JSON.parse(raw); } catch { return json({ error: "The request isn't valid JSON." }, 400); }
   if (!body || typeof body !== "object" || Array.isArray(body)) return json({ error: "Choose an AI reading job and its input." }, 400);
 
-  const model = body.job === "drawing" ? "deepseek-flash" : textModel();
+  const model = body.job === "drawing" ? "deepseek-flash" : textModel(body.job === "proposal" ? "deepseek-v4-pro" : "deepseek-flash");
   try {
     if (body.job === "drawing") {
       const job = parseDrawingJob(body.input);

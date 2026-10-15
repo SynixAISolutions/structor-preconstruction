@@ -9,8 +9,8 @@ export class DeepSeekError extends Error {
 }
 
 const ENDPOINT = "https://api.deepseek.com/chat/completions";
-/** deepseek-flash: fast, cheap, JSON output. AI_TEXT_MODEL=deepseek-v4-pro switches to the stronger, slower model. */
-export const textModel = () => process.env.AI_TEXT_MODEL?.trim() || "deepseek-flash";
+/** Flash for specification chunks; proposals pass Pro for better long-form coverage. The server override applies to both. */
+export const textModel = (fallback = "deepseek-flash") => process.env.AI_TEXT_MODEL?.trim() || fallback;
 
 export async function deepseekJson(key: string, messages: ChatMessage[], options: { model: string; maxTokens: number; budgetMs: number; fetchImpl?: typeof fetch; signal?: AbortSignal }): Promise<unknown> {
   const deadline = Date.now() + options.budgetMs;
