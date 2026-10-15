@@ -32,7 +32,8 @@ export const pageGuides = [
       "Choose Add scope item, or an item's pencil, to write the description, source reference, notes, and origin. Saving a change sends an approved item back to Needs review.",
       "Use the circle beside an item to approve or reopen it. Approve visible form approves every draft item in the selected bid form.",
       "In Requirement detail, choose Move trade to hand an item to another trade; it returns to review and that trade's owner is notified. Apply to all trades puts one item, such as dust protection, in every trade's bid form.",
-      "Switch to AI findings to review what the AI proposed for the trade: scope items, drawing regions, and quantities. Filter by Finding type and Review status, and check each finding's cited page and words before deciding.",
+      "Switch to AI findings. Under Read specifications, choose the Project manual PDF: Structor finds its specification sections and selects the trade's division. Use Find specification sections to tick others the package installs (a drywall package also reads framing, insulation, firestopping, doors installed by others and more); the count of AI requests updates. Choose Read selected sections and wait while each request is read.",
+      "The findings appear for review: scope items, drawing regions, and quantities. Filter by Finding type and Review status, and check each finding's cited page and words before deciding. Screening notes lists findings the AI proposed but Structor dropped because their quote is not on the cited page; failed requests are listed by section and pages, so you can read those sections again.",
       "Accept puts a scope item into the bid form already approved, a region into Drawing Flip, and a quantity into the trade's estimate. Edit corrects a finding before accepting it and keeps the AI's original version. Reject records a reason, and Reopen for review brings a rejected finding back. Select visible pending findings, then Accept selected, to accept several at once.",
       "When every item is approved, choose Publish to subcontractors. If the form changes afterwards the package shows Revised, and Publish revision releases the new version.",
     ],
@@ -44,7 +45,7 @@ export const pageGuides = [
       { name: "Citation", meaning: "The document, page, and exact words a finding relies on. A finding without one is never shown." },
     ],
     example: "Masonry's estimator sees brick anchors that the framing trade installs on this job, moves the item to Carpentry, and Carpentry's owner reviews it before publishing.",
-    reality: "Scope items, approvals, moves, findings, and publishing save in this browser for the open project. Publishing records notifications for invited companies but sends no email; invited companies answer the published form in the Subcontractor portal. Scope wording is sample content. The Drywall AI findings come from an illustrative sample run: no documents were read, and their quotes and pages are invented. Reading uploaded specifications with the live AI is being connected to this screen.",
+    reality: "Scope items, approvals, moves, findings, and publishing save in this browser for the open project. Publishing records notifications for invited companies but sends no email; invited companies answer the published form in the Subcontractor portal. Scope wording is sample content. The Drywall AI findings already shown come from an illustrative sample run: no documents were read, and their quotes and pages are invented. When you read a project manual, the PDF stays in this browser: only the selected sections' text is sent to the AI (DeepSeek), and the findings and their citations are saved here. Choose the PDF again after a reload to open cited pages. A page without a text layer (a scanned page) can't be read.",
     related: ["packages", "documents", "checks"],
   },
   {
@@ -216,7 +217,8 @@ export const pageGuides = [
       "Open a company's outreach to log a call, internal note, or message. The newest entry appears first.",
       "Use the package's Messages tab for conversations with the invited companies about that trade. Threads and drafts stay with the package; nothing is emailed.",
       "Choose Review bid form to approve and publish the package in Scopes & bid forms.",
-      "Choose Review proposals for proposals that arrived by email and were read by the AI. Review proposal shows the reading beside its source: base bid, the Y / N / P / N/A answer for every bid-form item, exclusions, clarifications, alternates, and the proposal's contact, each with the page and words it came from. Not stated means the proposal doesn't say.",
+      "Choose Review proposals. Under Read proposal PDF, choose the Invited company that sent it and its Proposal PDF, then Read proposal for review. Only the proposal's text and the published bid-form items are sent to the AI; the reading opens for checking.",
+      "Review proposals also lists proposals already read. Review proposal shows the reading beside its source: base bid, the Y / N / P / N/A answer for every bid-form item, exclusions, clarifications, alternates, and the proposal's contact, each with the page and words it came from. Not stated means the proposal doesn't say.",
       "Correct whatever was misread and choose Save corrections; the original AI reading stays visible. Confirm and submit revision makes it the company's next bid revision, ready in Bid leveling, with the company marked Submitted. Discard reading needs a reason.",
     ],
     terms: [
@@ -225,7 +227,7 @@ export const pageGuides = [
       { name: "Proposal reading", meaning: "The AI's reading of an emailed proposal against the published bid form. It becomes a bid only when an estimator confirms it." },
     ],
     example: "Invite District Concrete, log “Called — no answer, left voicemail”, and change the status to Bidding when they confirm.",
-    reality: "Invitations, statuses, outreach, and proposal readings save in this browser for the open project. No email or message is sent. Confirming a reading records the proposal file's details, not the file. A reading can't be confirmed while an item is unanswered, a P or N/A has no note, the base bid or contact is missing, or the bid form was revised after the proposal was read. The Jelleff reading of District Concrete's revised proposal is illustrative: no proposal was read.",
+    reality: "Invitations, statuses, outreach, and proposal readings save in this browser for the open project. No email or message is sent. Confirming a reading records the proposal file's details, not the file. A reading can't be confirmed while an item is unanswered, a P or N/A has no note, the base bid or contact is missing, or the bid form was revised after the proposal was read. A proposal can be read only against a published bid form, for an invited company that has no other reading waiting; a scanned proposal without a text layer needs OCR first. The PDF stays in this browser; choose it again after a reload to open cited pages. The Jelleff reading of District Concrete's revised proposal is illustrative: no proposal was read.",
     related: ["scopes", "bidders", "leveling"],
   },
   {
