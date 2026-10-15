@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { extractTradeScope, chunkPages, type ScopeRunResult } from "../../lib/ai-client";
-import { manualSections, sectionsInDivision } from "../../lib/manual-sections";
+import { manualSections, sectionsFromBidForm, sectionsInDivision } from "../../lib/manual-sections";
 import type { TradePackage } from "../../lib/procurement";
 import { getActiveProjectId } from "../../lib/project-scope";
 import { AiPdfPicker, type LoadedPdf } from "./ai-pdf-picker";
@@ -12,6 +12,7 @@ export function SpecificationReader({ pkg, onRun }: {
   pkg: TradePackage; onRun: (result: ScopeRunResult, file: File) => string | null;
 }) {
   const [pdf, setPdf] = useState<LoadedPdf | null>(null);
+  const [bidForm, setBidForm] = useState<LoadedPdf | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
@@ -19,19 +20,24 @@ export function SpecificationReader({ pkg, onRun }: {
   const [result, setResult] = useState<ScopeRunResult | null>(null);
   const [error, setError] = useState("");
   const request = useRef(0), running = useRef(false);
-  useEffect(() => () => { request.current++; }, []);
+  const controller = useRef<AbortController | null>(null);
+  useEffect(() => () => { request.current++; controller.current?.abort(); }, []);
   const sections = useMemo(() => pdf ? manualSections(pdf.text.pages) : [], [pdf]);
   const chosen = sections.filter(s => selected.includes(s.section));
   const visible = sections.filter(s => `${s.section} ${s.title}`.toLowerCase().includes(query.toLowerCase()));
   const calls = chosen.reduce((count, s) => count + chunkPages(s.pages).length, 0);
+  const brief = bidForm?.text.pages.map(page => page.text).join("\n") ?? "";
+  const formSelection = sectionsFromBidForm(sections, brief);
   async function read() {
     if (!pdf || !chosen.length || running.current) return;
+    if (brief.length > 20_000) { setError("This bid form is too long for the responsibility brief. Choose the trade's shorter scope form."); return; }
+    controller.current = new AbortController();
     running.current = true;
     const projectId = getActiveProjectId();
     const current = ++request.current;
     setBusy(true); setError(""); setResult(null); setProgress({ done: 0, total: calls });
     try {
-      const outcome = await extractTradeScope({ pkg, manual: pdf.text, sections: chosen, onProgress: (done, total) => { if (current === request.current) setProgress({ done, total }); } });
+      const outcome = await extractTradeScope({ pkg, manual: pdf.text, sections: chosen, brief, signal: controller.current.signal, onProgress: (done, total) => { if (current === request.current) setProgress({ done, total }); } });
       if (current !== request.current || projectId !== getActiveProjectId()) return;
       const message = onRun(outcome, pdf.file);
       if (message) throw new Error(message);
@@ -41,6 +47,7 @@ export function SpecificationReader({ pkg, onRun }: {
   }
   return <div className="ai-reader">
     <h3>Read specifications</h3><p>Choose the sections that belong in {pkg.name}. The AI proposes scope items for your review.</p>
+    <details><summary>Use this trade's scope bid form</summary><AiPdfPicker label="Scope bid form PDF" disabled={busy} onChange={loaded => { setBidForm(loaded); setError(""); }}/><p>The bid form's specification list can select sections across divisions. Its inclusions and exclusions also guide trade allocation. Check extra install-only sections separately.</p><Button disabled={busy || !pdf || !bidForm || !formSelection.sections.length} onClick={() => setSelected(formSelection.sections.map(s => s.section))}>Select bid form sections</Button>{bidForm && <p>{formSelection.listed.length} specification numbers listed · {formSelection.sections.length} manual sections matched{formSelection.missing.length ? ` · Not found: ${formSelection.missing.join(", ")}` : ""}. Division 01 includes its available sections.</p>}</details>
     <AiPdfPicker label="Project manual PDF" disabled={busy} onChange={loaded => { setPdf(loaded); const found = loaded ? manualSections(loaded.text.pages) : []; setSelected(sectionsInDivision(found, pkg.division).map(s => s.section)); setResult(null); setError(""); }}/>
     {pdf && (sections.length ? <>
       <label className="ui-field">Find specification sections<input value={query} disabled={busy} onChange={e => setQuery(e.target.value)} placeholder="Section number or title"/></label>
@@ -50,7 +57,7 @@ export function SpecificationReader({ pkg, onRun }: {
     </> : <p role="alert">No specification section headers were found. Choose a project manual with section numbers and readable text.</p>)}
     <p className="ai-privacy">The PDF stays in this browser. Running AI sends the selected section text to DeepSeek. Findings and their citations are saved here for review; choose the PDF again after a reload.</p>
     <Button variant="primary" disabled={busy || !chosen.length} onClick={read}>{busy ? "Reading specifications…" : "Read selected sections"}</Button>
-    {busy && <p role="status">Reading request {progress.done} of {progress.total}…</p>}
+    {busy && <><p role="status">Reading request {progress.done} of {progress.total}…</p><Button onClick={() => controller.current?.abort()}>Stop reading and keep completed findings</Button></>}
     {error && <p role="alert" className="proc-source-error">{error}</p>}
     {result && <div className="ai-run-result"><p role={result.input.error ? "alert" : "status"}>{result.input.error ? result.input.error : `${result.input.drafts.length} findings are ready below. Review before accepting.`}{result.failures.length > 0 && !result.input.error && " Some pages failed to read; this run is incomplete."}</p>{result.failures.length > 0 && <details open><summary>{result.failures.length} failed request{result.failures.length === 1 ? "" : "s"}</summary><ul>{result.failures.map((failure, i) => <li key={i}>{failure.section} · pages {failure.pages}: {failure.error}</li>)}</ul></details>}{result.dropped.length > 0 && <details><summary>Screening notes ({result.dropped.length}) · check omitted findings</summary><ul>{result.dropped.map((drop, i) => <li key={i}>{drop.what}: {drop.reason}</li>)}</ul></details>}</div>}
   </div>;

@@ -32,8 +32,8 @@ export const pageGuides = [
       "Choose Add scope item, or an item's pencil, to write the description, source reference, notes, and origin. Saving a change sends an approved item back to Needs review.",
       "Use the circle beside an item to approve or reopen it. Approve visible form approves every draft item in the selected bid form.",
       "In Requirement detail, choose Move trade to hand an item to another trade; it returns to review and that trade's owner is notified. Apply to all trades puts one item, such as dust protection, in every trade's bid form.",
-      "Switch to AI findings to review what the AI proposed for the trade: scope items, drawing regions, and quantities. Filter by Finding type and Review status, and check each finding's cited page and words before deciding.",
-      "Accept puts a scope item into the bid form already approved, a region into Drawing Flip, and a quantity into the trade's estimate. Edit corrects a finding before accepting it and keeps the AI's original version. Reject records a reason, and Reopen for review brings a rejected finding back. Select visible pending findings, then Accept selected, to accept several at once.",
+      "Switch to AI findings and choose the Project manual PDF. Structor reads its text locally and shows page progress. Optionally open Use this trade's scope bid form, choose its PDF and Select bid form sections to include the listed specifications across divisions. Check unmatched numbers and add any install-only sections; the bid form's inclusions and exclusions guide trade allocation. Choose Read selected sections to send selected text and the responsibility brief to DeepSeek. New findings wait for review.",
+      "Accept puts a scope item into the bid form already approved and a region into Drawing Flip. An accepted quantity becomes available to price under Quantity takeoffs → Accepted AI quantities; it is not automatically a priced estimate line. Edit corrects a finding before accepting it and keeps the AI's original version. Reject records a reason, and Reopen for review brings a rejected finding back. Select visible pending findings, then Accept selected, to accept several at once.",
       "When every item is approved, choose Publish to subcontractors. If the form changes afterwards the package shows Revised, and Publish revision releases the new version.",
     ],
     terms: [
@@ -44,7 +44,7 @@ export const pageGuides = [
       { name: "Citation", meaning: "The document, page, and exact words a finding relies on. A finding without one is never shown." },
     ],
     example: "Masonry's estimator sees brick anchors that the framing trade installs on this job, moves the item to Carpentry, and Carpentry's owner reviews it before publishing.",
-    reality: "Scope items, approvals, moves, findings, and publishing save in this browser for the open project. Publishing records notifications for invited companies but sends no email; invited companies answer the published form in the Subcontractor portal. Scope wording is sample content. The Drywall AI findings come from an illustrative sample run: no documents were read, and their quotes and pages are invented. Reading uploaded specifications with the live AI is being connected to this screen.",
+    reality: "Scope items, approvals, moves, findings and publishing save in this browser for the open project. The built-in run is illustrative; live reading uses uploaded documents. Failed-page and screening notes stay with new runs; a partial or capped reading is not complete package coverage. Export this run for accuracy check downloads its findings, citations and review history. Original PDFs remain in memory: choose the same source file again after a reload. Manual and proposal PDFs need readable text; drawings can be read as images. Publishing records notifications but sends no email.",
     related: ["packages", "documents", "checks"],
   },
   {
@@ -67,7 +67,7 @@ export const pageGuides = [
       { name: "Correction", meaning: "A region reassigned from the trade Structor proposed to another; kept in the region's history." },
     ],
     example: "Structor marked the doors on the demolition plan as the openings trade. Reassign them to demolition, because removing existing doors is demolition work; the new doors stay with openings.",
-    reality: "Pages and regions save in this browser for the open project. The sample regions are illustrative; Structor does not read the drawings yet, and pages show without drawing images in the demo.",
+    reality: "Pages and regions save in this browser for the open project. The built-in regions and diagram pages are illustrative. Under Scopes & bid forms → AI findings, open Read drawing sheets, choose the Drawing set PDF, select its pages and Read selected drawing sheets. The AI reads the selected page images and any available text; this sends those images and text to DeepSeek. Requirements, highlights and dimension-supported quantity proposals remain pending until accepted. Image citations have no automatic matching text-layer check: inspect the original sheet. Runtime sheets show the original PDF image, never substitute diagram linework; choose the same original drawing PDF again after a reload. Reading drawings does not automatically generate a 3D model.",
     related: ["scopes", "drawings", "packages"],
   },
   {
@@ -90,7 +90,7 @@ export const pageGuides = [
       { name: "Unpriced / Unassigned", meaning: "An unpriced item has no unit rate yet. An unassigned item belongs to no trade and counts only in the workbook total." },
     ],
     example: "Open Drywall, price the model's partition area at your unit rate, add a manual line for shaft wall, mark both reviewed, then use Budget & variance to compare Drywall's estimate with the leveled bid.",
-    reality: "Items and reviews save in this browser for the open project. The starting quantities and rates are illustrative. Model quantities come from the prepared Jelleff model, not from uploaded drawings. The estimate excludes indirect costs, markups, and allowances, which stay in Budget summary and the Allowances register.",
+    reality: "Items and reviews save in this browser for the open project. The starting quantities and rates are illustrative. Model quantities come from the prepared host model. Local drywall model measurements can load a privately prepared measurement file with traced FRP/sound-panel bands and one point per physical corner guard. These records save only for the open project and feed the model and quantity views together. Loading does not verify measurements; unresolved placement and source conflicts stay visible. Reading drawings alone does not create 3D geometry. The estimate excludes indirect costs, markups, and allowances, which stay in Budget summary and the Allowances register.",
     related: ["documents", "scopes", "budget", "model"],
   },
   {
@@ -216,7 +216,7 @@ export const pageGuides = [
       "Open a company's outreach to log a call, internal note, or message. The newest entry appears first.",
       "Use the package's Messages tab for conversations with the invited companies about that trade. Threads and drafts stay with the package; nothing is emailed.",
       "Choose Review bid form to approve and publish the package in Scopes & bid forms.",
-      "Choose Review proposals for proposals that arrived by email and were read by the AI. Review proposal shows the reading beside its source: base bid, the Y / N / P / N/A answer for every bid-form item, exclusions, clarifications, alternates, and the proposal's contact, each with the page and words it came from. Not stated means the proposal doesn't say.",
+      "Choose Review proposals, select the invited company that sent the proposal and choose its PDF (up to 50 MB). The package needs a published form and an eligible invitation. Confirm or discard a pending reading before reading another for that company. Choose Read proposal for review. Review proposal shows the reading beside its source: base bid, the Y / N / P / N/A answer for every bid-form item, exclusions, clarifications, alternates, and the proposal's contact, each with the page and words it came from. Not stated means the proposal doesn't say.",
       "Correct whatever was misread and choose Save corrections; the original AI reading stays visible. Confirm and submit revision makes it the company's next bid revision, ready in Bid leveling, with the company marked Submitted. Discard reading needs a reason.",
     ],
     terms: [
@@ -225,7 +225,7 @@ export const pageGuides = [
       { name: "Proposal reading", meaning: "The AI's reading of an emailed proposal against the published bid form. It becomes a bid only when an estimator confirms it." },
     ],
     example: "Invite District Concrete, log “Called — no answer, left voicemail”, and change the status to Bidding when they confirm.",
-    reality: "Invitations, statuses, outreach, and proposal readings save in this browser for the open project. No email or message is sent. Confirming a reading records the proposal file's details, not the file. A reading can't be confirmed while an item is unanswered, a P or N/A has no note, the base bid or contact is missing, or the bid form was revised after the proposal was read. The Jelleff reading of District Concrete's revised proposal is illustrative: no proposal was read.",
+    reality: "Invitations, statuses, outreach, and proposal readings save in this browser for the open project. No email or message is sent. Confirming a reading records the proposal file's details, not the file. A reading can't be confirmed while an item is unanswered, a P or N/A has no note, the base bid or contact is missing, or the bid form was revised after the proposal was read. The built-in Jelleff reading is illustrative. A live reading sends the chosen proposal text and published form items to DeepSeek. Its original PDF stays in browser memory and opens at the cited page; choose that same file again after a reload.",
     related: ["scopes", "bidders", "leveling"],
   },
   {

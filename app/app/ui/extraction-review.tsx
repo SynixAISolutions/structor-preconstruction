@@ -9,6 +9,11 @@ import { Badge, Button, Empty, Modal, Panel, PreviewNote, type ViewProps } from 
 import { ScopeSourceDialog } from "./scope-source-dialog";
 import { findingCitationSources, findingTitle } from "./extraction-citations";
 import { SpecificationReader } from "./specification-reader";
+import { DrawingReader } from "./drawing-reader";
+import { addPage } from "../../lib/drawing-flip";
+import { rememberPdf } from "../../lib/pdf-session";
+import { downloadText } from "../../lib/format";
+import type { ScopeRunResult } from "../../lib/ai-client";
 import { useActiveProject } from "../../lib/project-scope";
 import "./extraction-review.css";
 
@@ -90,17 +95,25 @@ export function ExtractionReview({ review, packageId, sections, colors, by, noti
     const outcome = `${accepted} finding${accepted === 1 ? "" : "s"} accepted.${messages.length ? ` ${messages.length} still ${messages.length === 1 ? "needs" : "need"} review. ${messages.join(" ")}` : ""}`;
     setResult(outcome); notify(outcome);
   }
+  function recordReading(outcome: ScopeRunResult, file: File) {
+    let id = "";
+    const input = { ...outcome.input, notes: { failures: outcome.failures.map(f => `${f.section} · pages ${f.pages}: ${f.error}`), screening: outcome.dropped.map(d => `${d.what}: ${d.reason}`) } };
+    const message = latest.current.run(current => { const next = recordRun(current, latest.current.procurement, input); id = next.runs.at(-1)!.id; return next; });
+    if (message) return message;
+    rememberPdf(file); setRunId(id); setSource({ runId: id, file }); setKind(""); setStatus("pending-review"); setSelected([]); setResult("");
+    notify(input.error ? "The run failed. Check the reported pages and try again." : `${input.drafts.length} findings are ready for review${outcome.failures.length ? "; some pages could not be read" : ""}.`);
+    return null;
+  }
   return <Panel className="ext-review" title="AI findings" subtitle="Check the cited source before accepting a finding.">
-    {pkg && <SpecificationReader key={`${projectId}:${pkg.id}`} pkg={pkg} onRun={(outcome, file) => {
-      let id = "";
-      const message = latest.current.run(current => { const next = recordRun(current, latest.current.procurement, outcome.input); id = next.runs.at(-1)!.id; return next; });
-      if (message) return message;
-      setRunId(id); setSource({ runId: id, file }); setKind(""); setStatus("pending-review"); setSelected([]); setResult("");
-      notify(outcome.input.error ? "The specification run failed. Check the reported pages and try again." : `${outcome.input.drafts.length} findings are ready for review${outcome.failures.length ? "; some pages could not be read" : ""}.`);
-      return null;
+    {pkg && <SpecificationReader key={`${projectId}:${pkg.id}`} pkg={pkg} onRun={recordReading}/>}
+    {pkg && <DrawingReader key={`drawing:${projectId}:${pkg.id}`} pkg={pkg} onRun={recordReading} onPages={(pages, document) => {
+      const errors = latest.current.runFlip(current => pages.reduce((state, page) => state.pages.some(p => p.documentName === document && p.pageNumber === page.page && p.sheet === page.sheet) ? state : addPage(state, { sheet: page.sheet, title: page.sheet, discipline: "Uploaded drawing", revision: "", documentId: `pdf:${document}`, documentName: document, pageNumber: page.page, aspect: page.aspect, source: "uploaded" }), current));
+      return errors ? Object.values(errors)[0] ?? "Check the selected sheets." : null;
     }}/>}
     {!activeRun ? <Empty title="No AI findings for this trade" description="Choose a project manual and read the relevant sections to start a review."/> : <>
     {activeRun.engine.mode === "sample" && <PreviewNote>Illustrative sample — no documents were read. These findings demonstrate the review workflow.</PreviewNote>}
+    <Button onClick={() => downloadText(`ai-review-${activeRun.id}.json`, JSON.stringify({ run: activeRun, findings: extraction.drafts.filter(d => d.runId === activeRun.id) }, null, 2), "application/json")}>Export this run for accuracy check</Button>
+    {activeRun.notes && (activeRun.notes.failures.length > 0 || activeRun.notes.screening.length > 0) && <details className="ai-run-result" open={activeRun.notes.failures.length > 0}><summary>{activeRun.notes.failures.length ? "Incomplete run" : "Screening notes"} · check coverage before publishing</summary><ul>{[...activeRun.notes.failures, ...activeRun.notes.screening].map((note, i) => <li key={i}>{note}</li>)}</ul></details>}
     <div className="ext-filters">
       <label className="ui-field">Extraction run<select value={activeRun.id} onChange={e => { setRunId(e.target.value); setSelected([]); setResult(""); }}>{runs.map(run => <option key={run.id} value={run.id}>{new Date(run.finishedAt).toLocaleDateString("en-US")} · {run.engine.mode} · {run.engine.model}</option>)}</select></label>
       <label className="ui-field">Finding type<select value={kind} onChange={e => { setKind(e.target.value as typeof kind); setSelected([]); }}><option value="">All types</option>{Object.entries(kinds).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
@@ -114,6 +127,7 @@ export function ExtractionReview({ review, packageId, sections, colors, by, noti
       <div className="ext-list">{drafts.map(draft => <article className={`ext-card ${draft.status}`} key={draft.id}>
         <header><div>{draft.status === "pending-review" && <input type="checkbox" aria-label={`Select ${findingTitle(draft)}`} checked={selected.includes(draft.id)} onChange={e => setSelected(e.target.checked ? [...selected, draft.id] : selected.filter(id => id !== draft.id))}/>}<Badge>{kinds[draft.kind]}</Badge><Badge tone={draft.status === "accepted" ? "green" : draft.status === "rejected" ? "neutral" : "amber"}>{statuses[draft.status]}</Badge>{isEdited(draft) && <Badge tone="blue">Edited</Badge>}</div></header>
         <h3>{findingTitle(draft)}</h3>
+        {draft.citations.some(c => c.verification === "image") && <p className="proc-modal-note">Image citation · check the sheet before accepting</p>}
         {draft.kind === "scope" ? <><p>{draft.detail}</p><small>{draft.source}</small></> : draft.kind === "region" ? <p>{draft.sheet} · {draft.status === "accepted" ? "Highlight saved in Drawing Flip." : "Highlight stays out of Drawing Flip until accepted."}</p> : <><strong className="ext-quantity">{draft.quantity.toLocaleString()} {draft.unit}</strong><p>{draft.basis}</p></>}
         <div className="ext-citations">{draft.citations.map((citation, index) => <button key={index} onClick={() => setDialog({ kind: "citation", draft, citation })}><FileText size={13}/>{citation.sheet ?? citation.document} · p. {citation.page}</button>)}</div>
         {draft.rejection && <p className="ext-rejection">{REJECT_REASONS[draft.rejection.reason]}{draft.rejection.note && ` · ${draft.rejection.note}`}</p>}

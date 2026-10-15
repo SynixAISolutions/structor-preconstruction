@@ -47,6 +47,7 @@ import {
 import { displayDate } from "../../lib/format";
 import { useDrawingFlip } from "../../lib/use-drawing-flip";
 import { useProcurement } from "../../lib/use-procurement";
+import { rememberPdf, useSourceFile } from "../../lib/pdf-session";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, PreviewNote, Stats, type ViewProps } from "./shared";
 import "./drawing-flip-ui.css";
 
@@ -94,9 +95,22 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
   expandable?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const file = useSourceFile(page.documentName);
+  const [rendered, setRendered] = useState<{ file: File; page: number; image: string } | null>(null);
+  const [sourceError, setSourceError] = useState("");
+  const runtime = page.source === "uploaded";
+  const image = page.image || (rendered?.file === file && rendered?.page === page.pageNumber ? rendered.image : null);
+  useEffect(() => {
+    let current = true;
+    setSourceError("");
+    if (runtime && file) import("../../lib/pdf-drawing").then(lib => lib.renderDrawingPage(file, page.pageNumber)).then(result => { if (current) setRendered({ file, page: page.pageNumber, image: result.image }); }, error => { if (current) setSourceError(error instanceof Error ? error.message : "The source page could not be rendered."); });
+    return () => { current = false; };
+  }, [runtime, file, page.pageNumber]);
+  if (runtime && !image) return <div className="flip-source-needed"><p>{sourceError || (file ? "Rendering original drawing page…" : `Choose ${page.documentName} to view the original sheet and its highlights.`)}</p><label className="ui-field">Original drawing PDF<input type="file" accept=".pdf,application/pdf" onChange={event => { const chosen = event.target.files?.[0]; if (!chosen) return; if (chosen.name !== page.documentName) { setSourceError(`Choose the cited file: ${page.documentName}.`); return; } rememberPdf(chosen); }}/></label></div>;
+  const displayPage = image ? { ...page, image } : page;
   const height = 1000 / page.aspect;
   const drawing = <svg viewBox={`0 0 1000 ${height}`} role="img" aria-label={`${page.sheet} with ${regions.length} trade regions`}>
-    <DrawingBackdrop page={page} height={height}/>
+    <DrawingBackdrop page={displayPage} height={height}/>
     <g className="flip-region-layer">{regions.map(region => {
       const points = region.polygon.map(point => `${point.x * 1000},${point.y * height}`).join(" ");
       const centerX = region.polygon.reduce((sum, point) => sum + point.x, 0) / region.polygon.length * 1000;
@@ -113,7 +127,7 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
     <div className="flip-canvas-wrap">
       <div className="flip-sheet">{drawing}</div>
       {expandable && <button className="flip-expand" onClick={() => setExpanded(true)} aria-label="Expand drawing"><Maximize2 size={16}/></button>}
-      {!page.image && <span className="flip-image-state"><PencilRuler size={13}/>Diagram preview</span>}
+      {!image && <span className="flip-image-state"><PencilRuler size={13}/>Diagram preview</span>}
     </div>
     {expanded && <Modal title={`${page.sheet} · ${page.title}`} subtitle="Trade regions stay linked as the drawing scales." wide onClose={() => setExpanded(false)}><div className="flip-expanded">{drawing}</div></Modal>}
   </>;
@@ -230,7 +244,7 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
         {mode === "regions" && selected && <Panel className="flip-region-detail">
           <div className="flip-detail-title"><span style={{ background: `${colors.get(selected.packageId)}1f`, color: colors.get(selected.packageId) }}>{selected.origin === "ai" ? <Bot size={19}/> : <UserRound size={19}/>}</span><div><small>{selected.number} · {selected.origin === "ai" ? "STRUCTOR PROPOSAL" : "ESTIMATOR REGION"}</small><h2>{selected.label}</h2></div></div>
           <div className={`flip-review-state ${selected.status}`}><ShieldCheck size={18}/><div><strong>{selected.status === "pending-review" ? "Contractor review required" : "Trade assignment approved"}</strong><small>{selected.reviewedBy ? `${selected.reviewedBy} · ${activityDate(selected.reviewedAt)}` : "Review or correct this assignment before it is relied on."}</small></div></div>
-          <dl><div><dt>Responsible trade</dt><dd><i style={{ background: colors.get(selected.packageId) }}/>{selectedPackage?.code} · {selectedPackage?.name}</dd></div><div><dt>Drawing evidence</dt><dd>{selected.evidence || "Estimator marked region"}</dd></div><div><dt>Confidence</dt><dd>{selected.confidence === null ? "Estimator reviewed" : `${Math.round(selected.confidence * 100)}%`}</dd></div><div><dt>Review notes</dt><dd>{selected.notes || "No notes recorded"}</dd></div></dl>
+          <dl><div><dt>Responsible trade</dt><dd><i style={{ background: colors.get(selected.packageId) }}/>{selectedPackage?.code} · {selectedPackage?.name}</dd></div><div><dt>Drawing evidence</dt><dd>{selected.evidence || "Estimator marked region"}</dd></div><div><dt>Confidence</dt><dd>{page?.source === "uploaded" ? "Uncalibrated AI proposal; verify on sheet" : selected.confidence === null ? "Estimator reviewed" : `${Math.round(selected.confidence * 100)}%`}</dd></div><div><dt>Review notes</dt><dd>{selected.notes || "No notes recorded"}</dd></div></dl>
           {selected.status === "pending-review" && <Button variant="primary" onClick={() => act(current => approveRegion(current, selected.id, CURRENT_USER), `${selected.number} approved.`)}><Check size={15}/>Approve trade assignment</Button>}
           <div className="flip-detail-actions"><Button onClick={() => { setReassignTo(""); setReassignReason(""); setReassignOpen(true); }}><RotateCcw size={15}/>Correct trade</Button><Button onClick={() => { setNotes(selected.notes); setNotesOpen(true); }}><PencilRuler size={15}/>Notes</Button></div>
           <div className="flip-scope-links"><header><div><Link2 size={15}/><strong>Linked scope items</strong></div><Badge>{linkedScopes.length}</Badge></header>{linkedScopes.map(scope => <article key={scope.id}><div><strong>{scope.title}</strong><small>{scope.source || "No source reference"}</small></div><button aria-label={`Unlink ${scope.title}`} onClick={() => act(current => unlinkScope(current, selected.id, scope.id, CURRENT_USER), "Scope item unlinked.")}><Unlink size={14}/></button></article>)}{!linkedScopes.length && <p>This region is not linked to a bid-form item yet.</p>}{availableScopes.length > 0 && <div className="flip-link-picker"><select aria-label="Scope item to link" value={linkId} onChange={event => setLinkId(event.target.value)}><option value="">Choose scope item…</option>{availableScopes.map(scope => <option value={scope.id} key={scope.id}>{scope.title}</option>)}</select><button disabled={!linkId} aria-label="Link scope item" onClick={() => { if (linkId && act(current => linkScope(current, procurement, selected.id, linkId, CURRENT_USER), "Scope item linked to the drawing.")) setLinkId(""); }}><Link2 size={15}/></button></div>}</div>

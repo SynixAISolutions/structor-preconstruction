@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { sampleProcurement } from "../../lib/data/procurement";
 import { sampleProposals } from "../../lib/data/proposals";
-import { extractTradeScope, readProposal } from "../../lib/ai-client";
+import { extractDrawingScope, extractTradeScope, readProposal } from "../../lib/ai-client";
 import { EMPTY_EXTRACTION, recordRun } from "../../lib/extraction";
 import { EMPTY_PROPOSALS, recordReading } from "../../lib/proposal-extraction";
 import { manualSections, sectionsInDivision } from "../../lib/manual-sections";
@@ -83,4 +83,36 @@ test("proposal reading uses the published items and records a review without sub
     assert.equal(recorded.readings[0].packageId, "concrete");
     assert.ok(recorded.readings[0].content.responses.every(r => r.answer === null));
   } finally { globalThis.fetch = fetchBefore; }
+});
+
+test("repeated service failures stop a long reading and identify pages never attempted", async () => {
+  const original = globalThis.fetch; let calls = 0;
+  globalThis.fetch = async () => { calls++; return Response.json({ error: "Service timeout" }, { status: 502 }); };
+  try {
+    const result = await extractTradeScope({ pkg: drywall, manual: { name: "manual.pdf", pageCount: 25 }, sections: [{ section: "09 29 00", title: "Gypsum", firstPage: 1, lastPage: 25, pages: Array.from({ length: 25 }, (_, i) => ({ page: i + 1, text: "Test specification text." })) }] });
+    assert.equal(calls, 3); assert.equal(result.failures.length, 5);
+    assert.match(result.failures[3].error, /Not attempted/);
+  } finally { globalThis.fetch = original; }
+});
+
+test("stopping a reading keeps completed findings and sends no later requests", async () => {
+  const original = globalThis.fetch, controller = new AbortController(); let calls = 0;
+  globalThis.fetch = async () => { calls++; controller.abort(); return Response.json({ model: "test", dropped: [], drafts: [{ kind: "scope", key: "completed", packageId: "drywall", title: "Completed finding", detail: "", source: "09 29 00", citations: [{ document: "manual.pdf", page: 1, sheet: null, quote: "Test specification text." }] }] }); };
+  try {
+    const result = await extractTradeScope({ pkg: drywall, manual: { name: "manual.pdf", pageCount: 10 }, signal: controller.signal, sections: [{ section: "09 29 00", title: "Gypsum", firstPage: 1, lastPage: 10, pages: Array.from({ length: 10 }, (_, i) => ({ page: i + 1, text: "Test specification text." })) }] });
+    assert.equal(calls, 1); assert.equal(result.input.drafts.length, 1); assert.match(result.failures[0].error, /Not attempted/);
+  } finally { globalThis.fetch = original; }
+});
+
+test("image-only drawings keep their sheet identity, image citation and scope links for review", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async (_url, init) => {
+    const body = JSON.parse(init!.body as string); assert.equal(body.job, "drawing"); assert.equal(body.input.image, "data:image/jpeg;base64,/9j/AAAA");
+    return Response.json({ model: "test", sheet: "A10.5", dropped: [], drafts: [{ kind: "scope", key: "image-1", packageId: "drywall", title: "Provide sound panels.", detail: "Check the image.", source: "A10.5", citations: [{ document: "drawings.pdf", page: 2, sheet: "A10.5", quote: "SAW-01 TECTUM PANELS", verification: "image" }] }] });
+  };
+  try {
+    const result = await extractDrawingScope({ pkg: drywall, document: "drawings.pdf", pageCount: 2, pages: [{ page: 2, text: "", sheet: "PDF 2" }], render: async () => ({ image: "data:image/jpeg;base64,/9j/AAAA" }) });
+    const recorded = recordRun(EMPTY_EXTRACTION, sampleProcurement, result.input);
+    assert.equal(result.drawingPages![0].sheet, "A10.5"); assert.equal(recorded.drafts[0].citations[0].verification, "image"); assert.equal(recorded.drafts[0].status, "pending-review");
+  } finally { globalThis.fetch = original; }
 });

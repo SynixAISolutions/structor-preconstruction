@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ArrowUpRight, Download, FileText, Layers3 } from "lucide-react";
-import { finishScheduleRows, modelForProject, wallBaseBreakdown, wallFinishRecords } from "../../lib/jelleff-model";
+import { finishScheduleRows } from "../../lib/jelleff-model";
 import { CSI_DIVISIONS } from "../../lib/csi";
 import { LEVELS, reviewStatus } from "../../lib/model";
-import { SAMPLE_PROJECT_ID, useActiveProject } from "../../lib/project-scope";
+import { useActiveProject } from "../../lib/project-scope";
 import { useModelReview } from "../../lib/use-model-review";
+import { usePreparedModel } from "../../lib/use-prepared-model";
+import { getActiveProjectId } from "../../lib/project-scope";
 import { Badge, Button, Empty, Panel, SearchBox, Stats, exportRows } from "./shared";
 import { DEFAULT_QUANTITY_FILTERS, QUANTITY_CATEGORIES, filterModelQuantityRows, modelQuantityCsv, modelQuantityRows, type ModelInspection, type ModelQuantityFilters, type ModelQuantityRow } from "./model-quantity-rows";
 
@@ -16,8 +18,8 @@ const reviewLabels = { unreviewed: "Not reviewed", verified: "Verified", flagged
 
 export function ModelQuantityTakeoffs({ quantityFilters: filters, onQuantityFilters: setFilters, onInspectModel, onPrice, priceLabel, isPriced }: ModelQuantityProps & { onPrice?: (row: ModelQuantityRow) => void; priceLabel?: string; isPriced?: (row: ModelQuantityRow) => boolean }) {
   const projectId = useActiveProject(), { state } = useModelReview();
-  const objects = useMemo(() => modelForProject(projectId), [projectId]);
-  const rows = useMemo(() => modelQuantityRows(objects, projectId === SAMPLE_PROJECT_ID ? wallFinishRecords : [], projectId === SAMPLE_PROJECT_ID ? wallBaseBreakdown : [], finishScheduleRows), [objects, projectId]);
+  const prepared = usePreparedModel(projectId), objects = prepared.objects, [importError, setImportError] = useState("");
+  const rows = useMemo(() => modelQuantityRows(objects, prepared.records, prepared.bases, finishScheduleRows), [objects, prepared.records, prepared.bases]);
   const visible = filterModelQuantityRows(rows, filters, state);
   const categoryRows = rows.filter(row => !filters.category || row.category === filters.category);
   const materials = [...new Set(categoryRows.map(row => row.material))].sort(), rooms = [...new Set(rows.flatMap(row => row.rooms))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
@@ -26,6 +28,11 @@ export function ModelQuantityTakeoffs({ quantityFilters: filters, onQuantityFilt
   function open(row: ModelQuantityRow, source = false) { onInspectModel({ projectId, level: row.level, objectId: row.objectId, finishId: row.finishId, source: source || !row.objectId ? row.sources[0] : undefined }); }
   if (!objects.length) return <Panel><Empty title="No prepared model quantities for this project" description="This view reads the selected project's prepared interior model. Open Estimate items to enter your own measurements. Uploading a drawing does not generate a model yet."/></Panel>;
   return <div className="mq-workspace">
+    <details className="ai-reader"><summary>Local drywall model measurements</summary><p>Load privately traced FRP and sound-panel bands in SF and one point per physical corner guard in EA. The measurements use this project's prepared host walls. Loading does not verify them or publish them.</p><label className="ui-field">Local measurement file<input type="file" accept=".json,application/json" onChange={async event => {
+      const file = event.target.files?.[0]; if (!file) return; setImportError("");
+      try { if (file.size > 2_000_000) throw new Error("Choose a measurement file of at most 2 MB."); const data = JSON.parse(await file.text()); if (projectId !== getActiveProjectId()) return; prepared.importMeasurements(data); setFilters({ ...DEFAULT_QUANTITY_FILTERS, category: "" }); }
+      catch (error) { setImportError(error instanceof Error ? error.message : "The measurement file could not be loaded."); }
+    }}/></label>{(importError || prepared.error) && <p role="alert">{importError || prepared.error}</p>}<p>{prepared.data.finishes.length} local finish records · {prepared.data.cornerGuards.length} physical guards. Model and estimate views use the same saved measurements; pricing remains separate.</p></details>
     <Stats items={[{ label: "Interior objects", value: rows.filter(row => !["base", "wall-finish"].includes(row.category)).length, detail: "Prepared model measurements" }, { label: "Quantity rows", value: rows.length, detail: "Objects, finish bands and base splits" }, { label: "Unmeasured bands", value: rows.filter(row => row.value === null).length, detail: "Retained with source evidence", tone: "orange" }, { label: "Matching rows", value: visible.length, detail: "Current filters · export matches" }]}/>
     <Panel title="Model quantities" subtitle="Read the same quantities used by the interior model and its room schedules." action={<Button disabled={!visible.length} onClick={() => exportRows("interior-model-quantities.csv", modelQuantityCsv(visible, state))}><Download size={15}/>Export filtered CSV</Button>}>
       <div className="mq-filters"><SearchBox value={filters.query} onChange={query => setFilters({ ...filters, query })} placeholder="Search model quantities…"/>

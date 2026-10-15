@@ -161,6 +161,9 @@ await assert.rejects(ask(scripted(new Response("bad key", { status: 401 }))), e 
 await assert.rejects(ask(scripted(reply('{"a":', "length"))), /cut off/);
 await assert.rejects(ask(scripted(reply("not json"), reply("still not"))), /wasn't valid JSON/);
 await assert.rejects(ask(scripted(new TypeError("fetch failed"))), /could not be reached/);
+await assert.rejects(D.deepseekJson("k", [], { model: "m", maxTokens: 1, budgetMs: 30_000, fetchImpl: async () => ({ ok: true, json: async () => { throw new DOMException("Body timed out", "TimeoutError"); } }) }), /timed out/, "A timed-out response body must not become an empty answer or a retry");
+const canceled = new AbortController(); canceled.abort();
+await assert.rejects(D.deepseekJson("k", [], { model: "m", maxTokens: 1, budgetMs: 30_000, signal: canceled.signal, fetchImpl: async (_url, init) => { init.signal.throwIfAborted(); } }), /canceled/, "Canceling the reading aborts the upstream request");
 await assert.rejects(D.deepseekJson("k", [], { model: "m", maxTokens: 1, budgetMs: 1000, fetchImpl: async () => { throw new Error("should not call"); } }), /no answer/, "No time left: no call");
 assert.equal(D.textModel(), "deepseek-flash");
 

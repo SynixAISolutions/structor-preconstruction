@@ -1,12 +1,13 @@
 import { AiJobError, parseProposalJob, parseScopeJob, proposalMessages, scopeMessages, screenProposal, screenScope } from "../../../lib/ai-jobs";
 import { deepseekJson, DeepSeekError, textModel } from "../../../lib/deepseek";
+import { parseDrawingJob, drawingMessages, screenDrawing } from "../../../lib/drawing-ai";
 
 // Structor's AI: one fixed job per request (scope from specification pages, or a proposal reading),
 // never free-form prompts. The demo password (proxy.ts) guards this route like every page.
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MAX_BODY = 1_000_000;
+const MAX_BODY = 3_200_000;
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
 export async function POST(request: Request) {
@@ -18,16 +19,21 @@ export async function POST(request: Request) {
   let body: { job?: unknown; input?: unknown };
   try { body = JSON.parse(raw); } catch { return json({ error: "The request isn't valid JSON." }, 400); }
 
-  const model = textModel();
+  const model = body.job === "drawing" ? "deepseek-flash" : textModel();
   try {
+    if (body.job === "drawing") {
+      const job = parseDrawingJob(body.input);
+      const output = await deepseekJson(key, drawingMessages(job), { model, maxTokens: 6000, budgetMs: 55_000, signal: request.signal });
+      return json({ model, ...screenDrawing(output, job) });
+    }
     if (body.job === "scope") {
       const job = parseScopeJob(body.input);
-      const output = await deepseekJson(key, scopeMessages(job), { model, maxTokens: 6000, budgetMs: 55_000 });
+      const output = await deepseekJson(key, scopeMessages(job), { model, maxTokens: 6000, budgetMs: 55_000, signal: request.signal });
       return json({ model, ...screenScope(output, job) });
     }
     if (body.job === "proposal") {
       const job = parseProposalJob(body.input);
-      const output = await deepseekJson(key, proposalMessages(job), { model, maxTokens: 8000, budgetMs: 55_000 });
+      const output = await deepseekJson(key, proposalMessages(job), { model, maxTokens: 8000, budgetMs: 55_000, signal: request.signal });
       return json({ model, ...screenProposal(output, job) });
     }
     return json({ error: "Unknown AI job." }, 400);

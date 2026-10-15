@@ -12,23 +12,25 @@ const ENDPOINT = "https://api.deepseek.com/chat/completions";
 /** deepseek-flash: fast, cheap, JSON output. AI_TEXT_MODEL=deepseek-v4-pro switches to the stronger, slower model. */
 export const textModel = () => process.env.AI_TEXT_MODEL?.trim() || "deepseek-flash";
 
-export async function deepseekJson(key: string, messages: ChatMessage[], options: { model: string; maxTokens: number; budgetMs: number; fetchImpl?: typeof fetch }): Promise<unknown> {
+export async function deepseekJson(key: string, messages: ChatMessage[], options: { model: string; maxTokens: number; budgetMs: number; fetchImpl?: typeof fetch; signal?: AbortSignal }): Promise<unknown> {
   const deadline = Date.now() + options.budgetMs;
   const call = options.fetchImpl ?? fetch;
   let last = "DeepSeek gave no answer.";
   for (let attempt = 1; attempt <= 2; attempt++) {
     const left = deadline - Date.now();
     if (left < 5_000) break;
+    const deadlineSignal = AbortSignal.timeout(left);
+    const signal = options.signal ? AbortSignal.any([options.signal, deadlineSignal]) : deadlineSignal;
     let response: Response;
     try {
       response = await call(ENDPOINT, {
         method: "POST",
         headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
         body: JSON.stringify({ model: options.model, messages, thinking: { type: "disabled" }, response_format: { type: "json_object" }, max_tokens: options.maxTokens, stream: false }),
-        signal: AbortSignal.timeout(left),
+        signal,
       });
     } catch (error) {
-      throw new DeepSeekError(error instanceof Error && error.name === "TimeoutError" ? "DeepSeek took too long. Try fewer pages at a time." : "DeepSeek could not be reached.");
+      throw new DeepSeekError(options.signal?.aborted ? "Reading canceled." : signal.aborted || error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name) ? "The AI service timed out. Try again later or read fewer pages." : "DeepSeek could not be reached.");
     }
     if (!response.ok) {
       const detail = (await response.text().catch(() => "")).slice(0, 200);
@@ -36,7 +38,11 @@ export async function deepseekJson(key: string, messages: ChatMessage[], options
       if (response.status === 429 || response.status >= 500) continue;
       throw new DeepSeekError(last);
     }
-    const data = await response.json().catch(() => null) as { choices?: { message?: { content?: string }; finish_reason?: string }[] } | null;
+    const data = await response.json().catch(error => {
+      if (options.signal?.aborted) throw new DeepSeekError("Reading canceled.");
+      if (signal.aborted || error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)) throw new DeepSeekError("The AI service timed out. Try again later or read fewer pages.");
+      return null;
+    }) as { choices?: { message?: { content?: string }; finish_reason?: string }[] } | null;
     const choice = data?.choices?.[0];
     if (choice?.finish_reason === "length") throw new DeepSeekError("DeepSeek's answer was cut off. Try fewer pages at a time.");
     const content = choice?.message?.content?.trim();

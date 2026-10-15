@@ -41,6 +41,8 @@ export type DrawingPage = {
   aspect: number;
   /** A rendered image of the page, when there is one. None in the demo. */
   image: string | null;
+  /** Runtime PDF pages require their original file; never substitute sample linework. */
+  source?: "uploaded";
 };
 
 export type RegionOrigin = "ai" | "estimator";
@@ -80,6 +82,7 @@ export type DrawingFlipState = { pages: DrawingPage[]; regions: FlipRegion[]; la
 export const EMPTY_DRAWING_FLIP: DrawingFlipState = { pages: [], regions: [], lastRegionNumber: 0 };
 
 export type PageInput = {
+  source?: "uploaded";
   sheet: string; title?: string; discipline?: string; revision?: string;
   documentId: string; documentName?: string; pageNumber: number; aspect?: number; image?: string | null;
 };
@@ -216,7 +219,7 @@ export function addPage(state: DrawingFlipState, input: PageInput): DrawingFlipS
   const page: DrawingPage = {
     id: newId(), sheet, title: input.title?.trim() ?? "", discipline: input.discipline?.trim() ?? "", revision,
     documentId: input.documentId.trim(), documentName: input.documentName?.trim() ?? "", pageNumber: input.pageNumber,
-    aspect: input.aspect ?? 1.5, image: input.image ?? null,
+    aspect: input.aspect ?? 1.5, image: input.image ?? null, ...(input.source ? { source: input.source } : {}),
   };
   return { ...state, pages: [...state.pages, page] };
 }

@@ -6,8 +6,8 @@ import "./ai-reading.css";
 
 export type LoadedPdf = { file: File; text: PdfText };
 
-export function AiPdfPicker({ label, disabled, maxBytes, onChange }: {
-  label: string; disabled: boolean; maxBytes?: number; onChange: (pdf: LoadedPdf | null) => void;
+export function AiPdfPicker({ label, disabled, maxBytes, onChange, allowImages = false }: {
+  label: string; disabled: boolean; maxBytes?: number; allowImages?: boolean; onChange: (pdf: LoadedPdf | null) => void;
 }) {
   const request = useRef(0);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
@@ -27,7 +27,7 @@ export function AiPdfPicker({ label, disabled, maxBytes, onChange }: {
       const { readPdfText } = await import("../../lib/pdf-text");
       const text = await readPdfText(file, (done, total) => { if (current === request.current) setProgress({ done, total }); });
       if (current !== request.current) return;
-      if (text.emptyPages === text.pageCount) throw new Error("This PDF has no readable text. A scanned document needs OCR first.");
+      if (!allowImages && text.emptyPages === text.pageCount) throw new Error("This PDF has no readable text. A scanned document needs OCR first.");
       setSummary(text); onChange({ file, text });
     } catch (failure) {
       if (current === request.current) setError(failure instanceof Error ? failure.message : "The PDF could not be read. Choose it again.");

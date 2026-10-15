@@ -32,6 +32,8 @@ export type Citation = {
   sheet: string | null;
   /** The words on the page the finding relies on, as read. */
   quote: string;
+  /** Image-only sheets have no text layer to verify the OCR quote automatically. */
+  verification?: "image";
 };
 
 export type DraftKind = "scope" | "region" | "quantity";
@@ -87,6 +89,7 @@ export type ExtractionRun = {
   status: "complete" | "failed";
   /** Why a failed run stopped. */
   error: string | null;
+  notes?: { failures: string[]; screening: string[] };
 };
 
 export type ExtractionState = { runs: ExtractionRun[]; drafts: Draft[] };
@@ -104,6 +107,7 @@ export type DraftInput =
   | ({ kind: "quantity"; key: string; packageId: string; citations: Citation[]; scopeKey?: string | null } & QuantityFields);
 
 export type RunInput = {
+  notes?: { failures: string[]; screening: string[] };
   packageIds: string[];
   engine: RunEngine;
   documents: { name: string; pages: number }[];
@@ -144,7 +148,7 @@ export function cleanCitations(citations: unknown, documents: { name: string; pa
       if (page > doc.pages) fail(`${what}: ${document} has ${doc.pages} pages, not ${page}.`);
     }
     const sheet = text(c?.sheet ?? "", "sheet", `${what}: the sheet`, true) || null;
-    return { document, page, sheet, quote: text(c?.quote, "quote", `${what}: the quoted words`) };
+    return { document, page, sheet, quote: text(c?.quote, "quote", `${what}: the quoted words`), ...(c.verification === "image" ? { verification: "image" as const } : {}) };
   });
 }
 
@@ -220,6 +224,10 @@ export function recordRun(state: ExtractionState, procurement: Procurement, inpu
     id: newId(), packageIds, engine: { mode: input.engine.mode, model: input.engine.model.trim() }, documents,
     startedAt: input.startedAt, finishedAt: input.finishedAt, by: AI_ACTOR, status: input.error ? "failed" : "complete", error: null,
   };
+  if (input.notes) {
+    for (const list of [input.notes.failures, input.notes.screening]) if (!Array.isArray(list) || list.length > 2000 || list.some(note => typeof note !== "string" || note.length > 3000)) fail("Run notes must be text, within the reading limits.");
+    run.notes = { failures: [...input.notes.failures], screening: [...input.notes.screening] };
+  }
   if (input.error) {
     if (input.drafts?.length) fail("A failed run can't carry findings.");
     return { ...state, runs: [...state.runs, { ...run, error: text(input.error, "error", "The error") }] };

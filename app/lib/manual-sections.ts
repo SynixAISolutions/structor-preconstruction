@@ -4,7 +4,7 @@
 // each section with "SECTION 092216 - NON-STRUCTURAL METAL FRAMING". Pages without either
 // (cover, contents, appendices) belong to no section.
 
-export type PageText = { page: number; text: string };
+export type PageText = { page: number; text: string; sheet?: string; aspect?: number };
 export type ManualSection = { section: string; title: string; firstPage: number; lastPage: number; pages: PageText[] };
 
 /** "092216" or "09 22 16" (and "09 22 16.13") → "09 22 16". */
@@ -42,3 +42,10 @@ export function manualSections(pages: PageText[]): ManualSection[] {
 /** Sections of one CSI division ("09"), for choosing what a trade's run reads. */
 export const sectionsInDivision = (sections: ManualSection[], division: string): ManualSection[] =>
   sections.filter(s => s.section.startsWith(`${division} `));
+
+/** A bid form's explicit specification list, including decimal subsections and Division 01. */
+export function sectionsFromBidForm(sections: ManualSection[], text: string) {
+  const listed = [...new Set([...text.matchAll(/^\s*(\d{2})\s*(\d{2})\s*(\d{2})(?:\.(\d{2}))?\s*[-–]\s*\S/gm)].map(m => format(m[1], m[2], m[3], m[4])))];
+  const matches = (section: string, listed: string) => section === listed || section.startsWith(`${listed}.`);
+  return { listed, sections: sections.filter(s => listed.some(code => matches(s.section, code)) || /division\s+01\b/i.test(text) && s.section.startsWith("01 ")), missing: listed.filter(code => !sections.some(s => matches(s.section, code))) };
+}

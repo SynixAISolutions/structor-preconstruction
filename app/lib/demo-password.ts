@@ -11,8 +11,8 @@ function sameText(a: string, b: string): boolean {
 }
 
 /** Whether a request's Authorization header carries the demo password. */
-export function passwordAccepted(authorization: string | null, password: string | undefined): boolean {
-  if (!password) return true;
+export function passwordAccepted(authorization: string | null, password: string | undefined, required = false): boolean {
+  if (!password || !password.trim()) return !required;
   const [scheme, encoded] = (authorization ?? "").trim().split(/\s+/);
   if (scheme?.toLowerCase() !== "basic" || !encoded) return false;
   let decoded: string;

@@ -19,9 +19,12 @@ export async function readPdfText(file: File, onPage?: (done: number, total: num
   const pages: PageText[] = [];
   try {
     for (let i = 1; i <= doc.numPages; i++) {
-      const content = await (await doc.getPage(i)).getTextContent();
+      const page = await doc.getPage(i), viewport = page.getViewport({ scale: 1 });
+      const content = await page.getTextContent();
       const text = content.items.map(item => "str" in item ? item.str + (item.hasEOL ? "\n" : "") : "").join("");
-      pages.push({ page: i, text });
+      const sheet = content.items.filter(item => "str" in item && item.transform[4] > viewport.width * .8 && item.transform[5] < viewport.height * .2)
+        .flatMap(item => "str" in item ? item.str.match(/^[A-Z]{1,3}\d{1,2}(?:\.\d{1,2}|-\d{2,3})$/)?.[0] ?? [] : []).at(-1);
+      pages.push({ page: i, text, ...(sheet ? { sheet } : {}), aspect: viewport.width / viewport.height });
       onPage?.(i, doc.numPages);
     }
   } finally {

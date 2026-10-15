@@ -5,7 +5,7 @@ import { reviewStatus, type BaseBreakdownRow, type FinishScheduleRow, type Level
 export type ModelInspection = { projectId: string; level: LevelId; objectId: string | null; finishId?: string; source?: ModelSource };
 export type ModelQuantityFilters = { category: string; query: string; level: string; room: string; division: string; material: string; review: string; coverage: string };
 export const DEFAULT_QUANTITY_FILTERS: ModelQuantityFilters = { category: "floor", query: "", level: "", room: "", division: "", material: "", review: "", coverage: "" };
-export const QUANTITY_CATEGORIES: Record<string, string> = { floor: "Floor zones", ceiling: "Ceiling zones", wall: "Wall construction / partitions", glass: "Glazing", door: "Door openings", transition: "Transitions", "wall-finish": "Wall finish bands", base: "Base by type" };
+export const QUANTITY_CATEGORIES: Record<string, string> = { floor: "Floor zones", ceiling: "Ceiling zones", wall: "Wall construction / partitions", glass: "Glazing", door: "Door openings", transition: "Transitions", fixture: "Corner guards / accessories", "wall-finish": "Wall finish bands", base: "Base by type" };
 export type ModelQuantityRow = {
   id: string; category: string; label: string; level: LevelId; rooms: string[]; division: string; section: string;
   material: string; tag: string; product: string; color: string; value: number | null; unit: QuantityUnit;

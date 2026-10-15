@@ -15,3 +15,7 @@
 .ai-run-result summary { cursor:pointer; }
 .ai-run-result ul { padding-left:18px; }
 @media(max-width:680px) { .ai-reader { padding:14px; }.ai-reader .ui-btn { max-width:100%; white-space:normal; } }
+ .ai-drawing-choice { display: flex; gap: 12px; align-items: center; padding: 8px; }
+ .ai-drawing-choice label { flex: 1; }
+ .ai-drawing-choice > input { width: 110px; max-width: 40%; padding: 8px; border: 1px solid var(--border, #d6ddd7); border-radius: 6px; }
+ .flip-source-needed { min-height: 180px; padding: 24px; background: #f5f7f4; }

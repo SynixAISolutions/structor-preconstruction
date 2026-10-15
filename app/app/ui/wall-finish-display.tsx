@@ -1,7 +1,7 @@
 import { parseFeetInches, type BaseBreakdownRow, type ModelObject, type WallFinishRecord } from "../../lib/model";
 
 // Presentation colors approximate the scheduled finishes; no color assigns a finish to an unnoted face.
-export const wallFinishColors: Record<string, string> = { "PT-02": "#cfb79d", "PT-03": "#94b645", "WT-01": "#b9a998", "WB-02": "#c9b39b", "WB-03": "#94ad52" };
+export const wallFinishColors: Record<string, string> = { "PT-02": "#cfb79d", "PT-03": "#94b645", "WT-01": "#b9a998", "WB-02": "#c9b39b", "WB-03": "#94ad52", "FRP-01": "#eee9dc", "SAW-01": "#bfc998" };
 export type FinishDisplay = { wallId: string; recordId: string; tag: string; kind: "band" | "run" | "base"; x: number; z: number; rotation: number; length: number; bottom: number; height: number; wallBase: number; wallHeight: number };
 
 /** Place only documented full runs. Width/height alone never supplies a panel's missing offset. */
