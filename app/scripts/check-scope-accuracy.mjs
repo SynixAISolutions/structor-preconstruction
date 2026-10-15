@@ -5,7 +5,7 @@ register("./ts-resolver.mjs", import.meta.url);
 const K = await import("../lib/bid-form-key.ts");
 const A = await import("../lib/scope-accuracy.ts");
 
-// ── An invented bid form in the MCN layout (the real ones stay out of the repository) ──
+// ── An invented bid form in the Contractor layout (the real ones stay out of the repository) ──
 const form = `Project: Example School
 Bid Date: March 2, 2027
 Trade: 09 - DRYWALL & CEILINGS
@@ -65,7 +65,7 @@ C Exclusions
 1 Fire safing at curtainwall slab edges N By Others
 2 Fire stopping of penetrations through drywall N By MEP Subcontractor
 D Schedule
-1 Meet MCN Schedule Y
+1 Meet Contractor Schedule Y
 Allowances
 1
 Subcontractor: _______________ 2 of 2`;
@@ -83,7 +83,7 @@ assert.deepEqual(key.breakdown, [
 const kinds = Object.fromEntries(key.items.map(i => [i.id, i.kind]));
 assert.deepEqual([kinds["B-1"], kinds["B-4"], kinds["B-*1"], kinds["B-32"], kinds["B-33"], kinds["B-45"], kinds["B-70"], kinds["B-72"], kinds["B-76"]],
   ["header", "reference", "general", "header", "scope", "header", "header", "header", "scope"]);
-assert(!key.items.some(i => /Subcontractor:|Project:|Scope Items to include|Meet MCN Schedule|Acknowledge receipt/.test(i.text)), "Page headers, footers, Section 1 and the schedule are not scope lines");
+assert(!key.items.some(i => /Subcontractor:|Project:|Scope Items to include|Meet Contractor Schedule|Acknowledge receipt/.test(i.text)), "Page headers, footers, Section 1 and the schedule are not scope lines");
 assert(!key.items.some(i => i.id === "B-12" || i.id === "B-44"), "Empty numbered lines are skipped");
 const line = id => key.items.find(i => i.id === id);
 assert.equal(line("B-33").text, "Furnish & install gypsum board at all interior partitions, ceilings and soffits including fire rated and moisture-resistant board as scheduled", "A line split across rows is joined");

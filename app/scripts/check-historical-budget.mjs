@@ -12,7 +12,7 @@ assert.equal(imported.total, 110); assert.equal(imported.sourceTotal, 110); asse
 assert.equal(imported.lines.filter(line => line.byOwner).length, 2, "Explicit zero amounts retain their cost centers");
 const numericCsi = structuredClone(mcn); numericCsi[2][0] = 3000;
 assert.equal(H.parseBudgetSheet(numericCsi, { G3: { f: "E3+F3" } }).lines[0].csiCode, "03000");
-assert.equal(H.parseBudgetSheet(mcn, { G3: { f: "E3+F3" } }).total, 110, "The real MCN workbook adds cost-center cells instead of using SUM");
+assert.equal(H.parseBudgetSheet(mcn, { G3: { f: "E3+F3" } }).total, 110, "The real Contractor workbook adds cost-center cells instead of using SUM");
 assert.throws(() => H.parseBudgetSheet(mcn, { G3: { f: "SUM(E4:F4)" } }), /same row/);
 assert(!imported.lines.some(line => line.amount === 999), "Columns outside the total's range never enter the budget");
 const ownerExcluded = structuredClone(mcn); ownerExcluded[5][4] = "NIC";
@@ -45,4 +45,4 @@ assert(applied.lines.every(line => line.status === "draft" && line.committed ===
 assert.equal(applied.conceptSource.area, 200);
 assert.throws(() => H.applyConceptBudget(applied, concept, "Estimator"), /already/);
 assert.equal(empty.lines.length, 0, "Applying builds a new state; original data stays untouched");
-console.log("Historical budgets checked: flat/MCN import, source reconciliation, cache errors, owner exclusions, area weighting, missing-line coverage, factors, estimate stages and non-destructive application.");
+console.log("Historical budgets checked: flat/Contractor import, source reconciliation, cache errors, owner exclusions, area weighting, missing-line coverage, factors, estimate stages and non-destructive application.");

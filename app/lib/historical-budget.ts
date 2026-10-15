@@ -25,7 +25,7 @@ const csiText = (value: unknown) => typeof value === "number" && Number.isIntege
 const column = (index: number): string => index < 26 ? String.fromCharCode(65 + index) : column(Math.floor(index / 26) - 1) + column(index % 26);
 const columnNumber = (s: string) => [...s].reduce((n, c) => n * 26 + c.charCodeAt(0) - 64, 0) - 1;
 
-/** Reads the app's flat budget export or the MCN estimate-summary layout; never guesses a total column. */
+/** Reads the app's flat budget export or the In-house estimate-summary layout; never guesses a total column. */
 export function parseBudgetSheet(rows: unknown[][], cells: BudgetSheet): { lines: HistoryLine[]; total: number; sourceTotal: number | null } {
   if (!Array.isArray(rows) || rows.length > 5000) fail("Choose a budget summary with at most 5,000 rows.");
   const header = rows.findIndex(row => row.some(v => key(v) === "description") && row.some(v => ["budget", "amount"].includes(key(v))));
@@ -52,7 +52,7 @@ export function parseBudgetSheet(rows: unknown[][], cells: BudgetSheet): { lines
   } else {
     const csiRow = rows.findIndex(row => key(row[0]) === "csi" && key(row[1]) === "description");
     const totalCol = csiRow > 0 ? rows[csiRow - 1].findIndex(v => key(v) === "totalcost") : -1;
-    if (csiRow < 0 || totalCol < 0) fail("Choose the MCN Estimate Summary sheet or a flat CSV with Description, Class and Budget columns.");
+    if (csiRow < 0 || totalCol < 0) fail("Choose the Estimate Summary sheet or a flat CSV with Description, Class and Budget columns.");
     const first = rows.findIndex((row, i) => i > csiRow && /^\d{5,6}$/.test(csiText(row[0])));
     const formula = first >= 0 ? cells[`${column(totalCol)}${first + 1}`]?.f ?? "" : "";
     const range = formula.match(/^\s*SUM\(\$?([A-Z]+)\$?(\d+):\$?([A-Z]+)\$?(\d+)\)\s*$/i);
@@ -62,7 +62,7 @@ export function parseBudgetSheet(rows: unknown[][], cells: BudgetSheet): { lines
       included = Array.from({ length: Math.max(0, end - start + 1) }, (_, i) => start + i);
     } else {
       const parts = formula.trim().split("+").map(part => part.trim().match(/^\$?([A-Z]+)\$?(\d+)$/i));
-      if (parts.length < 2 || parts.some(part => !part || Number(part[2]) !== first + 1)) fail("The MCN total must add its included cost-center cells or SUM their range on the same row. Check the workbook before importing.");
+      if (parts.length < 2 || parts.some(part => !part || Number(part[2]) !== first + 1)) fail("The Contractor total must add its included cost-center cells or SUM their range on the same row. Check the workbook before importing.");
       included = parts.map(part => columnNumber(part![1].toUpperCase()));
     }
     if (!included.length || new Set(included).size !== included.length || included.some(c => c < 2 || c >= totalCol)) fail("The included cost-center range is invalid.");

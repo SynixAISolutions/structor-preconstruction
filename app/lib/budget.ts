@@ -51,14 +51,14 @@ export type BudgetLine = {
   approval: { by: string; at: string } | null;
   source: LineSource;
   forecastSource: ForecastSource | null;
-  /** Set when the forecast is MCN's own estimate for the trade (applyEstimateValue); cleared like forecastSource. */
+  /** Set when the forecast is the contractor's own estimate for the trade (applyEstimateValue); cleared like forecastSource. */
   estimateSource?: EstimateSource | null;
   /** The trade package this line budgets, once linked or confirmed (estimate.ts budgetLinesForTrade). */
   packageId?: string | null;
   updatedAt: string;
 };
 
-/** The forecast came from MCN's estimate for a trade rather than a bid (Marcel, 7 Oct: "override to MCN budget"). */
+/** The forecast came from the in-house estimate for a trade rather than a bid (Marcel, 7 Oct: "override to Contractor budget"). */
 export type EstimateSource = { kind: "estimate"; packageId: string; value: number; lines: number; unreviewed: number; appliedAt: string; appliedBy: string };
 
 export type AllowanceStatus = "review" | "included" | "excluded";
@@ -402,7 +402,7 @@ export function applyLevelingValue(state: BudgetState, lineId: string, candidate
   return { ...state, lines: state.lines.map(l => l.id === lineId ? { ...l, forecast: value as number, forecastSource, estimateSource: null, updatedAt: at } : l) };
 }
 
-// ── MCN's estimate ──────────────────────────────────────────────────────────
+// ── the in-house estimate ──────────────────────────────────────────────────────────
 
 /** Ties a direct line to a trade package, or unties it (null). The budget and forecast are not touched. */
 export function linkBudgetLine(state: BudgetState, lineId: string, packageId: string | null, at = now()): BudgetState {
@@ -413,14 +413,14 @@ export function linkBudgetLine(state: BudgetState, lineId: string, packageId: st
 }
 
 /**
- * Sets a line's forecast to MCN's estimate for the trade instead of a bid. The line must be the
+ * Sets a line's forecast to the in-house estimate for the trade instead of a bid. The line must be the
  * trade's only budget line (linked, or suggested by its CSI code — applying confirms the link);
  * a trade spread over several cost centers can't be split from one estimate total. The bid stays
  * in Bid leveling, and the variance report keeps showing both.
  */
 export function applyEstimateValue(state: BudgetState, lineId: string, pkg: TradePackage, estimate: TradeEstimate, by: string, at = now()): BudgetState {
   const line = findLine(state, lineId);
-  if (line.classification !== "direct" || line.byOwner) fail({ forecast: "MCN's estimate applies to direct construction lines only." });
+  if (line.classification !== "direct" || line.byOwner) fail({ forecast: "the in-house estimate applies to direct construction lines only." });
   if (estimate.packageId !== pkg.id) fail({ forecast: "That estimate belongs to another trade." });
   if (!estimate.items.length || !(estimate.total > 0)) fail({ forecast: `${pkg.name} has no priced estimate lines yet.` });
   const trade = budgetLinesForTrade(state, pkg);

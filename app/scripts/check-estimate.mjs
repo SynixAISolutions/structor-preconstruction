@@ -98,7 +98,7 @@ assert.equal(B.linkBudgetLine(linked, "nc-09300", "drywall", at), linked);
 budgetFails(() => B.linkBudgetLine(budget, budget.lines.find(l => l.classification === "indirect").id, "drywall", at), /direct construction lines/);
 assert.deepEqual(lands(B.linkBudgetLine(budget, "nc-09200", "flooring", at), "drywall"), ["suggested", ["09300"], ["nc-09300"]], "A line linked to another trade is never suggested; the next code is");
 
-// ── Budget basis: MCN's estimate (Marcel, 14:55–15:28) ──
+// ── Budget basis: the in-house estimate (Marcel, 14:55–15:28) ──
 const drywallEstimate = trade(rows, "drywall");
 const onEstimate = B.applyEstimateValue(budget, "nc-09200", pkg("drywall"), drywallEstimate, "Safi", at);
 const line = onEstimate.lines.find(l => l.id === "nc-09200");
@@ -136,4 +136,4 @@ assert.deepEqual([steel.budget, steel.bid, steel.bidOverEstimate, steel.estimate
 assert.deepEqual([report.find(r => r.packageId === "carpentry").estimate, report.find(r => r.packageId === "carpentry").budgetOverEstimate], [null, null], "No estimate lines: nothing to compare");
 assert.equal(E.varianceReport({ rows: [legacy("09 · Finishes", { packageId: "drywall", quantity: 1, rate: 0 })], procurement: proc, budget, candidates }).find(r => r.packageId === "drywall").bidOverEstimate.percent, null, "A zero estimate has no percentage");
 
-console.log(`Estimate checked: ${list.trades.length} trades, legacy placement, add/model/AI/edit/move/remove lines, budget lines by 5-digit code, MCN estimate as budget basis, variance against leveled bids.`);
+console.log(`Estimate checked: ${list.trades.length} trades, legacy placement, add/model/AI/edit/move/remove lines, budget lines by 5-digit code, In-house estimate as budget basis, variance against leveled bids.`);

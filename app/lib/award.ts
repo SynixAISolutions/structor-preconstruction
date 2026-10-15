@@ -249,7 +249,7 @@ export const generateSampleSubcontract: SubcontractGenerator = (award, exhibit, 
   };
 };
 
-/** The templates documents use unless another is passed: this workspace's customer (MCN Build). */
+/** The templates documents use unless another is passed: this workspace's customer (Contractor). */
 export const DEFAULT_EXHIBIT_TEMPLATE: DocumentTemplate = MCN_EXHIBIT_TEMPLATE;
 export const DEFAULT_SUBCONTRACT_TEMPLATE: DocumentTemplate = MCN_SUBCONTRACT_TEMPLATE;
 
