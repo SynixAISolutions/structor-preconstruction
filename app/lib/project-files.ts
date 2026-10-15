@@ -119,3 +119,36 @@ export function upsertDocument(index: ProjectFileIndex, doc: StoredDocument): Pr
 }
 
 export const emptyIndex = (projectId: string): ProjectFileIndex => ({ projectId, documents: [], updatedAt: "" });
+
+// ── List of drawings / Exhibit B ────────────────────────────────────────────
+
+const DISCIPLINES: [RegExp, string][] = [
+  [/^CP/, "Code"], [/^CIV|^C\d/, "Civil"], [/^L/, "Landscape"], [/^AQ/, "Aquatics"], [/^AD/, "Architectural demolition"], [/^A/, "Architectural"], [/^K/, "Food service"],
+  [/^S/, "Structural"], [/^FP/, "Fire protection"], [/^P/, "Plumbing"], [/^M/, "Mechanical"], [/^E/, "Electrical"], [/^T/, "Technology"], [/^G/, "General"],
+];
+export const disciplineOf = (sheet: string) => DISCIPLINES.find(([re]) => re.test(sheet.toUpperCase()))?.[1] ?? "Other";
+
+export type RegisterRow = { sheet: string; title: string; discipline: string; date: string; doc: StoredDocument; page: number; revisions: number };
+
+/** Every named sheet of the newest drawing sets, in set order, with how many issues of its set exist. */
+export function drawingRegister(docs: StoredDocument[]): RegisterRow[] {
+  return latestDocuments(docs).filter(d => d.kind === "drawings").flatMap(doc => doc.sheets.filter(s => s.sheet).map(s => ({
+    sheet: s.sheet, title: s.title, discipline: disciplineOf(s.sheet), date: s.date, doc, page: s.page, revisions: revisionsOf(docs, doc.series).length,
+  })));
+}
+
+/**
+ * Exhibit B, the list of documents a subcontract is priced on (Marcel, 15 Oct): reports and other
+ * project documents, every drawing with its date, and every specification section. The dates are what
+ * lets a contractor say "you acknowledged these drawings, dated this, so the work is yours".
+ */
+export function exhibitBRows(docs: StoredDocument[]): string[][] {
+  const latest = latestDocuments(docs);
+  const day = (iso: string) => iso.slice(0, 10);
+  return [
+    ["Part", "Number", "Title", "Date", "Document"],
+    ...latest.filter(d => d.kind === "other").map(d => ["Documents", "", d.name.replace(/\.pdf$/i, ""), day(d.uploadedAt), `${d.name} (${revisionLabel(d)})`]),
+    ...drawingRegister(docs).map(r => ["Drawings", r.sheet, r.title, r.date, `${r.doc.name} (${revisionLabel(r.doc)})`]),
+    ...latest.filter(d => d.kind === "manual").flatMap(d => d.sections.map(s => ["Specifications", s.section, s.title, day(d.uploadedAt), `${d.name} (${revisionLabel(d)}), pages ${s.first}–${s.last}`])),
+  ];
+}

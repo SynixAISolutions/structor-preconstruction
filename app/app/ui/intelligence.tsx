@@ -16,6 +16,9 @@ import { SubmittalLogWorkspace } from "./submittal-log-ui";
 import { type ModelQuantityProps } from "./model-quantity-takeoffs";
 import { TradeEstimatesView } from "./trade-estimates";
 import { ProjectFilesScreen } from "./project-files-screen";
+import { StoredDrawingRegister, StoredSpecRegister } from "./document-registers";
+import { useProjectDocuments } from "../../lib/project-files-client";
+import { drawingRegister, findManual } from "../../lib/project-files";
 import "./intelligence.css";
 
 // Local UI drafts only; sample suggestions are never derived from uploaded files.
@@ -58,7 +61,12 @@ function SpecsScreen({ projectName, notify, navigate }: ViewProps) {
   return <div className="intel-view"><PageHeader eyebrow={`${projectName} / Project intelligence`} title={screenLabel("specs")} description="Track required product data, samples, shop drawings, and approvals by specification section." actions={<><Button onClick={() => navigate("documents")}><FileText size={16}/>Project manual</Button><ExportButton onClick={() => exportRows("submittal-packages.csv", [["Section", "Title", "Product", "Manufacturer", "Submittal", "Source", "Reviewed"], ...rows.map(r => [r.section, r.title, r.product, r.manufacturer, r.submittal, r.source, r.reviewed ? "Yes" : "No"])])}/></>}/><Stats items={[{ label: "Package requirements", value: rows.length, detail: "Organized by specification section" }, { label: "Products", value: rows.length, detail: "With source references" }, { label: "Reviewed", value: rows.filter(r => r.reviewed).length, detail: "Confirmed by the team", tone: "green" }, { label: "Needs clarification", value: rows.filter(r => r.manufacturer.includes("selected")).length, detail: "Manufacturer not yet selected", tone: "orange" }]}/><Panel><div className="intel-table-controls"><Tabs tabs={["All requirements", "Needs review"]} value={tab} onChange={setTab}/><SearchBox value={query} onChange={setQuery} placeholder="Find product, section, or manufacturer…"/></div><div className="ui-table-wrap"><table className="ui-table intel-spec-table"><thead><tr><th>CSI section</th><th>Product / Requirement</th><th>Manufacturers</th><th>Required submittals</th><th>Status</th><th></th></tr></thead><tbody>{visible.map(r => <tr key={r.id}><td><span className="intel-spec-code">{r.section}</span><small className="intel-table-sub">{r.title}</small></td><td><strong>{r.product}</strong><small className="intel-table-sub"><FileText size={11}/>{r.source}</small></td><td>{r.manufacturer}</td><td>{r.submittal.split(" · ").map(s => <span className="intel-submittal" key={s}>{s}</span>)}</td><td><Badge tone={r.reviewed ? "green" : "orange"}>{r.reviewed ? "Reviewed" : "To review"}</Badge></td><td><button className="ui-icon-btn" onClick={() => setEdit({ ...r })} aria-label={`Review ${r.title}`}><ChevronRight size={17}/></button></td></tr>)}</tbody></table></div>{!visible.length && <Empty title="No matching requirements" description="Adjust your search or show all requirements."/>}<div className="intel-panel-foot"><span>{visible.length} specification requirements</span><span>Sample project manual references</span></div></Panel><PreviewNote>Sample submittal package requirements · Review each product before assigning it to a trade package.</PreviewNote>{edit && <Modal title="Review specification" subtitle={`${edit.section} · ${edit.title}`} onClose={() => setEdit(null)}><form onSubmit={e => { e.preventDefault(); setRows(previous => previous.map(r => r.id === edit.id ? edit : r)); setEdit(null); notify("Specification requirement saved."); }}><label className="ui-field">Product / Requirement<textarea value={edit.product} required rows={2} onChange={e => setEdit({ ...edit, product: e.target.value })}/></label><label className="ui-field">Manufacturers<input value={edit.manufacturer} onChange={e => setEdit({ ...edit, manufacturer: e.target.value })}/></label><label className="ui-field">Required submittals<input value={edit.submittal} onChange={e => setEdit({ ...edit, submittal: e.target.value })}/></label><label className="ui-field">Source<input value={edit.source} onChange={e => setEdit({ ...edit, source: e.target.value })}/></label><label className="intel-checkbox"><input type="checkbox" checked={edit.reviewed} onChange={e => setEdit({ ...edit, reviewed: e.target.checked })}/>Requirement reviewed</label><div className="intel-dialog-actions"><Button onClick={() => setEdit(null)}>Cancel</Button><Button type="submit" variant="primary">Save requirement</Button></div></form></Modal>}</div>;
 }
 
-function SpecificationsScreen({ projectName, navigate }: ViewProps) {
+function SpecificationsScreen(props: ViewProps) {
+  const { documents } = useProjectDocuments();
+  return findManual(documents) ? <StoredSpecRegister {...props} documents={documents}/> : <SampleSpecificationsScreen {...props}/>;
+}
+
+function SampleSpecificationsScreen({ projectName, navigate }: ViewProps) {
   const [sections] = useLocalDraft("specification-sections", initialSpecSections);
   const [query, setQuery] = useState("");
   const [division, setDivision] = useState("All divisions");
@@ -86,7 +94,12 @@ function SpecificationsScreen({ projectName, navigate }: ViewProps) {
   </div>;
 }
 
-function DrawingsScreen({ projectName, notify, navigate }: ViewProps) {
+function DrawingsScreen(props: ViewProps) {
+  const { documents } = useProjectDocuments();
+  return drawingRegister(documents).length ? <StoredDrawingRegister {...props} documents={documents}/> : <SampleDrawingsScreen {...props}/>;
+}
+
+function SampleDrawingsScreen({ projectName, notify, navigate }: ViewProps) {
   const [rows, setRows] = useLocalDraft("drawing-register", initialDrawings);
   const [query, setQuery] = useState("");
   const [discipline, setDiscipline] = useState("All disciplines");

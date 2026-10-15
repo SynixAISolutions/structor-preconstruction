@@ -14,7 +14,7 @@ const index = await S.updateDocument(args.project, args.doc, doc => ({
   ...doc,
   sheets: doc.sheets.map(s => {
     const r = read.find(x => x.page === s.page && !x.error);
-    return r?.sheet ? { page: s.page, sheet: String(r.sheet).trim(), title: String(r.title ?? "").trim(), date: String(r.date ?? "").trim() } : s;
+    return r?.sheet ? { page: s.page, sheet: String(r.sheet).trim(), title: String(r.title ?? "").trim(), date: String(r.date ?? "").trim().replace(/[/.]/g, "-") } : s;
   }),
 }));
 const doc = index.documents.find(d => d.id === args.doc);

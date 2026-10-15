@@ -27,7 +27,7 @@ const titleBlock = job({
   screen: (output: unknown): TitleBlock => {
     const o = (output ?? {}) as Record<string, unknown>;
     const sheet = str(o.sheet, 20);
-    return { sheet: /^[A-Z]{1,4}[-.]?\d{1,4}(?:\.\d{1,3})?[A-Z]?$/i.test(sheet) ? sheet.toUpperCase() : "", title: str(o.title, 160), date: str(o.date, 20) };
+    return { sheet: /^[A-Z]{1,4}[-.]?\d{1,4}(?:\.\d{1,3})?[A-Z]?$/i.test(sheet) ? sheet.toUpperCase() : "", title: str(o.title, 160), date: str(o.date, 20).replace(/[/.]/g, "-") };
   },
 });
 
