@@ -109,7 +109,7 @@ rule(() => markInvitationSubmitted(sample, "inv-x"), /no longer exists/);
 rule(() => setInvitationStatus(sample, "inv-x", "declined"), /no longer exists/);
 
 // New items, notifications.
-const added = addScope(sample, { packageId: "flooring", title: "  Floor transition strips at every material change. ", source: "A-101" }, "Vijay", at);
+const added = addScope(sample, { packageId: "flooring", title: "  Floor transition strips at every material change. ", source: "A1.1" }, "Vijay", at);
 assert.deepEqual([added.scopes.at(-1).title, added.scopes.at(-1).status, added.scopes.at(-1).origin], ["Floor transition strips at every material change.", "draft", "estimator"]);
 rule(() => addScope(sample, { packageId: "flooring", title: " " }, "Vijay", at), /Describe/);
 assert.equal(unreadFor(markNotificationsRead(moved, moved.notifications.map(n => n.id)), "Vijay").length, 0);

@@ -1,0 +1,23 @@
+.stored-viewer { display: grid; gap: 10px; min-width: 0; }
+.stored-viewer-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.stored-viewer-bar select { max-width: 320px; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); }
+.stored-viewer-name { display: grid; min-width: 0; flex: 1 1 220px; }
+.stored-viewer-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stored-viewer-name small { color: var(--muted); }
+.stored-viewer-pages, .stored-viewer-zoom { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.stored-viewer-frame { overflow: auto; max-height: 72vh; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); }
+.stored-viewer-frame > div { min-width: 100%; }
+.stored-viewer-quote { margin: 0; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--selected); color: var(--ink); }
+.stored-page-image { display: block; width: 100%; height: auto; background: #fff; }
+.stored-page-status { margin: 0; padding: 32px 16px; color: var(--muted); text-align: center; }
+
+.pf-upload-list { display: grid; gap: 8px; margin: 12px 0; }
+.pf-upload-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line-soft); border-radius: 6px; }
+.pf-upload-row progress { grid-column: 1 / -1; width: 100%; height: 6px; }
+.pf-upload-row small { color: var(--muted); }
+.pf-upload-row .pf-error { color: var(--red); grid-column: 1 / -1; }
+.pf-revisions { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.pf-revisions button { padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); color: var(--ink); font-size: 12px; cursor: pointer; }
+.pf-revisions button.active { border-color: var(--accent); color: var(--accent-dark); font-weight: 600; }
+.pf-actions { display: inline-flex; gap: 4px; justify-content: flex-end; }
+.pf-stored-note { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 13px; }

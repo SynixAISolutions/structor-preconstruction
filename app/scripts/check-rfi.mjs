@@ -35,7 +35,7 @@ assert.deepEqual(R.issueTrades(base), ["07 · Envelope", "07 · Roofing", "08 ·
 // The team's own issues are reviewed as they are added; AI ones wait.
 fails(() => R.addIssue(base, { title: " ", severity: "urgent" }, "Safi", at), "title", /Describe/);
 fails(() => R.addIssue(base, { title: "x", severity: "urgent" }, "Safi", at), "severity", /high, medium, or low/);
-let s = freeze(R.addIssue(base, { title: "  Confirm gym floor transition detail ", severity: "low", trade: "09 · Finishes", source: "A-501" }, "Vijay", at));
+let s = freeze(R.addIssue(base, { title: "  Confirm gym floor transition detail ", severity: "low", trade: "09 · Finishes", source: "A8.1" }, "Vijay", at));
 const own = s.issues.at(-1);
 assert.deepEqual([own.number, own.title, own.origin, own.raisedBy, own.category, own.status, own.reviewedBy], ["SC-006", "Confirm gym floor transition detail", "team", "Vijay", "Question", "open", "Vijay"]);
 assert.equal(R.addIssue({ ...s, lastIssueNumber: 9 }, { title: "x", severity: "low" }, "Safi", at).issues.at(-1).number, "SC-010", "Numbers follow the counter, never reused");
@@ -67,20 +67,20 @@ fails(() => R.createRfi(stale, { issueIds: [sc2], question: "q", to: architect }
 
 // A subcontractor's question from the portal waits for review too; the package owner is told.
 fails(() => R.raiseSubcontractorQuestion(base, proc, { invitationId: "inv-4", company: "Metro Mechanical", title: "x" }, at), "invitation", /active invitation/);
-s = freeze(R.raiseSubcontractorQuestion(s, proc, { invitationId: "inv-1", company: "Capital Demolition", title: "Who removes the roof anchors?", source: "AD-101" }, at));
+s = freeze(R.raiseSubcontractorQuestion(s, proc, { invitationId: "inv-1", company: "Capital Demolition", title: "Who removes the roof anchors?", source: "CIV0102" }, at));
 const question = s.issues.at(-1);
 assert.deepEqual([question.number, question.origin, question.status, question.bidderId, question.packageId, question.trade, question.raisedBy], ["SC-007", "subcontractor", "pending-review", "b1", "demolition", "02 · Demolition", "Capital Demolition"]);
 assert.deepEqual(s.notifications.map(n => [n.kind, n.recipientType, n.recipient]), [["question-raised", "team", "Safi"]]);
 assert.match(s.notifications[0].text, /waiting for your review/);
 fails(() => R.createRfi(s, { issueIds: [question.id], question: "q", to: architect }, "Safi", at), "issueIds", /SC-007 needs contractor review first/);
-const answered = R.closeIssue(s, question.id, "resolved", "Yes, per AD-101 note 4.", "Safi", at);
+const answered = R.closeIssue(s, question.id, "resolved", "Yes, per CIV0102 note 4.", "Safi", at);
 assert.deepEqual([answered.notifications.at(-1).kind, answered.notifications.at(-1).recipientType, answered.notifications.at(-1).recipient], ["question-resolved", "bidder", "b1"], "The subcontractor gets the answer");
 
 // Combining reviewed duplicates: the subcontractor's question folds into SC-001.
 s = freeze(R.approveIssue(s, question.id, "Safi", at));
 fails(() => R.combineIssues(s, sc1, [sc1], "Safi", at), "issueIds", /Choose the issues/);
 const intoOwn = R.combineIssues(s, own.id, [question.id], "Safi", at);
-assert.deepEqual([byNumber(intoOwn, "SC-006").severity, byNumber(intoOwn, "SC-006").source], ["medium", "A-501; AD-101"], "Takes the highest severity and every source");
+assert.deepEqual([byNumber(intoOwn, "SC-006").severity, byNumber(intoOwn, "SC-006").source], ["medium", "A8.1; CIV0102"], "Takes the highest severity and every source");
 assert.deepEqual(R.closeIssue(intoOwn, own.id, "resolved", "Roofing sub removes them.", "Safi", at).notifications.at(-1).recipient, "b1", "Resolving the kept issue answers the combined question");
 assert.deepEqual(R.reopenIssue(intoOwn, question.id, at).issues.at(-1).status + "/" + R.reopenIssue(intoOwn, question.id, at).issues.at(-1).combinedInto, "open/null");
 s = freeze(R.combineIssues(s, sc1, [question.id], "Safi", at));

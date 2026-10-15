@@ -10,10 +10,9 @@ export type LibraryFile = { id: string; name: string; category: string; type: st
 // exported to PDF and uploaded; Structor's bid forms live in Scopes & bid forms.
 export const categories = ["All files", "Drawings", "Specifications", "Reports", "RFP", "Contracts"];
 export const sampleFiles: LibraryFile[] = [
-  { id: "d1", name: "Architectural drawing set.pdf", category: "Drawings", type: "PDF", size: "24.8 MB", date: "2026-09-08", sample: true, revision: "Rev 02" },
-  { id: "d2", name: "Structural drawing set.pdf", category: "Drawings", type: "PDF", size: "12.4 MB", date: "2026-09-08", sample: true, revision: "Rev 02" },
-  { id: "d3", name: "MEP drawing set.pdf", category: "Drawings", type: "PDF", size: "18.6 MB", date: "2026-09-06", sample: true, revision: "Rev 01" },
-  { id: "d4", name: "Project manual & specifications.pdf", category: "Specifications", type: "PDF", size: "8.2 MB", date: "2026-09-05", sample: true, revision: "Rev 01" },
+  // The real GMP permit set and project manual, stored in Project files (private Blob, not in git).
+  { id: "jrc-drawings-251209", name: "JRC_GMP-Permit_Drawings_251209.pdf", category: "Drawings", type: "PDF", size: "166.5 MB", date: "2025-12-09", sample: true, revision: "GMP 12-09-2025" },
+  { id: "jrc-manual-251209", name: "JRC_GMP-Permit_Project-Manual_251209.pdf", category: "Specifications", type: "PDF", size: "110.5 MB", date: "2025-12-09", sample: true, revision: "GMP 12-09-2025" },
   { id: "d5", name: "Geotechnical investigation report.pdf", category: "Reports", type: "PDF", size: "4.1 MB", date: "2026-08-29", sample: true, revision: "Final" },
   { id: "d6", name: "Invitation to bid — Jelleff.pdf", category: "RFP", type: "PDF", size: "1.2 MB", date: "2026-08-28", sample: true, revision: "Original" },
   { id: "d7", name: "Subcontract agreement template.docx", category: "Contracts", type: "DOCX", size: "268 KB", date: "2026-08-28", sample: true, revision: "Template" },
@@ -28,23 +27,23 @@ export type TakeoffOrigin = { kind: "model"; rowId: string; measured: number } |
  */
 export type TakeoffRow = { id: string; division: string; item: string; unit: string; quantity: number; rate: number; source: string; reviewed: boolean; packageId?: string | null; origin?: TakeoffOrigin };
 export const initialTakeoffs: TakeoffRow[] = [
-  { id: "q1", division: trades[0], packageId: "demolition", item: "Interior partition demolition", unit: "LF", quantity: 1240, rate: 14, source: "AD-101", reviewed: true },
-  { id: "q2", division: trades[0], packageId: "demolition", item: "Floor finish removal", unit: "SF", quantity: 18650, rate: 2.75, source: "AD-101", reviewed: true },
-  { id: "q3", division: trades[0], packageId: "demolition", item: "Door & frame removal", unit: "EA", quantity: 38, rate: 185, source: "AD-101", reviewed: false },
-  { id: "q4", division: trades[1], packageId: "concrete", item: "Cast-in-place concrete slab", unit: "CY", quantity: 286, rate: 265, source: "S-101", reviewed: false },
-  { id: "q5", division: trades[2], packageId: "masonry", item: "8-inch reinforced CMU wall", unit: "SF", quantity: 4280, rate: 32, source: "A-101", reviewed: false },
-  { id: "q6", division: trades[3], packageId: "steel", item: "Structural steel framing", unit: "TON", quantity: 46.5, rate: 3800, source: "S-101", reviewed: true },
-  { id: "q7", division: trades[4], packageId: "thermal", item: "Single-ply membrane roofing", unit: "SF", quantity: 22500, rate: 12.5, source: "A-102", reviewed: false },
-  { id: "q8", division: trades[5], packageId: "openings", item: "Hollow metal door assemblies", unit: "EA", quantity: 42, rate: 1650, source: "A-601", reviewed: false },
-  { id: "q9", division: trades[6], packageId: "drywall", item: "Painted gypsum wall finish", unit: "SF", quantity: 32400, rate: 2.2, source: "A-101", reviewed: false },
+  { id: "q1", division: trades[0], packageId: "demolition", item: "Existing building demolition (perimeter)", unit: "LF", quantity: 1240, rate: 14, source: "CIV0102", reviewed: true },
+  { id: "q2", division: trades[0], packageId: "demolition", item: "Asphalt pavement removal, full depth", unit: "SF", quantity: 18650, rate: 2.75, source: "CIV0102", reviewed: true },
+  { id: "q3", division: trades[0], packageId: "demolition", item: "Site items removed (signs, light poles, fixtures)", unit: "EA", quantity: 38, rate: 185, source: "CIV0102", reviewed: false },
+  { id: "q4", division: trades[1], packageId: "concrete", item: "Cast-in-place concrete slab", unit: "CY", quantity: 286, rate: 265, source: "S101", reviewed: false },
+  { id: "q5", division: trades[2], packageId: "masonry", item: "8-inch reinforced CMU wall", unit: "SF", quantity: 4280, rate: 32, source: "A1.1", reviewed: false },
+  { id: "q6", division: trades[3], packageId: "steel", item: "Structural steel framing", unit: "TON", quantity: 46.5, rate: 3800, source: "S101", reviewed: true },
+  { id: "q7", division: trades[4], packageId: "thermal", item: "Single-ply membrane roofing", unit: "SF", quantity: 22500, rate: 12.5, source: "A1.3", reviewed: false },
+  { id: "q8", division: trades[5], packageId: "openings", item: "Hollow metal door assemblies", unit: "EA", quantity: 42, rate: 1650, source: "A8.2", reviewed: false },
+  { id: "q9", division: trades[6], packageId: "drywall", item: "Painted gypsum wall finish", unit: "SF", quantity: 32400, rate: 2.2, source: "A1.1", reviewed: false },
   // MCN's illustrative drywall estimate (Marcel's pilot trade): direct cost only, quantities and rates invented.
-  { id: "q10", division: trades[6], packageId: "drywall", item: "Metal stud framing, interior partitions", unit: "SF", quantity: 21400, rate: 9.5, source: "A-101 · Partition types", reviewed: true },
-  { id: "q11", division: trades[6], packageId: "drywall", item: "Gypsum board, both faces", unit: "SF", quantity: 42800, rate: 4.1, source: "A-101 · Partition types", reviewed: true },
+  { id: "q10", division: trades[6], packageId: "drywall", item: "Metal stud framing, interior partitions", unit: "SF", quantity: 21400, rate: 9.5, source: "A8.1 · Partition types", reviewed: true },
+  { id: "q11", division: trades[6], packageId: "drywall", item: "Gypsum board, both faces", unit: "SF", quantity: 42800, rate: 4.1, source: "A8.1 · Partition types", reviewed: true },
   { id: "q12", division: trades[6], packageId: "drywall", item: "Taping and finishing, Level 4", unit: "SF", quantity: 42800, rate: 2.4, source: "09 29 00 · §3.6", reviewed: false },
   { id: "q13", division: trades[6], packageId: "drywall", item: "Sound attenuation blankets", unit: "SF", quantity: 18900, rate: 1.85, source: "09 29 00 · §2.5", reviewed: false },
-  { id: "q14", division: trades[6], packageId: "drywall", item: "Shaft wall at elevator and stairs", unit: "SF", quantity: 2300, rate: 16.5, source: "A-101 · Elevator / stair", reviewed: false },
-  { id: "q15", division: trades[6], packageId: "drywall", item: "Acoustical panel ceilings", unit: "SF", quantity: 14600, rate: 7.25, source: "A-121 · Ceiling legend", reviewed: true },
-  { id: "q16", division: trades[6], packageId: "drywall", item: "Gypsum board ceilings and soffits", unit: "SF", quantity: 6200, rate: 14, source: "A-121 · Ceiling legend", reviewed: false },
+  { id: "q14", division: trades[6], packageId: "drywall", item: "Shaft wall at elevator and stairs", unit: "SF", quantity: 2300, rate: 16.5, source: "A1.1 · Elevator / stair", reviewed: false },
+  { id: "q15", division: trades[6], packageId: "drywall", item: "Acoustical panel ceilings", unit: "SF", quantity: 14600, rate: 7.25, source: "A3.1 · Ceiling legend", reviewed: true },
+  { id: "q16", division: trades[6], packageId: "drywall", item: "Gypsum board ceilings and soffits", unit: "SF", quantity: 6200, rate: 14, source: "A3.1 · Ceiling legend", reviewed: false },
 ];
 
 export type SpecItem = { id: string; section: string; title: string; product: string; manufacturer: string; submittal: string; source: string; reviewed: boolean };
@@ -61,16 +60,16 @@ export const initialSpecs: SpecItem[] = [
 export type Drawing = { id: string; title: string; discipline: string; date: string; received: string; revision: string; status: string };
 export const initialDrawings: Drawing[] = [
   { id: "G-001", title: "Cover sheet & drawing index", discipline: "General", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current" },
-  { id: "AD-101", title: "First floor demolition plan", discipline: "Architectural", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current" },
-  { id: "A-101", title: "First floor plan", discipline: "Architectural", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current" },
-  { id: "A-102", title: "Roof plan", discipline: "Architectural", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current" },
-  { id: "A-121", title: "First floor reflected ceiling plan", discipline: "Architectural", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current" },
-  { id: "A-501", title: "Wall sections & details", discipline: "Architectural", date: "2026-08-21", received: "2026-08-22", revision: "01", status: "Current" },
-  { id: "A-601", title: "Door & frame schedules", discipline: "Architectural", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current" },
-  { id: "S-101", title: "Foundation & framing plan", discipline: "Structural", date: "2026-09-08", received: "2026-09-09", revision: "02", status: "Current" },
-  { id: "M-101", title: "First floor mechanical plan", discipline: "Mechanical", date: "2026-09-06", received: "2026-09-07", revision: "01", status: "Current" },
-  { id: "P-101", title: "First floor plumbing plan", discipline: "Plumbing", date: "2026-09-06", received: "2026-09-07", revision: "01", status: "Current" },
-  { id: "E-101", title: "Lighting & power plan", discipline: "Electrical", date: "2026-09-06", received: "2026-09-07", revision: "01", status: "Current" },
+  { id: "CIV0102", title: "Demolition plan", discipline: "Civil", date: "2025-12-09", received: "2025-12-10", revision: "GMP", status: "Current" },
+  { id: "A1.1", title: "Level 01 - First floor plan", discipline: "Architectural", date: "2025-12-09", received: "2025-12-10", revision: "GMP", status: "Current" },
+  { id: "A1.3", title: "Roof plan", discipline: "Architectural", date: "2025-12-09", received: "2025-12-10", revision: "GMP", status: "Current" },
+  { id: "A3.1", title: "Level 01 - Reflected ceiling plan", discipline: "Architectural", date: "2025-12-09", received: "2025-12-10", revision: "GMP", status: "Current" },
+  { id: "A8.1", title: "Partition types", discipline: "Architectural", date: "2025-12-09", received: "2025-12-10", revision: "GMP", status: "Current" },
+  { id: "A8.2", title: "Door & frame type & schedule", discipline: "Architectural", date: "2025-12-09", received: "2025-12-10", revision: "GMP", status: "Current" },
+  { id: "S101", title: "Level 01 - First floor framing plan", discipline: "Structural", date: "2025-12-09", received: "2025-12-10", revision: "GMP", status: "Current" },
+  { id: "M101", title: "Level 01 - HVAC plan", discipline: "Mechanical", date: "2025-12-09", received: "2025-12-10", revision: "GMP", status: "Current" },
+  { id: "P2.1", title: "Level 01 - Overall plumbing plan", discipline: "Plumbing", date: "2025-12-09", received: "2025-12-10", revision: "GMP", status: "Current" },
+  { id: "E1.1", title: "Level 01 - Lighting plan", discipline: "Electrical", date: "2025-12-09", received: "2025-12-10", revision: "GMP", status: "Current" },
 ];
 
 /**

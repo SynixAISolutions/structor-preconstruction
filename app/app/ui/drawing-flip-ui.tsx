@@ -48,6 +48,8 @@ import { displayDate } from "../../lib/format";
 import { useDrawingFlip } from "../../lib/use-drawing-flip";
 import { useProcurement } from "../../lib/use-procurement";
 import { rememberPdf, useSourceFile } from "../../lib/pdf-session";
+import { renderStoredPage, useProjectDocuments } from "../../lib/project-files-client";
+import { findSheet } from "../../lib/project-files";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, PreviewNote, Stats, type ViewProps } from "./shared";
 import "./drawing-flip-ui.css";
 
@@ -99,7 +101,24 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
   const [rendered, setRendered] = useState<{ file: File; page: number; image: string } | null>(null);
   const [sourceError, setSourceError] = useState("");
   const runtime = page.source === "uploaded";
-  const image = page.image || (rendered?.file === file && rendered?.page === page.pageNumber ? rendered.image : null);
+  // The real sheet from Project files: by document id, or by sheet number in the stored drawing set.
+  const { documents } = useProjectDocuments();
+  const stored = useMemo(() => {
+    const byId = documents.find(d => d.id === page.documentId);
+    if (byId) return { doc: byId, pageNumber: page.pageNumber };
+    const found = findSheet(documents, page.sheet);
+    return found ? { doc: found.doc, pageNumber: found.sheet.page } : null;
+  }, [documents, page.documentId, page.pageNumber, page.sheet]);
+  const storedKey = stored ? `${stored.doc.id}:${stored.pageNumber}` : "";
+  const [storedImage, setStoredImage] = useState<{ key: string; image: string; aspect: number } | null>(null);
+  useEffect(() => {
+    if (!stored) return;
+    let live = true;
+    renderStoredPage(stored.doc, stored.pageNumber, 2400).then(result => { if (live) setStoredImage({ key: storedKey, ...result }); }, error => { if (live) setSourceError(error instanceof Error ? error.message : "The sheet could not be rendered."); });
+    return () => { live = false; };
+  }, [storedKey]);
+  const storedReady = storedImage?.key === storedKey ? storedImage : null;
+  const image = page.image || storedReady?.image || (rendered?.file === file && rendered?.page === page.pageNumber ? rendered.image : null);
   useEffect(() => {
     let current = true;
     setSourceError("");
@@ -107,8 +126,9 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
     return () => { current = false; };
   }, [runtime, file, page.pageNumber]);
   if (runtime && !image) return <div className="flip-source-needed"><p>{sourceError || (file ? "Rendering original drawing page…" : `Choose ${page.documentName} to view the original sheet and its highlights.`)}</p><label className="ui-field">Original drawing PDF<input type="file" accept=".pdf,application/pdf" onChange={event => { const chosen = event.target.files?.[0]; if (!chosen) return; if (chosen.name !== page.documentName) { setSourceError(`Choose the cited file: ${page.documentName}.`); return; } rememberPdf(chosen); }}/></label></div>;
+  if (stored && !image) return <div className="flip-source-needed"><p role="status">{sourceError || `Loading ${page.sheet} from ${stored.doc.name}…`}</p></div>;
   const displayPage = image ? { ...page, image } : page;
-  const height = 1000 / page.aspect;
+  const height = 1000 / (storedReady?.aspect ?? page.aspect);
   const drawing = <svg viewBox={`0 0 1000 ${height}`} role="img" aria-label={`${page.sheet} with ${regions.length} trade regions`}>
     <DrawingBackdrop page={displayPage} height={height}/>
     <g className="flip-region-layer">{regions.map(region => {

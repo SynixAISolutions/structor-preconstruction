@@ -2,8 +2,21 @@
 
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Button } from "./shared";
+import { StoredDocumentViewer } from "./project-file-viewer";
+import { useProjectDocuments } from "../../lib/project-files-client";
+import { findManual, latestDocuments } from "../../lib/project-files";
 
-export function SourcePdf({ page, range, onPageChange, label = "Source PDF", selectedFile, expectedName }: { page: number; range?: { first: number; last: number } | null; onPageChange: (page: number) => void; label?: string; selectedFile?: File; expectedName?: string }) {
+/** A source page: straight from Project files when the document is stored there, otherwise from a file the user picks. */
+export function SourcePdf(props: { page: number; range?: { first: number; last: number } | null; onPageChange: (page: number) => void; label?: string; selectedFile?: File; expectedName?: string; quote?: string; kind?: "manual" | "drawings" }) {
+  const { documents, ready } = useProjectDocuments();
+  const latest = latestDocuments(documents);
+  const stored = props.expectedName ? latest.find(d => d.name === props.expectedName) ?? documents.find(d => d.name === props.expectedName) : props.kind === "drawings" ? latest.find(d => d.kind === "drawings") : findManual(documents);
+  if (stored) return <StoredDocumentViewer doc={stored} page={Math.min(Math.max(1, props.page), stored.pageCount)} onPageChange={props.onPageChange} range={props.range} highlight={props.quote}/>;
+  if (!ready) return <p className="proc-modal-note" role="status">Looking for the document in Project files…</p>;
+  return <PickedSourcePdf {...props}/>;
+}
+
+function PickedSourcePdf({ page, range, onPageChange, label = "Source PDF", selectedFile, expectedName }: { page: number; range?: { first: number; last: number } | null; onPageChange: (page: number) => void; label?: string; selectedFile?: File; expectedName?: string }) {
   // shortcut: files last for this view; share file access when project storage is connected.
   const [file, setFile] = useState<{ url: string; name: string; source: File } | null>(null);
   const [image, setImage] = useState<string | null>(null);
@@ -33,7 +46,7 @@ export function SourcePdf({ page, range, onPageChange, label = "Source PDF", sel
   useEffect(() => { if (selectedFile) void openFile(selectedFile); return () => { request.current++; }; }, [selectedFile, expectedName]);
   function open(event: ChangeEvent<HTMLInputElement>) { const selected = event.currentTarget.files?.[0]; if (selected) void openFile(selected); }
   return <div className="proc-source-dialog">
-    <p className="proc-modal-note">Open the source PDF from your computer to check this reference. The file stays in this browser.</p>
+    <p className="proc-modal-note">This document is not in Project files yet. Upload it there once and every reference opens it automatically, or open it from your computer for now.</p>
     <label className="ui-field">{label}<input type="file" accept="application/pdf,.pdf" onChange={open}/></label>
     {error && <p className="proc-source-error" role="alert">{error}</p>}
     {file && <>

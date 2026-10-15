@@ -14,18 +14,18 @@ const sheets = r => r.drawings.map(d => `${d.page.sheet}[${d.regions.map(x => x.
 
 // The drywall item: its linked Drawing Flip region and its listed specification section with manual pages.
 const drywall = sources(scope("scope-12"));
-assert.deepEqual(sheets(drywall), ["A-101[R-005]"]);
+assert.deepEqual(sheets(drywall), ["A1.1[R-005]"]);
 assert.deepEqual(drywall.spec, { section: "09 29 00", paragraph: "§3.6", title: "Gypsum board", pages: { first: 346, last: 355 } });
 assert.equal(drywall.unresolved, null);
 
 // A drawing source names a Drawing Flip page: that page, with the item's regions on it.
-assert.deepEqual([sheets(sources(scope("scope-1"))), sources(scope("scope-1")).spec], [["AD-101[R-001]"], null]);
+assert.deepEqual([sheets(sources(scope("scope-1"))), sources(scope("scope-1")).spec], [["CIV0102[R-001]"], null]);
 // A named sheet with no region linked to the item still opens as the whole sheet.
-const sheetOnly = sources({ id: "x", source: "M-101 · Plan" });
-assert.deepEqual([sheets(sheetOnly), sheetOnly.unresolved], [["M-101[]"], null]);
+const sheetOnly = sources({ id: "x", source: "M101 · Plan" });
+assert.deepEqual([sheets(sheetOnly), sheetOnly.unresolved], [["M101[]"], null]);
 // A sheet that isn't in Drawing Flip stays plain text; linked regions elsewhere still show.
-assert.deepEqual([sheets(sources(scope("scope-8"))), sources(scope("scope-8")).unresolved], [[], "A-501 · Wall sections"]);
-assert.deepEqual([sheets(sources(scope("scope-7"))), sources(scope("scope-7")).unresolved], [["A-101[R-004]"], "A-501 · Wall Type 4"]);
+assert.deepEqual([sheets(sources(scope("scope-8"))), sources(scope("scope-8")).unresolved], [[], "A6.1 · Wall sections"]);
+assert.deepEqual([sheets(sources(scope("scope-7"))), sources(scope("scope-7")).unresolved], [["A1.1[R-004]"], "A8.1 · Partition types"]);
 // A section missing from the register: still a section, without title or pages.
 assert.deepEqual(sources(scope("scope-10")).spec, { section: "07 27 00", paragraph: "§2.1", title: null, pages: null });
 assert.deepEqual(sources({ id: "x", source: "09 29 00" }).spec, { section: "09 29 00", paragraph: null, title: "Gypsum board", pages: { first: 346, last: 355 } });
@@ -33,8 +33,8 @@ assert.deepEqual(sources({ id: "x", source: "09 29 00" }).spec, { section: "09 2
 assert.deepEqual(sources(scope("scope-12"), EMPTY_DRAWING_FLIP, []), { drawings: [], spec: { section: "09 29 00", paragraph: "§3.6", title: null, pages: null }, unresolved: null });
 assert.deepEqual(sources({ id: "x", source: "" }), { drawings: [], spec: null, unresolved: null });
 // Pages follow Drawing Flip's sheet order, each page once.
-const both = sources({ id: "scope-12", source: "AD-101 · Note 01" });
-assert.deepEqual(sheets(both), ["AD-101[]", "A-101[R-005]"]);
+const both = sources({ id: "scope-12", source: "CIV0102 · Note 01" });
+assert.deepEqual(sheets(both), ["CIV0102[]", "A1.1[R-005]"]);
 // Every sample item resolves to something to open or to plain text.
 for (const item of sampleProcurement.scopes) {
   const r = sources(item);
