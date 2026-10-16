@@ -18,6 +18,8 @@ import { useAward } from "../../lib/use-award";
 import { ProcurementPackagesView } from "./procurement";
 import { SubmissionPortalView } from "./submission-ui";
 import { ScheduleView } from "./schedule-ui";
+import { scheduleRows } from "../../lib/schedule";
+import { useSchedule } from "../../lib/use-schedule";
 import { AllowancesView, BudgetView } from "./budget-ui";
 import { AwardView } from "./award-ui";
 import { ValueEngineeringView } from "./value-engineering-ui";
@@ -65,7 +67,9 @@ function TurnoverView({ notify, navigate, projectName, project }: ViewProps & { 
     return () => { current = false; };
   }, [loadedPackageId, project.id, provenance]);
 
-  const summary = deriveTodo({ project, documents, procurement, submissions, leveling, budget, awards });
+  const { state: schedulePlan } = useSchedule();
+  const now = new Date(), today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const summary = deriveTodo({ project, documents, procurement, submissions, leveling, budget, awards, schedule: { rows: scheduleRows(schedulePlan, today), today } });
   const teamActions = summary.tasks.filter(task => task.status === "todo").length;
   const waiting = summary.tasks.filter(task => task.status === "waiting").length;
   const visible = summary.tasks.filter(task => filter === "All work" || (filter === "My actions" ? task.status === "todo" : task.status === "waiting"));

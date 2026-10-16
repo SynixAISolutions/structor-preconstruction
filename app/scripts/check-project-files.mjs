@@ -92,4 +92,18 @@ const R = EXTRA_JOBS["revision-diff"];
 assert.throws(() => R.parse({ sheet: "A1.1", before: "data:image/jpeg;base64,/9j/AA", after: "x" }), /JPEGs/);
 assert.deepEqual(R.screen({ changes: [{ title: "Wall added", kind: "Added", trade: "Drywall" }, { title: "", kind: "Added" }, { title: "Door moved", kind: "Teleported" }] }).changes.map(c => [c.title, c.kind]), [["Wall added", "Added"], ["Door moved", "Revised"]], "Untitled changes dropped; unknown kinds become Revised");
 
+const SS = EXTRA_JOBS["schedule-suggest"];
+const ssIn = SS.parse({ project: { name: "Jelleff", squareFeet: 26500, workType: "both" }, start: "2026-11-02", packages: [{ id: "concrete", code: "03", name: "Concrete" }, { id: "", name: "x" }], drawings: ["A1.1 Level 01 plan"], specs: ["09 29 00 Gypsum board"] });
+assert.equal(ssIn.packages.length, 1);
+assert.throws(() => SS.parse({ project: { name: "J" }, start: "next week" }), /start date/);
+assert.match(SS.messages(ssIn)[1].content, /A1.1 Level 01 plan/);
+const ssOut = SS.screen({ summary: "s", activities: [
+  { code: "A1000", name: "NTP", duration: 0, after: [] },
+  { code: "a1010", name: "Footings", packageId: "concrete", duration: 20, after: [{ code: "a1000", type: "ss", lag: 2 }] },
+  { code: "A1010", name: "Duplicate code", packageId: "roofing", duration: 5, after: [{ code: "A1000", type: "XX" }] },
+  { code: "A1030", name: "Too long", duration: 900 },
+  { code: "A1040", name: "", duration: 3 },
+] }, ssIn);
+assert.deepEqual(ssOut.activities.map(a => [a.code, a.packageId, a.duration, a.after.map(l => `${l.code} ${l.type}${l.lag}`).join()]), [["A1000", null, 0, ""], ["A1010", "concrete", 20, "A1000 SS2"], ["X9002", null, 5, "A1000 FS0"]], "Codes upper-cased and unique, unknown packages and link types normalised, impossible rows dropped");
+assert.throws(() => SS.screen({ activities: [] }, ssIn), /no usable schedule/);
 console.log("Project files checked: sheet keys, revisions, sheet/manual/section lookup, stored-file validation, index upsert, sections by trade.");

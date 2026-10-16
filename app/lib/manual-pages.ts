@@ -417,6 +417,8 @@ export const pageGuides = [
     title: "Project schedule",
     purpose: "Plan the project as linked activities: set working-day durations and the logic between them, see the critical path and the next three weeks, and exchange the schedule with Microsoft Project or Primavera P6.",
     steps: [
+      "Suggest schedule with AI drafts a first schedule from the project information, its bid packages and the drawings and specifications in Project files. Choose the start date, add notes for the AI if you like, and choose Suggest schedule. About a minute later you see every activity with its dates, trade and why it takes that long; critical ones are marked.",
+      "Choose Use this schedule to replace the current schedule (export the current one first if you want to keep it), or Ask again. The suggestion is a starting point: check the durations and links before relying on it.",
       "Read the cards for the number of activities and the project finish. Phase progress shows each phase's dates and progress, weighted by working-day duration.",
       "Filter by phase, owner, or status (Not started, In progress, Complete), choose Critical only or Late only, or search by activity, ID, or owner.",
       "Choose Add activity, or select an activity in the Linked timeline and choose Edit activity. Enter the activity name, Activity ID (assigned automatically if left blank), phase, owner, start, duration in working days (0 makes a milestone), trade package, and progress, then Save activity.",
@@ -441,6 +443,7 @@ export const pageGuides = [
     title: "Preconstruction to-do",
     purpose: "See what is left to do before the project leaves preconstruction. Every task is worked out from the project itself: scope reviews, published bid forms, invitations, submitted bids, leveling, the budget, allowances, awards, Exhibit A, and the subcontract.",
     steps: [
+      "The project schedule feeds this list too: activities past their finish, activities that should have started, and unfinished activities in the next three weeks appear under Project schedule.",
       "Read the overall percent complete. Each trade package counts eight milestones, from scope approved to subcontract executed, plus four project milestones: project information, project files, budget approved, and allowances decided.",
       "Work down the task list. Tasks you need to act on come first, most urgent at the top; tasks waiting on someone else, such as a subcontractor's bid or signature, come after.",
       "Choose a task to open the screen where the work is done: Scopes & bid forms, Bid packages, Bid leveling, Budget summary, Allowances, or Contracts & exhibits.",

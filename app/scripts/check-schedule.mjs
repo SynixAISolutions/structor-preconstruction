@@ -178,4 +178,20 @@ assert.equal(csv.find(l => l.startsWith("A1050")), 'A1050,"Award ""remaining"", 
 assert.equal(csv.find(l => l.startsWith("A1080")), "A1080,Foundations & structure,Construction,Naija,2026-12-07,2027-02-26,60,0,A1070 SS+20,0,Yes");
 assert.equal(csv.length, 14, "Header, 12 rows, trailing newline");
 
+// AI-suggested schedule: links by code, unknown and self links dropped, loops and duplicates refused.
+const sug = [
+  { code: "A1000", name: "Notice to proceed", phase: "Preconstruction", packageId: null, duration: 0, after: [] },
+  { code: "A1010", name: "Demolition", phase: "Construction", packageId: "demolition", duration: 10, after: [{ code: "A1000", type: "FS", lag: 0 }, { code: "A9999", type: "FS", lag: 0 }, { code: "A1010", type: "SS", lag: 0 }] },
+  { code: "A1020", name: "Foundations", phase: "Construction", packageId: "concrete", duration: 20.4, after: [{ code: "A1010", type: "SS", lag: 5 }] },
+];
+const fromAi = S.scheduleFromSuggestion(freeze(sug), "2026-11-02");
+assert.equal(fromAi.warnings.length, 2, "Unknown and self links are dropped with a warning");
+const placed = S.replaceSchedule(S.EMPTY_SCHEDULE, fromAi, "AI suggested schedule", "Marcel", at);
+assert.deepEqual(placed.activities.map(a => [a.code, a.start, a.duration, a.progress, a.owner]), [["A1000", "2026-11-02", 0, 0, ""], ["A1010", "2026-11-03", 10, 0, ""], ["A1020", "2026-11-10", 20, 0, ""]], "Links push each activity from the start date");
+assert.equal(placed.importedFrom, "AI suggested schedule");
+fails(() => S.scheduleFromSuggestion([{ ...sug[1], after: [{ code: "A1020", type: "FS", lag: 0 }] }, { ...sug[2] }], "2026-11-02"), "file", /loop/);
+fails(() => S.scheduleFromSuggestion([sug[0], sug[0]], "2026-11-02"), "code", /share a code/);
+fails(() => S.scheduleFromSuggestion(sug, "2026-02-30"), "start", /start date/);
+fails(() => S.scheduleFromSuggestion([], "2026-11-02"), "file", /no activities/);
+
 console.log(`Schedule checked: ${base.activities.length} sample activities; working days, FS/SS/FF/SF and lags, push-only date shift, critical path and float, progress, look-ahead, phases, MS Project XML in and out, CSV.`);
