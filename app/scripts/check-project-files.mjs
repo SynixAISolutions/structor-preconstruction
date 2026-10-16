@@ -115,6 +115,10 @@ const veIn = V.parse({ project: "Jelleff", lines: [{ packageId: "drywall", trade
 assert.equal(veIn.lines.length, 1);
 assert.deepEqual(V.screen({ ideas: [{ description: "Equal ceiling tile", packageId: "drywall", costImpact: -40000 }, { description: "Too big", packageId: "drywall", costImpact: -2000000 }, { description: "Adds cost", packageId: "drywall", costImpact: 500 }, { description: "Unknown trade", packageId: "roofing", costImpact: -10 }] }, veIn).ideas.map(i => i.description), ["Equal ceiling tile"], "Savings only, within the trade's cost, for trades that were sent");
 assert.throws(() => V.parse({ lines: [] }), /trades/);
+const SR = EXTRA_JOBS["submittal-requirements"];
+const srIn = SR.parse({ section: "09 29 00", title: "Gypsum board", pages: [{ page: 435, text: "1.4 ACTION SUBMITTALS A. Product Data: For each type of product. B. Samples: For each textured finish." }] });
+assert.deepEqual(SR.screen({ items: [{ title: "Product data", page: 435, quote: "Product Data: For each type of product." }, { title: "Samples", page: 435, quote: "Samples: invented text" }, { title: "Product data", page: 435, quote: "Product Data: For each type" }, { title: "Shop drawings", page: 999, quote: "Product Data" }] }, srIn).items.map(i => i.title), ["Product data"], "Quotes must be on the cited page; one item per title");
+assert.throws(() => SR.parse({ section: "Gypsum", pages: [{ page: 1, text: "x" }] }), /section/);
 const R = EXTRA_JOBS["revision-diff"];
 assert.throws(() => R.parse({ sheet: "A1.1", before: "data:image/jpeg;base64,/9j/AA", after: "x" }), /JPEGs/);
 assert.deepEqual(R.screen({ changes: [{ title: "Wall added", kind: "Added", trade: "Drywall" }, { title: "", kind: "Added" }, { title: "Door moved", kind: "Teleported" }] }).changes.map(c => [c.title, c.kind]), [["Wall added", "Added"], ["Door moved", "Revised"]], "Untitled changes dropped; unknown kinds become Revised");
