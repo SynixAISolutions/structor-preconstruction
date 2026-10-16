@@ -2,7 +2,7 @@
 
 import { Fragment, type ComponentType } from "react";
 import { ArrowLeft } from "lucide-react";
-import { PORTAL_PREVIEW_SCREEN, SCREEN_GROUPS, type Screen, type ScreenDef } from "../../lib/screens";
+import { ARCHITECT_PREVIEW_SCREEN, PORTAL_PREVIEW_SCREEN, SCREEN_GROUPS, type Screen, type ScreenDef } from "../../lib/screens";
 
 export function SidebarNavigation({ screen, projectOpen, navigate, icon: Icon }: {
   screen: Screen;
@@ -30,6 +30,6 @@ export function SidebarNavigation({ screen, projectOpen, navigate, icon: Icon }:
           : <Fragment key={block.items[0].id}>{block.items.map(entry)}</Fragment>)}
       </div>;
     })}
-    {projectOpen && <div className="nav-group nav-preview"><button className={screen === PORTAL_PREVIEW_SCREEN.id ? "active" : ""} aria-current={screen === PORTAL_PREVIEW_SCREEN.id ? "page" : undefined} onClick={() => navigate(PORTAL_PREVIEW_SCREEN.id)}><Icon id={PORTAL_PREVIEW_SCREEN.id} name={PORTAL_PREVIEW_SCREEN.icon} size={17}/><span>Preview as subcontractor</span></button></div>}
+    {projectOpen && <div className="nav-group nav-preview"><button className={screen === PORTAL_PREVIEW_SCREEN.id ? "active" : ""} aria-current={screen === PORTAL_PREVIEW_SCREEN.id ? "page" : undefined} onClick={() => navigate(PORTAL_PREVIEW_SCREEN.id)}><Icon id={PORTAL_PREVIEW_SCREEN.id} name={PORTAL_PREVIEW_SCREEN.icon} size={17}/><span>Preview as subcontractor</span></button><button className={screen === ARCHITECT_PREVIEW_SCREEN.id ? "active" : ""} aria-current={screen === ARCHITECT_PREVIEW_SCREEN.id ? "page" : undefined} onClick={() => navigate(ARCHITECT_PREVIEW_SCREEN.id)}><Icon id={ARCHITECT_PREVIEW_SCREEN.id} name={ARCHITECT_PREVIEW_SCREEN.icon} size={17}/><span>Preview as architect</span></button></div>}
   </nav>;
 }

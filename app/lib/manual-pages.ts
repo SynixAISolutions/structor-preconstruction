@@ -310,6 +310,25 @@ export const pageGuides = [
     related: ["packages", "bidders", "leveling"],
   },
   {
+    id: "architect",
+    group: "Architect view",
+    title: "Architect portal",
+    purpose: "See what the architect sees: only the project's submittals. The design team reviews what the contractor sent, records an action and comments, and sees what it already returned. Nothing else in the project is shared.",
+    steps: [
+      "Open a project and choose Preview as architect at the bottom of the menu.",
+      "To review lists the submittals the contractor sent from Submittal packages. Choose Record review on one.",
+      "Choose the action: Approved, Approved as noted, Revise and resubmit, or Rejected. Comments are required for anything other than an approval. Return to contractor records it.",
+      "Answered shows every submittal already returned, with its action and comments. The contractor returns each response to the subcontractor from Submittal packages.",
+    ],
+    example: "Send 09 29 00-01 gypsum board product data to the architect from Submittal packages, then preview as architect, record Approved as noted with a comment on the board type, and return it to the contractor.",
+    terms: [
+      { name: "Approved as noted", meaning: "Accepted with the architect's comments, which the subcontractor must follow; no resubmittal is needed." },
+      { name: "Revise and resubmit", meaning: "Not accepted as submitted; the subcontractor corrects it and submits a new revision." },
+    ],
+    reality: "A preview in this one-browser demo: there is no separate architect login yet, and nothing is emailed.",
+    related: ["specs", "portal"],
+  },
+  {
     id: "budget",
     group: "Preconstruction",
     title: "Budget summary",
@@ -446,7 +465,7 @@ export const pageGuides = [
   },
 ] satisfies {
   id: string;
-  group: "Workspace" | "Preconstruction" | "Operations" | "Subcontractor view";
+  group: "Workspace" | "Preconstruction" | "Operations" | "Subcontractor view" | "Architect view";
   title: string;
   purpose: string;
   steps: string[];

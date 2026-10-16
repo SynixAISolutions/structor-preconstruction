@@ -255,7 +255,7 @@ export const manualGuides: ManualGuide[] = [...workspaceGuides, ...pageGuides]
   .map((guide, i) => ({ guide, i }))
   .sort((a, b) => (menuOrder(a.guide.id) - menuOrder(b.guide.id)) || a.i - b.i)
   .map(({ guide }) => guide);
-export const manualGroups = ["Start here", "Workspace", "Preconstruction", "Operations", "Subcontractor view", "Reference"];
+export const manualGroups = ["Start here", "Workspace", "Preconstruction", "Operations", "Subcontractor view", "Architect view", "Reference"];
 export const glossary = [
   { name: "AI finding", meaning: "Something Structor's AI proposed from the project documents: a scope item, a drawing region, or a quantity, with its citation. An estimator accepts, corrects, or rejects it; nothing is used until accepted." },
   { name: "Addendum", meaning: "An official clarification or revision to the bid documents. Confirm which version each bidder priced." },
