@@ -6,6 +6,7 @@ import { ArrowRight, BookOpen, Check, ChevronRight, CircleHelp, Download, Search
 import { glossary, manualGroups, manualGuides, manualMarkdown, searchManual } from "../../lib/user-manual";
 import { downloadText, type Screen } from "./shared";
 import "./user-manual.css";
+import { AskStructor } from "./ask-structor";
 
 type Props = { open: boolean; onOpen: () => void; onClose: () => void; currentScreen: Screen; onNavigate: (id: string) => void };
 
@@ -42,9 +43,7 @@ export function UserManual({ open, onOpen, onClose, currentScreen, onNavigate }:
   if (!mounted) return null;
 
   return createPortal(<>
-    <button className="manual-launcher" type="button" onClick={onOpen} aria-label="Open website instruction manual" aria-haspopup="dialog" aria-expanded={open} title="About & help · website instruction manual">
-      <CircleHelp size={24} aria-hidden="true"/><span>About & help</span>
-    </button>
+    <AskStructor currentScreen={currentScreen} onOpenManual={onOpen} onNavigate={onNavigate}/>
     <dialog ref={dialog} className="manual-dialog" aria-labelledby="manual-title" onCancel={e => { e.preventDefault(); onClose(); }} onClose={onClose}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }} onKeyDownCapture={e => e.stopPropagation()}>
       <header className="manual-header">

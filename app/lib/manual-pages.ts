@@ -5,11 +5,12 @@ export const pageGuides = [
     title: "Project files · document library",
     purpose: "Organize document details by category and inspect a PDF you select from your computer. Use this as the starting point for checking original project requirements.",
     steps: [
-      "Select All files or a folder such as Drawings or Specifications. Search documents matches names and categories.",
-      "Choose Upload files, then Browse files or drop files into the upload box. Choose Save to category and remove any unwanted selections with the × button.",
-      "Choose Add files. The new rows show the file name, category, added date, size, and a New revision label.",
-      "Select a document name or its preview arrow. A selected PDF opens inline; other newly selected files offer Download file.",
-      "If a saved row says File details are saved, choose Select file to add the original file again. Open scope builder opens Scopes & bid forms.",
+      "Choose Upload files, pick the drawing sets, project manual and other documents, choose Save to category, then Store. A PDF is stored once for the project, behind the site password, and every page's text is read so the AI can use it later; drawing sets also get each sheet's number, title and date from its title block.",
+      "Large sets take a few minutes: the row shows uploading, reading pages, saving page text and reading title blocks. Keep the page open until it finishes.",
+      "Select a document to open it page by page. Drawing sets have a Go to sheet list; the project manual has Go to section. Zoom in for detail.",
+      "When a newer issue arrives, choose Upload revision on that document. It becomes V2 (then V3); earlier revisions stay, and Revision comparison compares them sheet by sheet.",
+      "Remove deletes one revision after you confirm. Non-PDF files keep their details only.",
+      "Scopes & bid forms, Drawing Flip, every source pop-up, the Lists of drawings and specifications, Submittal packages and Value engineering all read these stored files. Nothing needs uploading twice.",
     ],
     terms: [
       { name: "Revision", meaning: "The row's descriptive version label; New does not identify the revision printed on your drawing." },
@@ -26,9 +27,11 @@ export const pageGuides = [
     title: "Scopes & bid forms",
     purpose: "Review the checklist each trade will price. In Structor the scope and the bid form are the same list: an estimator approves every item before that trade's bid form can be published to invited subcontractors. Structor's AI can propose items from the documents, each with the page and words it relies on; nothing reaches the bid form until an estimator accepts it.",
     steps: [
+      "Choose Write scopes with AI. Structor finds the project manual in Project files, assigns each specification section to its trade (ceilings, wall coverings and acoustic panels go with Drywall; Division 01 stays in General), and shows the pages per trade. Choose the trades and Read.",
+      "The AI reads the sections a few pages at a time, then merges what it found into bid-form lines, one per thing the subcontractor prices. Each line keeps the page and the exact words it relied on. Proposals appear inside each trade with Accept, Reject, Move trade and Delete.",
       "Choose a trade package on the left. Each shows how many of its bid-form items are approved, how many AI findings wait for review, and whether it is Draft, Ready, Published, or Revised.",
       "Select an item to read its source reference, coordination notes, and history. Search this bid form narrows the list.",
-      "Choose View on drawings to open the drawing page and the region linked to the item, or choose the item's source reference (such as 09 29 00 · §3.6) to read its specification section and manual pages. Closing the window returns you to the same item. To check the actual document, open the source PDF from your computer; it stays in this browser.",
+      "Choose View on drawings to open the real drawing sheet with the region linked to the item, or choose the item's source reference (such as 09 29 00 · §3.6) to open that section of the project manual at its page, with the cited words shown. Closing the window returns you to the same item.",
       "Choose Add scope item, or an item's pencil, to write the description, source reference, notes, and origin. Saving a change sends an approved item back to Needs review.",
       "Use the circle beside an item to approve or reopen it. Approve visible form approves every draft item in the selected bid form.",
       "For an approved requirement, choose Add to estimate in Requirement detail. Open estimate drafts takes you to Quantity takeoffs; open that trade's Scope drafts to enter a measured quantity, unit and rate. Queueing a responsibility adds no invented quantities or costs.",
@@ -55,6 +58,7 @@ export const pageGuides = [
     title: "Drawing Flip",
     purpose: "Review the drawings trade by trade: every region is coloured by the trade responsible for it and tied to the scope items it shows, so missing scope and overlaps between trades stand out.",
     steps: [
+      "Sheets are the real drawing set stored in Project files, read by sheet number; the highlights sit on the actual drawings.",
       "Flip through the drawing pages. Each region is coloured by the trade responsible for it; the legend lists the trades on the page.",
       "Filter by page, trade, bid package, or review state, or search by region number, label, or evidence.",
       "Select a region to see its trade, the scope items it shows, Structor's evidence and confidence, notes, and history.",
@@ -102,6 +106,7 @@ export const pageGuides = [
     title: "Submittal packages",
     purpose: "Run the submittal back-and-forth after award: what each specification section requires, who holds each submittal, and what happens next, from the request to the architect’s final answer.",
     steps: [
+      "Read from the manual with AI reads the SUBMITTALS article of every section that belongs to a bid package and lists each item to submit, with its page and quote. Choose which to add to the log.",
       "The log lists every required submittal: number, specification section, what is required, trade, awarded subcontractor, status, who holds it now, the next action, and the due date. Overdue items are marked.",
       "Add requirements from the spec matrix (one per required document, such as mix design or test reports) or one at a time for a section and trade.",
       "Once a trade is awarded, assign its subcontractor and request the submittals with a due date. The subcontractor is told.",
@@ -152,6 +157,8 @@ export const pageGuides = [
     title: "List of drawings · drawing register",
     purpose: "Maintain a list of drawing numbers, titles, revisions, and receipt dates. The register helps identify the intended active drawing set and produces a list for exhibits.",
     steps: [
+      "With a stored drawing set, this list is read from the sheets' title blocks: every sheet's number, title and issue date, by discipline. Open a sheet to see the real page.",
+      "Export CSV gives Exhibit B, the list of documents a subcontract is priced on: documents, every drawing with its date, and every specification section.",
       "Use Search drawing number or title and the Drawing discipline filter to find a sheet.",
       "Choose Add drawing. Enter the drawing number, discipline, title, drawing date, received date, revision, and status, then Save drawing.",
       "For an existing number, use its edit arrow to update the revision or dates. Drawing numbers cannot be changed in the edit dialog; duplicate numbers are rejected when adding.",
@@ -173,6 +180,7 @@ export const pageGuides = [
     title: "List of specifications",
     purpose: "The written counterpart of the drawing list: every section of the project manual with its MasterFormat number, title, issue date, date received, revision, and status. Use it to confirm which specification sections exist and which issue is current before relying on them.",
     steps: [
+      "With a stored project manual, every section is listed by CSI division with its page range; Open shows its real pages.",
       "Read the section number first. Its first two digits are the CSI division, for example 09 for Finishes or 23 for HVAC.",
       "Check the revision and issue date against the latest project manual you received. Treat any section that is not current as a reason to ask before pricing it.",
       "Use the page range to find the section in the project manual itself. The list is an index; the manual is the requirement.",
@@ -192,11 +200,10 @@ export const pageGuides = [
     title: "Revision comparison",
     purpose: "Explore how to review drawing changes and their effect on trade scope. Use the prepared examples to practice checking and closing change-log items.",
     steps: [
-      "Choose a DRAWING, then select different PREVIOUS REVISION and LATEST REVISION values. Selecting the same revision shows a prompt to choose different versions.",
-      "Choose Side by side to see both sample drawings or Changes only to see the updated drawing alone. Toggle Highlight changes to change the sample emphasis.",
-      "Select a row in Change log. Read its description, affected division, and Scope impact.",
-      "Choose Open scope to go to Scopes & bid forms and consider any wording changes separately. Return and use Mark reviewed when finished, or Reopen to clear that flag.",
-      "Export CSV downloads the sample change log and review flags. Drawing register returns to the sheet list.",
+      "Upload the newer issue of a drawing set in Project files with Upload revision. Then choose the DRAWING SET, the PREVIOUS and LATEST revisions, and a SHEET; sheets are matched by number.",
+      "Overlay puts the new sheet on the old one: red linework was removed, blue was added, grey is unchanged. Numbered boxes mark each changed area. Side by side shows both sheets.",
+      "Choose Describe changes with AI. It zooms into each changed area of both revisions and lists what changed, by trade, for an estimator to price.",
+      "Mark each change reviewed, and export the change list.",
     ],
     terms: [
       { name: "Baseline", meaning: "The previous drawing used as the comparison reference." },
@@ -292,6 +299,7 @@ export const pageGuides = [
     title: "Subcontractor portal",
     purpose: "See what an invited subcontractor sees: its invitation, the published bid form, its answers and price, its questions, and once awarded its submittals. The contractor opens it as a preview; it is not one of the contractor's own tools.",
     steps: [
+      "Value engineering lets the company propose a cheaper equal, its saving and a product-data PDF. The contractor decides with the owner; the answer shows here.",
       "Open a project and choose Preview as subcontractor at the bottom of the menu. Project information's Subcontractor view opens the same preview.",
       "Use Acting as invited company to choose one of the open project's invitations. A declined invitation or an unpublished bid form explains why that company cannot bid yet.",
       "Use Edit submitter to confirm or change the directory contact name and email. On Invitation, review the package and download the TXT document previews.",
@@ -381,6 +389,9 @@ export const pageGuides = [
     title: "Value engineering",
     purpose: "Close the gap between the estimate and what the owner can spend. Set a target reduction, collect ideas that could save money, get subcontractors to price them, and record which ones the team accepts.",
     steps: [
+      "Suggest VE with AI compares each trade's cost with the basis-of-design products in the project manual and proposes equal products or simpler assemblies, with the estimated saving and its math. Add the ones worth pricing; they join the list as AI ideas.",
+      "Subcontractors can send VE options with product data from the portal; they appear here as subcontractor ideas, and the product data opens from the idea.",
+      "When the owner accepts an idea, its accepted saving lowers that trade's lowest-sub figure in Budget summary.",
       "Set the target: enter the owner's budget (the target is the estimate minus that budget) or type the reduction you need directly.",
       "Set the markup factor if general conditions, fee, insurance, bond and contingency apply on top of trade cost. The weighted impact of each idea is its cost impact times this factor.",
       "Add ideas with a description, heading, CSI code, trade, source reference, and estimated cost impact. A saving is a negative amount.",
@@ -403,6 +414,9 @@ export const pageGuides = [
     title: "Contracts & exhibits",
     purpose: "Carry one award per trade from the leveled bid to an executed subcontract: choose the bidder and award value, agree Exhibit A with the subcontractor, then generate, sign, and execute the subcontract.",
     steps: [
+      "Exhibit A follows your company's numbering: 1.0 Instructions to bidders, 2.0 General notes and the exhibit list, 3.0 Specific notes with 3.1 Scope of work, 4.0 Scope exclusions, 5.0 Phasing, 6.0 Economic inclusion.",
+      "In Create revision, Write 3.1 in contract language has the AI rewrite the bid-form scope lines as subcontract clauses, keeping every reference; read them, then create the revision.",
+      "Other exhibits lists Exhibits A to I: A is the scope written here, B is generated from Project files (Export CSV), and the contracts department uploads C to I. Uploads are stored with the project's files.",
       "Choose a trade on the left. Each shows where its award stands, from Bid form not published to Executed.",
       "To award a trade, load its submitted bids in Bid leveling first. Then choose the bidder and the award value — base bid, provisional leveled total, or reviewed leveled total — optionally link a direct budget line and included allowances, and choose Create award & Exhibit A. A trade has one live award at a time.",
       "Exhibit A is generated from the awarded bid form and the bidder's answers, in your company's template. Choose Share for review, record the subcontractor's change requests and questions under Comments, resolve them, use Create revision for a new revision, and choose Record agreement when both sides accept it. Agreement locks that revision.",
