@@ -3,6 +3,7 @@ import { deepseekJson, DeepSeekError, textModel } from "../../../lib/deepseek";
 import { parseDrawingJob, drawingMessages, screenDrawing } from "../../../lib/drawing-ai";
 import { contractScopeJob } from "../../../lib/contract-scope-ai";
 import { veJob } from "../../../lib/ve-ai";
+import { gapCostJob } from "../../../lib/gap-cost-ai";
 import { EXTRA_JOBS } from "../../../lib/ai-jobs-more";
 
 // Structor's AI: one fixed job per request (scope from specification pages, or a proposal reading),
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
   try {
     if (body.job === "contract-scope") return await contractScopeJob(body.input, key, request.signal);
     if (body.job === "value-engineering") return await veJob(body.input, key, request.signal);
+    if (body.job === "gap-cost") return await gapCostJob(body.input, key, request.signal);
     const extra = typeof body.job === "string" && Object.hasOwn(EXTRA_JOBS, body.job) ? EXTRA_JOBS[body.job] : null;
     if (extra) {
       const input = extra.parse(body.input);

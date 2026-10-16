@@ -42,6 +42,8 @@ export type SubmittedRevision = BidContent & {
 export type SubmissionStatus = "draft" | "submitted" | "revised";
 
 export type Submission = {
+  /** Curated demonstration bid, never a real subcontractor offer. */
+  illustrative?: boolean;
   id: string;
   projectId: string;
   packageId: string;

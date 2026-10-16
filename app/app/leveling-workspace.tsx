@@ -40,6 +40,8 @@ import { clearWorkspace, loadWorkspace, saveWorkspace } from "../lib/workspace-s
 import "./ui/leveling-extras.css";
 import { BidGapCostDialog } from "./ui/bid-gap-cost";
 import { approveGapCost, type CostBasis } from "../lib/bid-gap-cost";
+import { refreshPortalComparison, type SavedTradeComparison } from "../lib/leveling-sync";
+import { PortalBidInbox } from "./ui/portal-bid-inbox";
 
 type ScopeStatus = "" | "Y" | "N" | "P" | "N/A";
 type Response = {
@@ -243,6 +245,10 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
   const [directory] = useLocalDraft("directory", initialBidders);
   const [submissionProvenance, setSubmissionProvenance] = useLocalDraft<Record<string, BidProvenance>>("leveling-submission-provenance", {});
   const [loadedPackageId, setLoadedPackageId] = useLocalDraft("leveling-submission-package", "");
+  const [tradeComparisons, setTradeComparisons] = useLocalDraft<Record<string, SavedTradeComparison>>("leveling-trades", {});
+  const [autoLoadPortal, setAutoLoadPortal] = useState(false);
+  const [historicalRevisions, setHistoricalRevisions] = useState<Record<string, number>>();
+  const [inboxOpen, setInboxOpen] = useState(false);
   const [project, setProject] = useState<Project>(demoProject);
   const [items, setItems] = useState(seedItems);
   const [bidders, setBidders] = useState(seedBidders);
@@ -272,7 +278,7 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
 
   useEffect(() => {
     if (sourcePackageId && procurement.packages.some((pkg) => pkg.id === sourcePackageId)) return;
-    const submittedPackage = procurement.packages.find((pkg) => submissions.some((submission) => submission.packageId === pkg.id && submission.revisions.length));
+    const submittedPackage = procurement.packages.find(pkg => pkg.id === loadedPackageId) ?? procurement.packages.find((pkg) => submissions.some((submission) => submission.packageId === pkg.id && submission.revisions.length));
     setSourcePackageId(submittedPackage?.id ?? procurement.packages.find((pkg) => pkg.published)?.id ?? procurement.packages[0]?.id ?? "");
   }, [procurement.packages, sourcePackageId, submissions]);
 
@@ -289,7 +295,10 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
         setMessage(`Restored your workspace from ${new Date(saved.savedAt).toLocaleString()}`);
         setSaveState("Saved locally");
       } else {
-        setMessage("Demo data loaded. Import Marcel's workbook to start real work.");
+        setProject({ name: projectName, trade: "Choose a trade", budget: 0, isDemo: false });
+        setItems([]); setBidders([]); setSelectedId("");
+        setAutoLoadPortal(true);
+        setMessage("Choose a trade to compare submitted portal bids, or import an Excel workbook.");
         setSaveState("Not saved yet");
       }
       setStorageReady(true);
@@ -352,12 +361,28 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
   ])), [procurement.packages, submissions]);
   const loadedPackage = procurement.packages.find((pkg) => pkg.id === loadedPackageId);
 
+  useEffect(() => {
+    if (storageReady && loadedPackageId) setSourcePackageId(loadedPackageId);
+  }, [storageReady, loadedPackageId]);
+
+  useEffect(() => {
+    if (!storageReady) return;
+    const packageId = loadedPackageId || (autoLoadPortal ? sourcePackageId : "");
+    if (packageId) loadSubmittedBids(historicalRevisions, packageId);
+  }, [storageReady, procurement, submissions, loadedPackageId, autoLoadPortal, sourcePackageId, historicalRevisions]);
+
+  useEffect(() => {
+    if (!storageReady || !loadedPackageId || !Object.keys(submissionProvenance).length || historicalRevisions) return;
+    setTradeComparisons(current => ({ ...current, [loadedPackageId]: { project, items, bidders, provenance: submissionProvenance } }));
+  }, [storageReady, loadedPackageId, project, items, bidders, submissionProvenance, historicalRevisions]);
+
   function loadSubmittedBids(revisions?: Record<string, number>, packageId = sourcePackageId) {
+    if (!storageReady) return;
     if (!packageId) {
       setSubmissionIssues([{ code: "package-missing", message: "Choose a trade package before loading submitted bids." }]);
       return;
     }
-    const result = buildLevelingImport({
+    const imported = buildLevelingImport({
       projectId,
       projectName,
       packageId,
@@ -367,11 +392,9 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
       budget: project.name === projectName && !project.isDemo ? project.budget : 0,
       revisions,
     });
+    const previous = loadedPackageId === packageId && Object.keys(submissionProvenance).length ? { project, items, bidders, provenance: submissionProvenance } : tradeComparisons[packageId];
+    const result = refreshPortalComparison(imported, previous);
     setSubmissionIssues(result.issues);
-    if (!result.items.length || !result.bidders.length) {
-      setMessage(result.issues.map((issue) => issue.message).join(" ") || "No submitted bids are ready for leveling.");
-      return;
-    }
     workbookRef.current = null;
     setProject(result.project);
     setItems(result.items);
@@ -379,16 +402,18 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
     setSelectedId(result.items[0]?.id ?? "");
     setSubmissionProvenance(result.provenance);
     setLoadedPackageId(packageId);
+    setAutoLoadPortal(false);
     setStorageEnabled(true);
     setStorageReady(true);
     setSaveState("Saving…");
     const staleCount = result.issues.filter((issue) => issue.code === "stale-form").length;
-    setMessage(`Loaded ${result.bidders.length} submitted bid${result.bidders.length === 1 ? "" : "s"} for ${result.project.trade}.${staleCount ? ` ${staleCount} older-form bid${staleCount === 1 ? " is" : "s are"} shown but cannot be ranked.` : " Review every exception before ranking."}`);
+    setMessage(result.bidders.length ? `Loaded ${result.bidders.length} submitted bid${result.bidders.length === 1 ? "" : "s"} for ${result.project.trade}.${staleCount ? ` ${staleCount} older-form bid${staleCount === 1 ? " is" : "s are"} shown but cannot be ranked.` : " Review every exception before ranking."}` : result.issues.map(issue => issue.message).join(" ") || "No submitted bids yet.");
   }
 
   function loadSubmissionRevision(provenance: BidProvenance, revisionNumber: number) {
     const revisions = Object.fromEntries(Object.values(submissionProvenance).map((item) => [item.submissionId, item.revisionNumber]));
     revisions[provenance.submissionId] = revisionNumber;
+    setHistoricalRevisions(revisions);
     setReviewBidderId(null);
     setSourcePackageId(provenance.packageId);
     loadSubmittedBids(revisions, provenance.packageId);
@@ -430,14 +455,15 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
     setItems((current) => current.map((item) => item.id === selectedItemId ? { ...item, ...patch } : item));
   }
 
-  function applyGapAdjustment(bidderId: string, itemId: string, basis: CostBasis, reviewed: boolean): string | null {
+  function applyGapAdjustment(bidderId: string, itemId: string, basis: CostBasis, reviewed: boolean, coversScope: boolean): string | null {
     const item = items.find(i => i.id === itemId);
     const bidder = bidders.find(b => b.id === bidderId);
     if (!item || item.includeInTotal === false || !bidder) return "Choose a current bidder and a priced scope row.";
     try {
-      const next = approveGapCost(bidder.responses[itemId] ?? response(""), basis, reviewed);
+      if (bidder.sourceEligibility === "INCOMPLETE") return "Refresh the current bid before applying a cost adjustment.";
+      const next = approveGapCost(bidder.responses[itemId] ?? response(""), basis, reviewed, coversScope);
       setBidders(current => current.map(b => b.id === bidderId ? { ...b, responses: { ...b.responses, [itemId]: next } } : b));
-      setMessage(`Approved ${money.format(next.adjustment)} adjustment for ${bidder.name}. Review and resolve its scope coverage separately.`);
+      setMessage(`Approved ${money.format(next.adjustment)} adjustment for ${bidder.name}.${coversScope ? " This scope gap is resolved." : " Review and resolve its scope coverage separately."}`);
       return null;
     } catch (cause) { return cause instanceof Error ? cause.message : "The adjustment could not be applied."; }
   }
@@ -634,12 +660,12 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
           <div><div className="project-title"><h1>{project.name}</h1>{project.isDemo && <span>Demo data</span>}</div><p>{message}<small className={`save-state ${saveState.includes("failed") || saveState.includes("unavailable") ? "error" : ""}`}>{saveState}</small></p></div>
           <div className="submission-load-controls">
             <div className="active-leveling-trade" aria-label="Active trade"><span>Active trade</span><strong>{project.trade}</strong></div>
-            <label className="trade-select"><span>Switch trade</span><select aria-label="Trade package to load" value={sourcePackageId} disabled={!procurement.packages.length} onChange={(event) => setSourcePackageId(event.target.value)}>{!procurement.packages.length && <option value="">No packages</option>}{procurement.packages.map((pkg) => <option key={pkg.id} value={pkg.id}>{pkg.name} · {submissionCounts.get(pkg.id) ?? 0} submitted</option>)}</select><ChevronDown /></label>
-            <button className="button primary submission-load-button" disabled={!sourcePackageId} onClick={() => loadSubmittedBids()}><RefreshCw />{loadedPackageId === sourcePackageId ? "Refresh bids" : "Load selected trade"}</button>
+            <label className="trade-select"><span>Switch trade</span><select aria-label="Trade package to load" value={sourcePackageId} disabled={!storageReady || !procurement.packages.length} onChange={(event) => { setHistoricalRevisions(undefined); setSourcePackageId(event.target.value); loadSubmittedBids(undefined, event.target.value); }}>{!procurement.packages.length && <option value="">No packages</option>}{procurement.packages.map((pkg) => <option key={pkg.id} value={pkg.id}>{pkg.name} · {submissionCounts.get(pkg.id) ?? 0} submitted</option>)}</select><ChevronDown /></label>
+            <button className="button primary submission-load-button" disabled={!storageReady || !sourcePackageId} onClick={() => { setHistoricalRevisions(undefined); loadSubmittedBids(); }}><RefreshCw />{loadedPackageId === sourcePackageId ? "Refresh bids" : "Load selected trade"}</button>
           </div>
         </header>
 
-        {loadedPackage && <div className="submission-source-bar"><FileText/><span><strong>Portal submissions loaded</strong><small>{loadedPackage.code} · {loadedPackage.name} · {Object.keys(submissionProvenance).length} bidder revision{Object.keys(submissionProvenance).length === 1 ? "" : "s"} · browser-only demo</small></span><button onClick={() => loadSubmittedBids(undefined, loadedPackage.id)}><RefreshCw/>Refresh from portal</button></div>}
+        {loadedPackage && <div className="submission-source-bar"><FileText/><span><strong>Portal submissions loaded{Object.values(submissionProvenance).some(p => p.illustrative) ? " · Illustrative sample bids" : ""}</strong><small>{loadedPackage.code} · {loadedPackage.name} · {Object.keys(submissionProvenance).length} bidder revision{Object.keys(submissionProvenance).length === 1 ? "" : "s"} · browser-only demo</small></span><button onClick={() => { setHistoricalRevisions(undefined); loadSubmittedBids(undefined, loadedPackage.id); }}><RefreshCw/>Refresh from portal</button></div>}
         {!!submissionIssues.length && <div className="submission-issue-bar" role="status"><AlertTriangle/><div><strong>{submissionIssues.length} submission notice{submissionIssues.length === 1 ? "" : "s"}</strong>{submissionIssues.map((issue, index) => <span key={`${issue.code}-${issue.submissionId ?? index}`}>{issue.message}</span>)}</div><button aria-label="Dismiss submission notices" onClick={() => setSubmissionIssues([])}><X/></button></div>}
 
         <section className="summary" aria-label="Bid summary">
@@ -655,7 +681,7 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
           <button className="button secondary" onClick={() => inputRef.current?.click()}><Upload />Import Excel</button>
           <button className="button primary" onClick={addScopeItem}><Plus />Add scope item</button>
           <button className="button secondary" disabled={bidders.length >= BIDDER_SLOT_COUNT} onClick={() => setEditingBidderId("new")}><UserPlus />Add bidder</button>
-          <button className="button secondary" onClick={openMailbox}><Mail />Proposal inbox</button>
+          <button className="button secondary" onClick={() => setInboxOpen(true)}><Mail />Proposal inbox</button>
           <button className="button secondary" onClick={() => setCostSuggestionsOpen(true)}><Calculator />Cost suggestions</button>
           <button className="button secondary" onClick={() => setGlossaryOpen(true)}><BookOpen />Glossary</button>
           <button className="button secondary" onClick={() => setWalkthroughOpen(true)}><CircleHelp />How it works</button>
@@ -728,7 +754,8 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
       />}
       {glossaryOpen && <GlossaryDialog onClose={() => setGlossaryOpen(false)} />}
       {walkthroughOpen && <HowItWorksDialog onClose={() => setWalkthroughOpen(false)} />}
-      {costSuggestionsOpen && <BidGapCostDialog items={items} bidders={bidders} initialItemId={selectedId} packageId={loadedPackageId} onClose={() => setCostSuggestionsOpen(false)} onApply={applyGapAdjustment}/>}
+      {inboxOpen && <PortalBidInbox procurement={procurement} submissions={submissions.filter(s => s.projectId === projectId)} directory={directory} onClose={() => setInboxOpen(false)} onEmail={() => { setInboxOpen(false); void openMailbox(); }} onReview={(id, bidderId) => { setHistoricalRevisions(undefined); setSourcePackageId(id); loadSubmittedBids(undefined, id); setInboxOpen(false); setReviewBidderId(bidderId); }}/>}
+      {costSuggestionsOpen && <BidGapCostDialog key={JSON.stringify(submissionProvenance)} items={items} bidders={bidders.filter(b => b.sourceEligibility !== "INCOMPLETE")} initialItemId={selectedId} packageId={loadedPackageId} onClose={() => setCostSuggestionsOpen(false)} onApply={applyGapAdjustment}/>}
     </main>
   );
 }
@@ -779,7 +806,7 @@ function SubmissionLevelingReview({ bidder, items, provenance, revisionNumbers, 
     <section className="modal submission-review-modal" role="dialog" aria-modal="true" aria-labelledby="submission-review-title">
       <header><div><span>Portal submission</span><h2 id="submission-review-title">{bidder.name}</h2></div><button aria-label="Close submission review" onClick={onClose}><X/></button></header>
       <div className="submission-review-body">
-        {provenance.stale && <div className="submission-review-warning"><AlertTriangle/><span><strong>Older bid form</strong><small>This revision answered version {provenance.formVersion}; version {provenance.currentFormVersion} is current. It remains visible but cannot be ranked.</small></span></div>}
+        {(provenance.stale || provenance.superseded) && <div className="submission-review-warning"><AlertTriangle/><span><strong>{provenance.superseded ? "Superseded bid revision" : "Older bid form"}</strong><small>This revision is retained for reference and cannot be ranked. Refresh from portal to review the current bid.</small></span></div>}
         <div className="submission-review-summary">
           <div><small>BASE BID</small><strong>{bidder.baseBid == null ? "—" : money.format(bidder.baseBid)}</strong></div>
           <div><small>REVISION</small><label><select aria-label="Submission revision" value={provenance.revisionNumber} onChange={(event) => onRevision(Number(event.target.value))}>{revisionNumbers.map((number) => <option key={number} value={number}>Revision {number}{number === provenance.revisionNumber ? " · loaded" : ""}</option>)}</select><ChevronDown/></label></div>
@@ -797,7 +824,7 @@ function SubmissionLevelingReview({ bidder, items, provenance, revisionNumbers, 
           </aside>
         </div>
       </div>
-      <footer className="submission-review-actions"><span>Revision {provenance.revisionNumber} of {provenance.revisionCount} · saved in this browser</span>{!provenance.stale && <button className="button secondary" onClick={onEdit}><Pencil/>Edit leveling settings</button>}<button className="button primary" onClick={onClose}>Review scope grid<ArrowRight/></button></footer>
+      <footer className="submission-review-actions"><span>Revision {provenance.revisionNumber} of {provenance.revisionCount} · saved in this browser</span>{!provenance.stale && !provenance.superseded && <button className="button secondary" onClick={onEdit}><Pencil/>Edit leveling settings</button>}<button className="button primary" onClick={onClose}>Review scope grid<ArrowRight/></button></footer>
     </section>
   </div>;
   return typeof document === "undefined" ? null : createPortal(modal, document.body);

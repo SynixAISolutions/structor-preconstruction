@@ -19,6 +19,11 @@ export const initialBidders: Bidder[] = [
   { id: "b7", company: "Capitol Wall Systems", name: "Avery Morgan", email: "avery@example.com", trade: "Drywall", location: "Washington, DC", status: "Qualified" },
   { id: "b8", company: "Rock Creek Interiors", name: "Dana Brooks", email: "dana@example.com", trade: "Drywall", location: "Silver Spring, MD", status: "Qualified" },
   { id: "b9", company: "Anacostia Partitions", name: "Riley Shaw", email: "riley@example.com", trade: "Drywall", location: "Hyattsville, MD", status: "Qualified" },
+  { id: "demo-c2", company: "Potomac Concrete (sample)", name: "Jamie Lee", email: "jamie@example.com", trade: "Concrete", location: "Washington, DC", status: "Qualified" },
+  { id: "demo-d1", company: "Capital Door & Hardware (sample)", name: "Morgan Lane", email: "morgan@example.com", trade: "Doors, frames & hardware", location: "Rockville, MD", status: "Qualified" },
+  { id: "demo-d2", company: "Metro Openings (sample)", name: "Casey Bell", email: "casey@example.com", trade: "Doors, frames & hardware", location: "Arlington, VA", status: "Qualified" },
+  { id: "demo-r1", company: "District Roofing (sample)", name: "Sam Park", email: "sam@example.com", trade: "Roofing & waterproofing", location: "Washington, DC", status: "Qualified" },
+  { id: "demo-r2", company: "Potomac Roof Systems (sample)", name: "Alex Gray", email: "alex.gray@example.com", trade: "Roofing & waterproofing", location: "Fairfax, VA", status: "Qualified" },
 ];
 
 export const portalScope=["Site protection and dust control","Selective demolition per demolition plans","Debris removal and disposal","Existing utilities coordination","Include required permits and inspections","Include all addenda through September 8"];
