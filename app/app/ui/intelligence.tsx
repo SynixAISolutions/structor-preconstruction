@@ -15,6 +15,11 @@ import { DrawingFlipWorkspace } from "./drawing-flip-ui";
 import { SubmittalLogWorkspace } from "./submittal-log-ui";
 import { type ModelQuantityProps } from "./model-quantity-takeoffs";
 import { TradeEstimatesView } from "./trade-estimates";
+import { ProjectFilesScreen } from "./project-files-screen";
+import { StoredDrawingRegister, StoredSpecRegister } from "./document-registers";
+import { RevisionCompare } from "./revision-compare";
+import { useProjectDocuments } from "../../lib/project-files-client";
+import { drawingRegister, findManual } from "../../lib/project-files";
 import "./intelligence.css";
 
 // Local UI drafts only; sample suggestions are never derived from uploaded files.
@@ -46,30 +51,6 @@ function PlanPanel({ title = "Source drawing", sheet = "A-101", revised = false,
   return <><Panel title={title} subtitle={`${sheet} · First floor plan`} action={<Badge tone="orange">Sample</Badge>} className="intel-plan-panel"><div className="intel-plan-viewport"><PlanDrawing label={sheet} revised={revised} zoom={zoom}/></div><div className="intel-plan-footer"><span><i/>Referenced scope area</span>{controls}</div>{children}</Panel>{expanded && <Modal title={`${sheet} · First floor plan`} subtitle="Sample source drawing" wide onClose={() => setExpanded(false)}><PlanDrawing label={sheet} revised={revised}/></Modal>}</>;
 }
 
-function DocumentsScreen({ projectName, notify, navigate }: ViewProps) {
-  const [files, setFiles] = useLocalDraft("library", sampleFiles);
-  const [category, setCategory] = useState("All files");
-  const [query, setQuery] = useState("");
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [pending, setPending] = useState<File[]>([]);
-  const [uploadCategory, setUploadCategory] = useState("Drawings");
-  const [preview, setPreview] = useState<LibraryFile | null>(null);
-  const urls = useRef<Record<string, string>>({});
-  const picker = useRef<HTMLInputElement>(null);
-  useEffect(() => () => Object.values(urls.current).forEach(URL.revokeObjectURL), []);
-  const visible = files.filter(f => (category === "All files" || f.category === category) && `${f.name} ${f.category}`.toLowerCase().includes(query.toLowerCase()));
-  function addFiles() {
-    const date = new Date().toISOString().slice(0, 10);
-    const additions = pending.map(file => { const id = crypto.randomUUID(); urls.current[id] = URL.createObjectURL(file); return { id, name: file.name, category: uploadCategory, type: file.name.split(".").pop()?.toUpperCase() || "FILE", size: file.size >= 1048576 ? `${(file.size / 1048576).toFixed(1)} MB` : `${Math.ceil(file.size / 1024)} KB`, date, revision: "New" }; });
-    setFiles(previous => [...additions, ...previous]); setPending([]); setUploadOpen(false); notify(`${additions.length} file${additions.length === 1 ? "" : "s"} added to your local document library.`);
-  }
-  return <div className="intel-view"><PageHeader eyebrow={`${projectName} / Project intelligence`} title="Document library" description="Every drawing, specification, and project file. One organized place." actions={<Button variant="primary" onClick={() => setUploadOpen(true)}><Plus size={16}/>Upload files</Button>}/>
-    <div className="intel-library-layout"><aside className="ui-panel intel-folders"><div className="intel-folder-heading">PROJECT FILES</div>{categories.map((c, i) => <button key={c} className={c === category ? "active" : ""} onClick={() => setCategory(c)}>{i === 0 ? <Layers size={17}/> : <Folder size={17}/>}<span>{c}</span><small>{c === "All files" ? files.length : files.filter(f => f.category === c).length}</small></button>)}<div className="intel-library-tip"><CloudUpload size={22}/><strong>Build your project knowledge</strong><p>Add project documents, then organize scope and quantity reviews from the same workspace.</p><button onClick={() => navigate("scopes")}>Open scope builder<ArrowRight size={14}/></button></div></aside>
-    <div className="intel-library-main"><div className="intel-file-summary"><div><span className="intel-square-icon"><Folder size={23}/></span><div><strong>{category}</strong><span>{visible.length} documents · Project workspace</span></div></div><Badge tone="green">Organized by category</Badge></div><Panel><div className="ui-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search documents…"/><span className="intel-muted">Name · Type · Category</span></div><div className="ui-table-wrap"><table className="ui-table"><thead><tr><th>Document name</th><th>Revision</th><th>Added</th><th>Size</th><th></th></tr></thead><tbody>{visible.map(f => <tr key={f.id}><td><button className="intel-file-link" onClick={() => setPreview(f)}><span className={`intel-file-icon ${f.type.toLowerCase()}`}>{f.type === "XLSX" ? <FileSpreadsheet size={19}/> : <FileText size={19}/>}</span><span><strong>{f.name}</strong><small>{f.category} {f.sample ? "· Sample" : "· Local file"}</small></span></button></td><td><Badge>{f.revision}</Badge></td><td>{displayDate(f.date)}</td><td className="intel-muted">{f.size}</td><td><button className="ui-icon-btn" aria-label={`Preview ${f.name}`} onClick={() => setPreview(f)}><ChevronRight size={17}/></button></td></tr>)}</tbody></table></div>{!visible.length && <Empty title="No documents found" description="Choose another category or add your first file." action={<Button onClick={() => setUploadOpen(true)}>Upload files</Button>}/>}<div className="intel-panel-foot"><span>{visible.length} of {files.length} files</span><span>Sample files demonstrate the document structure</span></div></Panel><div className="intel-inline-note"><ShieldCheck size={17}/><span>Files you select stay in this browser session. Your document metadata is saved locally.</span></div></div></div>
-    {uploadOpen && <Modal title="Add project documents" subtitle="Keep your drawings, reports, and bid documents together." onClose={() => setUploadOpen(false)}><div className="intel-upload-zone" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); setPending(Array.from(e.dataTransfer.files)); }}><CloudUpload size={34}/><h3>Drop your files here</h3><p>PDF, Excel, Word, images, and other project files</p><Button onClick={() => picker.current?.click()}>Browse files</Button><input ref={picker} type="file" multiple hidden onChange={e => setPending(Array.from(e.target.files || []))}/></div><label className="ui-field">Save to category<select value={uploadCategory} onChange={e => setUploadCategory(e.target.value)}>{categories.slice(1).map(c => <option key={c}>{c}</option>)}</select></label>{pending.length > 0 && <div className="intel-upload-files">{pending.map((f, i) => <div key={`${f.name}-${i}`}><File size={16}/><span>{f.name}</span><small>{Math.ceil(f.size / 1024)} KB</small><button className="ui-icon-btn" aria-label={`Remove ${f.name}`} onClick={() => setPending(p => p.filter((_, index) => index !== i))}><X size={14}/></button></div>)}</div>}<p className="intel-muted intel-small">This local preview stores file details and lets you view selected PDFs. Automated extraction will be connected separately.</p><div className="intel-dialog-actions"><Button onClick={() => setUploadOpen(false)}>Cancel</Button><Button variant="primary" disabled={!pending.length} onClick={addFiles}>Add {pending.length || ""} file{pending.length === 1 ? "" : "s"}</Button></div></Modal>}
-    {preview && <Modal title={preview.name} subtitle={`${preview.category} · ${preview.revision} · ${preview.size}`} wide onClose={() => setPreview(null)}>{preview.sample ? preview.category === "Drawings" ? <PlanDrawing/> : <div className="intel-document-page"><div className="intel-document-brand">STRUCTOR <span>PROJECT DOCUMENT</span></div><Badge tone="orange">Sample document</Badge><h2>{preview.name.replace(/\.[^.]+$/, "")}</h2><p>{projectName}</p><hr/><h3>{preview.category === "Specifications" ? "01 10 00 — Summary of work" : preview.category === "RFP" ? "Invitation to bid" : "Document overview"}</h3><p>This sample preview shows where your project source documents are reviewed. Upload a PDF to view the actual document in this workspace.</p><div className="intel-document-lines"><i/><i/><i/><i/><i/></div></div> : urls.current[preview.id] && preview.type === "PDF" ? <iframe title={preview.name} src={urls.current[preview.id]} className="intel-pdf-frame"/> : <Empty title={urls.current[preview.id] ? "File added to your library" : "File details are saved"} description={urls.current[preview.id] ? "Inline preview is available for PDF documents. Your original file is available below." : "Select this file again to preview it in a new browser session."} action={urls.current[preview.id] ? <a className="ui-btn secondary" href={urls.current[preview.id]} download={preview.name}><ArrowDownToLine size={16}/>Download file</a> : <Button onClick={() => { setPreview(null); setUploadOpen(true); }}>Select file</Button>}/>}</Modal>}
-  </div>;
-}
 
 
 function SpecsScreen({ projectName, notify, navigate }: ViewProps) {
@@ -81,7 +62,12 @@ function SpecsScreen({ projectName, notify, navigate }: ViewProps) {
   return <div className="intel-view"><PageHeader eyebrow={`${projectName} / Project intelligence`} title={screenLabel("specs")} description="Track required product data, samples, shop drawings, and approvals by specification section." actions={<><Button onClick={() => navigate("documents")}><FileText size={16}/>Project manual</Button><ExportButton onClick={() => exportRows("submittal-packages.csv", [["Section", "Title", "Product", "Manufacturer", "Submittal", "Source", "Reviewed"], ...rows.map(r => [r.section, r.title, r.product, r.manufacturer, r.submittal, r.source, r.reviewed ? "Yes" : "No"])])}/></>}/><Stats items={[{ label: "Package requirements", value: rows.length, detail: "Organized by specification section" }, { label: "Products", value: rows.length, detail: "With source references" }, { label: "Reviewed", value: rows.filter(r => r.reviewed).length, detail: "Confirmed by the team", tone: "green" }, { label: "Needs clarification", value: rows.filter(r => r.manufacturer.includes("selected")).length, detail: "Manufacturer not yet selected", tone: "orange" }]}/><Panel><div className="intel-table-controls"><Tabs tabs={["All requirements", "Needs review"]} value={tab} onChange={setTab}/><SearchBox value={query} onChange={setQuery} placeholder="Find product, section, or manufacturer…"/></div><div className="ui-table-wrap"><table className="ui-table intel-spec-table"><thead><tr><th>CSI section</th><th>Product / Requirement</th><th>Manufacturers</th><th>Required submittals</th><th>Status</th><th></th></tr></thead><tbody>{visible.map(r => <tr key={r.id}><td><span className="intel-spec-code">{r.section}</span><small className="intel-table-sub">{r.title}</small></td><td><strong>{r.product}</strong><small className="intel-table-sub"><FileText size={11}/>{r.source}</small></td><td>{r.manufacturer}</td><td>{r.submittal.split(" · ").map(s => <span className="intel-submittal" key={s}>{s}</span>)}</td><td><Badge tone={r.reviewed ? "green" : "orange"}>{r.reviewed ? "Reviewed" : "To review"}</Badge></td><td><button className="ui-icon-btn" onClick={() => setEdit({ ...r })} aria-label={`Review ${r.title}`}><ChevronRight size={17}/></button></td></tr>)}</tbody></table></div>{!visible.length && <Empty title="No matching requirements" description="Adjust your search or show all requirements."/>}<div className="intel-panel-foot"><span>{visible.length} specification requirements</span><span>Sample project manual references</span></div></Panel><PreviewNote>Sample submittal package requirements · Review each product before assigning it to a trade package.</PreviewNote>{edit && <Modal title="Review specification" subtitle={`${edit.section} · ${edit.title}`} onClose={() => setEdit(null)}><form onSubmit={e => { e.preventDefault(); setRows(previous => previous.map(r => r.id === edit.id ? edit : r)); setEdit(null); notify("Specification requirement saved."); }}><label className="ui-field">Product / Requirement<textarea value={edit.product} required rows={2} onChange={e => setEdit({ ...edit, product: e.target.value })}/></label><label className="ui-field">Manufacturers<input value={edit.manufacturer} onChange={e => setEdit({ ...edit, manufacturer: e.target.value })}/></label><label className="ui-field">Required submittals<input value={edit.submittal} onChange={e => setEdit({ ...edit, submittal: e.target.value })}/></label><label className="ui-field">Source<input value={edit.source} onChange={e => setEdit({ ...edit, source: e.target.value })}/></label><label className="intel-checkbox"><input type="checkbox" checked={edit.reviewed} onChange={e => setEdit({ ...edit, reviewed: e.target.checked })}/>Requirement reviewed</label><div className="intel-dialog-actions"><Button onClick={() => setEdit(null)}>Cancel</Button><Button type="submit" variant="primary">Save requirement</Button></div></form></Modal>}</div>;
 }
 
-function SpecificationsScreen({ projectName, navigate }: ViewProps) {
+function SpecificationsScreen(props: ViewProps) {
+  const { documents } = useProjectDocuments();
+  return findManual(documents) ? <StoredSpecRegister {...props} documents={documents}/> : <SampleSpecificationsScreen {...props}/>;
+}
+
+function SampleSpecificationsScreen({ projectName, navigate }: ViewProps) {
   const [sections] = useLocalDraft("specification-sections", initialSpecSections);
   const [query, setQuery] = useState("");
   const [division, setDivision] = useState("All divisions");
@@ -109,7 +95,12 @@ function SpecificationsScreen({ projectName, navigate }: ViewProps) {
   </div>;
 }
 
-function DrawingsScreen({ projectName, notify, navigate }: ViewProps) {
+function DrawingsScreen(props: ViewProps) {
+  const { documents } = useProjectDocuments();
+  return drawingRegister(documents).length ? <StoredDrawingRegister {...props} documents={documents}/> : <SampleDrawingsScreen {...props}/>;
+}
+
+function SampleDrawingsScreen({ projectName, notify, navigate }: ViewProps) {
   const [rows, setRows] = useLocalDraft("drawing-register", initialDrawings);
   const [query, setQuery] = useState("");
   const [discipline, setDiscipline] = useState("All disciplines");
@@ -123,7 +114,12 @@ function DrawingsScreen({ projectName, notify, navigate }: ViewProps) {
   </div>;
 }
 
-function RevisionsScreen({ projectName, notify, navigate }: ViewProps) {
+function RevisionsScreen(props: ViewProps) {
+  const { documents } = useProjectDocuments();
+  return documents.some(d => d.kind === "drawings") ? <RevisionCompare {...props} documents={documents}/> : <SampleRevisionsScreen {...props}/>;
+}
+
+function SampleRevisionsScreen({ projectName, notify, navigate }: ViewProps) {
   const [changes, setChanges] = useLocalDraft("drawing-changes", initialChanges);
   const [sheet, setSheet] = useState("A-101 · First floor plan");
   const [leftRevision, setLeftRevision] = useState("Rev 01 · Aug 21, 2026");
@@ -144,7 +140,7 @@ function RevisionsScreen({ projectName, notify, navigate }: ViewProps) {
 
 export function IntelligenceView(props: ViewProps & ModelQuantityProps & { screen: Screen }) {
   switch (props.screen) {
-    case "documents": return <DocumentsScreen {...props}/>;
+    case "documents": return <ProjectFilesScreen {...props}/>;
     case "scopes": return <ProcurementScopesView {...props}/>;
     case "drawing-flip": return <DrawingFlipWorkspace {...props}/>;
     case "takeoffs": return <TradeEstimatesView {...props}/>;

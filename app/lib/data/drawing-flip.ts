@@ -1,25 +1,25 @@
-// Sample Drawing Flip for the Jelleff project: nine sheets from the drawing sets in Project files
-// and the regions Structor proposed on them. Illustrative demo data — nothing was read from the
-// drawings. Package and scope ids are the sample procurement's (lib/data/procurement.ts).
+// Sample Drawing Flip for the Jelleff project: nine sheets of the real GMP permit drawing set stored in
+// Project files (JRC_GMP-Permit_Drawings_251209.pdf) and trade regions placed on those sheets. The
+// sheets are real; the regions, reviewers and history are a sample. Package and scope ids are the
+// sample procurement's (lib/data/procurement.ts).
 
 import { rectangle, type DrawingFlipState, type DrawingPage, type FlipRegion, type Point, type RegionEvent } from "../drawing-flip";
 
-const page = (sheet: string, title: string, discipline: string, documentId: string, documentName: string, pageNumber: number, revision: string): DrawingPage =>
-  ({ id: `pg-${sheet.toLowerCase()}`, sheet, title, discipline, revision, documentId, documentName, pageNumber, aspect: 1.5, image: null });
+export const JRC_DRAWINGS = { id: "jrc-drawings-251209", name: "JRC_GMP-Permit_Drawings_251209.pdf" };
+const page = (sheet: string, title: string, discipline: string, pageNumber: number): DrawingPage =>
+  ({ id: `pg-${sheet.toLowerCase()}`, sheet, title, discipline, revision: "GMP 12-09-2025", documentId: JRC_DRAWINGS.id, documentName: JRC_DRAWINGS.name, pageNumber, aspect: 1.4, image: null });
 
-const ARCH = "Architectural drawing set.pdf", STRUCT = "Structural drawing set.pdf", MEP = "MEP drawing set.pdf";
 const pages: DrawingPage[] = [
-  page("AD-101", "First floor demolition plan", "Architectural", "d1", ARCH, 2, "02"),
-  page("A-101", "First floor plan", "Architectural", "d1", ARCH, 3, "02"),
-  page("A-102", "Roof plan", "Architectural", "d1", ARCH, 4, "02"),
-  page("A-121", "First floor reflected ceiling plan", "Architectural", "d1", ARCH, 5, "02"),
-  page("A-601", "Door & frame schedules", "Architectural", "d1", ARCH, 6, "02"),
-  page("S-101", "Foundation & framing plan", "Structural", "d2", STRUCT, 1, "02"),
-  page("M-101", "First floor mechanical plan", "Mechanical", "d3", MEP, 1, "01"),
-  page("P-101", "First floor plumbing plan", "Plumbing", "d3", MEP, 2, "01"),
-  page("E-101", "Lighting & power plan", "Electrical", "d3", MEP, 3, "01"),
+  page("CIV0102", "Demolition plan", "Civil", 9),
+  page("A1.1", "Level 01 - First floor plan", "Architectural", 46),
+  page("A1.3", "Roof plan", "Architectural", 48),
+  page("A3.1", "Level 01 - Reflected ceiling plan", "Architectural", 53),
+  page("A8.2", "Door & frame type & schedule", "Architectural", 65),
+  page("S101", "Level 01 - First floor framing plan", "Structural", 111),
+  page("M101", "Level 01 - HVAC plan", "Mechanical", 145),
+  page("P2.1", "Level 01 - Overall plumbing plan", "Plumbing", 133),
+  page("E1.1", "Level 01 - Lighting plan", "Electrical", 178),
 ];
-
 const proposed = "2026-09-17T13:00:00.000Z";
 const reviewed = "2026-09-18T15:00:00.000Z";
 type Sample = {
@@ -46,23 +46,22 @@ const region = (s: Sample): FlipRegion => {
 };
 
 const regions: FlipRegion[] = [
-  region({ number: "R-001", sheet: "AD-101", label: "Interior partitions to be removed", polygon: [{ x: 0.12, y: 0.18 }, { x: 0.46, y: 0.18 }, { x: 0.46, y: 0.34 }, { x: 0.3, y: 0.34 }, { x: 0.3, y: 0.52 }, { x: 0.12, y: 0.52 }], packageId: "demolition", scopeIds: ["scope-1"], evidence: "Dashed walls per the demolition legend; keynote 01 “Remove partition”.", confidence: 0.93, review: "Safi" }),
-  region({ number: "R-002", sheet: "AD-101", label: "Resilient flooring removal area", polygon: rectangle(0.5, 0.2, 0.32, 0.36), packageId: "demolition", scopeIds: ["scope-2"], evidence: "Hatched area with keynote 04 “Remove flooring and base”.", confidence: 0.88 }),
-  region({ number: "R-003", sheet: "AD-101", label: "Doors and frames to be removed", polygon: rectangle(0.14, 0.6, 0.2, 0.12), packageId: "demolition", scopeIds: ["scope-4"], evidence: "Door symbols with keynote 07 “Remove door, frame and hardware”.", confidence: 0.64, correctedFrom: { packageId: "openings", by: "Safi", reason: "Removing existing doors is demolition; the new doors are the openings package." } }),
-  region({ number: "R-004", sheet: "A-101", label: "Reinforced CMU partitions", polygon: rectangle(0.1, 0.22, 0.24, 0.3), packageId: "masonry", scopeIds: ["scope-7"], evidence: "Wall type 4 tag and CMU hatch on the floor plan.", confidence: 0.9 }),
-  region({ number: "R-005", sheet: "A-101", label: "Gypsum board partitions", polygon: rectangle(0.38, 0.22, 0.3, 0.3), packageId: "drywall", scopeIds: ["scope-12"], evidence: "Wall types 1 and 2 (metal stud and gypsum board).", confidence: 0.86, review: "Safi" }),
-  region({ number: "R-006", sheet: "A-101", label: "Community room LVT flooring", polygon: rectangle(0.62, 0.58, 0.26, 0.28), packageId: "flooring", scopeIds: ["scope-13"], evidence: "Finish tag LVT-1 in rooms 110–112.", confidence: 0.77 }),
-  region({ number: "R-007", sheet: "A-102", label: "TPO roof membrane", polygon: rectangle(0.08, 0.1, 0.84, 0.72), packageId: "thermal", scopeIds: [], evidence: "Roof plan note “60-mil TPO over tapered insulation”.", confidence: 0.91 }),
-  region({ number: "R-008", sheet: "A-601", label: "Scheduled hollow metal doors", polygon: rectangle(0.06, 0.12, 0.58, 0.5), packageId: "openings", scopeIds: ["scope-11"], evidence: "Door schedule rows D-101 to D-142, type HM.", confidence: 0.72 }),
-  region({ number: "R-009", sheet: "S-101", label: "Slab on grade and foundations", polygon: rectangle(0.06, 0.1, 0.86, 0.76), packageId: "concrete", scopeIds: ["scope-5"], evidence: "Foundation plan with slab-on-grade notes and footing schedule.", confidence: 0.95, review: "Vijay" }),
-  region({ number: "R-010", sheet: "M-101", label: "Main supply duct run", polygon: [{ x: 0.1, y: 0.4 }, { x: 0.86, y: 0.4 }, { x: 0.86, y: 0.46 }, { x: 0.52, y: 0.46 }, { x: 0.52, y: 0.8 }, { x: 0.46, y: 0.8 }, { x: 0.46, y: 0.46 }, { x: 0.1, y: 0.46 }], packageId: "mechanical", scopeIds: ["scope-15"], evidence: "Supply duct from RTU-1, sized 24×14 to 12×10.", confidence: 0.83 }),
-  region({ number: "R-011", sheet: "P-101", label: "Restroom plumbing fixtures", polygon: rectangle(0.58, 0.16, 0.22, 0.2), packageId: "plumbing", scopeIds: ["scope-14"], evidence: "Fixture tags WC-1, LAV-1 and UR-1 in restrooms 104 and 105.", confidence: 0.69 }),
-  region({ number: "R-012", sheet: "E-101", label: "Gym lighting", polygon: rectangle(0.16, 0.18, 0.4, 0.46), packageId: "electrical", scopeIds: ["scope-16"], evidence: "", confidence: null, review: "Naija", notes: "High-bay fixtures; confirm the gym lighting controls with the architect." }),
+  region({ number: "R-001", sheet: "CIV0102", label: "Existing recreation center building to be removed", polygon: rectangle(0.19, 0.31, 0.09, 0.16), packageId: "demolition", scopeIds: ["scope-1"], evidence: "Demolition keynote 1: existing building to be removed.", confidence: 0.93, review: "Safi" }),
+  region({ number: "R-002", sheet: "CIV0102", label: "Asphalt pavement to be removed", polygon: rectangle(0.23, 0.5, 0.08, 0.25), packageId: "demolition", scopeIds: ["scope-2"], evidence: "Keynote 6 and the hatched area per the demolition legend: asphalt pavement, full depth.", confidence: 0.88 }),
+  region({ number: "R-003", sheet: "CIV0102", label: "Concrete sidewalk, curb and gutter to be removed", polygon: rectangle(0.28, 0.855, 0.14, 0.05), packageId: "demolition", scopeIds: ["scope-4"], evidence: "Keynotes 2 and 8 along S Street: existing sidewalk, curb and gutter to be removed.", confidence: 0.64, correctedFrom: { packageId: "concrete", by: "Safi", reason: "Removing the existing sidewalk and curb is demolition; the concrete package carries the new paving." } }),
+  region({ number: "R-004", sheet: "A1.1", label: "CMU walls around the gym", polygon: rectangle(0.19, 0.415, 0.215, 0.435), packageId: "masonry", scopeIds: ["scope-7"], evidence: "Gym 103 enclosure; general note 2: interior CMU walls 8 inches nominal unless noted.", confidence: 0.9 }),
+  region({ number: "R-005", sheet: "A1.1", label: "Gypsum board partitions, locker rooms and toilets", polygon: rectangle(0.565, 0.41, 0.15, 0.175), packageId: "drywall", scopeIds: ["scope-12"], evidence: "Partition tags at lockers/change 117B, toilet/shower 117A and the restroom core.", confidence: 0.86, review: "Safi" }),
+  region({ number: "R-006", sheet: "A1.1", label: "Fitness center flooring", polygon: rectangle(0.58, 0.66, 0.1, 0.09), packageId: "flooring", scopeIds: ["scope-13"], evidence: "Fitness Center 106; floor finish per the A12.2 finish plan and A12.1 schedule.", confidence: 0.77 }),
+  region({ number: "R-007", sheet: "A1.3", label: "Gym roof with PV array", polygon: rectangle(0.193, 0.408, 0.215, 0.43), packageId: "thermal", scopeIds: [], evidence: "Roof plan: 1/4\" per foot slope to crickets, PV panels typical, metal copper coping.", confidence: 0.91 }),
+  region({ number: "R-008", sheet: "A8.2", label: "Door and frame schedule", polygon: rectangle(0.033, 0.02, 0.385, 0.35), packageId: "openings", scopeIds: ["scope-11"], evidence: "Door and frame schedule, doors 101A to S202: HM, wood and aluminum with hardware set numbers.", confidence: 0.72 }),
+  region({ number: "R-009", sheet: "S101", label: "Level 01 slab on grade and spread footings", polygon: rectangle(0.143, 0.15, 0.56, 0.44), packageId: "concrete", scopeIds: ["scope-5"], evidence: "5\" slab on grade, foundation plan notes and the spread footing schedule (3000 psf).", confidence: 0.95, review: "Vijay" }),
+  region({ number: "R-010", sheet: "M101", label: "HVAC duct mains through the core", polygon: rectangle(0.47, 0.3, 0.15, 0.25), packageId: "mechanical", scopeIds: ["scope-15"], evidence: "Level 01 HVAC plan: supply, return and exhaust mains from DOAS-1 through the core.", confidence: 0.83 }),
+  region({ number: "R-011", sheet: "P2.1", label: "Locker room and toilet plumbing", polygon: rectangle(0.357, 0.167, 0.113, 0.133), packageId: "plumbing", scopeIds: ["scope-14"], evidence: "Fixtures and piping at the toilet/shower and locker rooms.", confidence: 0.69 }),
+  region({ number: "R-012", sheet: "E1.1", label: "Gym lighting", polygon: rectangle(0.133, 0.133, 0.213, 0.425), packageId: "electrical", scopeIds: ["scope-16"], evidence: "", confidence: null, review: "Naija", notes: "Override switch for the main gym; confirm the gym lighting controls with the architect." }),
   // Drywall, Marcel's pilot trade: framing and shaft wall on the plan, ceilings on the reflected ceiling plan.
-  region({ number: "R-013", sheet: "A-101", label: "Metal stud partitions, community wing", polygon: rectangle(0.38, 0.56, 0.22, 0.26), packageId: "drywall", scopeIds: ["scope-17", "scope-18"], evidence: "Partition type tags on the community room walls; sound-rated types around rooms 110–112.", confidence: 0.81, review: "Safi" }),
-  region({ number: "R-014", sheet: "A-101", label: "Shaft walls at elevator and stair", polygon: rectangle(0.72, 0.18, 0.12, 0.16), packageId: "drywall", scopeIds: ["scope-19"], evidence: "Shaft wall type at the elevator hoistway and stair B enclosure.", confidence: 0.74 }),
-  region({ number: "R-015", sheet: "A-121", label: "Acoustical panel ceilings", polygon: rectangle(0.36, 0.2, 0.42, 0.34), packageId: "drywall", scopeIds: ["scope-20"], evidence: "Ceiling tag ACT-1 (2x2 lay-in) in the community rooms and corridors.", confidence: 0.88, review: "Safi" }),
-  region({ number: "R-016", sheet: "A-121", label: "Gypsum board ceilings and soffits", polygon: rectangle(0.1, 0.6, 0.3, 0.22), packageId: "drywall", scopeIds: ["scope-21"], evidence: "Ceiling tag GWB-1 in restrooms and the lobby soffit.", confidence: 0.67 }),
+  region({ number: "R-013", sheet: "A1.1", label: "Metal stud partitions, offices and circulation", polygon: rectangle(0.43, 0.57, 0.13, 0.1), packageId: "drywall", scopeIds: ["scope-17", "scope-18"], evidence: "Partition type tags at offices 104 and 105 and circulation 102B.", confidence: 0.81, review: "Safi" }),
+  region({ number: "R-014", sheet: "A1.1", label: "Shaft wall at the elevator", polygon: rectangle(0.6, 0.575, 0.04, 0.055), packageId: "drywall", scopeIds: ["scope-19"], evidence: "Elevator 114 hoistway enclosure.", confidence: 0.74 }),
+  region({ number: "R-015", sheet: "A3.1", label: "Acoustical panel ceilings (APC-1), fitness wing", polygon: [{ x: 0.518, y: 0.692 }, { x: 0.679, y: 0.583 }, { x: 0.729, y: 0.683 }, { x: 0.56, y: 0.833 }], packageId: "drywall", scopeIds: ["scope-20"], evidence: "APC-1 ceiling tags at Fitness Center 106, offices and circulation, 10'-0\".", confidence: 0.88, review: "Safi" }),
+  region({ number: "R-016", sheet: "A3.1", label: "Gypsum board ceilings, locker rooms and toilets", polygon: rectangle(0.555, 0.43, 0.155, 0.145), packageId: "drywall", scopeIds: ["scope-21"], evidence: "GWB-1 ceiling tags at the locker/change and toilet/shower rooms, 9'-0\".", confidence: 0.67 }),
 ];
-
 export const sampleDrawingFlip: DrawingFlipState = { pages, regions, lastRegionNumber: 16 };

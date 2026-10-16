@@ -65,7 +65,7 @@ const quantityDraft = sampleExtraction.drafts.find(d => d.kind === "quantity");
 fails(() => E.addAcceptedQuantity(rows, proc, quantityDraft, 8), /Accept the quantity finding/);
 const acceptedDraft = X.acceptDraft({ extraction: sampleExtraction, procurement: proc, flip: sampleDrawingFlip }, quantityDraft.id, "Safi", at).extraction.drafts.find(d => d.id === quantityDraft.id);
 const withAi = E.addAcceptedQuantity(rows, proc, acceptedDraft, 8);
-assert.deepEqual([withAi.at(-1).origin, withAi.at(-1).packageId, withAi.at(-1).quantity, withAi.at(-1).source], [{ kind: "ai", draftId: quantityDraft.id }, "drywall", 6840, "A-101"]);
+assert.deepEqual([withAi.at(-1).origin, withAi.at(-1).packageId, withAi.at(-1).quantity, withAi.at(-1).source], [{ kind: "ai", draftId: quantityDraft.id }, "drywall", 6840, "A1.1"]);
 fails(() => E.addAcceptedQuantity(withAi, proc, acceptedDraft, 8), /already in the estimate/);
 
 const repriced = E.editEstimateItem(rows, proc, "q1", { rate: 15 });

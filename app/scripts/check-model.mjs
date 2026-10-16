@@ -587,8 +587,8 @@ fails(() => M.verifyObject(base, objects, "nope", "Safi", "", at), "object", /no
 fails(() => M.verifyObject(base, objects, "slab-gym", " ", "", at), "by", /who/);
 fails(() => M.verifyObject(base, objects, "floor-gym", "Safi", "", at), "object", /Already verified/);
 fails(() => M.flagObject(base, objects, "slab-gym", " ", "Safi", at), "note", /what needs checking/);
-let s = freeze(M.verifyObject(base, objects, "slab-gym", " Vijay ", " Thickness per S-101 ", at));
-assert.deepEqual(M.reviewOf(s, "slab-gym"), { objectId: "slab-gym", status: "verified", note: "Thickness per S-101", by: "Vijay", at, history: [{ status: "verified", note: "Thickness per S-101", by: "Vijay", at }] });
+let s = freeze(M.verifyObject(base, objects, "slab-gym", " Vijay ", " Thickness per S101 ", at));
+assert.deepEqual(M.reviewOf(s, "slab-gym"), { objectId: "slab-gym", status: "verified", note: "Thickness per S101", by: "Vijay", at, history: [{ status: "verified", note: "Thickness per S101", by: "Vijay", at }] });
 s = freeze(M.flagObject(s, objects, "slab-gym", "Recheck the thickened edge.", "Safi", at));
 assert.deepEqual([M.reviewStatus(s, "slab-gym"), M.reviewOf(s, "slab-gym").history.map(h => h.status)], ["flagged", ["verified", "flagged"]]);
 s = freeze(M.clearObjectReview(s, objects, "slab-gym", "Safi", at));

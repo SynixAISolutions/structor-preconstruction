@@ -16,7 +16,7 @@ const flip = freeze(structuredClone(sampleDrawingFlip));
 const base = freeze(structuredClone(sampleExtraction));
 const records = freeze({ extraction: base, procurement: proc, flip });
 const draft = (s, prefix) => s.drafts.find(d => (d.title ?? d.label ?? d.item).startsWith(prefix));
-const [framing, finish, ceilings, doors] = ["Provide metal stud", "Finish gypsum board", "Provide acoustical", "Provide sound-rated"].map(p => draft(base, p));
+const [framing, finish, ceilings, doors] = ["Provide metal stud", "Finish gypsum board", "Provide acoustical", "Provide flush wood"].map(p => draft(base, p));
 const region = base.drafts.find(d => d.kind === "region"), quantity = base.drafts.find(d => d.kind === "quantity");
 
 // ── Sample: one illustrative drywall run, every state the review queue shows ──
@@ -31,7 +31,7 @@ assert.deepEqual(startingDraft("another-project", "extraction", sampleExtraction
 
 // ── Recording a run: validated, all or nothing ──
 const ARCH = "Architectural drawing set.pdf";
-const cite = { document: ARCH, page: 3, sheet: "A-101", quote: "Wall type tag" };
+const cite = { document: ARCH, page: 3, sheet: "A1.1", quote: "Wall type tag" };
 const scopeIn = (over = {}) => ({ kind: "scope", key: "s", packageId: "drywall", title: "Frame partitions.", detail: "", source: "09 22 16", citations: [cite], ...over });
 const run = (drafts, over = {}) => X.recordRun(X.EMPTY_EXTRACTION, proc, { packageIds: ["drywall"], engine: { mode: "offline", model: "m" }, documents: [{ name: ARCH, pages: 12 }], startedAt: "2026-10-13T08:00:00.000Z", finishedAt: "2026-10-13T08:05:00.000Z", drafts, ...over });
 const one = run([scopeIn()]);
@@ -51,7 +51,7 @@ fails(() => run([scopeIn()], { finishedAt: "2026-10-13T07:00:00.000Z" }), /finis
 fails(() => run([scopeIn()], { engine: { mode: "guess", model: "m" } }), /sample, offline or live/);
 fails(() => run([scopeIn()], { documents: [] }), /which documents/);
 fails(() => run([]), /no findings/);
-const regionIn = (over = {}) => ({ kind: "region", key: "r", packageId: "drywall", sheet: "A-101", label: "Partitions", polygon: [{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.1 }, { x: 0.2, y: 0.2 }], confidence: 0.6, scopeKeys: ["s"], citations: [cite], ...over });
+const regionIn = (over = {}) => ({ kind: "region", key: "r", packageId: "drywall", sheet: "A1.1", label: "Partitions", polygon: [{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.1 }, { x: 0.2, y: 0.2 }], confidence: 0.6, scopeKeys: ["s"], citations: [cite], ...over });
 const quantityIn = (over = {}) => ({ kind: "quantity", key: "q", packageId: "drywall", item: "Partitions", quantity: 100, unit: "SF", basis: "Length × height", scopeKey: "s", citations: [cite], ...over });
 const three = run([scopeIn(), regionIn(), quantityIn()]);
 assert.deepEqual([three.drafts[1].scopeDraftIds, three.drafts[2].scopeDraftId], [[three.drafts[0].id], three.drafts[0].id], "Keys become links");
@@ -81,8 +81,8 @@ const bothAccepted = X.acceptDraft(scopeAccepted, region.id, "Safi", at);
 const newRegion = bothAccepted.flip.regions.at(-1);
 assert.deepEqual([newRegion.origin, newRegion.status, newRegion.reviewedBy, newRegion.packageId, newRegion.scopeIds, newRegion.confidence, newRegion.label],
   ["ai", "approved", "Safi", "drywall", [newScope.id], 0.7, region.label]);
-assert.equal(newRegion.pageId, flip.pages.find(p => p.sheet === "A-101").id);
-assert(newRegion.evidence.includes(region.citations[0].quote) && newRegion.evidence.startsWith("A-101 p.3"), "The citation becomes the region's evidence");
+assert.equal(newRegion.pageId, flip.pages.find(p => p.sheet === "A1.1").id);
+assert(newRegion.evidence.includes(region.citations[0].quote) && newRegion.evidence.startsWith("A1.1 p.46"), "The citation becomes the region's evidence");
 assert.equal(bothAccepted.extraction.drafts.find(d => d.id === region.id).acceptedId, newRegion.id);
 // The other order links too: region first, then its scope finding.
 const regionFirst = X.acceptDraft(X.acceptDraft(records, region.id, "Safi", at), framing.id, "Safi", at);
@@ -95,8 +95,8 @@ fails(() => X.acceptDraft(scopeAccepted, framing.id, "Safi", at), /Only a findin
 fails(() => X.acceptDraft(records, doors.id, "Safi", at), /Only a finding waiting/);
 fails(() => X.acceptDraft(records, framing.id, " ", at), /who reviewed/);
 fails(() => X.acceptDraft(records, "nope", "Safi", at), /no longer exists/);
-const noSheet = freeze({ ...records, flip: { ...flip, pages: flip.pages.filter(p => p.sheet !== "A-101") } });
-fails(() => X.acceptDraft(noSheet, region.id, "Safi", at), /Add sheet A-101 to Drawing Flip/);
+const noSheet = freeze({ ...records, flip: { ...flip, pages: flip.pages.filter(p => p.sheet !== "A1.1") } });
+fails(() => X.acceptDraft(noSheet, region.id, "Safi", at), /Add sheet A1.1 to Drawing Flip/);
 const noPackage = freeze({ ...records, procurement: { ...proc, packages: proc.packages.filter(p => p.id !== "drywall") } });
 fails(() => X.acceptDraft(noPackage, framing.id, "Safi", at), /trade package no longer exists/);
 
