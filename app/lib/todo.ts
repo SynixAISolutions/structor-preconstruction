@@ -16,9 +16,10 @@ import type { BidProvenance, LevelingBidder, LevelingScopeItem } from "./levelin
 import { bidForm, packageStatus, type Procurement } from "./procurement";
 import type { Project } from "./projects";
 import type { Screen } from "./screens";
+import { lookahead, type ScheduleRow } from "./schedule";
 import { isStale, type Submission } from "./submissions";
 
-export type TodoGroup = "setup" | "scopes" | "outreach" | "leveling" | "budget" | "award";
+export type TodoGroup = "setup" | "scopes" | "outreach" | "leveling" | "budget" | "award" | "schedule";
 /** todo: the team must act · waiting: someone else must act (a subcontractor, usually). */
 export type TodoStatus = "todo" | "waiting";
 export type TodoPriority = "high" | "normal" | "low";
@@ -69,6 +70,8 @@ export type TodoInput = {
   leveling: LevelingSnapshot | null;
   budget: BudgetState;
   awards: AwardState;
+  /** Project schedule rows (scheduleRows) and today (yyyy-mm-dd): late and next-3-week activities become tasks. */
+  schedule?: { rows: ScheduleRow[]; today: string };
 };
 
 export const TODO_GROUPS: { group: TodoGroup; label: string; screen: Screen }[] = [
@@ -78,6 +81,7 @@ export const TODO_GROUPS: { group: TodoGroup; label: string; screen: Screen }[] 
   { group: "leveling", label: "Bid leveling", screen: "leveling" },
   { group: "budget", label: "Budget & allowances", screen: "budget" },
   { group: "award", label: "Award & contracts", screen: "contracts" },
+  { group: "schedule", label: "Project schedule", screen: "schedule" },
 ];
 
 const MILESTONES: { key: MilestoneKey; label: string }[] = [
@@ -201,6 +205,20 @@ export function deriveTodo(input: TodoInput): TodoSummary {
   if (over.length) add({ id: "budget:over", group: "budget", title: `${plural(over.length, "budget line")} forecast over budget`, detail: over.map(l => `${l.description} (${l.costCenter})`).slice(0, 3).join(", ") + (over.length > 3 ? ", …" : ""), status: "todo", priority: "high", screen: "budget", packageId: null, refs: { budgetLineIds: over.map(l => l.id) }, count: over.length });
   if (unforecast.length) add({ id: "budget:forecast", group: "budget", title: `Set forecasts for ${plural(unforecast.length, "direct line")}`, detail: "Apply a leveled value or enter the expected cost.", status: "todo", priority: "low", screen: "budget", packageId: null, refs: { budgetLineIds: unforecast.map(l => l.id) }, count: unforecast.length });
   if (reviewAllowances.length) add({ id: "budget:allowances", group: "budget", title: `Decide ${plural(reviewAllowances.length, "allowance")}`, detail: "Include or exclude each one, and link it to the budget line that carries it.", status: "todo", priority: "normal", screen: "allowances", packageId: null, refs: { allowanceIds: reviewAllowances.map(a => a.id) }, count: reviewAllowances.length });
+
+  // ── Schedule ── (15 Oct: unfinished activities of the next 3 weeks belong on the to-do list)
+  if (input.schedule) {
+    const { rows, today } = input.schedule;
+    const soon = new Set(lookahead(rows, today).map(r => r.id));
+    for (const r of rows) {
+      if (r.status === "complete") continue;
+      const who = r.owner ? ` Owner: ${r.owner}.` : "";
+      const progress = `${r.progress}% complete.`;
+      if (r.late) add({ id: `schedule:late:${r.id}`, group: "schedule", title: `${r.code} ${r.name} is past its finish`, detail: `Planned finish ${r.finish}; ${progress}${who}`, status: "todo", priority: "high", screen: "schedule", packageId: r.packageId });
+      else if (r.notStartedOnTime) add({ id: `schedule:start:${r.id}`, group: "schedule", title: `Start ${r.code} ${r.name}`, detail: `Planned to start ${r.start}.${who}`, status: "todo", priority: "high", screen: "schedule", packageId: r.packageId });
+      else if (soon.has(r.id)) add({ id: `schedule:soon:${r.id}`, group: "schedule", title: `${r.code} ${r.name}`, detail: `${r.milestone ? `Due ${r.start}` : `${r.start} to ${r.finish}`}; ${progress}${who}`, status: "todo", priority: r.critical ? "normal" : "low", screen: "schedule", packageId: r.packageId });
+    }
+  }
 
   const project: ProjectMilestone[] = [
     { key: "project-facts", label: "Project information complete", done: !missing.length },

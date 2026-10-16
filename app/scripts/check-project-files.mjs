@@ -72,6 +72,15 @@ assert.deepEqual([boxes[1].x, boxes[1].y], [0.7, 0.7]);
 assert.ok(boxes[0].pixels > boxes[1].pixels);
 
 // New AI jobs: inputs validated, outputs screened before anything uses them.
+// Drawing sheets per trade, by title keywords for its CSI code, most telling first, capped.
+const reg = ["CIV0102 Demolition Plan", "ED1.1 ELECTRICAL DEMOLITION SITE PLAN", "A1.1 LEVEL 01 - FIRST FLOOR PLAN", "A3.1 LEVEL 01 - REFLECTED CEILING PLAN", "A8.1 PARTITION TYPES", "A8.2 DOOR & FRAME TYPE & SCHEDULE", "AQ2.1 POOL COMPOSITE PIPING PLAN", "M001 MECHANICAL SYMBOLS, ABBREVIATIONS & NOTES", "M101 LEVEL 01 - HVAC PLAN", "M201 LEVEL 01 - PIPING PLAN"].map(x => ({ sheet: x.split(" ")[0], title: x.slice(x.indexOf(" ") + 1) }));
+const sheetsOf = code => P.sheetsForTrade(reg, code).map(r => r.sheet);
+assert.deepEqual(sheetsOf("02 41 19"), ["CIV0102", "ED1.1"]);
+assert.deepEqual(sheetsOf("09 29 00"), ["A8.1", "A3.1", "A1.1"], "Partition types, then ceilings, then floor plans");
+assert.deepEqual(sheetsOf("08 11 13"), ["A8.2"]);
+assert.deepEqual(sheetsOf("23 73 13"), ["M001", "M101", "M201"], "Pool piping is not the mechanical trade's");
+assert.deepEqual(sheetsOf("12 00 00"), [], "No rule, no sheets");
+assert.equal(P.sheetsForTrade(reg, "02 41 19", 1).length, 1);
 const { EXTRA_JOBS } = await import("../lib/ai-jobs-more.ts");
 const C = EXTRA_JOBS["scope-consolidate"], T = EXTRA_JOBS["title-block"];
 const input = C.parse({ trade: "Drywall", section: "09 29 00", maxLines: 2, findings: [{ title: "a" }, { title: "b" }, { title: "c" }, { title: "" }] });
@@ -92,4 +101,18 @@ const R = EXTRA_JOBS["revision-diff"];
 assert.throws(() => R.parse({ sheet: "A1.1", before: "data:image/jpeg;base64,/9j/AA", after: "x" }), /JPEGs/);
 assert.deepEqual(R.screen({ changes: [{ title: "Wall added", kind: "Added", trade: "Drywall" }, { title: "", kind: "Added" }, { title: "Door moved", kind: "Teleported" }] }).changes.map(c => [c.title, c.kind]), [["Wall added", "Added"], ["Door moved", "Revised"]], "Untitled changes dropped; unknown kinds become Revised");
 
+const SS = EXTRA_JOBS["schedule-suggest"];
+const ssIn = SS.parse({ project: { name: "Jelleff", squareFeet: 26500, workType: "both" }, start: "2026-11-02", packages: [{ id: "concrete", code: "03", name: "Concrete" }, { id: "", name: "x" }], drawings: ["A1.1 Level 01 plan"], specs: ["09 29 00 Gypsum board"] });
+assert.equal(ssIn.packages.length, 1);
+assert.throws(() => SS.parse({ project: { name: "J" }, start: "next week" }), /start date/);
+assert.match(SS.messages(ssIn)[1].content, /A1.1 Level 01 plan/);
+const ssOut = SS.screen({ summary: "s", activities: [
+  { code: "A1000", name: "NTP", duration: 0, after: [] },
+  { code: "a1010", name: "Footings", packageId: "concrete", duration: 20, after: [{ code: "a1000", type: "ss", lag: 2 }] },
+  { code: "A1010", name: "Duplicate code", packageId: "roofing", duration: 5, after: [{ code: "A1000", type: "XX" }] },
+  { code: "A1030", name: "Too long", duration: 900 },
+  { code: "A1040", name: "", duration: 3 },
+] }, ssIn);
+assert.deepEqual(ssOut.activities.map(a => [a.code, a.packageId, a.duration, a.after.map(l => `${l.code} ${l.type}${l.lag}`).join()]), [["A1000", null, 0, ""], ["A1010", "concrete", 20, "A1000 SS2"], ["X9002", null, 5, "A1000 FS0"]], "Codes upper-cased and unique, unknown packages and link types normalised, impossible rows dropped");
+assert.throws(() => SS.screen({ activities: [] }, ssIn), /no usable schedule/);
 console.log("Project files checked: sheet keys, revisions, sheet/manual/section lookup, stored-file validation, index upsert, sections by trade.");

@@ -448,6 +448,35 @@ export function replaceSchedule(state: ScheduleState, imported: ImportResult, fi
   return { ...next, importedFrom: fileName.trim() || "schedule.xml", log: [...state.log, { at, by, action: `Imported ${imported.activities.length} activities from ${fileName.trim() || "schedule.xml"}`, shifted }] };
 }
 
+/** One activity of an AI-suggested schedule (lib/ai-jobs-more "schedule-suggest"); links name other activities by code. */
+export type SuggestedActivity = { code: string; name: string; phase: string; packageId: string | null; duration: number; after: { code: string; type: LinkType; lag: number }[] };
+
+/**
+ * Turns a suggested schedule into activities for replaceSchedule. Every activity starts on `start`
+ * and its links then push it to its place (the date-shift rule). Links to unknown codes or to the
+ * activity itself are dropped with a warning; a loop is refused.
+ */
+export function scheduleFromSuggestion(suggested: SuggestedActivity[], start: string): ImportResult {
+  if (!isDate(start)) fail({ start: "Choose the schedule's start date." });
+  if (!suggested.length) fail({ file: "The suggestion has no activities." });
+  if (suggested.length > MAX_ACTIVITIES) fail({ file: `At most ${MAX_ACTIVITIES} activities.` });
+  const ids = new Map(suggested.map(s => [s.code, newId()]));
+  if (ids.size !== suggested.length) fail({ code: "Two suggested activities share a code." });
+  const warnings: string[] = [];
+  const first = addWorkdays(start, 0);
+  const activities: Activity[] = suggested.map(s => ({
+    id: ids.get(s.code)!, code: s.code.slice(0, 40), name: s.name.slice(0, 200), phase: (s.phase || "Construction").slice(0, 80), owner: "", packageId: s.packageId,
+    start: first, duration: Math.min(MAX_DURATION, Math.max(0, Math.round(s.duration) || 0)), progress: 0,
+    predecessors: s.after.flatMap(l => {
+      const id = ids.get(l.code);
+      if (!id || l.code === s.code) { warnings.push(`${s.code}: the link to ${l.code || "an unnamed activity"} was dropped.`); return []; }
+      return [{ activityId: id, type: l.type, lag: Math.max(-MAX_LAG, Math.min(MAX_LAG, Math.round(l.lag) || 0)) }];
+    }),
+  }));
+  try { topological(activities); } catch { fail({ file: "The suggested links form a loop. Ask for another suggestion." }); }
+  return { activities, warnings };
+}
+
 /** The schedule as CSV for Excel: one row per activity, predecessors as "A1010 FS+2". */
 export function toCsv(state: ScheduleState, today: string): string {
   const rows = scheduleRows(state, today);
