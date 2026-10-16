@@ -1,0 +1,3 @@
+import assert from 'node:assert/strict';import {test} from 'node:test';import {renderToStaticMarkup} from 'react-dom/server';
+import {AssetLink,AssetUpload} from './contract-files';
+test('private document links use the protected app route, with accessible upload labels',()=>{const html=renderToStaticMarkup(<><AssetLink asset={{id:'11111111-1111-4111-8111-111111111111',name:'Insurance.pdf',type:'application/pdf',size:200}}/><AssetUpload label="Upload Exhibit C" onSave={()=>{}}/></>);assert.match(html,/\/api\/document-assets\?id=/);assert.match(html,/Insurance.pdf/);assert.match(html,/Upload Exhibit C/);assert.match(html,/accept="application\/pdf"/);});

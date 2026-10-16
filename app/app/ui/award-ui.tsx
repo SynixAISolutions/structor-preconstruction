@@ -28,6 +28,9 @@ import {
   Badge, Button, Empty, Modal, PageHeader, Panel, PreviewNote, Stats, Tabs,
   downloadText, usd, type ViewProps,
 } from "./shared";
+import { OtherExhibits, CompanyFormSettings, ContractScopeDraft, AssetLink } from "./contract-files";
+import { setContractFiles } from "../../lib/contract-files";
+import { assetUrl } from "../../lib/document-assets";
 import "./award-ui.css";
 
 const actor = "Marcel Khoury";
@@ -69,9 +72,9 @@ function ErrorSummary({ errors }: { errors: AwardErrors }) {
   return messages.length ? <div className="award-errors" role="alert"><AlertTriangle size={17}/><div>{messages.map(message => <p key={message}>{message}</p>)}</div></div> : null;
 }
 
-function DocumentPreview({ content, status }: { content: DocumentContent; status: string }) {
+function DocumentPreview({ content, status, company }: { content: DocumentContent; status: string; company?: import("../../lib/contract-files").CompanyForm }) {
   return <article className="award-paper">
-    <header><span className="award-paper-brand">General contractor</span><Badge tone="amber">{status}</Badge></header>
+    <header><span className="award-paper-brand">{company?.logo && <img src={assetUrl(company.logo)} alt={`${company.name} logo`} style={{maxWidth:120,maxHeight:45}}/>}{company?.name || "General contractor"}</span><Badge tone="amber">{status}</Badge></header>
     <h2>{content.title}</h2>
     {content.sections.map((section, index) => <section key={`${section.heading}-${index}`}>
       <h3>{String(index + 1).padStart(2, "0")}. {section.heading}</h3>
@@ -212,7 +215,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
 
   return <div className="award-view">
     <PageHeader eyebrow="BID → AWARD → CONTRACT" title="Contracts & exhibits" description="Select the reviewed bid, agree the trade scope, and carry one award through execution." actions={<>
-      {unread > 0 && <Button onClick={() => { setTab("Activity"); if (!award) notify(`${unread} recorded contract notifications across this project.`); }}><Bell size={16}/>{unread} unread</Button>}
+      <CompanyFormSettings/>{unread > 0 && <Button onClick={() => { setTab("Activity"); if (!award) notify(`${unread} recorded contract notifications across this project.`); }}><Bell size={16}/>{unread} unread</Button>}
       <Button onClick={() => navigate("leveling")}>Bid leveling<ArrowRight size={15}/></Button>
     </>}/>
     <PreviewNote>Browser-only demo · Shares, signature requests, and notifications are recorded here; no email is sent. Typed signatures are demonstration records.</PreviewNote>
@@ -266,18 +269,18 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
           </section>
 
           {stage && <div className="award-flow">{flow.map((label, index) => <div className={index < stageIndex(stage) ? "done" : index === stageIndex(stage) ? "current" : ""} key={label}><span>{index < stageIndex(stage) ? <Check size={14}/> : index + 1}</span><strong>{label}</strong></div>)}</div>}
-          <Tabs tabs={["Exhibit A", "Comments", "Subcontract", "Activity"]} value={tab} onChange={setTab}/>
+          <Tabs tabs={["Exhibit A", "Comments", "All other exhibits", "Subcontract", "Activity"]} value={tab} onChange={setTab}/>
           <ErrorSummary errors={errors}/>
 
           {tab === "Exhibit A" && currentRevision && <div className="award-document-layout">
             <Panel title={`Exhibit A · Revision ${currentRevision.number}`} subtitle={`${currentRevision.template.name} · Created ${stamp(currentRevision.createdAt)}`} action={<Badge tone={award.exhibit.status === "agreed" ? "green" : "amber"}>{award.exhibit.status.replaceAll("-", " ")}</Badge>}>
               <div className="award-document-actions">
                 <Button onClick={() => downloadText(`${slug(award.snapshot.packageName)}-exhibit-a-rev-${currentRevision.number}.txt`, renderDocumentText(currentRevision.content))}><Download size={15}/>Download</Button>
-                {award.exhibit.status !== "agreed" && <Button onClick={openEditor}><PenLine size={15}/>Create revision</Button>}
+                {award.exhibit.status !== "agreed" && <ContractScopeDraft key={award.id} award={award} save={(content,note) => perform(current => reviseExhibit(current, award.id, content, note, actor), "Reviewed Section 3 saved as a new revision.", () => setRevisionNumber(0))}/>}{award.exhibit.status !== "agreed" && <Button onClick={openEditor}><PenLine size={15}/>Create revision</Button>}
                 {award.exhibit.status !== "agreed" && award.exhibit.status !== "shared" && <Button variant="primary" onClick={() => perform(current => shareExhibit(current, award.id), "Exhibit A share recorded. No email was sent.")}><Send size={15}/>{award.exhibit.status === "changes-requested" ? "Reshare revision" : "Share for review"}</Button>}
                 {award.exhibit.status === "shared" && <><Button onClick={() => openComment("changes")}><MessageSquare size={15}/>Request changes</Button><Button variant="primary" onClick={() => { setAgreementName(award.snapshot.company.contact); setAgreementParty("subcontractor"); setAgreementOpen(true); setErrors({}); }}><Check size={15}/>Record agreement</Button></>}
               </div>
-              <DocumentPreview content={currentRevision.content} status={`EXHIBIT A · REV ${currentRevision.number}`}/>
+              <DocumentPreview company={award.contractFiles?.company} content={currentRevision.content} status={`EXHIBIT A · REV ${currentRevision.number}`}/>
             </Panel>
             <aside className="award-document-side">
               <Panel title="Revision history" subtitle={`${award.exhibit.revisions.length} saved revision${award.exhibit.revisions.length === 1 ? "" : "s"}`}>
@@ -287,6 +290,8 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
               {award.exhibit.agreement && <div className="award-agreement"><ShieldCheck size={20}/><div><strong>Revision {award.exhibit.agreement.revisionNumber} agreed</strong><small>{award.exhibit.agreement.by} · {stamp(award.exhibit.agreement.at)}</small></div></div>}
             </aside>
           </div>}
+
+          {tab === "All other exhibits" && <OtherExhibits key={award.id} award={award} save={files => perform(current => setContractFiles(current, award.id, files), "Contract package saved. Regenerate an existing draft to include the latest files.")}/>}
 
           {tab === "Comments" && <Panel title="Exhibit A comments" subtitle="Record both sides of the review in one timeline." action={award.exhibit.status !== "agreed" ? <Button variant="primary" onClick={() => openComment("comment")}><Plus size={15}/>Add comment</Button> : <Badge tone="green">Locked after agreement</Badge>}>
             <div className="award-comments">{award.exhibit.comments.map(comment => <article className={comment.resolved ? "resolved" : ""} key={comment.id}><span className={`award-comment-avatar ${comment.party}`}>{comment.author.slice(0, 1).toUpperCase()}</span><div><header><span><strong>{comment.author}</strong><Badge tone={comment.party === "contractor" ? "blue" : "amber"}>{comment.party}</Badge><Badge tone={comment.resolved ? "green" : "red"}>{comment.resolved ? "Resolved" : "Open"}</Badge></span><small>Revision {comment.revisionNumber} · {stamp(comment.at)}</small></header><p>{comment.text}</p>{comment.resolved && <small>Resolved by {comment.resolvedBy} · {stamp(comment.resolvedAt)}</small>}</div>{award.exhibit.status !== "agreed" && <Button onClick={() => perform(current => setCommentResolved(current, award.id, comment.id, !comment.resolved, actor), comment.resolved ? "Comment reopened." : "Comment resolved.")}>{comment.resolved ? "Reopen" : "Resolve"}</Button>}</article>)}</div>
@@ -304,7 +309,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
                   {award.subcontract.status === "subcontractor-signed" && <Button variant="primary" onClick={() => openSignature("contractor")}><Signature size={15}/>Countersign</Button>}
                   {award.subcontract.status === "countersigned" && <Button variant="primary" onClick={() => perform(current => executeSubcontract(current, award.id), "Subcontract executed and final copy frozen.")}><FileCheck2 size={15}/>Execute subcontract</Button>}
                 </div>
-                <DocumentPreview content={award.subcontract.content} status={award.subcontract.status === "executed" ? "EXECUTED" : "SUBCONTRACT"}/>
+                {award.subcontract.attachments && <div className="contract-file-row"><h3>Attached originals</h3><p><AssetLink asset={award.subcontract.attachments.company.form}/></p>{Object.entries(award.subcontract.attachments.files).map(([code, asset]) => <p key={code}>Exhibit {code}: <AssetLink asset={asset}/></p>)}</div>}<DocumentPreview company={award.subcontract.attachments?.company} content={award.subcontract.content} status={award.subcontract.status === "executed" ? "EXECUTED" : "SUBCONTRACT"}/>
               </Panel>
               <aside className="award-document-side"><Panel title="Signature status"><div className="award-signatures">
                 <div className={award.subcontract.subcontractorSignature ? "signed" : ""}><span><Signature size={18}/></span><div><strong>Subcontractor</strong>{award.subcontract.subcontractorSignature ? <><p>{award.subcontract.subcontractorSignature.name} · {award.subcontract.subcontractorSignature.title || "Title not recorded"}</p><small>{award.subcontract.subcontractorSignature.email} · {stamp(award.subcontract.subcontractorSignature.signedAt)}</small></> : <small>Awaiting signature</small>}</div></div>
@@ -342,7 +347,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
       <ErrorSummary errors={errors}/><div className="award-modal-actions"><Button onClick={() => setAgreementOpen(false)}>Cancel</Button><Button type="submit" variant="primary">Agree revision</Button></div>
     </form></Modal>}
 
-    {contractorOpen && award && <Modal title={award.subcontract ? "Regenerate subcontract" : "Generate subcontract"} subtitle="The agreed Exhibit A revision and award value will be attached." onClose={() => setContractorOpen(false)}><form onSubmit={event => { event.preventDefault(); perform(current => generateSubcontract(current, award.id, contractorName, actor), "Subcontract draft generated.", () => setContractorOpen(false)); }}>
+    {contractorOpen && award && <Modal title={award.subcontract ? "Regenerate subcontract" : "Generate subcontract"} subtitle="The agreed Exhibit A revision and award value will be attached." onClose={() => setContractorOpen(false)}><form onSubmit={event => { event.preventDefault(); if (!award.contractFiles) { setErrors({ subcontract: "Prepare All other exhibits before generating the subcontract." }); setContractorOpen(false); setTab("All other exhibits"); return; } perform(current => generateSubcontract(current, award.id, contractorName, actor), "Subcontract draft generated.", () => setContractorOpen(false)); }}>
       <label className="ui-field"><span>General contractor legal name</span><input required value={contractorName} onChange={event => setContractorName(event.target.value)}/></label>
       <div className="award-modal-note"><FileText size={17}/><span>The current template is identified inside the generated document. Review every term before signature.</span></div>
       <ErrorSummary errors={errors}/><div className="award-modal-actions"><Button onClick={() => setContractorOpen(false)}>Cancel</Button><Button type="submit" variant="primary">Generate draft</Button></div>

@@ -160,13 +160,15 @@ const mcn = A.createAward(empty, mcnCtx, { levelingBidderId: green.levelingBidde
 const mdoc = A.latestExhibit(mcn).content;
 assert.deepEqual([A.latestExhibit(mcn).template.id, A.latestExhibit(mcn).template.sample, mdoc.title], ["mcn-exhibit-a", false, "Exhibit A — Scope of Work · 02 41 19 Demolition"]);
 assert.deepEqual(section(mdoc, "Exhibit A — Scope of Work"), ["Demolition", "DC Department of General Services", "Jelleff Recreation Center", "3265 S Street NW, Washington, DC 20007"]);
-const notes = mdoc.sections.find(x => x.heading.startsWith("General notes")).lines;
+const general = section(mdoc, "General requirements");
+const notes = general.filter(line => /^\d+\. /.test(line));
+assert.equal(mdoc.sections[2].heading, "Scope of work", "Scope is numbered Section 3");
 assert.deepEqual([notes.length, notes[0].startsWith("1. It is the intent of this bid package"), notes.at(-1).startsWith("32. All work hours")], [32, true, true], "the contractor's 32 general notes, numbered");
 const mscope = section(mdoc, "Scope of work");
 assert(mscope[0].startsWith("The scope of work of this Subcontract includes") && mscope.at(-1) === "Provide an ADD ALTERNATE Payment and Performance Bond.");
 assert.equal(mscope.length, 1 + (form.length - 1) + 1, "Intro, the included items (not the N item), the bond alternate");
 assert.deepEqual(section(mdoc, "Scope exclusions"), [form[1].title, "Hazardous materials abatement"]);
-assert.deepEqual(section(mdoc, "Specific notes for scope of work — governing sections").at(-1), "02 41 19 — Demolition");
+assert(general.includes("02 41 19 — Demolition"), "Governing sections remain in the shell");
 assert(section(mdoc, "Phasing & schedule highlights").includes("Project Commencement – 2026-06-01"));
 assert(section(mdoc, "Phasing & schedule highlights").includes("Project Substantial Completion – [finish]"), "A missing value stays visible as [finish]");
 assert(mdoc.sections.some(x => x.heading === "Economic inclusion requirements") && mdoc.sections.at(-1).heading === "- End of Exhibit A -");

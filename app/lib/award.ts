@@ -15,6 +15,7 @@ import type { BudgetState, LevelingBasis, LevelingCandidate } from "./budget";
 import type { DirectoryCompany, Procurement } from "./procurement";
 import type { Alternate, ScopeAnswer, Submission } from "./submissions";
 import { MCN_EXHIBIT_TEMPLATE, MCN_SUBCONTRACT_TEMPLATE } from "./data/templates";
+import { contractFileLines, missingContractFiles, type ContractFiles } from "./contract-files";
 
 // ── Templates (samples until the customer's own are configured) ─────────────
 
@@ -70,6 +71,7 @@ export type SubcontractStatus = "draft" | "signature-pending" | "subcontractor-s
 export type Signer = { name: string; title: string; email: string };
 export type Signature = Signer & { party: Party; signedAt: string; method: "typed-demo" };
 export type Subcontract = {
+  attachments?: ContractFiles;
   status: SubcontractStatus;
   content: DocumentContent;
   template: DocumentTemplate;
@@ -98,6 +100,7 @@ export type AwardSnapshot = {
 };
 
 export type Award = {
+  contractFiles?: ContractFiles;
   id: string; projectId: string; packageId: string; invitationId: string; bidderId: string; submissionId: string; revisionNumber: number;
   budgetLineId: string | null;
   basis: LevelingBasis;
@@ -428,6 +431,10 @@ export function generateSubcontract(
     exhibitRevision: exhibit.number, amount: award.amount, createdAt: at, createdBy: by, sentAt: null,
     subcontractorSignature: null, contractorSignature: null, executedAt: null, executedCopy: null,
   };
+  if (award.contractFiles) {
+    subcontract.attachments = structuredClone(award.contractFiles);
+    subcontract.content.sections.push({ heading: "Attached contract package (frozen at generation)", lines: contractFileLines(subcontract.attachments) });
+  }
   return replace(state, { ...award, subcontract, updatedAt: at });
 }
 
@@ -436,6 +443,7 @@ export function sendSubcontract(state: AwardState, id: string, at = now()): Awar
   const award = live(findAward(state, id));
   const sub = award.subcontract ?? fail({ subcontract: "Generate the subcontract first." });
   if (sub.status !== "draft") fail({ subcontract: "The subcontract was already sent." });
+  if (sub.attachments && missingContractFiles(sub.attachments).length) fail({ subcontract: `Complete the contract package first: ${missingContractFiles(sub.attachments).join(", ")}.` });
   return replace(state, { ...award, subcontract: { ...sub, status: "signature-pending", sentAt: at }, updatedAt: at },
     [toBidder(award, "subcontract-sent", `The ${award.snapshot.packageName} subcontract is ready for your signature.`, at)]);
 }

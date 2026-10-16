@@ -9,7 +9,7 @@
 
 import type { DocumentTemplate } from "../award";
 
-export const MCN_EXHIBIT_TEMPLATE: DocumentTemplate = {
+const EXHIBIT_SHELL: DocumentTemplate = {
   id: "mcn-exhibit-a", name: "Contractor Exhibit A (all trades shell)", version: "25_0314", sample: false,
   notice: "The contractor's Exhibit A shell. Check the project-specific general notes before sharing.",
   layout: {
@@ -99,6 +99,16 @@ export const MCN_EXHIBIT_TEMPLATE: DocumentTemplate = {
       { kind: "text", heading: "- End of Exhibit A -", lines: ["{template}"] },
     ],
   },
+};
+
+const shellBlocks = EXHIBIT_SHELL.layout!.blocks;
+export const MCN_EXHIBIT_TEMPLATE: DocumentTemplate = {
+  ...EXHIBIT_SHELL, version: "25_0314-section-3",
+  layout: { ...EXHIBIT_SHELL.layout!, blocks: [
+    shellBlocks[0],
+    { kind: "text", heading: "General requirements", lines: shellBlocks.slice(1, 6).flatMap(b => b.kind === "text" ? [b.heading, ...b.lines.map((line, i) => `${b.numbered ? `${i + 1}. ` : ""}${line}`)] : []) },
+    shellBlocks[6], ...shellBlocks.slice(7),
+  ] },
 };
 
 export const MCN_SUBCONTRACT_TEMPLATE: DocumentTemplate = {
