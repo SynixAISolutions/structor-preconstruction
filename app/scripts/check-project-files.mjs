@@ -71,6 +71,17 @@ assert.deepEqual([boxes[0].x, boxes[0].y, boxes[0].width, boxes[0].height], [0.1
 assert.deepEqual([boxes[1].x, boxes[1].y], [0.7, 0.7]);
 assert.ok(boxes[0].pixels > boxes[1].pixels);
 
+// Other exhibits: uploaded files named "Exhibit X - …"; B is generated, A is the scope.
+const X = await import("../lib/exhibits.ts");
+assert.equal(X.exhibitFileName("C", "Insurance.pdf"), "Exhibit C - Insurance.pdf");
+assert.equal(X.exhibitFileName("E", "Exhibit E - Jelleff Schedule.pdf"), "Exhibit E - Jelleff Schedule.pdf", "Already named: kept");
+const exE = doc("ex-e", "ex-e", 1, { kind: "other", category: "Contracts", name: "Exhibit E - Jelleff Schedule.pdf" });
+assert.equal(X.exhibitDocument([exE, report], "E")?.id, "ex-e");
+assert.equal(X.exhibitDocument([exE], "C"), null);
+assert.equal(X.exhibitDocument([doc("x", "x", 1, { name: "Exhibitions.pdf" })], "I"), null, "A word starting with 'Exhibit' is not an exhibit");
+const status = X.exhibitStatus([exE], true, false);
+assert.deepEqual(status.map(s => [s.letter, s.ready]), [["A", true], ["B", false], ["C", false], ["D", false], ["E", true], ["F", false], ["G", false], ["H", false], ["I", false]]);
+
 // New AI jobs: inputs validated, outputs screened before anything uses them.
 const { EXTRA_JOBS } = await import("../lib/ai-jobs-more.ts");
 const C = EXTRA_JOBS["scope-consolidate"], T = EXTRA_JOBS["title-block"];

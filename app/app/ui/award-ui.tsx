@@ -29,6 +29,7 @@ import {
   downloadText, usd, type ViewProps,
 } from "./shared";
 import { ContractLanguageButton } from "./contract-language";
+import { OtherExhibits } from "./other-exhibits";
 import "./award-ui.css";
 
 const actor = "Marcel Khoury";
@@ -267,7 +268,8 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
           </section>
 
           {stage && <div className="award-flow">{flow.map((label, index) => <div className={index < stageIndex(stage) ? "done" : index === stageIndex(stage) ? "current" : ""} key={label}><span>{index < stageIndex(stage) ? <Check size={14}/> : index + 1}</span><strong>{label}</strong></div>)}</div>}
-          <Tabs tabs={["Exhibit A", "Comments", "Subcontract", "Activity"]} value={tab} onChange={setTab}/>
+          <Tabs tabs={["Exhibit A", "Comments", "Subcontract", "Other exhibits", "Activity"]} value={tab} onChange={setTab}/>
+          {tab === "Other exhibits" && <OtherExhibits hasScope={!!currentRevision} notify={notify} onOpenScope={() => setTab("Exhibit A")} onOpenDrawings={() => navigate("drawings")}/>}
           <ErrorSummary errors={errors}/>
 
           {tab === "Exhibit A" && currentRevision && <div className="award-document-layout">

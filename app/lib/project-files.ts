@@ -147,7 +147,7 @@ export function exhibitBRows(docs: StoredDocument[]): string[][] {
   const day = (iso: string) => iso.slice(0, 10);
   return [
     ["Part", "Number", "Title", "Date", "Document"],
-    ...latest.filter(d => d.kind === "other").map(d => ["Documents", "", d.name.replace(/\.pdf$/i, ""), day(d.uploadedAt), `${d.name} (${revisionLabel(d)})`]),
+    ...latest.filter(d => d.kind === "other" && d.category !== "Contracts").map(d => ["Documents", "", d.name.replace(/\.pdf$/i, ""), day(d.uploadedAt), `${d.name} (${revisionLabel(d)})`]),
     ...drawingRegister(docs).map(r => ["Drawings", r.sheet, r.title, r.date, `${r.doc.name} (${revisionLabel(r.doc)})`]),
     ...latest.filter(d => d.kind === "manual").flatMap(d => d.sections.map(s => ["Specifications", s.section, s.title, day(d.uploadedAt), `${d.name} (${revisionLabel(d)}), pages ${s.first}–${s.last}`])),
   ];
