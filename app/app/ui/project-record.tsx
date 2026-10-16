@@ -8,6 +8,7 @@ import {
 } from "../../lib/projects";
 import { displayDate } from "../../lib/format";
 import { screenLabel, type Screen } from "../../lib/screens";
+import { addProjectMember, CONSTRUCTION_ROLES } from "../../lib/project-team";
 import { Badge, Button, Modal, PageHeader, Panel, usd } from "./shared";
 
 function FieldError({ errors, field }: { errors: ProjectFormErrors; field: keyof typeof PROJECT_FORM_FIELDS }) {
@@ -77,7 +78,7 @@ export function ProjectForm({ project, onSave, onCancel }: { project?: Project; 
 
     <section className="project-form-section">
       <div className="project-form-section-head"><div><h3>Project team</h3><p>Record each team member and their project role.</p></div><Button onClick={() => setTeam(rows => [...rows, { name: "", role: "" }])}><Plus size={14}/>Add person</Button></div>
-      <div className="project-repeat-list">{team.map((member, index) => <div className="project-repeat-row team" key={index}><label className="ui-field">Name<input name={f.teamName} value={member.name} onChange={e => setTeam(rows => rows.map((row, i) => i === index ? { ...row, name: e.target.value } : row))}/></label><label className="ui-field">Role<input name={f.teamRole} value={member.role} onChange={e => setTeam(rows => rows.map((row, i) => i === index ? { ...row, role: e.target.value } : row))}/></label><button type="button" className="ui-icon-btn" aria-label={"Remove team member " + (index + 1)} onClick={() => setTeam(rows => rows.filter((_, i) => i !== index))}><Trash2 size={15}/></button></div>)}</div>
+      <div className="project-repeat-list">{team.map((member, index) => <div className="project-repeat-row team" key={index}><label className="ui-field">Name<input name={f.teamName} value={member.name} onChange={e => setTeam(rows => rows.map((row, i) => i === index ? { ...row, name: e.target.value } : row))}/></label><label className="ui-field">Role<select name={f.teamRole} value={member.role} onChange={e => setTeam(rows => rows.map((row, i) => i === index ? { ...row, role: e.target.value } : row))}><option value="">Choose a role</option>{member.role && !CONSTRUCTION_ROLES.some(r=>r===member.role) && <option value={member.role}>{member.role}</option>}{CONSTRUCTION_ROLES.map(r=><option key={r}>{r}</option>)}</select></label><button type="button" className="ui-icon-btn" aria-label={"Remove team member " + (index + 1)} onClick={() => setTeam(rows => rows.filter((_, i) => i !== index))}><Trash2 size={15}/></button></div>)}</div>
     </section>
 
     <section className="project-form-section">
@@ -90,6 +91,7 @@ export function ProjectForm({ project, onSave, onCancel }: { project?: Project; 
 
 export function ProjectInformation({ project, onSave, navigate, cover }: { project: Project; onSave: (project: Project) => void; navigate: (screen: Screen) => void; cover: ReactNode }) {
   const [editing, setEditing] = useState(false);
+  const [addingMember, setAddingMember] = useState(false), [memberError, setMemberError] = useState("");
   const workType = WORK_TYPES.find(option => option.value === project.workType)?.label ?? "Not recorded";
   const taxStatus = TAX_STATUSES.find(option => option.value === project.taxStatus)?.label ?? "Not recorded";
   const details = [
@@ -99,13 +101,14 @@ export function ProjectInformation({ project, onSave, navigate, cover }: { proje
     ["Construction start", displayDate(project.start)], ["Expected completion", displayDate(project.finish)], ["Certifications", project.certifications.join(", ") || "Not recorded"], ["RFP document", project.rfpFileName || "Not recorded"],
   ];
 
-  return <><PageHeader eyebrow="PROJECT INFORMATION" title={project.name} description="The shared source of project context for your team and trade partners." actions={<><Button onClick={() => navigate("portal")}><HardHat size={16}/>Subcontractor view</Button><Button variant="primary" onClick={() => setEditing(true)}>Edit information</Button></>}/>
+  return <><PageHeader eyebrow="PROJECT INFORMATION" title={project.name} description="The shared source of project context for your team and trade partners." actions={<><Button onClick={() => navigate("portal")}><HardHat size={16}/>Subcontractor view</Button><Button onClick={()=>navigate("architect")}>Architect view</Button><Button variant="primary" onClick={() => setEditing(true)}>Edit information</Button></>}/>
     <div className="info-cover">{cover}<div><Badge tone="green">{project.status}</Badge><h2>{project.type}</h2><p><MapPin size={16}/>{project.location}</p></div></div>
     <div className="ui-two-col"><Panel title="Project brief" subtitle="Visible to the project team and invited partners"><div className="info-body"><p>{project.description || "No project brief has been recorded."}</p><dl className="info-grid">{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></div></Panel>
-      <div className="info-side"><Panel title="Project team"><div className="team-list">{project.team.length ? project.team.map(member => <div key={member.name + "-" + member.role}><span className="user-avatar">{member.name.split(/\s+/).map(part => part[0]).join("").slice(0, 2).toUpperCase()}</span><div><strong>{member.name}</strong><small>{member.role || "Role not recorded"}</small></div></div>) : <p className="project-empty-note">No project team recorded.</p>}</div></Panel>
+      <div className="info-side"><Panel title="Project team" action={<Button onClick={() => {setAddingMember(true);setMemberError("");}}><Plus size={14}/>Add member</Button>}><div className="team-list">{project.team.length ? project.team.map(member => <div key={member.name + "-" + member.role}><span className="user-avatar">{member.name.split(/\s+/).map(part => part[0]).join("").slice(0, 2).toUpperCase()}</span><div><strong>{member.name}</strong><small>{member.role || "Role not recorded"}</small></div></div>) : <p className="project-empty-note">No project team recorded.</p>}</div></Panel>
         <Panel title="Internal estimate"><div className="internal-value"><span><ShieldCheck size={15}/>TEAM VIEW</span><strong>{usd(project.value)}</strong><p>Planning value for this project.</p><Button onClick={() => navigate("budget")}>Budget breakdown<ArrowRight size={15}/></Button></div></Panel></div>
     </div>
     <div className="info-links">{[[screenLabel("documents"), "Drawings, manuals and reports", "documents", FileStack], ["RFP & bid requirements", "Owner requirements and key dates", "documents", FileText], [screenLabel("packages"), "Trade scopes and assigned owners", "packages", Box]].map(([title, description, destination, Icon]) => { const LinkIcon = Icon as typeof Box; return <button key={String(title)} onClick={() => navigate(destination as Screen)}><LinkIcon size={24}/><div><strong>{String(title)}</strong><small>{String(description)}</small></div><ArrowUpRight size={18}/></button>; })}</div>
+    {addingMember && <Modal title="Add project member" subtitle="Add a person to the project record." onClose={()=>setAddingMember(false)}><form onSubmit={e=>{e.preventDefault();const data=new FormData(e.currentTarget);try{onSave(addProjectMember(project,String(data.get("name")||""),String(data.get("role")||"")));setAddingMember(false);}catch(error){setMemberError(error instanceof Error?error.message:"Member could not be added.");}}}><label className="ui-field"><span>Name</span><input name="name" required maxLength={150}/></label><label className="ui-field"><span>Construction role</span><select name="role" required>{CONSTRUCTION_ROLES.map(r=><option key={r}>{r}</option>)}</select></label>{memberError&&<p role="alert">{memberError}</p>}<Button type="submit" variant="primary">Add member</Button></form></Modal>}
     {editing && <Modal title="Edit project information" subtitle="Update the project record used across the workspace." wide onClose={() => setEditing(false)}><ProjectForm project={project} onCancel={() => setEditing(false)} onSave={updated => { onSave(updated); setEditing(false); }}/></Modal>}
   </>;
 }

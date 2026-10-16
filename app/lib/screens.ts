@@ -13,7 +13,7 @@ export type Screen =
   | "packages" | "bidders" | "portal" | "leveling" | "budget" | "allowances"
   | "contracts" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
   | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
-  | "ratings" | "prequalification" | "drawing-flip" | "model-mep" | "model-structural" | "model-exterior";
+  | "architect" | "ratings" | "prequalification" | "drawing-flip" | "model-mep" | "model-structural" | "model-exterior";
 
 export type ViewProps = { navigate: (screen: Screen) => void; notify: (message: string) => void; projectName: string };
 
@@ -21,7 +21,7 @@ export type ViewProps = { navigate: (screen: Screen) => void; notify: (message: 
  * "global" screens belong to the organization; "project" screens show the selected project;
  * "subcontractor" screens are the invited company's view of the selected project.
  */
-export type ScreenScope = "global" | "project" | "subcontractor";
+export type ScreenScope = "global" | "project" | "subcontractor" | "architect";
 
 /**
  * `section` is a sub-heading inside a group; items sharing one are adjacent.
@@ -83,12 +83,14 @@ export const SUBCONTRACTOR_VIEW: ScreenGroup = { label: "SUBCONTRACTOR VIEW", sc
   { id: "portal", label: "Subcontractor portal", icon: "HardHat", keywords: ["proposals", "bidder view", "preview as subcontractor"] },
 ]};
 
+export const ARCHITECT_VIEW: ScreenGroup = { label: "ARCHITECT VIEW", scope: "architect", items: [{ id: "architect", label: "Architect submittals", icon: "BookOpenText", keywords: ["preview as architect", "design team review"] }] };
+
 /** The contractor's way into the subcontractor view. */
 export const PORTAL_PREVIEW_SCREEN: ScreenDef = SUBCONTRACTOR_VIEW.items[0];
 
 export const SETTINGS_SCREEN: ScreenDef = { id: "settings", label: "Settings", icon: "Settings2" };
 
-export const ALL_SCREENS: ScreenDef[] = [...SCREEN_GROUPS.flatMap(group => group.items), ...SUBCONTRACTOR_VIEW.items, SETTINGS_SCREEN];
+export const ALL_SCREENS: ScreenDef[] = [...SCREEN_GROUPS.flatMap(group => group.items), ...SUBCONTRACTOR_VIEW.items, ...ARCHITECT_VIEW.items, SETTINGS_SCREEN];
 
 /**
  * Screens that no longer exist, and where their old links now go. Messages: messaging lives in each Bid package (Marcel,
@@ -105,7 +107,7 @@ export const isScreen = (value: string): value is Screen => ALL_SCREENS.some(scr
 export const screenLabel = (id: Screen): string => ALL_SCREENS.find(screen => screen.id === id)?.label ?? "";
 
 /** The group a screen sits in, SUBCONTRACTOR VIEW included; undefined for Settings, which is global and ungrouped. */
-export const screenGroup = (id: Screen): ScreenGroup | undefined => [...SCREEN_GROUPS, SUBCONTRACTOR_VIEW].find(group => group.items.some(screen => screen.id === id));
+export const screenGroup = (id: Screen): ScreenGroup | undefined => [...SCREEN_GROUPS, SUBCONTRACTOR_VIEW, ARCHITECT_VIEW].find(group => group.items.some(screen => screen.id === id));
 
 /** Screens matching a free-text query, for the quick-find palette. */
 export const searchScreens = (query: string): ScreenDef[] => {

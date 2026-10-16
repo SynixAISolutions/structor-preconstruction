@@ -1,4 +1,5 @@
 export const pageGuides = [
+  { id: "architect", group: "Architect view", title: "Architect submittals", purpose: "Review only the submittal revisions sent to the design team.", steps: ["Choose Preview as architect or Architect view in Project information.", "Choose the receiving architect, then Open submittal.", "Record an action and comments. The contractor receives the response before returning it to the subcontractor."], terms: [{name:"Sent revision",meaning:"A revision approved by the contractor and explicitly sent to this architect."}], example:"Approve a sent mix-design submittal as noted; the contractor then returns your response.", reality:"This is a workflow preview in the shared browser workspace, not a separate authenticated architect account. Contractor drafts are filtered from this view.", related:["specs","portal"] },
   {
     id: "documents",
     group: "Preconstruction",
@@ -446,7 +447,7 @@ export const pageGuides = [
   },
 ] satisfies {
   id: string;
-  group: "Workspace" | "Preconstruction" | "Operations" | "Subcontractor view";
+  group: "Workspace" | "Preconstruction" | "Operations" | "Subcontractor view" | "Architect view";
   title: string;
   purpose: string;
   steps: string[];

@@ -14,6 +14,7 @@ import { PROJECT_TABS, filterProjects, loadProjects, sampleProjectRecords, saveP
 import { SAMPLE_PROJECT_ID, selectProject, useActiveProject } from "../lib/project-scope";
 import { useSampleRefresh } from "../lib/use-sample-refresh";
 import { SampleDataSettings, SampleRefreshBanner } from "./ui/sample-data-settings";
+import { ArchitectView } from "./ui/architect-view";
 import { ProjectOverview } from "./ui/project-overview";
 import { PageVoiceFeedback } from "./ui/voice-feedback";
 import { modelViewForScreen } from "../lib/model";
@@ -35,7 +36,7 @@ export default function StructorApp(){
  useEffect(()=>{setModelInspection(null);setQuantityFilters(DEFAULT_QUANTITY_FILTERS);},[activeId]);
  const project=projects.find(p=>p.id===activeId)||projects[0];
  const modelView=modelViewForScreen(screen);
- const projectOpen=["project","subcontractor"].includes(screenGroup(screen)?.scope??"global");
+ const projectOpen=["project","subcontractor","architect"].includes(screenGroup(screen)?.scope??"global");
  const notify=useCallback((message:string)=>setToast(message),[]);
  const navigate=useCallback((next:Screen)=>{setScreen(next);setModelInspection(null);setMenuOpen(false);setSearchOpen(false); window.location.hash=next;scrollRef.current?.scrollTo({top:0});},[]);
  useEffect(()=>{const sync=()=>{const value=location.hash.slice(1);const next=resolveScreen(value);if(next){setScreen(next);if(value!==next)history.replaceState(null,"",`#${next}`);}};sync();window.addEventListener("hashchange",sync);const saved=loadProjects();if(saved)setProjects(saved);setReady(true);return()=>window.removeEventListener("hashchange",sync);},[]);
@@ -62,6 +63,7 @@ export default function StructorApp(){
      {screen==="overview"&&<ProjectOverview project={project} navigate={navigate} onNew={()=>setNewProject(true)} cover={<BuildingModel/>}/>}
      {modelView&&<ModelStudio view={modelView} projectId={project.id} projectName={project.name} navigate={navigate} notify={notify} inspection={modelView==="interior"?modelInspection:null}/>}
      {screen==="projects"&&<Projects projects={projects} onNew={()=>setNewProject(true)} onOpen={p=>{selectProject(p.id);navigate("information");}}/>}
+     {screen==="architect"&&<ArchitectView {...props}/>}
      {screen==="information"&&<ProjectInformation project={project} cover={<BuildingModel/>} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Project information saved locally.");}} navigate={navigate}/>}
       {['documents','scopes','drawing-flip','takeoffs','specs','checks','drawings','specifications','revisions'].includes(screen)&&<IntelligenceView {...props} screen={screen} quantityFilters={quantityFilters} onQuantityFilters={setQuantityFilters} onInspectModel={inspectModel}/>}
      {['packages','bidders','ratings','prequalification','portal','budget','allowances','value-engineering','contracts','schedule','turnover'].includes(screen)&&<CommercialView {...props} screen={screen} project={project}/>}
