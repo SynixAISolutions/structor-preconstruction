@@ -21,25 +21,27 @@ import type { Alternate, AttachmentMeta, Submission, SubmittedRevision, Submitte
 
 // Shapes of app/leveling-workspace.tsx (kept structurally identical).
 export type LevelingStatus = "" | "Y" | "N" | "P" | "N/A";
-export type LevelingResponse = { status: LevelingStatus; note: string; adjustment: number; resolved: boolean; adjustmentApproved: boolean };
+export type LevelingResponse = { status: LevelingStatus; note: string; adjustment: number; resolved?: boolean; adjustmentApproved?: boolean };
 export type LevelingScopeItem = { id: string; number: string; description: string; section: string; required: boolean; source: string; estimatorNote: string };
 export type LevelingBidder = { id: string; name: string; contact: string; baseBid: number | null; sourceEligibility?: string; responses: Record<string, LevelingResponse> };
-export type LevelingProject = { name: string; trade: string; budget: number; isDemo: boolean };
+export type LevelingProject = { name: string; trade: string; budget: number; isDemo?: boolean };
 
 /** Where a leveling bidder came from, and what the estimator must see beside the grid. */
 export type BidProvenance = {
+  illustrative?: boolean;
   projectId: string; packageId: string; invitationId: string; bidderId: string; submissionId: string;
   revisionNumber: number; revisionCount: number; formVersion: number; currentFormVersion: number;
   submittedAt: string; submitter: Submitter;
   /** Answers an older bid-form version: shown, never ranked. */
   stale: boolean;
+  superseded?: boolean;
   exclusions: string[]; alternates: Alternate[]; clarifications: string[]; attachments: AttachmentMeta[];
   /** Answers given for items that are no longer in the current bid form (stale revisions only). */
   droppedResponses: { scopeItemId: string; answer: string; note: string }[];
 };
 
 export type LevelingImportIssueCode =
-  | "package-missing" | "package-unpublished" | "no-submitted-bids" | "submission-mismatch" | "revision-missing" | "stale-form" | "unknown-bidder";
+  | "package-missing" | "package-unpublished" | "no-submitted-bids" | "submission-mismatch" | "revision-missing" | "stale-form" | "superseded-revision" | "unknown-bidder";
 export type LevelingImportIssue = { code: LevelingImportIssueCode; message: string; submissionId?: string };
 
 export type LevelingImport = {
@@ -95,6 +97,7 @@ export function buildLevelingImport(input: LevelingImportInput): LevelingImport 
     const invitation = procurement.invitations.find(i => i.id === submission.invitationId);
     if (submission.projectId !== input.projectId) { mismatch(submission, "A submission belongs to a different project and was left out."); continue; }
     if (!invitation) { mismatch(submission, "A submission refers to an invitation that no longer exists and was left out."); continue; }
+    if (invitation.status === "declined") continue;
     if (invitation.packageId !== submission.packageId || invitation.bidderId !== submission.bidderId) { mismatch(submission, "A submission does not match its invitation and was left out."); continue; }
     if (seenInvitations.has(invitation.id)) { mismatch(submission, "A second submission for the same invitation was left out."); continue; }
     seenInvitations.add(invitation.id);
@@ -114,12 +117,16 @@ export function buildLevelingImport(input: LevelingImportInput): LevelingImport 
       const answer = answers.get(item.id);
       return [item.id, { status: answer?.answer ?? "", note: answer?.note ?? "", adjustment: 0, resolved: false, adjustmentApproved: false }];
     }));
+    const superseded = revision.number !== submission.revisions.at(-1)?.number;
+    if (superseded) issues.push({ code: "superseded-revision", submissionId: submission.id, message: `${name}'s revision ${revision.number} is superseded. It is shown for reference and cannot be ranked.` });
     const id = `submission-${submission.id}`;
-    bidders.push({ id, name, contact: revision.submitter.name, baseBid: revision.baseBid, ...(stale ? { sourceEligibility: STALE_SOURCE_ELIGIBILITY } : {}), responses });
+    bidders.push({ id, name, contact: revision.submitter.name, baseBid: revision.baseBid, ...(stale || superseded ? { sourceEligibility: STALE_SOURCE_ELIGIBILITY } : {}), responses });
     provenance[id] = {
+      ...(submission.illustrative ? { illustrative: true } : {}),
       projectId: submission.projectId, packageId: submission.packageId, invitationId: submission.invitationId, bidderId: submission.bidderId, submissionId: submission.id,
       revisionNumber: revision.number, revisionCount: submission.revisions.length, formVersion: revision.formVersion, currentFormVersion: form.version,
       submittedAt: revision.submittedAt, submitter: revision.submitter, stale,
+      ...(superseded ? { superseded: true } : {}),
       exclusions: revision.exclusions, alternates: revision.alternates, clarifications: revision.clarifications, attachments: revision.attachments,
       droppedResponses: revision.responses.filter(r => !formIds.has(r.scopeItemId)).map(r => ({ scopeItemId: r.scopeItemId, answer: r.answer ?? "", note: r.note })),
     };

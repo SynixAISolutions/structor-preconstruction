@@ -80,3 +80,4 @@
 @media (max-width: 520px) { .cost-calculated { align-items: flex-start; flex-direction: column; } .cost-suggestions-modal footer { flex-wrap: wrap; } }
 @media (max-width: 950px) { .submission-load-controls { width: 100%; justify-content: flex-start; flex-wrap: wrap; } .submission-review-columns { grid-template-columns: 1fr; } }
 @media (max-width: 700px) { .submission-load-controls .trade-select { flex: 1 1 150px; } .submission-load-controls .trade-select select { width: 100%; } .submission-source-bar { align-items: flex-start; flex-wrap: wrap; } .submission-source-bar button { width: 100%; margin-left: 27px; } .submission-review-summary { grid-template-columns: 1fr 1fr; } .submission-review-actions { align-items: stretch; flex-direction: column; } .submission-review-actions > span { margin: 0 0 3px; } }
+.legacy-leveling .topbar{flex-shrink:0}

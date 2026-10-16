@@ -99,7 +99,24 @@ drywallAwards = executeSubcontract(drywallAwards, drywallAwardId, at("2026-10-12
 // Concrete keeps its "s-" ids; everything drywall added gets "dw-" ids.
 const withDrywall = stableIds({ submissions: drywallSubmissions, awards: drywallAwards }, "dw");
 
-/** Every submitted bid: District Concrete for concrete; Capitol Wall Systems and Rock Creek Interiors for drywall. */
-export const sampleSubmissions: Submission[] = withDrywall.submissions;
+// These run through the same draft/answer/submit rules as the portal; no leveling-only bids.
+let demoBids = withDrywall.submissions;
+for (const [invitationId, amount] of [["demo-inv-c2", 1685000], ["demo-inv-d1", 416000], ["demo-inv-d2", 398500], ["demo-inv-r1", 532000], ["demo-inv-r2", 508750]] as const) {
+  const invitation = procurement.invitations.find(i => i.id === invitationId)!;
+  const form = procurement.packages.find(p => p.id === invitation.packageId)!.published!;
+  const company = initialBidders.find(b => b.id === invitation.bidderId)!;
+  demoBids = openSubmission(demoBids, procurement, { projectId: project.id, invitationId }, at("2026-10-13", "10:00"));
+  const sid = demoBids.find(s => s.invitationId === invitationId)!.id;
+  for (const item of form.items) {
+    const excluded = invitationId === "demo-inv-c2" && item.id === "scope-6" || invitationId === "demo-inv-d2" && item.id === "scope-23";
+    const partial = invitationId === "demo-inv-r2" && item.id === "scope-22";
+    const notApplicable = item.id === "scope-24";
+    demoBids = setResponse(demoBids, sid, item.id, notApplicable ? "N/A" : excluded ? "N" : partial ? "P" : "Y", notApplicable ? "Illustrative new openings package; no existing hardware to salvage." : excluded ? "Illustrative exclusion; carry this scope as a leveling plug." : partial ? "Illustrative partial scope: membrane included; insulation and flashings excluded." : "", at("2026-10-13", "11:00"));
+  }
+  demoBids = updateDraft(demoBids, sid, { baseBid: amount, exclusions: invitationId.endsWith("2") ? ["Illustrative scope exceptions are listed against the bid form."] : [], clarifications: ["Illustrative sample bid for workflow review; not a real subcontractor offer."] }, at("2026-10-13", "12:00"));
+  demoBids = submitBid(demoBids, procurement, sid, { name: company.name, email: company.email }, at("2026-10-13", "13:00"));
+}
+/** Illustrative submitted bids for Concrete, Drywall, Doors/Hardware and Roofing. */
+export const sampleSubmissions: Submission[] = stableIds(demoBids, "level").map(s => ({ ...s, illustrative: true }));
 /** Concrete to District Concrete and drywall to Capitol Wall Systems: Exhibit A agreed, subcontracts executed. */
 export const sampleAwards: AwardState = withDrywall.awards;

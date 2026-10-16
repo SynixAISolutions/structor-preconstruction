@@ -143,7 +143,7 @@ s = freeze(R.recordRfiResponse(s, proc, rfi.id, { text: "Anchors per new detail 
 rfi = s.rfis[0];
 assert.deepEqual([rfi.status, rfi.response.by, s.notifications.slice(-2).map(n => n.recipient).sort()], ["answered", "Matt D.", ["Safi", "Vijay"]], "Owners of the roofing and openings packages are told");
 s = freeze(R.shareRfiResponse(s, proc, rfi.id, at));
-assert.deepEqual(s.rfis[0].shares.map(x => [x.bidderId, x.packageId]), [["b6", "openings"], ["b1", "thermal"]], "The openings invitee, and Capital Demolition whose question was combined in");
+assert.deepEqual(s.rfis[0].shares.map(x => [x.bidderId, x.packageId]), [["demo-d1", "openings"], ["demo-d2", "openings"], ["demo-r1", "thermal"], ["demo-r2", "thermal"], ["b6", "openings"], ["b1", "thermal"]], "All invited openings/roofing bidders, plus the company whose question was combined in");
 fails(() => R.shareRfiResponse(s, proc, rfi.id, at), "rfi", /already has this answer/);
 s = freeze(R.closeRfi(s, rfi.id, "Safi", at));
 assert.deepEqual([s.rfis[0].status, byNumber(s, "SC-001").status, byNumber(s, "SC-002").resolution.note.startsWith("Answered in RFI-001: Anchors"), byNumber(s, "SC-007").status], ["closed", "resolved", true, "combined"]);

@@ -52,7 +52,7 @@ assert.deepEqual(numbers(F.filterRegions(base, proc, { query: "pv array" })), ["
 assert.deepEqual(numbers(F.filterRegions(base, proc, { query: "masonry" })), ["R-004"], "Searches the trade name");
 assert.deepEqual(numbers(F.filterRegions(base, proc)), ["R-001", "R-002", "R-003", "R-004", "R-005", "R-006", "R-013", "R-014", "R-007", "R-015", "R-016", "R-008", "R-009", "R-010", "R-011", "R-012"], "Page order, then number");
 assert.deepEqual(numbers(F.regionsForScope(base, "scope-4")), ["R-003"]);
-assert.deepEqual(F.unlocatedScopes(base, proc).map(s => s.id), ["scope-3", "scope-6", "scope-8", "scope-9", "scope-10"]);
+assert.deepEqual(F.unlocatedScopes(base, proc).map(s => s.id), ["scope-3", "scope-6", "scope-8", "scope-9", "scope-10", "scope-22", "scope-23", "scope-24"], "Illustrative leveling-only scopes have no fabricated drawing regions");
 assert.deepEqual(F.tradeLegend(base, proc, "pg-civ0102"), [{ packageId: "demolition", name: "Demolition", division: "02", regions: 3 }]);
 assert.deepEqual(F.tradeLegend(base, proc, "pg-a1.1").map(t => t.packageId), ["masonry", "drywall", "flooring"], "By division, then name");
 assert.deepEqual(F.flipSummary(base), { regions: 16, pendingReview: 9, approved: 7, corrected: 1, withoutScope: 1 });
@@ -142,7 +142,7 @@ assert.deepEqual(F.corrections(s).map(c => [c.number, c.from, c.to]), [["R-006",
 const keepsAll = F.reassignRegion(F.linkScope(s, allTrades, r5, "scope-3", "Safi", at), allTrades, r5, "flooring", "Safi", "", at);
 assert.deepEqual(byNumber(keepsAll, "R-005").scopeIds, ["scope-3"], "All-trades items stay linked");
 assert.deepEqual(byNumber(keepsAll, "R-005").history.at(-1).unlinked, ["scope-12"]);
-assert.deepEqual(F.unlocatedScopes(s, proc).map(x => x.id), ["scope-6", "scope-8", "scope-10", "scope-13"], "R-006's old scope item is unlocated again; scope-3 and scope-9 now are");
+assert.deepEqual(F.unlocatedScopes(s, proc).map(x => x.id), ["scope-6", "scope-8", "scope-10", "scope-13", "scope-22", "scope-23", "scope-24"], "Moved scope and illustrative leveling items stay unlocated");
 
 // Notes.
 const noted = F.editRegionNotes(s, r5, "  Check wall type 2 height. ", "Safi", at);
