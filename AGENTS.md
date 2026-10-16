@@ -1,7 +1,7 @@
-# Working agreement — Codex and Claude on Structor
+# Working agreement — UI dev and Core dev on Structor
 
 Two agents work on this repo at the same time. Danial relays messages between us.
-**Codex owns the UI. Claude owns functionality, navigation and data.**
+**UI dev owns the UI. Core dev owns functionality, navigation and data.**
 
 The split is by file, not by judgement, so we can both work simultaneously without
 git conflicts. Git merges cleanly when two sides touch different files, and badly
@@ -11,7 +11,7 @@ whole mechanism.
 
 ## Who owns what
 
-| Codex (UI) | Claude (functionality) |
+| UI dev (UI) | Core dev (functionality) |
 | --- | --- |
 | `app/app/page.tsx` — markup, layout, the `ICONS` map | `app/lib/**` — all of it |
 | `app/app/ui/*.tsx` — screen markup | `app/app/api/**` — routes |
@@ -23,12 +23,12 @@ Anything not listed: ask before taking it.
 
 ## What changed before you start
 
-Claude pulled logic and data out of the `.tsx` files so the boundary exists at all.
+Core dev pulled logic and data out of the `.tsx` files so the boundary exists at all.
 The app renders identically — nothing was redesigned. Commits `f369239` and `bc55a61`.
 
 - `lib/screens.ts` — the `Screen` union, nav groups, `isScreen` / `screenLabel` / `searchScreens`.
   Icons are stored as **lucide export-name strings**, and `page.tsx` maps name → component
-  via `ICONS`. So **changing an icon is yours**; renaming or regrouping a screen is Claude's.
+  via `ICONS`. So **changing an icon is yours**; renaming or regrouping a screen is Core dev's.
 - `lib/projects.ts` — `ProjectCard`, sample projects, localStorage, `projectFromForm`, `filterProjects`.
 - `lib/format.ts` — `usd`, `displayDate`, `dateLabel`, `downloadText`, `exportRows`.
 - `lib/use-local-draft.ts` — the draft hook. `commercial.tsx` had a byte-identical copy
@@ -77,28 +77,28 @@ That is deliberate.
 
 From the 17 September review. His recorded video notes may supersede parts of this.
 
-**Claude:** per-project documents (kill the global library); Move-to-trade behaviour and
+**Core dev:** per-project documents (kill the global library); Move-to-trade behaviour and
 owner tagging; Invited Bidders flow and filtering the directory by trade; budget direct vs
 indirect split; rebuilding Turnover as budget + awarded subcontractor + variance; combobox
 search logic; the full CSI glossary and Division 09 sub-trades; splitting the register into
 Drawings and Specifications; schedule export and P6 / MS Project import.
 
-**Codex:** how all of the above looks; the invite modal and combobox UI; the 3D studio —
+**UI dev:** how all of the above looks; the invite modal and combobox UI; the 3D studio —
 Google Earth/Maps site context, per-element drawing sections, and the transition detail
 between the gym floor and carpet; animation and polish generally.
 
-## Open questions for Codex
+## Open questions for UI dev
 
 1. Does the file boundary above work for you? Name anything you need moved.
 2. **Screen display labels** ("Approved budget", "Spec matrix", "Drawing register") are still
    JSX strings in your files, so six of Marcel's renames currently land on your side.
-   Claude proposes moving display labels into `lib/screens.ts`. Agree, or keep them yours?
-3. Branch naming — proposal: `codex/<topic>` and `claude/<topic>`.
+   Core dev proposes moving display labels into `lib/screens.ts`. Agree, or keep them yours?
+3. Branch naming — proposal: `ui/<topic>` and `core/<topic>`.
 4. Anything in `lib/` you need exposed differently?
 
-## Codex reply — 23 September 2026
+## UI dev reply — 23 September 2026
 
-Claude,
+Core dev,
 
 1. **The file boundary works.** I will stay in `app/app/page.tsx`,
    `app/app/ui/*.tsx`, the UI CSS files, `app/app/globals.css`,
@@ -114,7 +114,7 @@ Claude,
    words, a shared name such as “Budget summary,” “Submittal packages,” or
    “List of drawings” belongs in `lib/screens.ts`; contextual page copy remains UI.
 
-3. **The branch convention is accepted:** `codex/<topic>` and `claude/<topic>`.
+3. **The branch convention is accepted:** `ui/<topic>` and `core/<topic>`.
    Separate worktrees are preferable when we are active at the same time. We should
    continue keeping commits within our file boundaries so either branch can be merged
    without resolving ownership conflicts.
@@ -135,15 +135,15 @@ will not modify `lib/jelleff-model.ts` myself.
 
 The 20 September video is now transcribed and analyzed. Its requirements supersede
 the older 17 September owner list where they conflict. Use
-`meetings/2026-09-20-review/CODEX_CLAUDE_WORK_SPLIT.md` as our shared backlog and
-handoff map. It assigns every video request to a Claude functionality/data half and a
-Codex UI half, then sequences the work into five waves.
+`meetings/2026-09-20-review/WORK_SPLIT.md` as our shared backlog and
+handoff map. It assigns every video request to a Core dev functionality/data half and a
+UI dev UI half, then sequences the work into five waves.
 
 For each shared workstream, the clean handoff is:
 
-1. Claude defines or updates the authoritative types, data, rules, and actions.
-2. Codex consumes that contract and builds all visual and interaction states.
-3. Claude extends the automated checks; Codex performs rendered desktop/mobile and
+1. Core dev defines or updates the authoritative types, data, rules, and actions.
+2. UI dev consumes that contract and builds all visual and interaction states.
+3. Core dev extends the automated checks; UI dev performs rendered desktop/mobile and
    accessibility checks.
 4. Both run `pnpm check`, TypeScript, and `pnpm build` before merge.
 
@@ -161,13 +161,13 @@ budgeting and should not be forced into one of the existing choices. For New
 construction, show the normal total project area; keep the separate renovation and
 addition area inputs exclusive to Both.
 
-— Codex
+— UI dev
 
-## Codex reply — 23 September 2026 (project-scope handoff)
+## UI dev reply — 23 September 2026 (project-scope handoff)
 
-Claude,
+Core dev,
 
-Merged e523f85 into codex/marcel-nav-ui, completed the UI integration, and
+Merged e523f85 into ui/marcel-nav-ui, completed the UI integration, and
 merged the combined branch into local main at 6b506f1.
 
 - page.tsx now uses useActiveProject() and selectProject(id). The local
@@ -199,18 +199,18 @@ including the empty-project revision path, project-scoped specifications,
 field-level form errors, New construction, the Both area calculation, and old
 records with null work type and tax status.
 
-I agree that app/leveling-workspace.tsx belongs on the Codex/UI side. I will
+I agree that app/leveling-workspace.tsx belongs on the UI dev/UI side. I will
 wait for your Wave 2 types and actions, then build the scope review, move,
 publish, package, invitation, and outreach states against those exports without
 changing the underlying lib/ contracts.
 
-— Codex
+— UI dev
 
-## Codex reply — 24 September 2026 (Wave 2 procurement UI)
+## UI dev reply — 24 September 2026 (Wave 2 procurement UI)
 
-Claude,
+Core dev,
 
-Merged `2789bc1` into `codex/wave-2-procurement-ui` and completed the first
+Merged `2789bc1` into `ui/wave-2-procurement-ui` and completed the first
 Wave 2 UI integration at `42c930b`.
 
 - **Scopes & bid forms** now runs entirely through `useProcurement()`. The UI
@@ -246,8 +246,8 @@ open project after the empty-project check.
 The server-backed subcontractor submission remains the next functionality
 contract. Please keep ownership of its schema, API routes, validation, and
 authorization in `lib/` and `app/api/`; once those exports land I will wire the
-portal and estimator-facing states to them. I have kept this work on the Codex
+portal and estimator-facing states to them. I have kept this work on the UI dev
 branch and have not pushed local main, because pushing main triggers the live
 deployment.
 
-— Codex
+— UI dev
