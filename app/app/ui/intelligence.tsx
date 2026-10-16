@@ -17,6 +17,7 @@ import { type ModelQuantityProps } from "./model-quantity-takeoffs";
 import { TradeEstimatesView } from "./trade-estimates";
 import { ProjectFilesScreen } from "./project-files-screen";
 import { StoredDrawingRegister, StoredSpecRegister } from "./document-registers";
+import { RevisionCompare } from "./revision-compare";
 import { useProjectDocuments } from "../../lib/project-files-client";
 import { drawingRegister, findManual } from "../../lib/project-files";
 import "./intelligence.css";
@@ -113,7 +114,12 @@ function SampleDrawingsScreen({ projectName, notify, navigate }: ViewProps) {
   </div>;
 }
 
-function RevisionsScreen({ projectName, notify, navigate }: ViewProps) {
+function RevisionsScreen(props: ViewProps) {
+  const { documents } = useProjectDocuments();
+  return documents.some(d => d.kind === "drawings") ? <RevisionCompare {...props} documents={documents}/> : <SampleRevisionsScreen {...props}/>;
+}
+
+function SampleRevisionsScreen({ projectName, notify, navigate }: ViewProps) {
   const [changes, setChanges] = useLocalDraft("drawing-changes", initialChanges);
   const [sheet, setSheet] = useState("A-101 · First floor plan");
   const [leftRevision, setLeftRevision] = useState("Rev 01 · Aug 21, 2026");

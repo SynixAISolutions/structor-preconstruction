@@ -141,13 +141,15 @@ async function readTitleBlocks(file: File, sheets: StoredSheet[], onProgress: (d
           const view = page.getViewport({ scale: 1 });
           const scale = 2200 / Math.max(view.width, view.height);
           const viewport = page.getViewport({ scale });
-          const strip = { x: Math.floor(viewport.width * 0.915), y: Math.floor(viewport.height * 0.5) };
-          const canvas = document.createElement("canvas");
-          canvas.width = Math.ceil(viewport.width) - strip.x; canvas.height = Math.ceil(viewport.height) - strip.y;
-          const context = canvas.getContext("2d")!;
-          context.translate(-strip.x, -strip.y);
-          await page.render({ canvas, canvasContext: context, viewport }).promise;
+          // Render the whole sheet, then copy out the title-block strip (right 8.5%, lower half).
+          const full = document.createElement("canvas");
+          full.width = Math.ceil(viewport.width); full.height = Math.ceil(viewport.height);
+          await page.render({ canvas: full, canvasContext: full.getContext("2d")!, viewport }).promise;
           page.cleanup();
+          const strip = { x: Math.floor(full.width * 0.915), y: Math.floor(full.height * 0.5) };
+          const canvas = document.createElement("canvas");
+          canvas.width = full.width - strip.x; canvas.height = full.height - strip.y;
+          canvas.getContext("2d")!.drawImage(full, strip.x, strip.y, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
           const read = await readTitleBlock(canvas.toDataURL("image/jpeg", 0.8));
           if (read.sheet) Object.assign(sheet, { sheet: read.sheet, title: read.title, date: read.date });
         } catch { /* keep what the text layer gave; the sheet can be named in List of drawings */ }

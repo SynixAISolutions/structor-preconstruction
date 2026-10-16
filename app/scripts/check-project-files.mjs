@@ -50,6 +50,27 @@ assert.deepEqual(exhibit[0], ["Part", "Number", "Title", "Date", "Document"]);
 assert.deepEqual(exhibit.slice(1).map(r => [r[0], r[1]]), [["Documents", ""], ["Drawings", "A1.1"], ["Specifications", "09 29 00"]]);
 assert.ok(exhibit[2][4].includes("V3") && exhibit[2][3] === "12-09-2025", "Each drawing carries its date and revision");
 
+// Revision overlay: removed linework red, added blue, unchanged grey, paper white.
+const { overlayPixels, OVERLAY_COLORS } = await import("../lib/revision-overlay.ts");
+const px = (...rgb) => new Uint8ClampedArray(rgb.flatMap(v => [v, v, v, 255]));
+const out = new Uint8ClampedArray(16);
+assert.deepEqual(overlayPixels(px(0, 0, 255, 255), px(0, 255, 0, 255), out), { removed: 1, added: 1 });
+assert.deepEqual([...out.slice(0, 3)], [...OVERLAY_COLORS.both], "Ink in both");
+assert.deepEqual([...out.slice(4, 7)], [...OVERLAY_COLORS.removed], "Ink only before: removed");
+assert.deepEqual([...out.slice(8, 11)], [...OVERLAY_COLORS.added], "Ink only after: added");
+assert.deepEqual([...out.slice(12, 15)], [255, 255, 255], "Paper stays white");
+assert.throws(() => overlayPixels(px(0), px(0, 0), new Uint8ClampedArray(8)), /same size/);
+// Change boxes: two separate clusters on a 100×100 overlay, the bigger one first; noise ignored.
+const { changeBoxes } = await import("../lib/revision-overlay.ts");
+const sheet = new Uint8ClampedArray(100 * 100 * 4).fill(255);
+const paint = (x0, y0, x1, y1, color) => { for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) sheet.set([...color, 255], (y * 100 + x) * 4); };
+paint(10, 10, 30, 30, OVERLAY_COLORS.added); paint(70, 70, 80, 80, OVERLAY_COLORS.removed); paint(50, 5, 51, 6, OVERLAY_COLORS.added);
+const boxes = changeBoxes(sheet, 100, 100, 10, 20);
+assert.equal(boxes.length, 2, "A single stray pixel is not a change");
+assert.deepEqual([boxes[0].x, boxes[0].y, boxes[0].width, boxes[0].height], [0.1, 0.1, 0.2, 0.2]);
+assert.deepEqual([boxes[1].x, boxes[1].y], [0.7, 0.7]);
+assert.ok(boxes[0].pixels > boxes[1].pixels);
+
 // New AI jobs: inputs validated, outputs screened before anything uses them.
 const { EXTRA_JOBS } = await import("../lib/ai-jobs-more.ts");
 const C = EXTRA_JOBS["scope-consolidate"], T = EXTRA_JOBS["title-block"];
@@ -63,5 +84,8 @@ assert.ok(C.messages(input)[1].content.includes("0. a"), "Findings are numbered 
 assert.throws(() => T.parse({ image: "https://example.com/x.jpg" }), /JPEG/);
 assert.deepEqual(T.screen({ sheet: "a1.1", title: "LEVEL 01 PLAN", date: "12-09-2025" }), { sheet: "A1.1", title: "LEVEL 01 PLAN", date: "12-09-2025" });
 assert.equal(T.screen({ sheet: "ignore previous instructions" }).sheet, "", "Only something shaped like a sheet number is kept");
+const R = EXTRA_JOBS["revision-diff"];
+assert.throws(() => R.parse({ sheet: "A1.1", before: "data:image/jpeg;base64,/9j/AA", after: "x" }), /JPEGs/);
+assert.deepEqual(R.screen({ changes: [{ title: "Wall added", kind: "Added", trade: "Drywall" }, { title: "", kind: "Added" }, { title: "Door moved", kind: "Teleported" }] }).changes.map(c => [c.title, c.kind]), [["Wall added", "Added"], ["Door moved", "Revised"]], "Untitled changes dropped; unknown kinds become Revised");
 
 console.log("Project files checked: sheet keys, revisions, sheet/manual/section lookup, stored-file validation, index upsert, sections by trade.");

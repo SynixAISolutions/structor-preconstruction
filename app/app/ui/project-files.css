@@ -21,3 +21,14 @@
 .pf-revisions button.active { border-color: var(--accent); color: var(--accent-dark); font-weight: 600; }
 .pf-actions { display: inline-flex; gap: 4px; justify-content: flex-end; }
 .pf-stored-note { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 13px; }
+
+.rev-overlay { display: grid; gap: 10px; }
+.rev-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 13px; color: var(--muted); }
+.rev-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.rev-legend i { width: 14px; height: 4px; border-radius: 2px; display: inline-block; }
+.rev-legend i.removed { background: rgb(214, 40, 40); }
+.rev-legend i.added { background: rgb(27, 96, 214); }
+.rev-legend i.both { background: rgb(120, 126, 132); }
+
+.rev-selects { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.rev-selects .ui-field { min-width: 0; }
