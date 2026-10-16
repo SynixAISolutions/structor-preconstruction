@@ -72,7 +72,7 @@ function sheetFromItems(items: TextItem[], width: number, height: number): strin
 
 async function readPages(file: File, kind: StoredDocument["kind"], onPage: (done: number, total: number) => void) {
   const pdfjs = await import("pdfjs-dist");
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+  pdfjs.GlobalWorkerOptions.workerSrc = (await import("./pdf-worker")).pdfWorkerSrc();
   const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
   const doc = await task.promise;
   const pages: PageText[] = [], sheets: StoredSheet[] = [];
@@ -127,7 +127,7 @@ export async function uploadProjectPdf(args: { projectId: string; file: File; ca
 /** Reads every sheet's title block (right-hand strip, lower half) with the AI, six at a time. */
 async function readTitleBlocks(file: File, sheets: StoredSheet[], onProgress: (done: number, total: number) => void): Promise<StoredSheet[]> {
   const pdfjs = await import("pdfjs-dist");
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+  pdfjs.GlobalWorkerOptions.workerSrc = (await import("./pdf-worker")).pdfWorkerSrc();
   const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
   const pdf = await task.promise;
   const out = sheets.map(s => ({ ...s }));
@@ -192,7 +192,7 @@ export function openStoredPdf(doc: StoredDocument): Promise<PdfDoc> {
   if (opened.has(doc.id)) return opened.get(doc.id)!;
   const promise = (async () => {
     const pdfjs = await import("pdfjs-dist");
-    pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+    pdfjs.GlobalWorkerOptions.workerSrc = (await import("./pdf-worker")).pdfWorkerSrc();
     const transport = new pdfjs.PDFDataRangeTransport(doc.size, null);
     const url = `/api/project-files/source?project=${encodeURIComponent(doc.projectId)}&doc=${encodeURIComponent(doc.id)}`;
     transport.requestDataRange = (begin: number, end: number) => {
