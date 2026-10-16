@@ -3,7 +3,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { ArrowRight, ArrowUpRight, Box, FileStack, FileText, HardHat, MapPin, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import {
-  CERTIFICATION_PROGRAMS, ESTIMATE_STAGES, estimateStageLabel, PROJECT_FORM_FIELDS, PROJECT_TYPES, TAX_STATUSES, WORK_TYPES,
+  CERTIFICATION_PROGRAMS, PROJECT_ROLES, ESTIMATE_STAGES, estimateStageLabel, PROJECT_FORM_FIELDS, PROJECT_TYPES, TAX_STATUSES, WORK_TYPES,
   parseProjectForm, squareFeetLabel, type Project, type ProjectFormErrors, type WorkType,
 } from "../../lib/projects";
 import { displayDate } from "../../lib/format";
@@ -77,7 +77,7 @@ export function ProjectForm({ project, onSave, onCancel }: { project?: Project; 
 
     <section className="project-form-section">
       <div className="project-form-section-head"><div><h3>Project team</h3><p>Record each team member and their project role.</p></div><Button onClick={() => setTeam(rows => [...rows, { name: "", role: "" }])}><Plus size={14}/>Add person</Button></div>
-      <div className="project-repeat-list">{team.map((member, index) => <div className="project-repeat-row team" key={index}><label className="ui-field">Name<input name={f.teamName} value={member.name} onChange={e => setTeam(rows => rows.map((row, i) => i === index ? { ...row, name: e.target.value } : row))}/></label><label className="ui-field">Role<input name={f.teamRole} value={member.role} onChange={e => setTeam(rows => rows.map((row, i) => i === index ? { ...row, role: e.target.value } : row))}/></label><button type="button" className="ui-icon-btn" aria-label={"Remove team member " + (index + 1)} onClick={() => setTeam(rows => rows.filter((_, i) => i !== index))}><Trash2 size={15}/></button></div>)}</div>
+      <div className="project-repeat-list">{team.map((member, index) => <div className="project-repeat-row team" key={index}><label className="ui-field">Name<input name={f.teamName} value={member.name} onChange={e => setTeam(rows => rows.map((row, i) => i === index ? { ...row, name: e.target.value } : row))}/></label><label className="ui-field">Role<RoleSelect name={f.teamRole} value={member.role} onChange={role => setTeam(rows => rows.map((row, i) => i === index ? { ...row, role } : row))}/></label><button type="button" className="ui-icon-btn" aria-label={"Remove team member " + (index + 1)} onClick={() => setTeam(rows => rows.filter((_, i) => i !== index))}><Trash2 size={15}/></button></div>)}</div>
     </section>
 
     <section className="project-form-section">
@@ -88,8 +88,24 @@ export function ProjectForm({ project, onSave, onCancel }: { project?: Project; 
   </form>;
 }
 
+/** Construction roles as a list; a role saved before the list existed stays selectable. */
+function RoleSelect({ name, value, onChange }: { name?: string; value: string; onChange: (role: string) => void }) {
+  const roles = value && !PROJECT_ROLES.includes(value) ? [value, ...PROJECT_ROLES] : PROJECT_ROLES;
+  return <select name={name} value={value} onChange={e => onChange(e.target.value)}><option value="">Choose a role</option>{roles.map(role => <option key={role}>{role}</option>)}</select>;
+}
+
+/** Marcel, 15 Oct: add a team member from Project information without opening the whole form. */
+function AddMemberDialog({ onAdd, onClose }: { onAdd: (member: { name: string; role: string }) => void; onClose: () => void }) {
+  const [name, setName] = useState(""), [role, setRole] = useState("");
+  return <Modal title="Add team member" subtitle="Add a person and their role on this project." onClose={onClose}><form onSubmit={e => { e.preventDefault(); if (name.trim()) onAdd({ name: name.trim(), role }); }}>
+    <div className="ui-form-grid"><label className="ui-field">Name<input autoFocus required value={name} onChange={e => setName(e.target.value)}/></label><label className="ui-field">Role<RoleSelect value={role} onChange={setRole}/></label></div>
+    <div className="ui-form-actions"><Button onClick={onClose}>Cancel</Button><Button type="submit" variant="primary">Add member</Button></div>
+  </form></Modal>;
+}
+
 export function ProjectInformation({ project, onSave, navigate, cover }: { project: Project; onSave: (project: Project) => void; navigate: (screen: Screen) => void; cover: ReactNode }) {
   const [editing, setEditing] = useState(false);
+  const [adding, setAdding] = useState(false);
   const workType = WORK_TYPES.find(option => option.value === project.workType)?.label ?? "Not recorded";
   const taxStatus = TAX_STATUSES.find(option => option.value === project.taxStatus)?.label ?? "Not recorded";
   const details = [
@@ -102,10 +118,11 @@ export function ProjectInformation({ project, onSave, navigate, cover }: { proje
   return <><PageHeader eyebrow="PROJECT INFORMATION" title={project.name} description="The shared source of project context for your team and trade partners." actions={<><Button onClick={() => navigate("portal")}><HardHat size={16}/>Subcontractor view</Button><Button variant="primary" onClick={() => setEditing(true)}>Edit information</Button></>}/>
     <div className="info-cover">{cover}<div><Badge tone="green">{project.status}</Badge><h2>{project.type}</h2><p><MapPin size={16}/>{project.location}</p></div></div>
     <div className="ui-two-col"><Panel title="Project brief" subtitle="Visible to the project team and invited partners"><div className="info-body"><p>{project.description || "No project brief has been recorded."}</p><dl className="info-grid">{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></div></Panel>
-      <div className="info-side"><Panel title="Project team"><div className="team-list">{project.team.length ? project.team.map(member => <div key={member.name + "-" + member.role}><span className="user-avatar">{member.name.split(/\s+/).map(part => part[0]).join("").slice(0, 2).toUpperCase()}</span><div><strong>{member.name}</strong><small>{member.role || "Role not recorded"}</small></div></div>) : <p className="project-empty-note">No project team recorded.</p>}</div></Panel>
+      <div className="info-side"><Panel title="Project team" action={<Button onClick={() => setAdding(true)}><Plus size={14}/>Add member</Button>}><div className="team-list">{project.team.length ? project.team.map((member, index) => <div key={member.name + "-" + member.role + "-" + index}><span className="user-avatar">{member.name.split(/\s+/).map(part => part[0]).join("").slice(0, 2).toUpperCase()}</span><div><strong>{member.name}</strong><small>{member.role || "Role not recorded"}</small></div><button type="button" className="ui-icon-btn" aria-label={`Remove ${member.name}`} onClick={() => onSave({ ...project, team: project.team.filter((_, i) => i !== index) })}><Trash2 size={14}/></button></div>) : <p className="project-empty-note">No project team recorded.</p>}</div></Panel>
         <Panel title="Internal estimate"><div className="internal-value"><span><ShieldCheck size={15}/>TEAM VIEW</span><strong>{usd(project.value)}</strong><p>Planning value for this project.</p><Button onClick={() => navigate("budget")}>Budget breakdown<ArrowRight size={15}/></Button></div></Panel></div>
     </div>
     <div className="info-links">{[[screenLabel("documents"), "Drawings, manuals and reports", "documents", FileStack], ["RFP & bid requirements", "Owner requirements and key dates", "documents", FileText], [screenLabel("packages"), "Trade scopes and assigned owners", "packages", Box]].map(([title, description, destination, Icon]) => { const LinkIcon = Icon as typeof Box; return <button key={String(title)} onClick={() => navigate(destination as Screen)}><LinkIcon size={24}/><div><strong>{String(title)}</strong><small>{String(description)}</small></div><ArrowUpRight size={18}/></button>; })}</div>
+    {adding && <AddMemberDialog onClose={() => setAdding(false)} onAdd={member => { onSave({ ...project, team: [...project.team, member] }); setAdding(false); }}/>}
     {editing && <Modal title="Edit project information" subtitle="Update the project record used across the workspace." wide onClose={() => setEditing(false)}><ProjectForm project={project} onCancel={() => setEditing(false)} onSave={updated => { onSave(updated); setEditing(false); }}/></Modal>}
   </>;
 }

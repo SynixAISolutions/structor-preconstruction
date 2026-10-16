@@ -49,6 +49,8 @@ export const TAX_STATUSES: { value: TaxStatus; label: string }[] = [
 ];
 /** Suggestions only; the form may submit any program name. */
 export const CERTIFICATION_PROGRAMS = ["CBE", "MBE", "WBE", "SBE", "First Source"];
+/** Roles on a contractor's project team (Rawad, 15 Oct: "the roles in this industry are the drop-down"). */
+export const PROJECT_ROLES = ["Project executive", "Senior project manager", "Project manager", "Assistant project manager", "Preconstruction manager", "Chief estimator", "Senior estimator", "Estimator", "Project engineer", "General superintendent", "Superintendent", "Assistant superintendent", "MEP coordinator", "Safety manager", "Contracts administrator", "Project accountant", "Owner's representative", "Architect", "Engineer of record"];
 
 /** Names the create/edit form must use for its inputs. Repeated fields use FormData.getAll. */
 export const PROJECT_FORM_FIELDS = {
