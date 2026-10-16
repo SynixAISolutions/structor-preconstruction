@@ -1,25 +1,17 @@
 "use client";
 
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { ArrowRight, Building2, Check, Clock3, Download, Pencil, Plus, Star, UserCheck } from "lucide-react";
 import { Badge, Button, Empty, ExportButton, Modal, PageHeader, Panel, PreviewNote, SearchBox, Stats, Tabs, downloadText, exportRows, type Screen, type ViewProps } from "./shared";
 import "./commercial.css";
 import { useLocalDraft } from "../../lib/use-local-draft";
 import { screenLabel } from "../../lib/screens";
 import { trades, initialBidders, type Bidder } from "../../lib/data/commercial";
-import { sampleFiles } from "../../lib/data/preconstruction";
-import { deriveTodo, type LevelingSnapshot } from "../../lib/todo";
 import type { Project } from "../../lib/projects";
-import type { BidProvenance, LevelingBidder, LevelingScopeItem } from "../../lib/leveling-import";
-import { loadWorkspace } from "../../lib/workspace-storage";
-import { useSubmissions } from "../../lib/use-submissions";
-import { useBudget } from "../../lib/use-budget";
-import { useAward } from "../../lib/use-award";
 import { ProcurementPackagesView } from "./procurement";
 import { SubmissionPortalView } from "./submission-ui";
 import { ScheduleView } from "./schedule-ui";
-import { scheduleRows } from "../../lib/schedule";
-import { useSchedule } from "../../lib/use-schedule";
+import { useTodoSummary } from "../../lib/use-todo-summary";
 import { AllowancesView, BudgetView } from "./budget-ui";
 import { AwardView } from "./award-ui";
 import { ValueEngineeringView } from "./value-engineering-ui";
@@ -50,26 +42,8 @@ function PrequalificationView({ navigate }: ViewProps) {
 }
 
 function TurnoverView({ notify, navigate, projectName, project }: ViewProps & { project: Project }) {
-  const { procurement, submissions } = useSubmissions();
-  const { state: budget } = useBudget();
-  const { state: awards } = useAward();
-  const [documents] = useLocalDraft("library", sampleFiles);
-  const [provenance] = useLocalDraft<Record<string, BidProvenance>>("leveling-submission-provenance", {});
-  const [loadedPackageId] = useLocalDraft("leveling-submission-package", "");
-  const [leveling, setLeveling] = useState<LevelingSnapshot | null>(null);
   const [filter, setFilter] = useState("My actions");
-
-  useEffect(() => {
-    let current = true;
-    void loadWorkspace<unknown, LevelingScopeItem, LevelingBidder>()
-      .then(saved => { if (current) setLeveling(saved ? { packageId: loadedPackageId || null, items: saved.items, bidders: saved.bidders, provenance } : null); })
-      .catch(() => { if (current) setLeveling(null); });
-    return () => { current = false; };
-  }, [loadedPackageId, project.id, provenance]);
-
-  const { state: schedulePlan } = useSchedule();
-  const now = new Date(), today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const summary = deriveTodo({ project, documents, procurement, submissions, leveling, budget, awards, schedule: { rows: scheduleRows(schedulePlan, today), today } });
+  const summary = useTodoSummary(project);
   const teamActions = summary.tasks.filter(task => task.status === "todo").length;
   const waiting = summary.tasks.filter(task => task.status === "waiting").length;
   const visible = summary.tasks.filter(task => filter === "All work" || (filter === "My actions" ? task.status === "todo" : task.status === "waiting"));
