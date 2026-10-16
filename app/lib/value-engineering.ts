@@ -42,6 +42,8 @@ export type VeIdea = {
   status: VeStatus;
   pricing: VePricingRequest[];
   decision: { outcome: "accepted" | "rejected"; by: string; at: string; note: string; acceptedImpact: number | null } | null;
+  /** Product data a subcontractor attached (a stored project file), for the owner to review (Marcel, 15 Oct). */
+  attachment?: { docId: string; name: string } | null;
   createdAt: string; createdBy: string; updatedAt: string;
 };
 
@@ -60,7 +62,7 @@ export type VeState = {
 
 export const EMPTY_VE: VeState = { target: { ownerBudget: null, reduction: null }, markupFactor: 1, lastNumber: 0, ideas: [], notifications: [] };
 
-export type VeIdeaInput = { description: string; category?: string; csiCode?: string | null; packageId?: string | null; source?: string; origin?: VeOrigin; costImpact: number; notes?: string };
+export type VeIdeaInput = { description: string; category?: string; csiCode?: string | null; packageId?: string | null; source?: string; origin?: VeOrigin; costImpact: number; notes?: string; attachment?: { docId: string; name: string } | null };
 export type VeErrors = Partial<Record<"description" | "costImpact" | "ownerBudget" | "reduction" | "markupFactor" | "bidders" | "quote" | "decision" | "idea", string>>;
 
 export class VeRuleError extends Error {
@@ -119,6 +121,7 @@ export function addVeIdea(state: VeState, input: VeIdeaInput, by: string, at = n
     id: newId(), number: nextVeNumber(state), category: input.category?.trim() ?? "", description: input.description.trim(),
     csiCode: input.csiCode?.trim() || null, packageId: input.packageId || null, source: input.source?.trim() ?? "", origin: input.origin ?? "team",
     costImpact: input.costImpact, notes: input.notes?.trim() ?? "", status: "idea", pricing: [], decision: null, createdAt: at, createdBy: by, updatedAt: at,
+    ...(input.attachment?.docId ? { attachment: { docId: input.attachment.docId, name: input.attachment.name } } : {}),
   };
   return { ...state, lastNumber: lastNumber(state) + 1, ideas: [...state.ideas, idea] };
 }
@@ -249,4 +252,14 @@ export function veSummary(state: VeState, estimate: number | null): VeSummary {
     projectedEstimate: estimate === null ? null : (cents(estimate) + cents(acceptedWeighted)) / 100,
     counts,
   };
+}
+
+/**
+ * Accepted VE by trade package (Marcel, 15 Oct: once the owner accepts, it "translates into bid
+ * leveling … and into the budget summary for the lowest sub"). Signed: negative = saving.
+ */
+export function acceptedVeByPackage(state: VeState): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const idea of state.ideas) if (idea.decision?.outcome === "accepted" && idea.packageId) out[idea.packageId] = Math.round(((out[idea.packageId] ?? 0) + (idea.decision.acceptedImpact ?? idea.costImpact)) * 100) / 100;
+  return out;
 }

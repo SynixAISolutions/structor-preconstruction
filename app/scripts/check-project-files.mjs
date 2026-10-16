@@ -82,6 +82,16 @@ assert.equal(X.exhibitDocument([doc("x", "x", 1, { name: "Exhibitions.pdf" })], 
 const status = X.exhibitStatus([exE], true, false);
 assert.deepEqual(status.map(s => [s.letter, s.ready]), [["A", true], ["B", false], ["C", false], ["D", false], ["E", true], ["F", false], ["G", false], ["H", false], ["I", false]]);
 
+// Accepted VE lowers the lowest sub's number for its trade; ideas still open or rejected do not.
+const VE = await import("../lib/value-engineering.ts");
+let ve = VE.addVeIdea(VE.EMPTY_VE, { description: "Equal ceiling tile", packageId: "drywall", costImpact: -40000, origin: "subcontractor", attachment: { docId: "d1", name: "Product data.pdf" } }, "Capitol");
+ve = VE.addVeIdea(ve, { description: "Thinner board", packageId: "drywall", costImpact: -5000 }, "Safi");
+ve = VE.addVeIdea(ve, { description: "No canopy", packageId: "steel", costImpact: -9000 }, "Safi");
+ve = VE.decideVeIdea(ve, ve.ideas[0].id, "accepted", { acceptedImpact: -35000, note: "Owner accepted" }, "Marcel");
+ve = VE.decideVeIdea(ve, ve.ideas[2].id, "rejected", { note: "Owner wants the canopy" }, "Marcel");
+assert.deepEqual(VE.acceptedVeByPackage(ve), { drywall: -35000 }, "The accepted amount, not the estimate; rejected and open ideas count for nothing");
+assert.deepEqual(ve.ideas[0].attachment, { docId: "d1", name: "Product data.pdf" }, "A subcontractor's product data stays with the idea");
+
 // New AI jobs: inputs validated, outputs screened before anything uses them.
 const { EXTRA_JOBS } = await import("../lib/ai-jobs-more.ts");
 const C = EXTRA_JOBS["scope-consolidate"], T = EXTRA_JOBS["title-block"];
@@ -100,6 +110,11 @@ const scopeIn = K.parse({ trade: "Drywall", lines: ["Install gypsum board", "Tap
 assert.equal(scopeIn.lines.length, 2);
 assert.deepEqual(K.screen({ clauses: [{ line: 1, clause: "Subcontractor shall tape and finish." }, { line: 1, clause: "dup" }, { line: 7, clause: "x" }] }, scopeIn).clauses, ["Install gypsum board", "Subcontractor shall tape and finish."], "Skipped lines keep their wording; one clause per line");
 assert.throws(() => K.parse({ trade: "Drywall", lines: [] }), /scope lines/);
+const V = EXTRA_JOBS["ve-suggest"];
+const veIn = V.parse({ project: "Jelleff", lines: [{ packageId: "drywall", trade: "Drywall", code: "09 29 00", amount: 1000000 }, { packageId: "x", trade: "", amount: 5 }] });
+assert.equal(veIn.lines.length, 1);
+assert.deepEqual(V.screen({ ideas: [{ description: "Equal ceiling tile", packageId: "drywall", costImpact: -40000 }, { description: "Too big", packageId: "drywall", costImpact: -2000000 }, { description: "Adds cost", packageId: "drywall", costImpact: 500 }, { description: "Unknown trade", packageId: "roofing", costImpact: -10 }] }, veIn).ideas.map(i => i.description), ["Equal ceiling tile"], "Savings only, within the trade's cost, for trades that were sent");
+assert.throws(() => V.parse({ lines: [] }), /trades/);
 const R = EXTRA_JOBS["revision-diff"];
 assert.throws(() => R.parse({ sheet: "A1.1", before: "data:image/jpeg;base64,/9j/AA", after: "x" }), /JPEGs/);
 assert.deepEqual(R.screen({ changes: [{ title: "Wall added", kind: "Added", trade: "Drywall" }, { title: "", kind: "Added" }, { title: "Door moved", kind: "Teleported" }] }).changes.map(c => [c.title, c.kind]), [["Wall added", "Added"], ["Door moved", "Revised"]], "Untitled changes dropped; unknown kinds become Revised");

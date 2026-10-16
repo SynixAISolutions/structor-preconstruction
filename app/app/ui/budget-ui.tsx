@@ -14,6 +14,11 @@ import { useSubmissions } from "../../lib/use-submissions";
 import { useLocalDraft } from "../../lib/use-local-draft";
 import { initialBidders } from "../../lib/data/commercial";
 import { lowestTradeBid, lowestSubLineValue, tradeForBudgetLine, type LowBid } from "../../lib/budget-comparison";
+import { acceptedVeByPackage } from "../../lib/value-engineering";
+import { useValueEngineering } from "../../lib/use-value-engineering";
+
+/** The lowest bid after owner-accepted VE for its trade (negative impact = saving). */
+const withAcceptedVe = (bid: LowBid | null, ve: number): LowBid | null => bid && ve ? { ...bid, value: Math.max(0, Math.round((bid.value + ve) * 100) / 100), name: `${bid.name} · incl. accepted VE ${ve < 0 ? "−" : "+"}$${Math.abs(ve).toLocaleString("en-US")}` } : bid;
 import type { TradePackage } from "../../lib/procurement";
 import { InHouseBudgetEditor, LowBidCell, LowBidSplitEditor } from "./budget-comparison";
 import { budgetLinesForTrade } from "../../lib/estimate";
@@ -63,6 +68,8 @@ export function BudgetView({ notify, navigate, project }: ViewProps & { project:
   const { state, run } = useBudget();
   const estimate = useEstimate();
   const submitted = useSubmissions();
+  // Marcel, 15 Oct: owner-accepted VE lowers the lowest sub's number in the budget.
+  const veByPackage = acceptedVeByPackage(useValueEngineering().state);
   const [directory] = useLocalDraft("directory", initialBidders);
   const [inHouseLine, setInHouseLine] = useState<BudgetLine | null>(null);
   const [split, setSplit] = useState<{pkg:TradePackage;bid:LowBid}|null>(null);
@@ -147,7 +154,7 @@ export function BudgetView({ notify, navigate, project }: ViewProps & { project:
   function budgetRow(line: BudgetLine) {
     const forecast = line.forecast ?? line.budget;
     const pkg = tradeForBudgetLine(state, submitted.procurement, line);
-    const low = pkg ? lowestTradeBid(submitted.procurement, submitted.submissions, pkg.id, candidates, directory) : null;
+    const low = withAcceptedVe(pkg ? lowestTradeBid(submitted.procurement, submitted.submissions, pkg.id, candidates, directory) : null, pkg ? veByPackage[pkg.id] ?? 0 : 0);
     const lowValue = pkg && low ? lowestSubLineValue(state,pkg,line.id,low.value) : null;
     const margin = lowValue === null ? null : Math.round((line.budget-lowValue)*100)/100;
     const carried = state.allowances.filter(a => a.budgetLineId === line.id && a.status === "included");
@@ -157,7 +164,7 @@ export function BudgetView({ notify, navigate, project }: ViewProps & { project:
 
   const totalVariance = totals.totalBudget - totals.totalForecast;
   return <div className="cm-view">
-    <PageHeader eyebrow="COST CONTROL" title="Project budget" description="Set your in-house budget beside the lowest subcontractor price, and review the margin on each line." actions={<><ExportButton onClick={() => exportRows("project-budget.csv", [["Cost center", "Class", "CSI", "Description", "Owner", "By owner", "In-house budget", "Lowest sub budget", "Lowest sub basis", "Cost / SF", "Forecast", "Committed", "Variance", "Status"], ...state.lines.map(line => [line.costCenter, line.classification, line.csiCode ?? "", line.description, line.owner, line.byOwner ? "Yes" : "No", line.budget, (()=>{const p=tradeForBudgetLine(state,submitted.procurement,line);const b=p?lowestTradeBid(submitted.procurement,submitted.submissions,p.id,candidates,directory):null;return p&&b?lowestSubLineValue(state,p,line.id,b.value)??"":"";})(), (()=>{const p=tradeForBudgetLine(state,submitted.procurement,line);return p?lowestTradeBid(submitted.procurement,submitted.submissions,p.id,candidates,directory)?.basis??"":"";})(), costPerSquareFoot(line.budget, centerAreas.get(line.costCenter)) ?? "", line.forecast ?? "", line.committed, line.budget - (line.forecast ?? line.budget), line.status])])}/><Button variant="primary" onClick={() => { setEdit("new"); setErrors({}); }}><Plus size={16}/>Add line</Button></>}/>
+    <PageHeader eyebrow="COST CONTROL" title="Project budget" description="Set your in-house budget beside the lowest subcontractor price, and review the margin on each line." actions={<><ExportButton onClick={() => exportRows("project-budget.csv", [["Cost center", "Class", "CSI", "Description", "Owner", "By owner", "In-house budget", "Lowest sub budget", "Lowest sub basis", "Cost / SF", "Forecast", "Committed", "Variance", "Status"], ...state.lines.map(line => [line.costCenter, line.classification, line.csiCode ?? "", line.description, line.owner, line.byOwner ? "Yes" : "No", line.budget, (()=>{const p=tradeForBudgetLine(state,submitted.procurement,line);const b=withAcceptedVe(p?lowestTradeBid(submitted.procurement,submitted.submissions,p.id,candidates,directory):null,p?veByPackage[p.id]??0:0);return p&&b?lowestSubLineValue(state,p,line.id,b.value)??"":"";})(), (()=>{const p=tradeForBudgetLine(state,submitted.procurement,line);return p?lowestTradeBid(submitted.procurement,submitted.submissions,p.id,candidates,directory)?.basis??"":"";})(), costPerSquareFoot(line.budget, centerAreas.get(line.costCenter)) ?? "", line.forecast ?? "", line.committed, line.budget - (line.forecast ?? line.budget), line.status])])}/><Button variant="primary" onClick={() => { setEdit("new"); setErrors({}); }}><Plus size={16}/>Add line</Button></>}/>
     <PreviewNote>{state.lines.length ? "Browser-only demo · Owner-carried costs stay visible and are excluded from contractor totals." : "Browser-only demo · This project starts with an empty budget and saves additions in this browser."}</PreviewNote>
     <p>Estimate stage: {estimateStageLabel(project.estimateStage)}</p>
     <Tabs tabs={["Budget lines", "Trade variance", "Budget versions", "Historical concept budget"]} value={view} onChange={setView}/>
