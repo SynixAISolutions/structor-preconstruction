@@ -1,0 +1,16 @@
+"use client";
+import {useState} from "react";
+import {useProjectDocuments} from "../../lib/project-files-client";
+import {findManual,findSheet} from "../../lib/project-files";
+import {sourceRegion,type ModelDetails} from "../../lib/model-details";
+import type {ModelSource,ModelObject,WallFinishRecord} from "../../lib/model";
+import {sheetTransformFor,toSheetPoint} from "../../lib/jelleff-model";
+import {StoredPage} from "./project-file-viewer";
+export function ModelSourceSheet({source,selected,finish,details}:{source:ModelSource;selected?:ModelObject|null;finish?:WallFinishRecord|null;details:ModelDetails}){
+  const {documents,ready}=useProjectDocuments(),[zoom,setZoom]=useState(1);
+  const found=findSheet(documents,source.sheet),manual=/^\d{2}\s?\d{2}\s?\d{2}$/.test(source.sheet)?findManual(documents):null,doc=found?.doc||manual,page=found?.sheet.page||source.page;
+  const calibrated=doc?.id===details.documentId,region=calibrated?sourceRegion(details,source,finish?.bands.flatMap(b=>b.tags)[0]||selected?.tag||undefined):null;
+  const transform=sheetTransformFor(source.sheet),extent=finish?.extent||selected?.points;
+  const located=calibrated&&!!extent&&!!transform&&(finish?finish.evidence.some(e=>e.sheet===source.sheet)&&transform.levels.includes(finish.level):selected&&transform.levels.includes(selected.level)&&source.sheet===selected.sources[0]?.sheet);
+  return <section className="ms-source-sheet"><header><div><strong>{source.sheet}</strong><span>PDF page {page} · {doc?`V${doc.revision}`:"Source unavailable"}</span></div><div><button aria-label="Zoom out blueprint" disabled={zoom<=1} onClick={()=>setZoom(z=>Math.max(1,z-.5))}>−</button><span>{zoom*100}%</span><button aria-label="Zoom in blueprint" disabled={zoom>=4} onClick={()=>setZoom(z=>Math.min(4,z+.5))}>+</button></div></header><p>{source.detail}</p>{doc&&page<=doc.pageCount?<div className="ms-source-scroll"><div className="ms-source-image" style={{width:`${zoom*100}%`,position:"relative"}}><StoredPage doc={doc} page={page} size={zoom>1.5?3600:2400} alt={`${source.sheet}: ${source.detail}. Original stored project drawing.`}/>{region&&<div className="ms-source-region" role="img" aria-label={`Highlighted source region: ${region.label}`} style={{position:"absolute",pointerEvents:"none",left:`${region.box.x*100}%`,top:`${region.box.y*100}%`,width:`${region.box.width*100}%`,height:`${region.box.height*100}%`}}/>}{located&&<svg viewBox={`0 0 ${transform!.imageWidth} ${transform!.imageHeight}`} aria-label="Approximate selected object location"><polyline points={extent!.map(p=>toSheetPoint(source.sheet,p)!.join(",")).join(" ")} fill={selected?.kind==="floor"?"#efaa4544":"none"} stroke="#ed9a1d" strokeWidth="10"/></svg>}</div></div>:<p role={ready?"alert":"status"}>{ready?"This sheet is not registered in Project files. Upload or name the sheet there to open this reference.":"Looking up the original project sheet…"}</p>}<footer>{region?`Highlighted: ${region.label} · prepared region, check the original.`:located?"Approximate selected location highlighted.":doc&&!calibrated?"New or different drawing revision: the earlier highlight calibration is not applied.":"No region has been recorded for this reference."}</footer></section>;
+}

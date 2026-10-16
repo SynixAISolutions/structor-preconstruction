@@ -13,7 +13,7 @@ const render=(state:ExtractionState)=>renderToStaticMarkup(<InlineScopeDrafts re
 test("AI proposals expose inline decisions and page citations without a second upload",()=>{
  const html=render(sampleExtraction);
  for(const name of ['Accept','Reject','Move','Delete','Illustrative sample'])assert.ok(html.includes(name));
- assert.match(html,/p\. 338/);assert.ok(!html.includes('type="file"'));
+ assert.match(html,/p\. 431/);assert.ok(!html.includes('type="file"'));
 });
 test("deleting a proposal hides its inline line while retaining its audit",()=>{
  const draft=sampleExtraction.drafts.find(d=>d.kind==='scope'&&d.status==='pending-review')!;

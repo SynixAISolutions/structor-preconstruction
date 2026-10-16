@@ -4,9 +4,10 @@ import { Button, Modal, Panel, Badge, downloadText } from "./shared";
 import { useLocalDraft } from "../../lib/use-local-draft";
 import { EXHIBITS, EMPTY_CONTRACT_FILES, documentRegister, type CompanyForm, type ContractFiles } from "../../lib/contract-files";
 import { assetUrl, uploadDocument, type DocumentAsset } from "../../lib/document-assets";
-import { initialDrawings, initialSpecSections, sampleFiles } from "../../lib/data/preconstruction";
 import { DEFAULT_EXHIBIT_TEMPLATE, generateSampleExhibit, latestExhibit, renderDocumentText, type Award, type DocumentContent } from "../../lib/award";
 import type { ContractScopeOutput } from "../../lib/contract-scope-ai";
+import { useProjectDocuments } from "../../lib/project-files-client";
+import { drawingRegister, latestDocuments } from "../../lib/project-files";
 
 export function AssetLink({ asset }: { asset?: DocumentAsset }) { return asset ? <a href={assetUrl(asset)} target="_blank" rel="noreferrer">{asset.name}</a> : <span>Not uploaded</span>; }
 export function AssetUpload({ label, accept = "application/pdf", onSave }: { label: string; accept?: string; onSave: (asset: DocumentAsset) => void }) {
@@ -20,7 +21,10 @@ export function CompanyFormSettings() {
 }
 export function OtherExhibits({ award, save }: { award: Award; save: (files: ContractFiles) => void }) {
   const [company] = useLocalDraft<CompanyForm>("company-form", { name: "General contractor" });
-  const [drawings] = useLocalDraft("drawing-register", initialDrawings), [specs] = useLocalDraft("specification-sections", initialSpecSections), [reports] = useLocalDraft("library", sampleFiles);
+  const { documents, ready } = useProjectDocuments();
+  const drawings = drawingRegister(documents).map(r => ({ id:r.sheet, title:r.title, date:r.date, revision:`V${r.doc.revision}` }));
+  const specs = latestDocuments(documents).filter(d=>d.kind==="manual").flatMap(d=>d.sections.map(s=>({id:s.section,title:`${s.title} · ${d.name}, pages ${s.first}–${s.last}; registered ${d.uploadedAt.slice(0,10)}`,date:"",revision:`V${d.revision}`})));
+  const reports = latestDocuments(documents).filter(d=>d.kind==="other").map(d=>({name:`${d.name} · registered ${d.uploadedAt.slice(0,10)}`,date:"",revision:`V${d.revision}`}));
   const [defaults, setDefaults] = useState<{ form?: DocumentAsset; shell?: DocumentAsset }>({});
   const [error, setError] = useState("");
   useEffect(() => { void fetch("/api/contract-assets").then(async r => { if (!r.ok) throw new Error("Original forms are unavailable. Upload your company form below."); setDefaults(await r.json()); }).catch(e => setError(e.message)); }, []);
@@ -29,7 +33,7 @@ export function OtherExhibits({ award, save }: { award: Award; save: (files: Con
   return <Panel title="All other exhibits" subtitle="Build the document list, then upload the department's PDFs. These files are frozen into the subcontract when generated." action={locked ? <Badge>Locked package</Badge> : <Button onClick={() => save({ ...files, company: { ...company, form: company.form || defaults.form } })}>Use company form & logo</Button>}>
     {error && <p role="alert">{error}</p>}<p>Company: <strong>{files.company.name}</strong> · Agreement: <AssetLink asset={files.company.form}/></p><p>Original Exhibit A shell: <AssetLink asset={defaults.shell}/></p>
     {!locked && <AssetUpload label="Agreement form" accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onSave={form => save({ ...files, company: { ...files.company, form } })}/>}
-    <section className="contract-file-row"><h3>B · List of documents</h3><p>Drawing, specification and report issue dates come from their registers. Review the list before sharing.</p>{!locked && <Button onClick={() => save({ ...files, b: documentRegister(award.snapshot.projectName, drawings, specs, reports.filter(r => r.category === "Reports")) })}>Build / refresh Exhibit B</Button>}{files.b && <><Button onClick={() => downloadText("exhibit-b.txt", renderDocumentText(files.b!))}>Download Exhibit B</Button><details><summary>Review included documents</summary>{files.b.sections.map(s => <section key={s.heading}><h4>{s.heading}</h4>{s.lines.length ? s.lines.map((l, i) => <p key={i}>{l}</p>) : <p>No documents in this register.</p>}</section>)}</details></>}</section>
+    <section className="contract-file-row"><h3>B · List of documents</h3><p>This list uses the stored project documents. Drawing issue dates come from title blocks; other issue dates remain unrecorded, with upload dates labelled separately. Review before sharing.</p>{!locked && <Button disabled={!ready || !documents.length} onClick={() => save({ ...files, b: documentRegister(award.snapshot.projectName, drawings, specs, reports) })}>Build / refresh Exhibit B</Button>}{files.b && <><Button onClick={() => downloadText("exhibit-b.txt", renderDocumentText(files.b!))}>Download Exhibit B</Button><details><summary>Review included documents</summary>{files.b.sections.map(s => <section key={s.heading}><h4>{s.heading}</h4>{s.lines.length ? s.lines.map((l, i) => <p key={i}>{l}</p>) : <p>No documents in this register.</p>}</section>)}</details></>}</section>
     {(Object.entries(EXHIBITS) as [keyof typeof EXHIBITS, string][]).map(([code, label]) => <section className="contract-file-row" key={code}><h3>{code} · {label}</h3><AssetLink asset={files.files[code]}/>{!locked && <AssetUpload label={`Upload Exhibit ${code}`} onSave={asset => save({ ...files, files: { ...files.files, [code]: asset } })}/>}</section>)}
   </Panel>;
 }

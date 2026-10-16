@@ -300,6 +300,7 @@ export const pageGuides = [
       "Enter Base bid · USD and record exclusions, alternates, and clarifications. Attach files records their names and details in this browser.",
       "Choose Submit bid after completing every required response and entering a positive price. Later changes can be submitted as another preserved revision for estimator review.",
       "Use RFIs to save a question draft for that invitation.",
+      "Use Value engineering to submit an alternative, signed cost impact and private product-data PDF for owner review.",
     ],
     terms: [
       { name: "Y / N / P / N/A", meaning: "Yes, included; no, excluded; partially included; or not applicable. P and N/A require a note." },
@@ -367,7 +368,8 @@ export const pageGuides = [
       "Set the markup factor if general conditions, fee, insurance, bond and contingency apply on top of trade cost. The weighted impact of each idea is its cost impact times this factor.",
       "Add ideas with a description, heading, CSI code, trade, source reference, and estimated cost impact. A saving is a negative amount.",
       "Ask one or more subcontractors to price an idea. Record each quote, or their decline, when it comes back.",
-      "Accept or reject each idea. Accepting needs the cost impact you are accepting, from the estimate or a quote. Reopen an idea to change a decision.",
+      "Ask AI for options from bids, historical costs or a priced takeoff with a sourced alternative rate. Add supported suggestions to the review list.",
+      "Accept or reject each idea. For owner acceptance, select its current submitted bid, enter the accepted price impact and record the owner approver. Reopen to withdraw the adjustment.",
       "Watch the summary: accepted savings, savings still pending, the gap to the target, and the projected estimate.",
     ],
     terms: [
@@ -376,7 +378,7 @@ export const pageGuides = [
       { name: "Target reduction", meaning: "How much the estimate must come down to meet the owner's budget." },
     ],
     example: "The estimate is $30 million and the owner has $28 million, so the target is $2 million. An alternative roofing membrane is estimated at -$40,000; with a markup factor of 1.25 its weighted impact is -$50,000.",
-    reality: "Ideas, quotes and decisions save in this browser for the open project. Pricing requests are recorded, not sent. Accepting an idea does not change the budget; AI suggestions are not generated yet.",
+    reality: "Ideas, quotes and decisions save in this browser for the open project. Pricing requests are recorded, not sent. AI options use sourced prices and show the calculated impact. Select a current bid and name the owner approver to apply a decision to that bid in leveling and the lowest-sub budget. Team-only decisions do not apply a bid adjustment. Reopening or a newer submitted bid removes the effect. In-house budget is unchanged.",
     related: ["budget", "allowances", "packages"],
   },
   {
