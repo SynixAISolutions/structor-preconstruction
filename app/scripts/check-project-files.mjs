@@ -72,6 +72,15 @@ assert.deepEqual([boxes[1].x, boxes[1].y], [0.7, 0.7]);
 assert.ok(boxes[0].pixels > boxes[1].pixels);
 
 // New AI jobs: inputs validated, outputs screened before anything uses them.
+// Drawing sheets per trade, by title keywords for its CSI code, most telling first, capped.
+const reg = ["CIV0102 Demolition Plan", "ED1.1 ELECTRICAL DEMOLITION SITE PLAN", "A1.1 LEVEL 01 - FIRST FLOOR PLAN", "A3.1 LEVEL 01 - REFLECTED CEILING PLAN", "A8.1 PARTITION TYPES", "A8.2 DOOR & FRAME TYPE & SCHEDULE", "AQ2.1 POOL COMPOSITE PIPING PLAN", "M001 MECHANICAL SYMBOLS, ABBREVIATIONS & NOTES", "M101 LEVEL 01 - HVAC PLAN", "M201 LEVEL 01 - PIPING PLAN"].map(x => ({ sheet: x.split(" ")[0], title: x.slice(x.indexOf(" ") + 1) }));
+const sheetsOf = code => P.sheetsForTrade(reg, code).map(r => r.sheet);
+assert.deepEqual(sheetsOf("02 41 19"), ["CIV0102", "ED1.1"]);
+assert.deepEqual(sheetsOf("09 29 00"), ["A8.1", "A3.1", "A1.1"], "Partition types, then ceilings, then floor plans");
+assert.deepEqual(sheetsOf("08 11 13"), ["A8.2"]);
+assert.deepEqual(sheetsOf("23 73 13"), ["M001", "M101", "M201"], "Pool piping is not the mechanical trade's");
+assert.deepEqual(sheetsOf("12 00 00"), [], "No rule, no sheets");
+assert.equal(P.sheetsForTrade(reg, "02 41 19", 1).length, 1);
 const { EXTRA_JOBS } = await import("../lib/ai-jobs-more.ts");
 const C = EXTRA_JOBS["scope-consolidate"], T = EXTRA_JOBS["title-block"];
 const input = C.parse({ trade: "Drywall", section: "09 29 00", maxLines: 2, findings: [{ title: "a" }, { title: "b" }, { title: "c" }, { title: "" }] });

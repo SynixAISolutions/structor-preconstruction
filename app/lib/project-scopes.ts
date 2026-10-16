@@ -31,6 +31,36 @@ export function sectionsByTrade(sections: StoredSection[], packages: Pick<TradeP
 }
 
 /** Sections no trade covers (outside Division 00/01): shown so the estimator can add a trade or move work. */
+// Which drawing sheets carry a trade's scope (15 Oct: scopes come from all the project files, the
+// drawings as well as the specifications). Title keywords by CSI code, most telling first, capped
+// so a trade costs a handful of vision requests.
+const SHEET_RULES: [RegExp, RegExp[]][] = [
+  [/^02/, [/DEMOLITION/]],
+  [/^03/, [/FOUNDATION|CONCRETE/, /STRUCTURAL NOTES/]],
+  [/^04/, [/MASONRY/, /EXTERIOR ELEVATIONS/, /WALL SECTIONS/]],
+  [/^05/, [/STEEL/, /FRAMING PLAN/, /COLUMN|BRAC/]],
+  [/^06/, [/CASEWORK/, /INTERIOR DETAILS/]],
+  [/^07/, [/ROOF PLAN/, /WALL SECTIONS|EXTERIOR SECTION|MOCK-UP/]],
+  [/^08/, [/DOOR/, /WINDOW|STOREFRONT|GLAZING/]],
+  [/^09 [2-5]/, [/PARTITION/, /REFLECTED CEILING|CEILING DETAILS/, /^LEVEL \d+ - \w+ FLOOR PLAN/]],
+  [/^09 6/, [/FINISH/]],
+  [/^09 9/, [/FINISH/, /INTERIOR ELEVATIONS/]],
+  [/^21/, [/FIRE PROTECTION/]],
+  [/^22/, [/PLUMBING (GENERAL )?NOTES|PLUMBING SCHEDULES/, /PLUMBING PLAN/]],
+  [/^23/, [/MECHANICAL (SYMBOLS|SCHEDULES)/, /HVAC PLAN|^LEVEL \d+.* PIPING PLAN/]],
+  [/^26/, [/ELECTRICAL (SYMBOLS|SCHEDULES)/, /POWER PLAN|LIGHTING PLAN/]],
+  [/^2[78]/, [/TELECOM|SECURITY/]],
+  [/^3[1-3]/, [/SITE PLAN|GRADING|UTILITY PLAN/, /NOTES, LEGEND/]],
+];
+export const MAX_SHEETS_PER_TRADE = 6;
+
+/** The drawing sheets (from drawingRegister) most likely to show a trade's work, by its CSI code. */
+export function sheetsForTrade<T extends { title: string }>(register: T[], code: string, max = MAX_SHEETS_PER_TRADE): T[] {
+  const out: T[] = [];
+  for (const re of SHEET_RULES.find(([c]) => c.test(code))?.[1] ?? []) for (const row of register) if (out.length < max && !out.includes(row) && re.test(row.title.toUpperCase())) out.push(row);
+  return out;
+}
+
 export function uncoveredSections(sections: StoredSection[], packages: Pick<TradePackage, "id" | "division" | "code">[]): StoredSection[] {
   const covered = new Set([...sectionsByTrade(sections, packages).values()].flat());
   return sections.filter(s => !covered.has(s) && !/^0[01]/.test(digits(s.section)));
