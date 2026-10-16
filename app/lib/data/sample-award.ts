@@ -8,7 +8,8 @@
 // ceilings (N) and offers a partial finish level (P), so it stays open in Bid leveling until an
 // estimator resolves it — the reason leveling exists. Anacostia Partitions declined.
 
-import { agreeExhibit, createAward, executeSubcontract, generateSubcontract, sendSubcontract, shareExhibit, signSubcontract, type AwardState } from "../award";
+import { agreeExhibit, createAward, executeSubcontract, generateSubcontract, latestExhibit, reviseExhibit, sendSubcontract, shareExhibit, signSubcontract, type AwardState, type DocumentContent } from "../award";
+import { SAMPLE_CONTRACT_CLAUSES } from "./sample-contract-language";
 import { levelingCandidates } from "../budget";
 import { buildLevelingImport } from "../leveling-import";
 import { sampleProjectRecords } from "../projects";
@@ -19,6 +20,12 @@ import { sampleProcurement } from "./procurement";
 import { stableIds } from "./stable-ids";
 
 const at = (date: string, time = "14:00") => `${date}T${time}:00.000Z`;
+/** Exhibit A with its Section 3.1 scope lines in contract language, as the estimator saves it before sharing. */
+function contractLanguage(state: AwardState, awardId: string, by: string, when: string): AwardState {
+  const content: DocumentContent = latestExhibit(state.awards.find(a => a.id === awardId)!).content;
+  const sections = content.sections.map(s => s.number !== "3.1" ? s : { ...s, lines: s.lines.map(line => { const m = /^(\d+)\.\s+(.*)$/.exec(line); return m && SAMPLE_CONTRACT_CLAUSES[m[2]] ? `${m[1]}. ${SAMPLE_CONTRACT_CLAUSES[m[2]]}` : line; }) });
+  return reviseExhibit(state, awardId, { ...content, sections }, "Section 3.1 written in contract language.", by, when);
+}
 const project = sampleProjectRecords[0];
 const procurement = sampleProcurement;
 const form = procurement.packages.find(p => p.id === "concrete")!.published!;
@@ -42,6 +49,7 @@ let awards: AwardState = createAward({ awards: [], notifications: [] }, {
   owner: "DC Department of General Services", projectAddress: project.location, projectStart: project.start,
 }, { levelingBidderId: candidates[0].levelingBidderId, basis: "base", budgetLineId: "nc-03000" }, "Vijay", at("2026-09-23"));
 const awardId = awards.awards[0].id;
+awards = contractLanguage(awards, awardId, "Vijay", at("2026-09-23", "14:30"));
 awards = shareExhibit(awards, awardId, at("2026-09-23", "15:00"));
 awards = agreeExhibit(awards, awardId, "Sarah Chen", "subcontractor", at("2026-09-24"));
 awards = generateSubcontract(awards, awardId, "General contractor", "Vijay", at("2026-09-24", "15:00"));
@@ -88,6 +96,7 @@ let drywallAwards: AwardState = createAward(stable.awards, {
   owner: "DC Department of General Services", projectAddress: project.location, projectStart: project.start,
 }, { levelingBidderId: capitol.levelingBidderId, basis: "base", budgetLineId: "nc-09200" }, "Safi", at("2026-10-09"));
 const drywallAwardId = drywallAwards.awards.at(-1)!.id;
+drywallAwards = contractLanguage(drywallAwards, drywallAwardId, "Safi", at("2026-10-09", "14:30"));
 drywallAwards = shareExhibit(drywallAwards, drywallAwardId, at("2026-10-09", "15:00"));
 drywallAwards = agreeExhibit(drywallAwards, drywallAwardId, "Avery Morgan", "subcontractor", at("2026-10-10"));
 drywallAwards = generateSubcontract(drywallAwards, drywallAwardId, "General contractor", "Safi", at("2026-10-10", "15:00"));

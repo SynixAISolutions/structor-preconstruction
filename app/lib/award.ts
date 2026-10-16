@@ -30,7 +30,8 @@ export type TemplateField =
   | "owner" | "project" | "projectAddress" | "trade" | "tradeCode" | "contractor" | "subcontractor" | "subcontractorContact" | "subcontractorEmail"
   | "amount" | "basis" | "formVersion" | "bidRevision" | "exhibitRevision" | "start" | "finish" | "template";
 
-export type TemplateBlock =
+/** `number` is the section number the customer's document prints (Marcel's Exhibit A: 3.0 is the scope). */
+export type TemplateBlock = (
   /** Fixed text; `numbered` prefixes 1., 2., ... */
   | { kind: "text"; heading: string; lines: string[]; numbered?: boolean }
   /** Included scope items (Y and P answers), after an optional intro and before optional fixed lines. */
@@ -40,7 +41,7 @@ export type TemplateBlock =
   | { kind: "not-applicable"; heading: string }
   | { kind: "clarifications"; heading: string }
   | { kind: "alternates"; heading: string }
-  | { kind: "allowances"; heading: string };
+  | { kind: "allowances"; heading: string }) & { number?: string };
 
 export type TemplateLayout = { title: string; blocks: TemplateBlock[] };
 export const SAMPLE_EXHIBIT_TEMPLATE: DocumentTemplate = {
@@ -54,7 +55,7 @@ export const SAMPLE_SUBCONTRACT_TEMPLATE: DocumentTemplate = {
 
 // ── Records ─────────────────────────────────────────────────────────────────
 
-export type DocumentSection = { heading: string; lines: string[] };
+export type DocumentSection = { heading: string; lines: string[]; number?: string };
 export type DocumentContent = { title: string; sections: DocumentSection[] };
 
 export type Party = "contractor" | "subcontractor";
@@ -192,7 +193,8 @@ const exclusionLines = (snapshot: AwardSnapshot) => [...snapshot.scope.filter(i 
 /** Renders a customer layout. Sections that end up with no lines are dropped. */
 function renderLayout(layout: TemplateLayout, values: Partial<Record<TemplateField, string>>, snapshot: AwardSnapshot): DocumentContent {
   const included = snapshot.scope.filter(item => item.answer === "Y" || item.answer === "P");
-  const sections = layout.blocks.map((block): DocumentSection => {
+  const sections = layout.blocks.map((block): DocumentSection => ({ ...(block.number ? { number: block.number } : {}), ...section(block) }));
+  function section(block: TemplateBlock): DocumentSection {
     const heading = fill(block.heading, values);
     switch (block.kind) {
       case "text": return { heading, lines: block.lines.map((l, i) => `${block.numbered ? `${i + 1}. ` : ""}${fill(l, values)}`) };
@@ -203,7 +205,7 @@ function renderLayout(layout: TemplateLayout, values: Partial<Record<TemplateFie
       case "alternates": return { heading, lines: snapshot.alternates.map(alternateLine) };
       case "allowances": return { heading, lines: snapshot.allowances.map(allowanceLine) };
     }
-  });
+  }
   return { title: fill(layout.title, values), sections: sections.filter(s => s.lines.length) };
 }
 
@@ -274,6 +276,7 @@ const toBidder = (award: Award, kind: AwardNotificationKind, text: string, at: s
 function validContent(content: DocumentContent): DocumentContent {
   const title = typeof content?.title === "string" ? content.title.trim() : "";
   const sections = Array.isArray(content?.sections) ? content.sections.map(s => ({
+    ...(typeof s?.number === "string" && s.number.trim() ? { number: s.number.trim().slice(0, 12) } : {}),
     heading: typeof s?.heading === "string" ? s.heading.trim() : "",
     lines: Array.isArray(s?.lines) ? s.lines.filter((l): l is string => typeof l === "string").map(l => l.trim()).filter(Boolean) : [],
   })) : [];

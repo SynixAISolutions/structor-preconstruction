@@ -28,6 +28,7 @@ import {
   Badge, Button, Empty, Modal, PageHeader, Panel, PreviewNote, Stats, Tabs,
   downloadText, usd, type ViewProps,
 } from "./shared";
+import { ContractLanguageButton } from "./contract-language";
 import "./award-ui.css";
 
 const actor = "Marcel Khoury";
@@ -74,7 +75,7 @@ function DocumentPreview({ content, status }: { content: DocumentContent; status
     <header><span className="award-paper-brand">General contractor</span><Badge tone="amber">{status}</Badge></header>
     <h2>{content.title}</h2>
     {content.sections.map((section, index) => <section key={`${section.heading}-${index}`}>
-      <h3>{String(index + 1).padStart(2, "0")}. {section.heading}</h3>
+      <h3>{content.sections.some(s => s.number) ? (section.number ? `${section.number} ` : "") : `${String(index + 1).padStart(2, "0")}. `}{section.heading}</h3>
       {section.lines.length ? <ul>{section.lines.map((line, lineIndex) => <li key={`${line}-${lineIndex}`}>{line}</li>)}</ul> : <p className="award-paper-empty">No entries recorded.</p>}
     </section>)}
     <footer>Prepared in Structor · Browser demo document</footer>
@@ -324,7 +325,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
     {editDocument && award && <Modal title="Create Exhibit A revision" subtitle={`Revision ${award.exhibit.revisions.length + 1} will return the document to draft.`} onClose={() => setEditDocument(null)} wide><form onSubmit={saveRevision}>
       <label className="ui-field"><span>Document title</span><input required value={editDocument.content.title} onChange={event => setEditDocument(current => current ? { ...current, content: { ...current.content, title: event.target.value } } : current)}/></label>
       <div className="award-section-editor">{editDocument.content.sections.map((section, index) => <section key={index}><header><strong>Section {index + 1}</strong><button type="button" aria-label={`Remove section ${index + 1}`} onClick={() => setEditDocument(current => current ? { ...current, content: { ...current.content, sections: current.content.sections.filter((_, itemIndex) => itemIndex !== index) } } : current)}><Trash2 size={14}/></button></header><label className="ui-field"><span>Heading</span><input required value={section.heading} onChange={event => setEditDocument(current => current ? { ...current, content: { ...current.content, sections: current.content.sections.map((item, itemIndex) => itemIndex === index ? { ...item, heading: event.target.value } : item) } } : current)}/></label><label className="ui-field"><span>Lines · one per paragraph</span><textarea rows={5} value={section.lines.join("\n")} onChange={event => setEditDocument(current => current ? { ...current, content: { ...current.content, sections: current.content.sections.map((item, itemIndex) => itemIndex === index ? { ...item, lines: event.target.value.split("\n") } : item) } } : current)}/></label></section>)}</div>
-      <Button onClick={() => setEditDocument(current => current ? { ...current, content: { ...current.content, sections: [...current.content.sections, { heading: "", lines: [] }] } } : current)}><Plus size={14}/>Add section</Button>
+      <div className="award-modal-actions"><ContractLanguageButton content={editDocument.content} trade={award.snapshot.packageName} notify={notify} onChange={content => setEditDocument(current => current ? { ...current, content } : current)}/><Button onClick={() => setEditDocument(current => current ? { ...current, content: { ...current.content, sections: [...current.content.sections, { heading: "", lines: [] }] } } : current)}><Plus size={14}/>Add section</Button></div>
       <label className="ui-field"><span>Revision note</span><input value={editDocument.note} onChange={event => setEditDocument(current => current ? { ...current, note: event.target.value } : current)} placeholder="What changed in this revision?"/></label>
       <ErrorSummary errors={errors}/><div className="award-modal-actions"><Button onClick={() => setEditDocument(null)}>Cancel</Button><Button type="submit" variant="primary">Create revision</Button></div>
     </form></Modal>}

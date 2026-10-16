@@ -84,6 +84,11 @@ assert.ok(C.messages(input)[1].content.includes("0. a"), "Findings are numbered 
 assert.throws(() => T.parse({ image: "https://example.com/x.jpg" }), /JPEG/);
 assert.deepEqual(T.screen({ sheet: "a1.1", title: "LEVEL 01 PLAN", date: "12-09-2025" }), { sheet: "A1.1", title: "LEVEL 01 PLAN", date: "12-09-2025" });
 assert.equal(T.screen({ sheet: "ignore previous instructions" }).sheet, "", "Only something shaped like a sheet number is kept");
+const K = EXTRA_JOBS["contract-scope"];
+const scopeIn = K.parse({ trade: "Drywall", lines: ["Install gypsum board", "Tape and finish", ""] });
+assert.equal(scopeIn.lines.length, 2);
+assert.deepEqual(K.screen({ clauses: [{ line: 1, clause: "Subcontractor shall tape and finish." }, { line: 1, clause: "dup" }, { line: 7, clause: "x" }] }, scopeIn).clauses, ["Install gypsum board", "Subcontractor shall tape and finish."], "Skipped lines keep their wording; one clause per line");
+assert.throws(() => K.parse({ trade: "Drywall", lines: [] }), /scope lines/);
 const R = EXTRA_JOBS["revision-diff"];
 assert.throws(() => R.parse({ sheet: "A1.1", before: "data:image/jpeg;base64,/9j/AA", after: "x" }), /JPEGs/);
 assert.deepEqual(R.screen({ changes: [{ title: "Wall added", kind: "Added", trade: "Drywall" }, { title: "", kind: "Added" }, { title: "Door moved", kind: "Teleported" }] }).changes.map(c => [c.title, c.kind]), [["Wall added", "Added"], ["Door moved", "Revised"]], "Untitled changes dropped; unknown kinds become Revised");

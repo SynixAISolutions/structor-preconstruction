@@ -20,8 +20,8 @@ export const MCN_EXHIBIT_TEMPLATE: DocumentTemplate = {
         "The following is a part of this bid package and will be attached to the successful bidder's subcontract agreement or purchase order as Exhibit A – Scope of Work.",
         "It is the intent of this Scope of Work to define the parameters to establish a Lump Sum Price to furnish and install all scope as shown, described, and / or implied by the Contract Documents. This scope of work is NOT intended to supplement and / or supersede requirements of the Contract Documents. If conflicts between this document and the Contract Documents occur; it shall be brought to the attention of Contractor a minimum of three (3) days prior to bid and will be resolved by Contractor amendment or Bid Addendum.",
       ] },
-      { kind: "text", heading: "Instructions to bidders", lines: ["Subcontractor acknowledges latest Instructions to Bidders document. Latest version is: Revision 1 - May 1, 2019."] },
-      { kind: "text", heading: "General notes for scope of work — this scope of the work includes, but is not limited to, the following notes", numbered: true, lines: [
+      { kind: "text", number: "1.0", heading: "Instructions to bidders", lines: ["Subcontractor acknowledges latest Instructions to Bidders document. Latest version is: Revision 1 - May 1, 2019."] },
+      { kind: "text", number: "2.0", heading: "General notes for scope of work — this scope of the work includes, but is not limited to, the following notes", numbered: true, lines: [
         "It is the intent of this bid package to competitively select the most qualified subcontractor to complete the work for this project. The selection will incorporate an evaluation of cost, schedule, staff commitment, safety record, and safety plan.",
         "Bidders are to familiarize themselves with the site conditions and access to the project site prior to submission of bid.",
         "Bidders certify they have familiarized themselves with the Project Schedule and Phasing Plans and have accounted for any and all overtime, demobilization, remobilization to meet the required schedule.",
@@ -55,31 +55,31 @@ export const MCN_EXHIBIT_TEMPLATE: DocumentTemplate = {
         "Mock-ups for the Work as required by the Contract Documents or directed by Contractor.",
         "All work hours and noise control will conform to local and county ordinances.",
       ] },
-      { kind: "text", heading: "Subcontractor is bound to all Subcontract Agreement Exhibits", lines: [
+      { kind: "text", number: "2.1", heading: "Subcontractor is bound to all Subcontract Agreement Exhibits", lines: [
         "Exhibit A: Scope of Work", "Exhibit B: List of Documents", "Exhibit C: Insurance Requirements", "Exhibit D: Safety Plan", "Exhibit E: Schedule",
         "Exhibit F: Billing Package (Wage Scale)", "Exhibit G: Quality Control Plan", "Exhibit H: Project Closeout Requirements", "Exhibit I: Compliance Requirements (LEED)",
         "Exhibit TBD: Prime Contract with Owner", "Exhibit TBD2: BIM Plan",
       ] },
-      { kind: "text", heading: "Specific notes for scope of work — governing sections", lines: [
+      { kind: "text", number: "3.0", heading: "Specific notes for scope of work — governing sections", lines: [
         "Division 00 — Procurement and Contracting Requirements (as applies to this Bid Package)",
         "Division 01 — General Requirements (as applies to this Bid Package)",
         "{tradeCode} — {trade}",
       ] },
-      { kind: "scope", heading: "Scope of work",
+      { kind: "scope", number: "3.1", heading: "Scope of work",
         intro: "The scope of work of this Subcontract includes, but is not necessarily limited to, providing all labor, materials, equipment, and supervision required to complete the above-referenced scope of work in strict accordance with the Contract Documents and as more specifically defined and as reasonably inferred for a complete and operable scope in the sections listed above and as clarified below:",
         append: ["Provide an ADD ALTERNATE Payment and Performance Bond."] },
-      { kind: "exclusions", heading: "Scope exclusions" },
-      { kind: "not-applicable", heading: "Not applicable" },
-      { kind: "clarifications", heading: "Clarifications" },
-      { kind: "alternates", heading: "Alternates offered (not included unless accepted in writing)" },
-      { kind: "allowances", heading: "Allowances" },
-      { kind: "text", heading: "Phasing & schedule highlights", lines: [
+      { kind: "clarifications", number: "3.2", heading: "Clarifications" },
+      { kind: "alternates", number: "3.3", heading: "Alternates offered (not included unless accepted in writing)" },
+      { kind: "allowances", number: "3.4", heading: "Allowances" },
+      { kind: "exclusions", number: "4.0", heading: "Scope exclusions" },
+      { kind: "not-applicable", number: "4.1", heading: "Not applicable" },
+      { kind: "text", number: "5.0", heading: "Phasing & schedule highlights", lines: [
         "See Exhibit E for project schedule. This is a high-level overview of the schedule as it pertains to this work.",
         "Project Commencement – {start}",
         "Project Substantial Completion – {finish}",
         "Include in your base bid the cost for all overtime and premium time work associated with completion of your trade's scope of work per the contractor's project schedule (Exhibit E).",
       ] },
-      { kind: "text", heading: "Economic inclusion requirements", lines: [
+      { kind: "text", number: "6.0", heading: "Economic inclusion requirements", lines: [
         "This project includes a subcontracting goal that promotes participation of local and small business concerns. If your company is a Certified Business Enterprise (CBE) that is self-performing all of the Work please provide your CBE Certification number and all applicable CBE categories (LBE, SBE, etc.):",
         "CBE Certification Number: ____________",
         "If the above section is complete, Subcontractor does not need to complete the 2nd Tier Subcontractor following.",

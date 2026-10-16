@@ -49,5 +49,16 @@ export async function consolidateScope(trade: string, drafts: DraftInput[], sign
   return { drafts: [...results.flat(), ...others], merged: scopes.length, dropped: scopes.length - used };
 }
 
+/** Rewrites bid-form scope lines as Exhibit A Section 3 clauses, 25 lines per request, three at a time. */
+export async function contractLanguage(trade: string, lines: string[], signal?: AbortSignal): Promise<string[]> {
+  const chunks = Array.from({ length: Math.ceil(lines.length / 25) }, (_, i) => lines.slice(i * 25, i * 25 + 25));
+  const out: string[][] = new Array(chunks.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(3, chunks.length) }, async () => {
+    while (next < chunks.length) { const i = next++; out[i] = (await aiJob<{ clauses: string[] }>("contract-scope", { trade, lines: chunks[i] }, signal)).clauses; }
+  }));
+  return out.flat();
+}
+
 /** Reads one sheet's title block (a JPEG crop of its right-hand strip). */
 export const readTitleBlock = (image: string, signal?: AbortSignal) => aiJob<TitleBlock>("title-block", { image }, signal);
