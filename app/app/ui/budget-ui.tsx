@@ -8,6 +8,7 @@ import {
   removeBudgetLine, reopenBudgetLine, totalsByCostCenter, totalsByDivision,
   type BudgetAllowance, type BudgetErrors, type BudgetLine, type LevelingBasis,
 } from "../../lib/budget";
+import { useValueEngineering } from "../../lib/use-value-engineering";
 import { useBudget } from "../../lib/use-budget";
 import { useEstimate } from "../../lib/use-estimate";
 import { useSubmissions } from "../../lib/use-submissions";
@@ -61,6 +62,7 @@ function LineForm({ line, costCenters, errors, onSubmit, onCancel }: { line: Bud
 
 export function BudgetView({ notify, navigate, project }: ViewProps & { project: Project }) {
   const { state, run } = useBudget();
+  const { state: ve } = useValueEngineering();
   const estimate = useEstimate();
   const submitted = useSubmissions();
   const [directory] = useLocalDraft("directory", initialBidders);
@@ -147,7 +149,7 @@ export function BudgetView({ notify, navigate, project }: ViewProps & { project:
   function budgetRow(line: BudgetLine) {
     const forecast = line.forecast ?? line.budget;
     const pkg = tradeForBudgetLine(state, submitted.procurement, line);
-    const low = pkg ? lowestTradeBid(submitted.procurement, submitted.submissions, pkg.id, candidates, directory) : null;
+    const low = pkg ? lowestTradeBid(submitted.procurement, submitted.submissions, pkg.id, candidates, directory, ve) : null;
     const lowValue = pkg && low ? lowestSubLineValue(state,pkg,line.id,low.value) : null;
     const margin = lowValue === null ? null : Math.round((line.budget-lowValue)*100)/100;
     const carried = state.allowances.filter(a => a.budgetLineId === line.id && a.status === "included");
@@ -157,7 +159,7 @@ export function BudgetView({ notify, navigate, project }: ViewProps & { project:
 
   const totalVariance = totals.totalBudget - totals.totalForecast;
   return <div className="cm-view">
-    <PageHeader eyebrow="COST CONTROL" title="Project budget" description="Set your in-house budget beside the lowest subcontractor price, and review the margin on each line." actions={<><ExportButton onClick={() => exportRows("project-budget.csv", [["Cost center", "Class", "CSI", "Description", "Owner", "By owner", "In-house budget", "Lowest sub budget", "Lowest sub basis", "Cost / SF", "Forecast", "Committed", "Variance", "Status"], ...state.lines.map(line => [line.costCenter, line.classification, line.csiCode ?? "", line.description, line.owner, line.byOwner ? "Yes" : "No", line.budget, (()=>{const p=tradeForBudgetLine(state,submitted.procurement,line);const b=p?lowestTradeBid(submitted.procurement,submitted.submissions,p.id,candidates,directory):null;return p&&b?lowestSubLineValue(state,p,line.id,b.value)??"":"";})(), (()=>{const p=tradeForBudgetLine(state,submitted.procurement,line);return p?lowestTradeBid(submitted.procurement,submitted.submissions,p.id,candidates,directory)?.basis??"":"";})(), costPerSquareFoot(line.budget, centerAreas.get(line.costCenter)) ?? "", line.forecast ?? "", line.committed, line.budget - (line.forecast ?? line.budget), line.status])])}/><Button variant="primary" onClick={() => { setEdit("new"); setErrors({}); }}><Plus size={16}/>Add line</Button></>}/>
+    <PageHeader eyebrow="COST CONTROL" title="Project budget" description="Set your in-house budget beside the lowest subcontractor price, and review the margin on each line." actions={<><ExportButton onClick={() => exportRows("project-budget.csv", [["Cost center", "Class", "CSI", "Description", "Owner", "By owner", "In-house budget", "Lowest sub budget", "Lowest sub basis", "Cost / SF", "Forecast", "Committed", "Variance", "Status"], ...state.lines.map(line => [line.costCenter, line.classification, line.csiCode ?? "", line.description, line.owner, line.byOwner ? "Yes" : "No", line.budget, (()=>{const p=tradeForBudgetLine(state,submitted.procurement,line);const b=p?lowestTradeBid(submitted.procurement,submitted.submissions,p.id,candidates,directory,ve):null;return p&&b?lowestSubLineValue(state,p,line.id,b.value)??"":"";})(), (()=>{const p=tradeForBudgetLine(state,submitted.procurement,line);return p?lowestTradeBid(submitted.procurement,submitted.submissions,p.id,candidates,directory,ve)?.basis??"":"";})(), costPerSquareFoot(line.budget, centerAreas.get(line.costCenter)) ?? "", line.forecast ?? "", line.committed, line.budget - (line.forecast ?? line.budget), line.status])])}/><Button variant="primary" onClick={() => { setEdit("new"); setErrors({}); }}><Plus size={16}/>Add line</Button></>}/>
     <PreviewNote>{state.lines.length ? "Browser-only demo · Owner-carried costs stay visible and are excluded from contractor totals." : "Browser-only demo · This project starts with an empty budget and saves additions in this browser."}</PreviewNote>
     <p>Estimate stage: {estimateStageLabel(project.estimateStage)}</p>
     <Tabs tabs={["Budget lines", "Trade variance", "Budget versions", "Historical concept budget"]} value={view} onChange={setView}/>

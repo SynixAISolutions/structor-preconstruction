@@ -2,6 +2,7 @@ import { AiJobError, parseProposalJob, parseScopeJob, proposalMessages, scopeMes
 import { deepseekJson, DeepSeekError, textModel } from "../../../lib/deepseek";
 import { parseDrawingJob, drawingMessages, screenDrawing } from "../../../lib/drawing-ai";
 import { contractScopeJob } from "../../../lib/contract-scope-ai";
+import { veJob } from "../../../lib/ve-ai";
 
 // Structor's AI: one fixed job per request (scope from specification pages, or a proposal reading),
 // never free-form prompts. The demo password (proxy.ts) guards this route like every page.
@@ -24,6 +25,7 @@ export async function POST(request: Request) {
   const model = body.job === "drawing" ? "deepseek-flash" : textModel(body.job === "proposal" ? "deepseek-v4-pro" : "deepseek-flash");
   try {
     if (body.job === "contract-scope") return await contractScopeJob(body.input, key, request.signal);
+    if (body.job === "value-engineering") return await veJob(body.input, key, request.signal);
     if (body.job === "drawing") {
       const job = parseDrawingJob(body.input);
       const output = await deepseekJson(key, drawingMessages(job), { model, maxTokens: 6000, budgetMs: 55_000, signal: request.signal });

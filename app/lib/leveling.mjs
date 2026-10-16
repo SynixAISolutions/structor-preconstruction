@@ -107,11 +107,13 @@ export function bidderTotals(bidder, items, fallbackBondRate = DEFAULT_BOND_RATE
     ? null
     : Math.round(subtotalCents * bondRate);
   const bondCents = Number.isSafeInteger(bondAmount) ? bondAmount : null;
-  const totalAmount = subtotalCents == null || bondCents == null ? null : subtotalCents + bondCents;
+  const veCents = cents(bidder.acceptedVeAdjustment, true);
+  const totalAmount = subtotalCents == null || bondCents == null || veCents == null ? null : subtotalCents + bondCents + veCents;
   const totalCents = Number.isSafeInteger(totalAmount) ? totalAmount : null;
   const sourceEligibilityState = sourceEligibility(bidder.sourceEligibility);
   const exceptions = items.filter((item) => responseNeedsReview(item, responses[item.id])).length;
   const eligibilityReasons = [];
+  if (veCents == null || totalAmount != null && totalAmount < 0) eligibilityReasons.push("invalid-ve-adjustment");
 
   if (priceState === "missing") eligibilityReasons.push("missing-price");
   if (priceState === "invalid") eligibilityReasons.push("invalid-price");
@@ -135,6 +137,7 @@ export function bidderTotals(bidder, items, fallbackBondRate = DEFAULT_BOND_RATE
 
   return {
     adjustment: provisionalAdjustment,
+    acceptedVeAdjustment: money(veCents),
     subtotal: provisionalSubtotal,
     bond: provisionalBond,
     total: provisionalTotal,

@@ -13,6 +13,8 @@
 // field-level errors. Pricing requests are recorded as notifications, never sent.
 
 import type { DirectoryCompany } from "./procurement";
+import type { VeBid } from "./ve-bids";
+import type { DocumentAsset } from "./document-assets";
 
 export type VeOrigin = "team" | "ai" | "subcontractor";
 export type VeStatus = "idea" | "pricing" | "priced" | "accepted" | "rejected";
@@ -25,6 +27,8 @@ export type VePricingRequest = {
 };
 
 export type VeIdea = {
+  bid?: VeBid;
+  productData?: DocumentAsset;
   id: string;
   /** "VE-01", in the order ideas were added. */
   number: string;
@@ -41,7 +45,7 @@ export type VeIdea = {
   notes: string;
   status: VeStatus;
   pricing: VePricingRequest[];
-  decision: { outcome: "accepted" | "rejected"; by: string; at: string; note: string; acceptedImpact: number | null } | null;
+  decision: { outcome: "accepted" | "rejected"; by: string; at: string; note: string; acceptedImpact: number | null; ownerApproved?: boolean } | null;
   createdAt: string; createdBy: string; updatedAt: string;
 };
 

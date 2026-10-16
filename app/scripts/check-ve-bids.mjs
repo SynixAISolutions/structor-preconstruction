@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';import {register} from 'node:module';register('./ts-resolver.mjs',import.meta.url);
+const V=await import('../lib/value-engineering.ts'),B=await import('../lib/ve-bids.ts'),AI=await import('../lib/ve-ai.ts'),C=await import('../lib/budget-comparison.ts');
+const {bidderTotals}=await import('../lib/leveling.mjs');
+const proc={packages:[{id:'trade',published:{version:1}}],invitations:[{id:'inv',packageId:'trade',bidderId:'sub',status:'submitted'}]};
+const sub={id:'bid',packageId:'trade',bidderId:'sub',invitationId:'inv',status:'submitted',revisions:[{number:1,formVersion:1,baseBid:416000}]};
+const product={id:'11111111-1111-4111-8111-111111111111',type:'application/pdf',name:'product.pdf',size:100};
+let state=B.submitBidVe(V.EMPTY_VE,{description:'Equivalent alternate with product data',costImpact:-16000},sub,proc,product,'Bidder');const id=state.ideas[0].id;
+assert.equal(B.acceptedBidVe(state,B.veBid(sub,proc)),0);assert.throws(()=>B.acceptOwnerVe(state,id,sub,proc,-16000,'',''),/owner/);
+state=B.acceptOwnerVe(state,id,sub,proc,-16000,'Owner representative','Approved after technical review');assert.equal(B.acceptedBidVe(state,B.veBid(sub,proc)),-16000);
+assert.equal(C.lowestTradeBid(proc,[sub],'trade',[],[],state).value,400000,'lowest-sub budget changes, original bid retained');assert.equal(sub.revisions[0].baseBid,416000);
+const p={...B.veBid(sub,proc),stale:false,extra:'must not affect matching'};
+const bidders=B.veLevelingBidders([{id:'x',baseBid:416000,bondRate:0,responses:{}}],{x:p},state,[sub]);assert.equal(bidderTotals(bidders[0],[]).reviewedTotal,400000);
+assert.equal(bidderTotals({...bidders[0],bondRate:.02},[]).reviewedTotal,424320-16000,'quoted impact applied once after bond');
+const newer={...sub,revisions:[...sub.revisions,{number:2,formVersion:1,baseBid:410000}]};assert.equal(B.veLevelingBidders(bidders,{x:p},state,[newer])[0].acceptedVeAdjustment,0);assert.equal(C.lowestTradeBid(proc,[newer],'trade',[],[],state).value,410000);assert.throws(()=>B.acceptOwnerVe(V.reopenVeIdea(state,id),id,newer,proc,-16000,'Owner',''),/older revision/);
+assert.equal(B.acceptedBidVe(V.reopenVeIdea(state,id),B.veBid(sub,proc)),0);assert.throws(()=>B.acceptOwnerVe(V.reopenVeIdea(state,id),id,sub,proc,-416001,'Owner',''),/exceed/);
+const evidence=AI.parseVeEvidence({evidence:[{id:'e',packageId:'trade',item:'Floor',unit:'SF',quantity:100,currentRate:10,alternativeRate:8,source:'Takeoff',alternativeSource:'Quoted alternative'}]});
+const options=AI.screenVe({suggestions:[{evidenceId:'e',description:'Compare quoted equivalent',review:'Confirm compliance'}]},evidence);assert.equal(options[0].impact,-200);assert.throws(()=>AI.screenVe({suggestions:[{evidenceId:'invented',description:'No source',review:''}]},evidence));assert.throws(()=>AI.parseVeEvidence({evidence:[{...evidence[0],quantity:NaN}]}));
+console.log('VE checked: product-data proposals, explicit owner approval, exact bid revision, once-only budget/leveling impact, newer bid exclusion, reopening and evidence-based AI math.');

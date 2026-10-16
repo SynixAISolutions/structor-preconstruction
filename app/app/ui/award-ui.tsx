@@ -29,6 +29,8 @@ import {
   downloadText, usd, type ViewProps,
 } from "./shared";
 import { OtherExhibits, CompanyFormSettings, ContractScopeDraft, AssetLink } from "./contract-files";
+import { useValueEngineering } from "../../lib/use-value-engineering";
+import { veLevelingBidders } from "../../lib/ve-bids";
 import { setContractFiles } from "../../lib/contract-files";
 import { assetUrl } from "../../lib/document-assets";
 import "./award-ui.css";
@@ -96,6 +98,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
   const { projectId, procurement, submissions } = useSubmissions();
   const { state: budget } = useBudget();
   const { state, run } = useAward();
+  const { state: ve } = useValueEngineering();
   const [directory] = useLocalDraft<Bidder[]>("directory", initialBidders);
   const [provenance] = useLocalDraft<Record<string, BidProvenance>>("leveling-submission-provenance", {});
   const [loadedPackageId] = useLocalDraft("leveling-submission-package", "");
@@ -136,14 +139,14 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
     setWorkspaceLoading(true); setWorkspaceMessage("");
     void loadWorkspace<unknown, LevelingScopeItem, LevelingBidder>().then(workspace => {
       if (!live) return;
-      const next = workspace ? levelingCandidates({ packageId: loadedPackageId || null, items: workspace.items, bidders: workspace.bidders, provenance }) : [];
+      const next = workspace ? levelingCandidates({ packageId: loadedPackageId || null, items: workspace.items, bidders: veLevelingBidders(workspace.bidders, provenance, ve, submissions), provenance }) : [];
       setCandidates(next);
       if (!next.length) setWorkspaceMessage("No saved leveling comparison is available. Load a submitted portal bid in Bid leveling first.");
     }).catch(error => {
       if (live) { setCandidates([]); setWorkspaceMessage(error instanceof Error ? error.message : "The saved leveling comparison could not be read."); }
     }).finally(() => { if (live) setWorkspaceLoading(false); });
     return () => { live = false; };
-  }, [loadedPackageId, projectId, provenance]);
+  }, [loadedPackageId, projectId, provenance, ve, submissions]);
 
   const pkg = procurement.packages.find(item => item.id === packageId);
   const packageCandidates = candidates.filter(candidate => candidate.packageId === packageId);

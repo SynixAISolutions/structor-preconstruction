@@ -32,6 +32,8 @@ import { createPortal } from "react-dom";
 import { initialBidders } from "../lib/data/commercial";
 import { buildLevelingImport, type BidProvenance, type LevelingImportIssue } from "../lib/leveling-import";
 import { bidderTotals, rankedBidders, responseNeedsReview } from "../lib/leveling.mjs";
+import { useValueEngineering } from "../lib/use-value-engineering";
+import { veLevelingBidders } from "../lib/ve-bids";
 import { useLocalDraft } from "../lib/use-local-draft";
 import { useSubmissions } from "../lib/use-submissions";
 import { clearWorkspace, loadWorkspace, saveWorkspace } from "../lib/workspace-storage";
@@ -321,10 +323,12 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
     if (gmailResult === "failed") setMessage("Gmail could not be connected. Your bid workspace is still available.");
   }, []);
 
+  const { state: ve } = useValueEngineering();
+  const effectiveBidders = useMemo(() => veLevelingBidders(bidders, submissionProvenance, ve, submissions), [bidders, submissionProvenance, ve, submissions]);
   const selected = items.find((item) => item.id === selectedId);
-  const ranked = useMemo<RankedBidder[]>(() => rankedBidders(bidders, items) as RankedBidder[], [bidders, items]);
+  const ranked = useMemo<RankedBidder[]>(() => rankedBidders(effectiveBidders, items) as RankedBidder[], [effectiveBidders, items]);
   const lowBid = ranked[0];
-  const totalsByBidder = useMemo(() => new Map(bidders.map((bidder) => [bidder.id, bidderTotals(bidder, items)])), [bidders, items]);
+  const totalsByBidder = useMemo(() => new Map(effectiveBidders.map((bidder) => [bidder.id, bidderTotals(bidder, items)])), [effectiveBidders, items]);
   const reviewBidders = bidders.filter((bidder) => totalsByBidder.get(bidder.id)?.sourceEligibility !== "ineligible");
   const requiredItems = items.filter((item) => item.required);
   const requiredCheckCount = requiredItems.length * reviewBidders.length;
@@ -676,6 +680,7 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
                 ))}
               </tbody>
               <tfoot>
+                <tr><th colSpan={3}>Owner-accepted VE</th>{effectiveBidders.map(b => <td key={b.id} colSpan={3}>{money.format(b.acceptedVeAdjustment)}</td>)}</tr>
                 <tr><th colSpan={3}>Provisional total</th>{bidders.flatMap((bidder) => { const total = totalsByBidder.get(bidder.id)!; const rank = ranked.find((entry) => entry.bidder.id === bidder.id)?.rank; const notLeveled = total.sourceEligibility === "ineligible"; return [<td key={`${bidder.id}-exceptions`} className={notLeveled ? "inactive-total" : total.eligible ? "complete-total" : "exception-total"}>{notLeveled ? "Not leveled" : total.eligible ? <><Check />Reviewed</> : total.exceptions ? `${total.exceptions} open` : "Pending"}</td>, <td key={`${bidder.id}-rank`}>{rank ? `#${rank}` : "—"}</td>, <td key={`${bidder.id}-total`} className="money-total">{total.provisionalTotal == null ? "—" : money.format(total.provisionalTotal)}</td>]; })}</tr>
               </tfoot>
             </table>

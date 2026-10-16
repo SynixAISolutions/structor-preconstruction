@@ -2,20 +2,23 @@ import { BudgetRuleError, editBudgetLine, type BudgetLine, type BudgetState, typ
 import { budgetLinesForTrade, type TradeEstimate } from "./estimate";
 import type { Procurement, TradePackage } from "./procurement";
 import { latestRevision, type Submission } from "./submissions";
+import { acceptedBidVe } from "./ve-bids";
+import { EMPTY_VE, type VeState } from "./value-engineering";
 
 export type LowBid = { packageId: string; bidderId: string | null; submissionId: string | null; name: string; value: number; basis: "reviewed" | "base" };
 const cents=(value:number)=>Math.round(value*100);
 const validMoney=(value:unknown):value is number=>typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=1e12&&Math.abs(value*100-Math.round(value*100))<1e-6;
 
 /** Compare reviewed totals together; otherwise show the lowest current submitted base, clearly unreviewed. */
-export function lowestTradeBid(procurement:Procurement,submissions:Submission[],packageId:string,candidates:LevelingCandidate[],directory:{id:string;company:string}[]):LowBid|null {
+export function lowestTradeBid(procurement:Procurement,submissions:Submission[],packageId:string,candidates:LevelingCandidate[],directory:{id:string;company:string}[],ve:VeState=EMPTY_VE):LowBid|null {
  const pkg=procurement.packages.find(p=>p.id===packageId);
  if(!pkg?.published)return null;
  const current=submissions.filter(s=>s.packageId===packageId&&s.status!=='draft'&&latestRevision(s)?.formVersion===pkg.published!.version&&procurement.invitations.some(i=>i.id===s.invitationId&&i.packageId===packageId&&i.bidderId===s.bidderId&&i.status!=='declined'));
  const reviewed=candidates.filter(c=>c.packageId===packageId&&!c.stale&&c.eligible&&validMoney(c.reviewedTotal)&&(!c.submissionId||current.some(s=>s.id===c.submissionId&&latestRevision(s)?.number===c.revisionNumber))).sort((a,b)=>a.reviewedTotal!-b.reviewedTotal!)[0];
  if(reviewed)return {packageId,bidderId:reviewed.bidderId,submissionId:reviewed.submissionId,name:reviewed.bidderName,value:reviewed.reviewedTotal!,basis:'reviewed'};
- const lowest=current.filter(s=>validMoney(latestRevision(s)?.baseBid)).sort((a,b)=>latestRevision(a)!.baseBid!-latestRevision(b)!.baseBid!)[0];
- return lowest?{packageId,bidderId:lowest.bidderId,submissionId:lowest.id,name:directory.find(d=>d.id===lowest.bidderId)?.company||lowest.bidderId,value:latestRevision(lowest)!.baseBid!,basis:'base'}:null;
+ const adjusted=(s:Submission)=>{const r=latestRevision(s)!;return Math.round((r.baseBid!+acceptedBidVe(ve,{submissionId:s.id,bidderId:s.bidderId,packageId:s.packageId,revisionNumber:r.number,formVersion:r.formVersion}))*100)/100;};
+ const lowest=current.filter(s=>validMoney(latestRevision(s)?.baseBid)&&validMoney(adjusted(s))).sort((a,b)=>adjusted(a)-adjusted(b))[0];
+ return lowest?{packageId,bidderId:lowest.bidderId,submissionId:lowest.id,name:directory.find(d=>d.id===lowest.bidderId)?.company||lowest.bidderId,value:adjusted(lowest),basis:'base'}:null;
 }
 
 export function tradeForBudgetLine(budget:BudgetState,procurement:Procurement,line:BudgetLine):TradePackage|null {
