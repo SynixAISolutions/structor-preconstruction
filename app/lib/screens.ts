@@ -12,7 +12,7 @@ export type Screen =
   | "overview" | "projects" | "information" | "documents" | "scopes" | "takeoffs"
   | "packages" | "bidders" | "portal" | "leveling" | "budget" | "allowances"
   | "contracts" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
-  | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
+  | "setup" | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
   | "architect" | "ratings" | "prequalification" | "drawing-flip" | "model-mep" | "model-structural" | "model-exterior";
 
 export type ViewProps = { navigate: (screen: Screen) => void; notify: (message: string) => void; projectName: string };
@@ -47,6 +47,7 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
   ]},
   { label: "PRECONSTRUCTION", scope: "project", items: [
     { id: "turnover", label: "Preconstruction to-do", icon: "ClipboardCheck", keywords: ["project turnover", "percent complete", "checklist"] },
+    { id: "setup", label: "Project setup", icon: "ListChecks", keywords: ["getting started", "onboarding", "missing documents", "checklist", "upload"] },
     { id: "overview", label: "Overview", icon: "LayoutDashboard", keywords: ["dashboard"] },
     { id: "information", label: "Project information", icon: "Building2" },
     { id: "documents", label: "Project files", icon: "FileStack", keywords: ["documents", "document library", "rfp"] },

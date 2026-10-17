@@ -129,4 +129,13 @@ assert.throws(() => P2.addPackage(custom, { name: "Signage", code: "10 14" }), /
 assert.throws(() => P2.addPackage(custom, { name: "", code: "10 14 00" }), /Name the trade/);
 assert.throws(() => P2.addPackage(custom, { name: "Signage", code: "10 14 00", due: "next week" }), /date/);
 
+// Rename, re-code and remove trades (split and combine go through moveScope).
+const renamed = P2.editPackage(custom, "pool-equipment", { name: "Pool & spa equipment", code: "13 11 13", due: "2026-11-02" });
+assert.deepEqual(renamed.packages.find(p => p.id === "pool-equipment"), { id: "pool-equipment", name: "Pool & spa equipment", division: "13", code: "13 11 13", owner: "Safi", due: "2026-11-02" });
+assert.throws(() => P2.editPackage(custom, "pool-equipment", { name: "Concrete" }), /already a trade package/);
+assert.throws(() => P2.editPackage(custom, "pool-equipment", { code: "13" }), /specification section/);
+assert.equal(P2.removePackage(custom, "pool-equipment").packages.some(p => p.id === "pool-equipment"), false);
+assert.throws(() => P2.removePackage(sample, sample.scopes[0].packageId), /bid form has been published|scope items/);
+assert.throws(() => P2.removePackage(addScope(custom, { packageId: "pool-equipment", title: "Pool pumps" }, "Safi"), "pool-equipment"), /Move Pool equipment's scope items/);
+
 console.log(`Procurement checked: ${sample.packages.length} packages, ${sample.scopes.length} scope items; move, all-trades, review, publish/revise, invitations, outreach.`);
