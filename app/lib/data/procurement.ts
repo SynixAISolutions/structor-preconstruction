@@ -16,7 +16,7 @@ const packages: TradePackage[] = [
   { id: "masonry", name: "Masonry", division: "04", code: "04 22 00", owner: "Naija", due: "2026-10-08" },
   { id: "steel", name: "Structural steel", division: "05", code: "05 12 00", owner: "Naija", due: "2026-10-08" },
   { id: "carpentry", name: "Carpentry", division: "06", code: "06 10 00", owner: "Vijay", due: "2026-10-09" },
-  { id: "thermal", name: "Thermal & moisture", division: "07", code: "07 54 23", owner: "Vijay", due: "2026-10-09" },
+  { id: "thermal", name: "Roofing & waterproofing", division: "07", code: "07 54 23", owner: "Vijay", due: "2026-10-09" },
   { id: "openings", name: "Doors, frames & hardware", division: "08", code: "08 11 13", owner: "Safi", due: "2026-10-12" },
   { id: "drywall", name: "Drywall", division: "09", code: "09 29 00", owner: "Safi", due: "2026-10-12" },
   { id: "flooring", name: "Flooring", division: "09", code: "09 65 19", owner: "Vijay", due: "2026-10-12" },
@@ -56,12 +56,16 @@ const scopes: ScopeItem[] = [
   item("drywall", "Provide shaft wall assemblies at the elevator and stair enclosures.", "Include liner panels, C-H studs, and rated joints.", "A1.1 · Elevator / stair", "drawing", false),
   item("drywall", "Provide suspended acoustical panel ceilings where shown on the reflected ceiling plan.", "Include suspension system, edge trim, and hold-down clips.", "A3.1 · Ceiling legend", "drawing", false),
   item("drywall", "Provide gypsum board ceilings and soffits where shown.", "Include framing, control joints, and access panels furnished by others.", "A3.1 · Ceiling legend", "drawing", false),
+  item("thermal", "Provide single-ply membrane roofing with insulation and flashings.", "Illustrative bid-form scope for testing portal bids and cost suggestions; verify against the project documents.", "Illustrative roofing bid form", "estimator", false),
+  item("openings", "Provide electrified hardware and access-control interface coordination.", "Illustrative bid-form scope; distinguish hardware installation from the security contractor's wiring.", "Illustrative doors and hardware bid form", "estimator", false),
+  item("openings", "Salvage and reinstall existing door hardware where scheduled.", "Illustrative applicability check; explain an N/A response.", "Illustrative doors and hardware bid form", "estimator", false),
 ];
 
 const listed: Procurement = {
   packages,
   scopes,
   invitations: [
+    ...[["demo-inv-c2", "concrete", "demo-c2"], ["demo-inv-d1", "openings", "demo-d1"], ["demo-inv-d2", "openings", "demo-d2"], ["demo-inv-r1", "thermal", "demo-r1"], ["demo-inv-r2", "thermal", "demo-r2"]].map(([id, packageId, bidderId]) => ({ id, packageId, bidderId, status: "submitted" as const, invitedAt: "2026-10-12T12:00:00.000Z", by: "Sample estimator" })),
     { id: "inv-1", packageId: "demolition", bidderId: "b1", status: "bidding", invitedAt: "2026-09-16T16:00:00.000Z", by: "Safi" },
     { id: "inv-2", packageId: "concrete", bidderId: "b2", status: "invited", invitedAt: "2026-09-16T16:05:00.000Z", by: "Vijay" },
     { id: "inv-3", packageId: "steel", bidderId: "b3", status: "invited", invitedAt: "2026-09-17T13:00:00.000Z", by: "Naija" },
@@ -85,6 +89,8 @@ const approveAll = (state: Procurement, packageId: string, by: string, at: strin
   bidForm(state, packageId).filter(i => i.status === "draft").reduce((next, i) => approveScope(next, i.id, by, at), state);
 const concrete = publishPackage(approveAll(listed, "concrete", "Vijay", "2026-09-17T13:00:00.000Z"), "concrete", "Vijay", "2026-09-17T15:00:00.000Z");
 const drywall = publishPackage(approveAll(concrete, "drywall", "Safi", "2026-10-05T13:00:00.000Z"), "drywall", "Safi", "2026-10-05T15:00:00.000Z");
-const submitted = ["inv-2", "inv-6", "inv-7"].reduce(markInvitationSubmitted, drywall);
+const roofing = publishPackage(approveAll(drywall, "thermal", "Vijay", "2026-10-12T13:00:00.000Z"), "thermal", "Vijay", "2026-10-12T14:00:00.000Z");
+const doors = publishPackage(approveAll(roofing, "openings", "Safi", "2026-10-12T13:00:00.000Z"), "openings", "Safi", "2026-10-12T14:00:00.000Z");
+const submitted = ["inv-2", "inv-6", "inv-7"].reduce(markInvitationSubmitted, doors);
 
 export const sampleProcurement: Procurement = stableIds(submitted, "pn");

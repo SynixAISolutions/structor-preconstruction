@@ -14,9 +14,9 @@ import { initialBidders } from "./data/commercial";
 import { GLOBAL_DRAFT_KEYS } from "./project-scope";
 
 /** Bump when the Jelleff sample changes in a way returning browsers should be offered. */
-export const SAMPLE_VERSION = "2026-10-14";
+export const SAMPLE_VERSION = "2026-10-16";
 /** What changed, for the offer to load it. */
-export const SAMPLE_CHANGES = "Drywall, Marcel's pilot trade, now runs end to end like Concrete: a six-item bid form on the drawings, three invited companies (two bids, one decline), an award against the drywall budget line, an executed subcontract and its submittals, plus the contractor's drywall estimate and AI findings to review.";
+export const SAMPLE_CHANGES = "Illustrative portal bids now cover Concrete, Drywall, Doors/Hardware and Roofing, with two bidders per trade, exclusions and partial scope. Proposal inbox and Bid leveling read those submitted revisions. AI Cost Suggestions proposes sourced quantity × rate plugs for estimator approval; revised bids reset their earlier review. Existing work is backed up before loading this sample.";
 
 export const SAMPLE_VERSION_KEY = "structor-sample-version";
 const BACKUP_PREFIX = "structor-sample-backup:";

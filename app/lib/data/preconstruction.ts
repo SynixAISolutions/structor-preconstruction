@@ -27,6 +27,12 @@ export type TakeoffOrigin = { kind: "model"; rowId: string; measured: number } |
  */
 export type TakeoffRow = { id: string; division: string; item: string; unit: string; quantity: number; rate: number; source: string; reviewed: boolean; packageId?: string | null; origin?: TakeoffOrigin };
 export const initialTakeoffs: TakeoffRow[] = [
+  ...[
+    { id: "demo-flatness", packageId: "concrete", division: "03 · Concrete", item: "Concrete slab surface preparation and floor-flatness finishing", quantity: 22500, rate: 1.85, unit: "SF" },
+    { id: "demo-hardware", packageId: "openings", division: "08 · Openings", item: "Electrified door hardware installation and access-control interface coordination", quantity: 24, rate: 625, unit: "EA" },
+    { id: "demo-roofing", packageId: "thermal", division: "07 · Thermal & moisture", item: "Roof insulation and membrane flashings excluded from partial roofing scope", quantity: 22500, rate: 4.85, unit: "SF" },
+    { id: "demo-finish", packageId: "drywall", division: "09 · Finishes", item: "Upgrade back-of-house gypsum board finishing from Level 3 to Level 4", quantity: 4200, rate: 1.4, unit: "SF" },
+  ].map(r => ({ ...r, reviewed: true, source: "Illustrative demo quantity and unit rate · 16 Oct 2026 · estimator must confirm the missing portion" })),
   { id: "q1", division: trades[0], packageId: "demolition", item: "Existing building demolition (perimeter)", unit: "LF", quantity: 1240, rate: 14, source: "CIV0102", reviewed: true },
   { id: "q2", division: trades[0], packageId: "demolition", item: "Asphalt pavement removal, full depth", unit: "SF", quantity: 18650, rate: 2.75, source: "CIV0102", reviewed: true },
   { id: "q3", division: trades[0], packageId: "demolition", item: "Site items removed (signs, light poles, fixtures)", unit: "EA", quantity: 38, rate: 185, source: "CIV0102", reviewed: false },

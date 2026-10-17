@@ -8,12 +8,12 @@ export function gapCostAmount(basis: CostBasis): number {
   return amount / 100;
 }
 
-/** Replaces this cell's adjustment. Coverage stays open until the estimator resolves it separately. */
-export function approveGapCost<T extends GapResponse>(response: T, basis: CostBasis, reviewed: boolean): T {
+/** Replaces this cell's adjustment; only an explicit coverage decision resolves the scope gap. */
+export function approveGapCost<T extends GapResponse>(response: T, basis: CostBasis, reviewed: boolean, coversScope = false): T {
   if (!["N", "P"].includes(response.status)) throw new Error("Choose an excluded or partial response.");
   if (!reviewed) throw new Error("Review the quantity, rate and basis before applying the adjustment.");
   const adjustment = gapCostAmount(basis);
   const previous = response.note.replace(/\n?Cost basis: [^\n]*/g, "").trim();
-  return { ...response, adjustment, adjustmentApproved: true, resolved: false,
+  return { ...response, adjustment, adjustmentApproved: true, resolved: coversScope,
     note: `${previous}${previous ? "\n" : ""}Cost basis: ${basis.quantity} ${basis.unit.trim()} × $${basis.rate} = $${adjustment.toFixed(2)}. ${basis.source.trim().replace(/[\r\n]+/g, " ")}` };
 }

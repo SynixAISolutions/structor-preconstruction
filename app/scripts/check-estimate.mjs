@@ -26,10 +26,10 @@ const list = E.estimateByTrade(rows, proc);
 assert.deepEqual(list.trades.map(t => t.packageId), proc.packages.map(p => p.id), "Every trade, in procurement order");
 assert.deepEqual([trade(rows, "demolition").items.map(r => r.id), trade(rows, "demolition").total, trade(rows, "demolition").owner], [["q1", "q2", "q3"], 1240 * 14 + 18650 * 2.75 + 38 * 185, "Safi"]);
 // Drywall, the pilot trade: painted wall finish plus the seven illustrative drywall lines (q9–q16).
-const DRYWALL = 71280 + 203300 + 175480 + 102720 + 34965 + 37950 + 105850 + 86800;
-assert.deepEqual([trade(rows, "drywall").total, trade(rows, "drywall").items.length, trade(rows, "drywall").unreviewed, trade(rows, "carpentry").total, trade(rows, "carpentry").items], [DRYWALL, 8, 5, 0, []]);
-assert.equal(DRYWALL, 818345);
-assert.deepEqual([list.unassigned, list.total], [[], 75677.5 + 75790 + 136960 + 176700 + 281250 + 69300 + DRYWALL]);
+const DRYWALL = 71280 + 203300 + 175480 + 102720 + 34965 + 37950 + 105850 + 86800 + 4200 * 1.4;
+assert.deepEqual([trade(rows, "drywall").total, trade(rows, "drywall").items.length, trade(rows, "drywall").unreviewed, trade(rows, "carpentry").total, trade(rows, "carpentry").items], [DRYWALL, 9, 5, 0, []]);
+assert.equal(DRYWALL, 824225);
+assert.deepEqual([list.unassigned, list.total], [[], 75677.5 + 75790 + 136960 + 176700 + 281250 + 69300 + DRYWALL + 22500 * 1.85 + 24 * 625 + 22500 * 4.85]);
 assert.deepEqual([E.lineAmount({ quantity: 0.1, rate: 0.2 }), E.lineAmount({ quantity: 3, rate: 33.333 })], [0.02, 100], "Line amounts to the cent");
 
 // Lines saved before trades existed are placed by division when only one trade has it.
@@ -77,7 +77,7 @@ fails(() => E.editEstimateItem(rows, proc, "q1", { quantity: -2 }), /above 0/);
 fails(() => E.editEstimateItem(rows, proc, "nope", { rate: 1 }), /no longer exists/);
 assert.equal(E.setItemReviewed(rows, "q9", true).find(r => r.id === "q9").reviewed, true);
 assert.equal(E.setItemReviewed(rows, "q1", true), rows);
-assert.deepEqual(E.removeEstimateItem(rows, "q9").map(r => r.id), ["q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q10", "q11", "q12", "q13", "q14", "q15", "q16"]);
+assert.deepEqual(E.removeEstimateItem(rows, "q9").map(r => r.id), ["demo-flatness", "demo-hardware", "demo-roofing", "demo-finish", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q10", "q11", "q12", "q13", "q14", "q15", "q16"]);
 fails(() => E.removeEstimateItem(rows, "nope"), /no longer exists/);
 
 // ── Which budget lines a trade lands on (Marcel's 5-digit codes) ──
@@ -102,7 +102,7 @@ assert.deepEqual(lands(B.linkBudgetLine(budget, "nc-09200", "flooring", at), "dr
 const drywallEstimate = trade(rows, "drywall");
 const onEstimate = B.applyEstimateValue(budget, "nc-09200", pkg("drywall"), drywallEstimate, "Safi", at);
 const line = onEstimate.lines.find(l => l.id === "nc-09200");
-assert.deepEqual([line.forecast, line.forecastSource, line.estimateSource, line.packageId, line.budget], [DRYWALL, null, { kind: "estimate", packageId: "drywall", value: DRYWALL, lines: 8, unreviewed: 5, appliedAt: at, appliedBy: "Safi" }, "drywall", 1065450.18]);
+assert.deepEqual([line.forecast, line.forecastSource, line.estimateSource, line.packageId, line.budget], [DRYWALL, null, { kind: "estimate", packageId: "drywall", value: DRYWALL, lines: 9, unreviewed: 5, appliedAt: at, appliedBy: "Safi" }, "drywall", 1065450.18]);
 budgetFails(() => B.applyEstimateValue(budget, "nc-05000", pkg("steel"), trade(rows, "steel"), "Safi", at), /budgeted on 2 lines \(New construction, Sitework\)/);
 budgetFails(() => B.applyEstimateValue(budget, "nc-09300", pkg("drywall"), drywallEstimate, "Safi", at), /isn't Drywall's budget line/);
 budgetFails(() => B.applyEstimateValue(budget, "nc-06000", pkg("carpentry"), trade(rows, "carpentry"), "Safi", at), /no priced estimate lines/);
@@ -122,10 +122,10 @@ const report = E.varianceReport({ rows, procurement: proc, budget, candidates })
 assert.deepEqual(report.map(r => r.packageId), proc.packages.map(p => p.id));
 const drywall = report.find(r => r.packageId === "drywall");
 assert.deepEqual(drywall, {
-  packageId: "drywall", name: "Drywall", owner: "Safi", estimate: DRYWALL, estimateLines: 8, estimateUnreviewed: 5,
+  packageId: "drywall", name: "Drywall", owner: "Safi", estimate: DRYWALL, estimateLines: 9, estimateUnreviewed: 5,
   bid: { bidderName: "Uniconstruction", value: 814269.06, basis: "reviewed", from: "leveling" },
   budget: 1065450.18, forecast: null, budgetBasis: "suggested",
-  bidOverEstimate: { amount: -4075.94, percent: -0.5 }, budgetOverEstimate: 247105.18,
+  bidOverEstimate: { amount: -9955.94, percent: -1.2 }, budgetOverEstimate: 241225.18,
 }, "Lowest eligible current reviewed bid of that trade, beside the estimate and the budget");
 const fromForecast = E.varianceReport({ rows, procurement: proc, budget: B.applyLevelingValue(budget, "nc-09200", candidate({ reviewedTotal: 820000 }), "reviewed", "Safi", at) }).find(r => r.packageId === "drywall");
 assert.deepEqual([fromForecast.bid, fromForecast.forecast], [{ bidderName: "Uniconstruction", value: 820000, basis: "reviewed", from: "budget-forecast" }, 820000], "Without the workspace, the bid applied to the budget");

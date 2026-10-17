@@ -316,7 +316,7 @@ export const pageGuides = [
       { name: "Scope responses", meaning: "Answers to every item in the package's currently published bid form." },
     ],
     example: "Act as Capital Demolition, answer the published demolition form, submit a base price, then review that revision from Marcel's estimator view.",
-    reality: "This is a one-browser demo with no subcontractor login or email. Invitations, submitter details, answers, revisions, and RFI drafts save locally; submitted revisions are loaded into Bid leveling with Switch trade and Load selected trade, where exceptions stay open until an estimator resolves them. Drafts never enter leveling. Everything stays in this browser, and attachment contents are not uploaded.",
+    reality: "This is a shared-browser workflow preview with no independent subcontractor login or sent invitation email. Submitted revisions appear in Proposal inbox and load into Bid leveling when that trade is opened. Drafts stay out, and new revisions require fresh cost and scope approval. Commercial answers and revisions save locally; proposal attachments here retain file details only. VE product-data uploads use private storage.",
     related: ["packages", "bidders", "leveling"],
   },
   {
