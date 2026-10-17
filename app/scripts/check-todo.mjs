@@ -119,4 +119,15 @@ assert(order.every((x, i) => i === 0 || rank(order[i - 1]) <= rank(x)), "Team ac
 assert.deepEqual(start.groups.map(g => g.group), TODO_GROUPS.map(g => g.group));
 assert.equal(start.groups.reduce((n, g) => n + g.todo + g.waiting, 0), start.tasks.length);
 
+// Schedule: late, not-started-on-time and next-3-week activities become tasks; finished ones don't.
+const Sch = await import("../lib/schedule.ts");
+const { sampleSchedule } = await import("../lib/data/schedule.ts");
+const withSchedule = deriveTodo({ ...base, schedule: { rows: Sch.scheduleRows(sampleSchedule, "2026-10-16"), today: "2026-10-16" } });
+const sched = withSchedule.tasks.filter(task => task.group === "schedule");
+assert.deepEqual(sched.map(task => task.id.split(":")[1] + " " + task.title.split(" ")[0] + task.title.split(" ")[1]).sort(), ["late A1000Design", "late A1010Scope", "soon A1040GMP", "soon A1050Award", "soon A1060Long-lead", "start StartA1030"].sort());
+assert.ok(sched.filter(task => task.id.startsWith("schedule:late") || task.id.startsWith("schedule:start")).every(task => task.priority === "high" && task.screen === "schedule"));
+assert.equal(withSchedule.groups.find(g => g.group === "schedule").todo, sched.length);
+assert.equal(withSchedule.tasks.length, start.tasks.length + sched.length, "Schedule tasks add to, never replace, the workflow tasks");
+assert.ok(!sched.some(task => task.title.includes("A1020")), "A finished milestone is not a task");
+
 console.log(`To-do checked: empty project, ${start.tasks.length} tasks on the Jelleff sample, Demolition walked from draft to executed subcontract (${finished.packages.find(p => p.packageId === "demolition").percent}%), stale forms, budget, ordering.`);

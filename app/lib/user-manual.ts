@@ -61,7 +61,7 @@ const workspaceGuides: ManualGuide[] = [
       "Use Add documents to open the document library, or New project to create a local project record.",
       "Read the metric cards: Scope requirements counts saved checklist items; Submitted bids counts companies with a submitted revision; Open document issues counts pending-review, open and in-RFI issues; Published bid forms counts packages whose current form is published.",
       "Use the next-step cards and workflow links to jump to scopes, document checks, or bid leveling. Trade and activity links also open the relevant screen.",
-      "The bell at the top opens example activity notifications. Quick find searches destinations. The profile initials open Settings.",
+      "The bell at the top opens Reminders: the open project's most urgent actions from its preconstruction to-do (late or unstarted schedule activities, scope items to approve, bids to review), each opening the page where it is done. Quick find searches destinations. The profile initials open Settings.",
     ],
     terms: [{ name: "Estimated value", meaning: "An early planning amount, not a signed contract price." }, { name: "Procurement", meaning: "The process of requesting bids, reviewing them, and selecting companies to do the work." }],
     example: "If you want to check whether the steel quotes cover the same work, follow Compare incoming proposals to Bid leveling. The dashboard’s proposal count is not a mailbox status indicator.",

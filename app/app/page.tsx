@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Activity, ArrowRight, ArrowUpRight, Bell, BookOpen, BookOpenText, Box, Building2, CalendarDays, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, ClipboardCheck, ClipboardList, Clock3, Command, FileCheck2, FileStack, FileText, FolderOpen, Gauge, GitCompareArrows, HardHat, Layers3, LayoutDashboard, Lightbulb, ListChecks, MapPin, Menu, MessageSquare, Plus, Ruler, Search, Settings2, ShieldCheck, Sparkles, Star, TrendingUp, Upload, UserCheck, Users, Wallet, X } from "lucide-react";
 import BidLevelingPage from "./leveling-workspace";
 import { IntelligenceView } from "./ui/intelligence";
+import { ActivityInbox } from "./ui/activity-inbox";
 import { CommercialView } from "./ui/commercial";
 import { UserManual } from "./ui/user-manual";
 import { ProjectForm, ProjectInformation } from "./ui/project-record";
@@ -56,7 +57,7 @@ export default function StructorApp(){
   </aside>
   <div className="product-main">
     <header className="product-topbar"><div className="topbar-left"><button className="ui-icon-btn mobile-menu" aria-label="Open navigation" onClick={()=>setMenuOpen(true)}><Menu size={21}/></button><span className="breadcrumb-home">{screenGroup(screen)?.label??"WORKSPACE"}</span><ChevronRight size={14}/><strong>{screenLabel(screen)}</strong></div><div className="topbar-right"><span className="preview-label"><span/>Design preview</span><button className="top-search" aria-label="Search workspace" onClick={()=>setSearchOpen(true)}><Search size={16}/><span>Quick find</span><kbd>⌘ K</kbd></button><button className="ui-icon-btn notification-btn" aria-label="Open notifications" onClick={()=>setNotifications(v=>!v)}><Bell size={18}/><i/></button><button className="top-avatar" onClick={()=>navigate("settings")} aria-label="Open profile">MK</button></div></header>
-   {notifications&&<div className="notification-popover"><h3>Activity inbox <Badge tone="orange">3 new</Badge></h3>{[["Revised drawing set received","Review changes to A-101","revisions"],["Steel scope needs your review","Fall-restraint anchors excluded","leveling"],["New bidder clarification","Selective demolition package","packages"]].map(([a,b,c])=><button key={a} onClick={()=>{setNotifications(false);navigate(c as Screen);}}><span className="activity-point"/><div><strong>{a}</strong><small>{b}</small></div><ChevronRight size={15}/></button>)}<p>Example project activity</p></div>}
+   {notifications&&<ActivityInbox project={project} onOpen={s=>{setNotifications(false);navigate(s);}}/>}
    <div className="product-content" ref={scrollRef}>
     <div className="page-enter" key={screen}>
       {activeId===SAMPLE_PROJECT_ID&&<SampleRefreshBanner refresh={sampleRefresh}/>}
