@@ -153,46 +153,34 @@ export const unreadFor = (state: Procurement, person: string): ProcurementNotifi
 // A new project starts with no packages (15 Oct: "I created a new project and put in the drawings,
 // will it write the scopes for me?"). They come from the project manual's divisions, or by hand.
 
-/** The usual subcontract trades by CSI code prefix, most specific prefix first (the Jelleff trades plus the common other divisions). */
-export const STANDARD_TRADES: { prefix: string; id: string; name: string; code: string }[] = [
-  { prefix: "02 4", id: "demolition", name: "Demolition", code: "02 41 19" },
-  { prefix: "02 8", id: "abatement", name: "Hazardous materials abatement", code: "02 82 00" },
-  { prefix: "03", id: "concrete", name: "Concrete", code: "03 30 00" },
-  { prefix: "04", id: "masonry", name: "Masonry", code: "04 22 00" },
-  { prefix: "05", id: "steel", name: "Structural steel", code: "05 12 00" },
-  { prefix: "06", id: "carpentry", name: "Carpentry", code: "06 10 00" },
-  { prefix: "07", id: "thermal", name: "Thermal & moisture", code: "07 54 23" },
-  { prefix: "08", id: "openings", name: "Doors, frames & hardware", code: "08 11 13" },
-  { prefix: "09 3", id: "flooring", name: "Flooring", code: "09 65 19" },
-  { prefix: "09 6", id: "flooring", name: "Flooring", code: "09 65 19" },
-  { prefix: "09 9", id: "painting", name: "Painting & coatings", code: "09 91 23" },
-  { prefix: "09", id: "drywall", name: "Drywall", code: "09 29 00" },
-  { prefix: "10", id: "specialties", name: "Specialties", code: "10 00 00" },
-  { prefix: "11", id: "equipment", name: "Equipment", code: "11 00 00" },
-  { prefix: "12", id: "furnishings", name: "Furnishings", code: "12 00 00" },
-  { prefix: "13", id: "special-construction", name: "Special construction", code: "13 00 00" },
-  { prefix: "14", id: "conveying", name: "Elevators", code: "14 20 00" },
-  { prefix: "21", id: "fire-protection", name: "Fire protection", code: "21 13 13" },
-  { prefix: "22", id: "plumbing", name: "Plumbing", code: "22 00 00" },
-  { prefix: "23", id: "mechanical", name: "Mechanical", code: "23 00 00" },
-  { prefix: "26", id: "electrical", name: "Electrical", code: "26 00 00" },
-  { prefix: "27", id: "communications", name: "Communications", code: "27 00 00" },
-  { prefix: "28", id: "security", name: "Electronic safety & security", code: "28 00 00" },
-  { prefix: "31", id: "earthwork", name: "Earthwork", code: "31 00 00" },
-  { prefix: "32", id: "site-improvements", name: "Exterior improvements", code: "32 00 00" },
-  { prefix: "33", id: "utilities", name: "Site utilities", code: "33 00 00" },
+/** The usual subcontract trades: the Jelleff trades plus the common other divisions. Which sections and sheets each covers is lib/project-scopes. */
+export const STANDARD_TRADES: { id: string; name: string; code: string }[] = [
+  { id: "demolition", name: "Demolition", code: "02 41 19" },
+  { id: "abatement", name: "Hazardous materials abatement", code: "02 82 00" },
+  { id: "concrete", name: "Concrete", code: "03 30 00" },
+  { id: "masonry", name: "Masonry", code: "04 22 00" },
+  { id: "steel", name: "Structural steel", code: "05 12 00" },
+  { id: "carpentry", name: "Carpentry", code: "06 10 00" },
+  { id: "thermal", name: "Thermal & moisture", code: "07 54 23" },
+  { id: "openings", name: "Doors, frames & hardware", code: "08 11 13" },
+  { id: "drywall", name: "Drywall", code: "09 29 00" },
+  { id: "flooring", name: "Flooring", code: "09 65 19" },
+  { id: "painting", name: "Painting & coatings", code: "09 91 23" },
+  { id: "specialties", name: "Specialties", code: "10 00 00" },
+  { id: "equipment", name: "Equipment", code: "11 00 00" },
+  { id: "furnishings", name: "Furnishings", code: "12 00 00" },
+  { id: "special-construction", name: "Special construction", code: "13 00 00" },
+  { id: "conveying", name: "Elevators", code: "14 20 00" },
+  { id: "fire-protection", name: "Fire protection", code: "21 13 13" },
+  { id: "plumbing", name: "Plumbing", code: "22 00 00" },
+  { id: "mechanical", name: "Mechanical", code: "23 00 00" },
+  { id: "electrical", name: "Electrical", code: "26 00 00" },
+  { id: "communications", name: "Communications", code: "27 00 00" },
+  { id: "security", name: "Electronic safety & security", code: "28 00 00" },
+  { id: "earthwork", name: "Earthwork", code: "31 00 00" },
+  { id: "site-improvements", name: "Exterior improvements", code: "32 00 00" },
+  { id: "utilities", name: "Site utilities", code: "33 00 00" },
 ];
-
-/** Trade packages the manual's sections call for and the project doesn't have yet, one per standard trade, in CSI order. Divisions 00 and 01 stay in General. */
-export function proposedPackages(state: Procurement, sectionCodes: string[]): TradePackage[] {
-  const out = new Map<string, TradePackage>();
-  for (const code of [...sectionCodes].sort()) {
-    const trade = STANDARD_TRADES.find(t => code.startsWith(t.prefix));
-    if (!trade || out.has(trade.id) || state.packages.some(p => p.id === trade.id || p.name.toLowerCase() === trade.name.toLowerCase())) continue;
-    out.set(trade.id, { id: trade.id, name: trade.name, division: trade.code.slice(0, 2), code: trade.code, owner: "", due: "" });
-  }
-  return [...out.values()];
-}
 
 /** Adds a trade package. `id` is kept for a standard trade; otherwise one is made from the name. */
 export function addPackage(state: Procurement, input: { name: string; code: string; owner?: string; due?: string; id?: string }): Procurement {

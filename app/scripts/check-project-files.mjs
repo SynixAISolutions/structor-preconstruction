@@ -115,6 +115,20 @@ const ssOut = SS.screen({ summary: "s", activities: [
 ] }, ssIn);
 assert.deepEqual(ssOut.activities.map(a => [a.code, a.packageId, a.duration, a.after.map(l => `${l.code} ${l.type}${l.lag}`).join()]), [["A1000", null, 0, ""], ["A1010", "concrete", 20, "A1000 SS2"], ["X9002", null, 5, "A1000 FS0"]], "Codes upper-cased and unique, unknown packages and link types normalised, impossible rows dropped");
 assert.throws(() => SS.screen({ activities: [] }, ssIn), /no usable schedule/);
+// Trade suggestions for a new project: from the manual (same mapping as Write scopes) and from drawings alone.
+const sec = code => ({ section: code, title: code, first: 1, last: 2 });
+const fromManual = P.suggestTrades([], { sections: ["01 10 00", "02 41 16", "03 30 00", "09 22 16", "09 30 13", "09 51 13", "09 91 23", "23 05 00", "25 00 00"].map(sec), sheets: [] });
+assert.deepEqual(fromManual.map(t => [t.id, t.sections.join()]), [["demolition", "02 41 16"], ["concrete", "03 30 00"], ["drywall", "09 22 16,09 51 13"], ["flooring", "09 30 13"], ["painting", "09 91 23"], ["mechanical", "23 05 00"]], "Ceilings go with drywall, tile with flooring; Division 01 and trades without a standard package are not suggested");
+const drawingsOnly = [
+  { sheet: "C1.0", title: "Demolition Plan", discipline: "Civil" }, { sheet: "C2.0", title: "Grading Plan", discipline: "Civil" },
+  { sheet: "A1.1", title: "LEVEL 01 - FIRST FLOOR PLAN", discipline: "Architectural" }, { sheet: "A8.1", title: "PARTITION TYPES", discipline: "Architectural" },
+  { sheet: "A4.1", title: "EXTERIOR ELEVATIONS", discipline: "Architectural" }, { sheet: "M1.1", title: "LEVEL 1 DUCTWORK", discipline: "Mechanical" },
+  { sheet: "E1.1", title: "LEVEL 1 LIGHTING", discipline: "Electrical" },
+];
+assert.deepEqual(P.suggestTrades([], { sections: [], sheets: drawingsOnly }).map(t => [t.id, t.sheets.join()]), [["demolition", "C1.0"], ["drywall", "A8.1"], ["mechanical", "M1.1"], ["electrical", "E1.1"], ["earthwork", "C2.0"]].sort((a, b) => P.suggestTrades([], { sections: [], sheets: drawingsOnly }).findIndex(t => t.id === a[0]) - P.suggestTrades([], { sections: [], sheets: drawingsOnly }).findIndex(t => t.id === b[0])), "Drawings alone suggest trades by their most telling title or discipline; elevations alone don't make a masonry trade");
+assert.deepEqual(P.suggestTrades([{ id: "drywall", name: "Drywall" }, { id: "x", name: "MECHANICAL" }], { sections: [], sheets: drawingsOnly }).map(t => t.id), ["demolition", "electrical", "earthwork"], "Trades the project has are skipped, by id or name");
+assert.deepEqual(P.sheetsForTrade(drawingsOnly, "23 00 00").map(r => r.sheet), ["M1.1"], "A discipline fills in when no title matches");
+
 // RFP: page picking, value shapes, quote-on-page screening, applying accepted facts.
 const RFP = await import("../lib/rfp.ts");
 const rfpDoc = [{ page: 1, text: "Invitation to Bid" }, { page: 2, text: "" }, { page: 3, text: "Scope" }, { page: 4, text: "General" }, { page: 5, text: "Proposals are due February 2, 2026 at 2:00 PM. The building is 26,500 SF." }, { page: 6, text: "Boilerplate" }];

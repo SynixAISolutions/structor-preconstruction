@@ -114,21 +114,17 @@ assert.deepEqual([added.scopes.at(-1).title, added.scopes.at(-1).status, added.s
 rule(() => addScope(sample, { packageId: "flooring", title: " " }, "Vijay", at), /Describe/);
 assert.equal(unreadFor(markNotificationsRead(moved, moved.notifications.map(n => n.id)), "Vijay").length, 0);
 
-// New projects: trades proposed from the manual's divisions, and added by hand.
+// New projects: trades added from suggestions (lib/project-scopes suggestTrades) or by hand.
 const P2 = await import("../lib/procurement.ts");
 const empty = Object.freeze({ packages: [], scopes: [], invitations: [], outreach: [], notifications: [] });
-const proposed = P2.proposedPackages(empty, ["01 10 00", "09 29 00", "03 30 00", "09 22 16", "09 65 13", "09 91 23", "23 05 00", "02 41 19", "02 82 13", "99 99 99"]);
-assert.deepEqual(proposed.map(p => p.id), ["abatement", "demolition", "concrete", "drywall", "flooring", "painting", "mechanical"].sort((a, b) => proposed.findIndex(p => p.id === a) - proposed.findIndex(p => p.id === b)));
-assert.deepEqual(proposed.map(p => p.id).slice(0, 3), ["demolition", "abatement", "concrete"], "CSI order; Division 01 stays in General; unknown codes ignored");
-assert.equal(proposed.find(p => p.id === "drywall").code, "09 29 00");
-assert.equal(P2.proposedPackages(sample, ["09 29 00", "03 30 00"]).length, 0, "Trades the project has are not proposed again");
+const proposed = P2.STANDARD_TRADES.slice(0, 4).map(t => ({ ...t, owner: "", due: "" }));
 const withTrades = proposed.reduce((s, p) => P2.addPackage(s, p), empty);
 assert.equal(withTrades.packages.length, proposed.length);
 assert.equal(empty.packages.length, 0, "addPackage returns new state");
 const custom = P2.addPackage(withTrades, { name: "  Pool equipment ", code: "13 11 00", owner: "Safi" });
 assert.deepEqual(custom.packages.at(-1), { id: "pool-equipment", name: "Pool equipment", division: "13", code: "13 11 00", owner: "Safi", due: "" });
 assert.equal(P2.addPackage(custom, { name: "Pool deck", code: "32 13 13", id: "pool-equipment" }).packages.at(-1).id, "pool-equipment-2", "Ids stay unique");
-assert.throws(() => P2.addPackage(custom, { name: "drywall", code: "09 29 00" }), /already a trade package/);
+assert.throws(() => P2.addPackage(custom, { name: "concrete", code: "03 30 00" }), /already a trade package/);
 assert.throws(() => P2.addPackage(custom, { name: "Signage", code: "10 14" }), /specification section/);
 assert.throws(() => P2.addPackage(custom, { name: "", code: "10 14 00" }), /Name the trade/);
 assert.throws(() => P2.addPackage(custom, { name: "Signage", code: "10 14 00", due: "next week" }), /date/);

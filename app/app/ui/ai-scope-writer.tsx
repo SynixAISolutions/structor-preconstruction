@@ -4,12 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { extractDrawingScope, extractTradeScope, chunkPages, type ScopeRunResult } from "../../lib/ai-client";
 import { addPage } from "../../lib/drawing-flip";
-import { addPackage, proposedPackages } from "../../lib/procurement";
+import { addPackage } from "../../lib/procurement";
 import { recordRun } from "../../lib/extraction";
 import { consolidateScope } from "../../lib/ai-more-client";
 import { drawingRegister, findManual, type RegisterRow } from "../../lib/project-files";
 import { readStoredText, renderStoredPage, useProjectDocuments } from "../../lib/project-files-client";
-import { sectionsByTrade, sheetsForTrade, uncoveredSections } from "../../lib/project-scopes";
+import { sectionsByTrade, sheetsForTrade, suggestTrades, uncoveredSections } from "../../lib/project-scopes";
 import { getActiveProjectId } from "../../lib/project-scope";
 import type { ManualSection } from "../../lib/manual-sections";
 import type { useExtraction } from "../../lib/use-extraction";
@@ -41,9 +41,10 @@ export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnT
   const [open, setOpen] = useState(() => { const again = reopenAfterTrades; reopenAfterTrades = false; return again; });
   const packages = review.procurement.packages;
   const assigned = useMemo(() => manual ? sectionsByTrade(manual.sections, packages) : new Map(), [manual, packages]);
+  const register = useMemo(() => drawingRegister(documents), [documents]);
   const uncovered = useMemo(() => manual ? uncoveredSections(manual.sections, packages) : [], [manual, packages]);
   // A new project has no trades yet: offer the ones its manual calls for (15 Oct, Marcel's first question).
-  const proposals = useMemo(() => manual ? proposedPackages(review.procurement, manual.sections.map(s => s.section)) : [], [manual, review.procurement]);
+  const proposals = useMemo(() => suggestTrades(packages, { sections: manual?.sections ?? [], sheets: register }), [packages, manual, register]);
   const [newTrades, setNewTrades] = useState<string[] | null>(null);
   const tradesToAdd = newTrades ?? (packages.length ? [] : proposals.map(p => p.id));
   function createTrades() {
@@ -55,7 +56,6 @@ export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnT
     setChosen(prev => [...new Set([...prev, ...chosenTrades.map(p => p.id)])]);
     notify(`${chosenTrades.length} trade package${chosenTrades.length === 1 ? "" : "s"} added from the project manual.`);
   }
-  const register = useMemo(() => drawingRegister(documents), [documents]);
   const [withDrawings, setWithDrawings] = useState(true);
   const sheetsFor = (id: string) => withDrawings ? sheetsForTrade(register, packages.find(p => p.id === id)?.code ?? "") : [];
   const [chosen, setChosen] = useState<string[]>([]);
@@ -158,7 +158,7 @@ export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnT
     <Button onClick={() => setOpen(true)}><Sparkles size={15}/>Write scopes with AI</Button>
     {open && <Modal title="Write scopes with AI" subtitle="The AI reads the project manual and the drawing sheets in Project files and proposes bid-form lines for each trade. You accept, reject, move or delete every line." wide onClose={() => { if (!busy) setOpen(false); }}>
       {!ready ? <p role="status">Looking for the project manual and drawings in Project files…</p> : !manual && !register.length ? <div className="ai-reader"><p>No project manual is stored for this project yet.</p><Button variant="primary" onClick={() => { setOpen(false); onOpenFiles(); }}>Upload it in Project files</Button></div> : <div className="ai-reader">
-        <p>{manual ? <><strong>{manual.name}</strong> · {manual.pageCount} pages · {manual.sections.length} specification sections. Division 01 general requirements stay in the General section.</> : "No project manual is stored; the drawings alone will be read."}</p>
+        <p>{manual ? <><strong>{manual.name}</strong> · {manual.pageCount} pages · {manual.sections.length} specification sections. Division 01 general requirements stay in the General section.</> : "No project manual is stored, so the drawings alone will be read. Scopes from drawings can miss specification requirements: upload the manual when you have it."}</p>
         {register.length > 0 && <label className="ai-drawings-toggle"><input type="checkbox" checked={withDrawings} disabled={busy} onChange={e => setWithDrawings(e.target.checked)}/> Also read each trade's drawing sheets ({register.length} sheets stored): plans, schedules and notes, up to six per trade. Highlights go to Drawing Flip.</label>}
         <div className="ai-section-actions"><Button disabled={busy} onClick={() => setChosen(packages.filter(p => pages(p.id) > 0 || sheetsFor(p.id).length > 0).map(p => p.id))}>Select every trade</Button><Button disabled={busy} onClick={() => setChosen([])}>Clear</Button></div>
         <div className="ai-section-list">{packages.map(pkg => {
@@ -172,8 +172,8 @@ export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnT
           </span></label>;
         })}</div>
         {proposals.length > 0 && <div className="ai-new-trades">
-          <p><strong>{packages.length ? `The manual calls for ${proposals.length} more trade${proposals.length === 1 ? "" : "s"}` : "This project has no trade packages yet"}.</strong> Create them from the specification divisions, then read their scopes. Owners and due dates can be set in Bid packages.</p>
-          <div className="ai-section-list">{proposals.map(p => <label key={p.id}><input type="checkbox" disabled={busy} checked={tradesToAdd.includes(p.id)} onChange={e => setNewTrades(e.target.checked ? [...tradesToAdd, p.id] : tradesToAdd.filter(id => id !== p.id))}/><span><strong>{p.code} · {p.name}</strong></span></label>)}</div>
+          <p><strong>{packages.length ? `The manual calls for ${proposals.length} more trade${proposals.length === 1 ? "" : "s"}` : "This project has no trade packages yet"}.</strong> Create them from the project files, then read their scopes; each lists the sections and sheets it came from. Owners and due dates can be set in Bid packages.</p>
+          <div className="ai-section-list">{proposals.map(p => <label key={p.id}><input type="checkbox" disabled={busy} checked={tradesToAdd.includes(p.id)} onChange={e => setNewTrades(e.target.checked ? [...tradesToAdd, p.id] : tradesToAdd.filter(id => id !== p.id))}/><span><strong>{p.code} · {p.name}</strong><small>{[p.sections.length ? `sections ${p.sections.slice(0, 5).join(", ")}${p.sections.length > 5 ? "…" : ""}` : "", p.sheets.length ? `sheets ${p.sheets.slice(0, 5).join(", ")}${p.sheets.length > 5 ? "…" : ""}` : ""].filter(Boolean).join(" · ")}</small></span></label>)}</div>
           <Button disabled={busy || !tradesToAdd.length} onClick={createTrades}>Create {tradesToAdd.length} trade package{tradesToAdd.length === 1 ? "" : "s"}</Button>
         </div>}
         {uncovered.length > 0 && <details><summary>{uncovered.length} section{uncovered.length === 1 ? "" : "s"} have no trade package yet</summary><p>{uncovered.map(s => `${s.section} ${s.title}`).join(" · ")}</p></details>}
