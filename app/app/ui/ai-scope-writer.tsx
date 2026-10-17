@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { extractDrawingScope, extractTradeScope, chunkPages, type ScopeRunResult } from "../../lib/ai-client";
 import { addPage } from "../../lib/drawing-flip";
+import { addPackage, proposedPackages } from "../../lib/procurement";
 import { recordRun } from "../../lib/extraction";
 import { consolidateScope } from "../../lib/ai-more-client";
 import { drawingRegister, findManual, type RegisterRow } from "../../lib/project-files";
@@ -16,6 +17,9 @@ import { Button, Modal } from "./shared";
 
 type TradeState = { status: "queued" | "reading" | "done" | "failed" | "skipped"; done: number; total: number; found: number; note: string };
 const PARALLEL_TRADES = 3;
+// ponytail: creating the first trades swaps the empty Scopes page for the full one, which remounts
+// this button; the flag reopens the dialog there so the reading can start.
+let reopenAfterTrades = false;
 
 /** One trade's specification and drawing readings as one run (both documents cited). */
 const mergeRuns = (a: ScopeRunResult, b: ScopeRunResult): ScopeRunResult => {
@@ -34,10 +38,23 @@ const mergeRuns = (a: ScopeRunResult, b: ScopeRunResult): ScopeRunResult => {
 export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnType<typeof useExtraction>; notify: (text: string) => void; onOpenFiles: () => void }) {
   const { documents, ready } = useProjectDocuments();
   const manual = findManual(documents);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => { const again = reopenAfterTrades; reopenAfterTrades = false; return again; });
   const packages = review.procurement.packages;
   const assigned = useMemo(() => manual ? sectionsByTrade(manual.sections, packages) : new Map(), [manual, packages]);
   const uncovered = useMemo(() => manual ? uncoveredSections(manual.sections, packages) : [], [manual, packages]);
+  // A new project has no trades yet: offer the ones its manual calls for (15 Oct, Marcel's first question).
+  const proposals = useMemo(() => manual ? proposedPackages(review.procurement, manual.sections.map(s => s.section)) : [], [manual, review.procurement]);
+  const [newTrades, setNewTrades] = useState<string[] | null>(null);
+  const tradesToAdd = newTrades ?? (packages.length ? [] : proposals.map(p => p.id));
+  function createTrades() {
+    const chosenTrades = proposals.filter(p => tradesToAdd.includes(p.id));
+    const errors = latest.current.runProcurement(current => chosenTrades.reduce((state, p) => addPackage(state, p), current));
+    if (errors) { notify(errors); return; }
+    setNewTrades(null);
+    reopenAfterTrades = !packages.length;
+    setChosen(prev => [...new Set([...prev, ...chosenTrades.map(p => p.id)])]);
+    notify(`${chosenTrades.length} trade package${chosenTrades.length === 1 ? "" : "s"} added from the project manual.`);
+  }
   const register = useMemo(() => drawingRegister(documents), [documents]);
   const [withDrawings, setWithDrawings] = useState(true);
   const sheetsFor = (id: string) => withDrawings ? sheetsForTrade(register, packages.find(p => p.id === id)?.code ?? "") : [];
@@ -154,6 +171,11 @@ export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnT
             {state && <small role="status">{state.status === "reading" ? (state.total ? `Reading request ${state.done} of ${state.total}` : state.note) : state.status === "done" ? `Done · ${state.found} scope proposal${state.found === 1 ? "" : "s"}${state.note ? ` · ${state.note}` : ""}` : state.status === "failed" ? `Failed · ${state.note}` : state.status === "skipped" ? state.note : "Waiting"}</small>}
           </span></label>;
         })}</div>
+        {proposals.length > 0 && <div className="ai-new-trades">
+          <p><strong>{packages.length ? `The manual calls for ${proposals.length} more trade${proposals.length === 1 ? "" : "s"}` : "This project has no trade packages yet"}.</strong> Create them from the specification divisions, then read their scopes. Owners and due dates can be set in Bid packages.</p>
+          <div className="ai-section-list">{proposals.map(p => <label key={p.id}><input type="checkbox" disabled={busy} checked={tradesToAdd.includes(p.id)} onChange={e => setNewTrades(e.target.checked ? [...tradesToAdd, p.id] : tradesToAdd.filter(id => id !== p.id))}/><span><strong>{p.code} · {p.name}</strong></span></label>)}</div>
+          <Button disabled={busy || !tradesToAdd.length} onClick={createTrades}>Create {tradesToAdd.length} trade package{tradesToAdd.length === 1 ? "" : "s"}</Button>
+        </div>}
         {uncovered.length > 0 && <details><summary>{uncovered.length} section{uncovered.length === 1 ? "" : "s"} have no trade package yet</summary><p>{uncovered.map(s => `${s.section} ${s.title}`).join(" · ")}</p></details>}
         <p className="ai-privacy">Selected section text goes to DeepSeek, about five pages per request ({Math.ceil(totalPages / 5)} requests for {totalPages} pages){totalSheets ? `, and ${totalSheets} drawing sheets, one image each` : ""}. Every proposal keeps its page and the exact words it relied on.</p>
         <div className="proc-form-actions">{busy ? <Button onClick={() => controller.current?.abort()}>Stop and keep finished trades</Button> : <Button onClick={() => setOpen(false)}>Close</Button>}<Button variant="primary" disabled={busy || !chosen.length} onClick={() => void start()}>{busy ? "Reading…" : `Read ${chosen.length} trade${chosen.length === 1 ? "" : "s"}`}</Button></div>

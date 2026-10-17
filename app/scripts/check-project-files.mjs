@@ -115,4 +115,34 @@ const ssOut = SS.screen({ summary: "s", activities: [
 ] }, ssIn);
 assert.deepEqual(ssOut.activities.map(a => [a.code, a.packageId, a.duration, a.after.map(l => `${l.code} ${l.type}${l.lag}`).join()]), [["A1000", null, 0, ""], ["A1010", "concrete", 20, "A1000 SS2"], ["X9002", null, 5, "A1000 FS0"]], "Codes upper-cased and unique, unknown packages and link types normalised, impossible rows dropped");
 assert.throws(() => SS.screen({ activities: [] }, ssIn), /no usable schedule/);
+// RFP: page picking, value shapes, quote-on-page screening, applying accepted facts.
+const RFP = await import("../lib/rfp.ts");
+const rfpDoc = [{ page: 1, text: "Invitation to Bid" }, { page: 2, text: "" }, { page: 3, text: "Scope" }, { page: 4, text: "General" }, { page: 5, text: "Proposals are due February 2, 2026 at 2:00 PM. The building is 26,500 SF." }, { page: 6, text: "Boilerplate" }];
+assert.deepEqual(RFP.rfpPages(rfpDoc).map(p => p.page), [1, 3, 4, 5], "First three pages with text, then pages naming dates, areas or money");
+assert.equal(RFP.normalizeFact("due", "February 2, 2026"), "2026-02-02");
+assert.equal(RFP.normalizeFact("due", "2026-02-30"), null);
+assert.equal(RFP.normalizeFact("squareFeet", "26,500 SF"), 26500);
+assert.equal(RFP.normalizeFact("value", "$33,328,991"), 33328991);
+assert.equal(RFP.normalizeFact("taxStatus", "Tax exempt"), "non-taxable");
+assert.equal(RFP.normalizeFact("workType", "New construction"), "new");
+assert.deepEqual(RFP.normalizeFact("certifications", "cbe, First Source; LSDBE"), ["CBE", "First Source", "LSDBE"]);
+const RF = EXTRA_JOBS["rfp-facts"];
+const rfIn = RF.parse({ pages: rfpDoc });
+assert.equal(rfIn.pages.length, 5, "Empty pages are not sent");
+assert.throws(() => RF.parse({ pages: [] }), /RFP's pages/);
+const rfOut = RF.screen({ facts: [
+  { field: "due", value: "February 2, 2026", page: 5, quote: "Proposals are due February 2, 2026 at 2:00 PM" },
+  { field: "due", value: "2026-03-01", page: 5, quote: "Proposals are due February 2, 2026" },
+  { field: "squareFeet", value: "26500", page: 5, quote: "The building is 26,500 SF" },
+  { field: "architect", value: "DLR Group", page: 1, quote: "Architect: DLR Group" },
+  { field: "owner", value: "DGS", page: 1, quote: "Invitation to Bid" },
+  { field: "value", value: "unknown", page: 5, quote: "The building is 26,500 SF" },
+] }, rfIn).facts;
+assert.deepEqual(rfOut.map(f => [f.field, f.value]), [["due", "2026-02-02"], ["squareFeet", 26500]], "One fact per field, quote on its page, known field, right shape");
+const { sampleProjectRecords } = await import("../lib/projects.ts");
+const updated = RFP.applyRfpFacts(sampleProjectRecords[0], [{ field: "due", value: "2026-03-01", page: 5, quote: "q" }, { field: "workType", value: "both", page: 1, quote: "q" }, { field: "renovationSquareFeet", value: 8000, page: 1, quote: "q" }, { field: "additionSquareFeet", value: 18500, page: 1, quote: "q" }]);
+assert.equal(updated.due, "2026-03-01");
+assert.equal(updated.squareFeet, 26500, "Renovation + addition make the total, as in the project form");
+assert.equal(updated.id, sampleProjectRecords[0].id);
+
 console.log("Project files checked: sheet keys, revisions, sheet/manual/section lookup, stored-file validation, index upsert, sections by trade.");

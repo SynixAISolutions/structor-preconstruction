@@ -7,7 +7,8 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { upload } from "@vercel/blob/client";
 import { manualSections } from "./manual-sections";
-import { readTitleBlock } from "./ai-more-client";
+import { aiJob, readTitleBlock } from "./ai-more-client";
+import { rfpPages, type RfpFact } from "./rfp";
 import { useActiveProject } from "./project-scope";
 import {
   chunkFor, emptyIndex, kindForCategory, MAX_RANGE_BYTES, sourcePath, TEXT_CHUNK,
@@ -237,4 +238,10 @@ export function renderStoredPage(doc: StoredDocument, pageNumber: number, size =
     if (renders.size > 40) renders.delete(renders.keys().next().value!);
   }
   return renders.get(key)!;
+}
+
+/** Reads a stored RFP and returns the project details it states, each with its page and quote, for the user to accept (lib/rfp applyRfpFacts). */
+export async function readRfpFacts(doc: StoredDocument, signal?: AbortSignal): Promise<RfpFact[]> {
+  const pages = rfpPages(await readStoredText(doc, { first: 1, last: Math.min(doc.pageCount, 150) }));
+  return (await aiJob<{ facts: RfpFact[] }>("rfp-facts", { pages }, signal)).facts;
 }
