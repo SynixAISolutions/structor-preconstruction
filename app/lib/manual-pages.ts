@@ -461,6 +461,28 @@ export const pageGuides = [
     reality: "Tasks come from this browser’s demo data for the open project. Leveling tasks use the comparison currently loaded in Bid leveling. Nothing is sent to anyone, and the list does not track work done outside Structor.",
     related: ["scopes", "leveling", "contracts"],
   },
+  {
+    id: "setup",
+    group: "Preconstruction",
+    title: "Project setup",
+    purpose: "Get a new project from empty to AI-written scopes, then gather the documents a project usually needs. Every step is worked out from what is actually in the project.",
+    steps: [
+      "Follow the four opening steps in order: upload drawings and specifications, review the project details, confirm the trades, write the scopes. Drawings alone are enough to start; the project manual adds specification requirements.",
+      "Each step shows its status: missing, needs review, in progress, ready or failed. A PDF whose pages couldn't be read, or drawings whose title blocks weren't read, is not counted as done.",
+      "Upload the RFP and review what was read from it: each detail shows the current value, the proposed value and the page it came from. Nothing changes until you accept it, and a new RFP revision is reviewed again.",
+      "Confirm the trades suggested from the drawings and the manual; each lists the sections and sheets it came from. Rename, add or remove trades in Bid packages.",
+      "The recommended steps (contract documents, site and reports, budget, schedule, team) say why each item is suggested for this project; reports follow the work type.",
+      "When an item doesn't apply, mark it Not applicable with a reason; it is asked again if the work type or estimate stage changes. When someone else has to provide it, mark it Waiting with who and an optional follow-up date; it stays outstanding.",
+    ],
+    terms: [
+      { name: "Needs review", meaning: "Something was uploaded or read but a person still has to check it, such as RFP details or unread title blocks." },
+      { name: "Not applicable", meaning: "A recorded decision, with a reason, that an item isn't needed for this project." },
+      { name: "Waiting", meaning: "Someone else has to provide the item; it stays on the list until it arrives." },
+    ],
+    example: "Uploading only the drawing set marks the first step ready and suggests Demolition, Drywall, Mechanical and Electrical from the sheet titles; confirming them opens Write scopes with AI.",
+    reality: "Statuses come from the files stored for this project and this browser's project data. Decisions are saved in this browser. Missing reports are suggestions, not requirements, and drawing completeness is not checked yet.",
+    related: ["documents", "information", "scopes", "turnover"],
+  },
 ] satisfies {
   id: string;
   group: "Workspace" | "Preconstruction" | "Operations" | "Subcontractor view" | "Architect view";

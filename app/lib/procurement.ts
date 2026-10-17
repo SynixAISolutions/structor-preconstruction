@@ -196,6 +196,28 @@ export function addPackage(state: Procurement, input: { name: string; code: stri
   return { ...state, packages: [...state.packages, { id, name, division: code.slice(0, 2), code, owner: input.owner?.trim() ?? "", due }] };
 }
 
+/** Renames a trade or changes its main section, owner or due date. A published bid form keeps the name it was published under until republished. */
+export function editPackage(state: Procurement, id: string, changes: { name?: string; code?: string; owner?: string; due?: string }): Procurement {
+  const pkg = findPackage(state, id);
+  const name = changes.name === undefined ? pkg.name : changes.name.trim() || fail("Name the trade.");
+  const code = changes.code === undefined ? pkg.code : changes.code.trim();
+  if (!/^\d{2} \d{2} \d{2}(?:\.\d{2})?$/.test(code)) fail("Give the trade's main specification section, e.g. 09 29 00.");
+  if (state.packages.some(p => p.id !== id && p.name.toLowerCase() === name.toLowerCase())) fail(`${name} is already a trade package.`);
+  const due = changes.due === undefined ? pkg.due : changes.due.trim();
+  if (due && !/^\d{4}-\d{2}-\d{2}$/.test(due)) fail("Use a date for the bid due date.");
+  const next = { ...pkg, name, code, division: code.slice(0, 2), owner: changes.owner === undefined ? pkg.owner : changes.owner.trim(), due };
+  return { ...state, packages: state.packages.map(p => p.id === id ? next : p) };
+}
+
+/** Removes a trade with nothing in it yet. To combine trades, move the scope items first (moveScope). */
+export function removePackage(state: Procurement, id: string): Procurement {
+  const pkg = findPackage(state, id);
+  if (pkg.published) fail(`${pkg.name}'s bid form has been published; it can't be removed.`);
+  if (state.scopes.some(s => s.packageId === id)) fail(`Move ${pkg.name}'s scope items to another trade first.`);
+  if (state.invitations.some(i => i.packageId === id)) fail(`${pkg.name} has invited bidders; it can't be removed.`);
+  return { ...state, packages: state.packages.filter(p => p.id !== id) };
+}
+
 // ── Scope review ────────────────────────────────────────────────────────────
 
 export function addScope(state: Procurement, input: { packageId: string; title: string; detail?: string; source?: string; origin?: ScopeOrigin }, by: string, at = now()): Procurement {
