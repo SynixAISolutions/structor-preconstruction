@@ -55,7 +55,13 @@ export type SetupStep = {
   route: boolean;
   status: SetupStatus; screen: Screen; items: SetupItem[]; decision: SetupDecision | null; reconsider: boolean;
 };
-export type SetupSummary = { steps: SetupStep[]; progress: { done: number; total: number; percent: number }; next: SetupStep | null };
+export type SetupSummary = {
+  steps: SetupStep[];
+  progress: { done: number; total: number; percent: number };
+  /** Item by item (a step without items counts once): how much of what a project needs is in place, and how much is missing (red) or needs checking (yellow). */
+  completeness: { done: number; total: number; percent: number; missing: number; review: number; waiting: number };
+  next: SetupStep | null;
+};
 
 export type SetupInput = {
   project: Project;
@@ -173,7 +179,15 @@ export function projectSetup(input: SetupInput): SetupSummary {
   ];
   const done = steps.filter(s => DONE.has(s.status)).length;
   const open = (s: SetupStep) => !DONE.has(s.status) && s.status !== "waiting";
-  return { steps, progress: { done, total: steps.length, percent: Math.round((done / steps.length) * 100) }, next: steps.find(s => s.route && open(s)) ?? steps.find(open) ?? null };
+  const units = steps.flatMap((s): { status: SetupStatus; reconsider: boolean }[] => s.items.length ? s.items : [s]);
+  const unitsDone = units.filter(u => DONE.has(u.status)).length;
+  const completeness = {
+    done: unitsDone, total: units.length, percent: Math.round((unitsDone / units.length) * 100),
+    missing: units.filter(u => u.status === "missing" && !u.reconsider).length,
+    review: units.filter(u => u.status === "needs-review" || u.status === "failed" || u.reconsider).length,
+    waiting: units.filter(u => u.status === "waiting").length,
+  };
+  return { steps, progress: { done, total: steps.length, percent: Math.round((done / steps.length) * 100) }, completeness, next: steps.find(s => s.route && open(s)) ?? steps.find(open) ?? null };
 }
 
 /** A saved decision applies unless the work is actually ready; "not applicable" made under another work type or stage asks to reconsider. */
