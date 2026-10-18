@@ -16,6 +16,7 @@ import type { BidProvenance, LevelingBidder, LevelingScopeItem } from "./levelin
 import { bidForm, packageStatus, type Procurement } from "./procurement";
 import type { Project } from "./projects";
 import type { Screen } from "./screens";
+import type { SetupSummary } from "./project-setup";
 import { lookahead, type ScheduleRow } from "./schedule";
 import { isStale, type Submission } from "./submissions";
 
@@ -39,6 +40,8 @@ export type TodoTask = {
   refs: { submissionIds?: string[]; invitationIds?: string[]; awardId?: string; budgetLineIds?: string[]; allowanceIds?: string[] };
   /** How many things the task covers (items to approve, bids to load, …). */
   count: number;
+  /** Project setup warnings: red for something missing, yellow for information to check. */
+  flag?: { tone: "red" | "yellow"; label: string };
 };
 
 export type MilestoneKey = "scope-approved" | "bid-form-published" | "bidders-invited" | "bids-received" | "bids-leveled" | "awarded" | "exhibit-agreed" | "subcontract-executed";
@@ -72,10 +75,12 @@ export type TodoInput = {
   awards: AwardState;
   /** Project schedule rows (scheduleRows) and today (yyyy-mm-dd): late and next-3-week activities become tasks. */
   schedule?: { rows: ScheduleRow[]; today: string };
+  /** The project setup guide (lib/project-setup): its missing and to-check items become tasks, replacing the basic setup tasks. */
+  setup?: SetupSummary | null;
 };
 
 export const TODO_GROUPS: { group: TodoGroup; label: string; screen: Screen }[] = [
-  { group: "setup", label: "Project setup", screen: "information" },
+  { group: "setup", label: "Project setup", screen: "setup" },
   { group: "scopes", label: "Scopes & bid forms", screen: "scopes" },
   { group: "outreach", label: "Subcontractor outreach", screen: "packages" },
   { group: "leveling", label: "Bid leveling", screen: "leveling" },
@@ -112,6 +117,26 @@ export function missingProjectFacts(project: Project | null): string[] {
   return missing;
 }
 
+// ── Done tasks ──────────────────────────────────────────────────────────────
+// Tasks are derived, so "done" is a task that was open at the last check and is gone now (18 Oct:
+// finished tasks show up as done). Checks run when the to-do is open and its data has loaded, and
+// on "Scan for task completion".
+
+export type DoneTask = { id: string; title: string; group: TodoGroup; at: string };
+export type TodoHistory = { open: Record<string, { title: string; group: TodoGroup }>; done: DoneTask[] };
+export const EMPTY_TODO_HISTORY: TodoHistory = { open: {}, done: [] };
+
+/** Moves tasks that disappeared since the last check to done (newest first, last 100). Returns the same history when nothing changed. */
+export function reconcileTodo(history: TodoHistory, tasks: TodoTask[], at: string): { history: TodoHistory; completed: DoneTask[] } {
+  const current = new Map(tasks.map(task => [task.id, task]));
+  const completed = Object.entries(history.open).filter(([id]) => !current.has(id)).map(([id, task]) => ({ id, title: task.title, group: task.group, at }));
+  const open = Object.fromEntries(tasks.map(task => [task.id, { title: task.title, group: task.group }]));
+  const unchanged = !completed.length && Object.keys(open).length === Object.keys(history.open).length && tasks.every(task => history.open[task.id]?.title === task.title);
+  if (unchanged) return { history, completed };
+  const done = [...completed, ...history.done.filter(d => !current.has(d.id) && !completed.some(c => c.id === d.id))].slice(0, 100);
+  return { history: { open, done }, completed };
+}
+
 export function deriveTodo(input: TodoInput): TodoSummary {
   const { procurement, submissions, leveling, budget, awards } = input;
   const tasks: TodoTask[] = [];
@@ -119,9 +144,9 @@ export function deriveTodo(input: TodoInput): TodoSummary {
 
   // ── Setup ──
   const missing = missingProjectFacts(input.project);
-  if (missing.length) add({ id: "setup:facts", group: "setup", title: "Complete the project information", detail: `Missing: ${missing.join(", ")}.`, status: "todo", priority: "normal", screen: "information", packageId: null, count: missing.length });
-  if (!input.documents.length) add({ id: "setup:files", group: "setup", title: "Upload the project files", detail: "Add the drawings, specifications and RFP.", status: "todo", priority: "high", screen: "documents", packageId: null, count: 0 });
-  if (!procurement.packages.length) add({ id: "setup:packages", group: "setup", title: "Set up trade packages", detail: "No trade packages exist yet, so there is nothing to scope or bid.", status: "todo", priority: "high", screen: "scopes", packageId: null, count: 0 });
+  if (!input.setup && missing.length) add({ id: "setup:facts", group: "setup", title: "Complete the project information", detail: `Missing: ${missing.join(", ")}.`, status: "todo", priority: "normal", screen: "information", packageId: null, count: missing.length });
+  if (!input.setup && !input.documents.length) add({ id: "setup:files", group: "setup", title: "Upload the project files", detail: "Add the drawings, specifications and RFP.", status: "todo", priority: "high", screen: "documents", packageId: null, count: 0 });
+  if (!input.setup && !procurement.packages.length) add({ id: "setup:packages", group: "setup", title: "Set up trade packages", detail: "No trade packages exist yet, so there is nothing to scope or bid.", status: "todo", priority: "high", screen: "scopes", packageId: null, count: 0 });
 
   // ── Per package ──
   const packages: PackageProgress[] = procurement.packages.map(pkg => {
@@ -205,6 +230,22 @@ export function deriveTodo(input: TodoInput): TodoSummary {
   if (over.length) add({ id: "budget:over", group: "budget", title: `${plural(over.length, "budget line")} forecast over budget`, detail: over.map(l => `${l.description} (${l.costCenter})`).slice(0, 3).join(", ") + (over.length > 3 ? ", …" : ""), status: "todo", priority: "high", screen: "budget", packageId: null, refs: { budgetLineIds: over.map(l => l.id) }, count: over.length });
   if (unforecast.length) add({ id: "budget:forecast", group: "budget", title: `Set forecasts for ${plural(unforecast.length, "direct line")}`, detail: "Apply a leveled value or enter the expected cost.", status: "todo", priority: "low", screen: "budget", packageId: null, refs: { budgetLineIds: unforecast.map(l => l.id) }, count: unforecast.length });
   if (reviewAllowances.length) add({ id: "budget:allowances", group: "budget", title: `Decide ${plural(reviewAllowances.length, "allowance")}`, detail: "Include or exclude each one, and link it to the budget line that carries it.", status: "todo", priority: "normal", screen: "allowances", packageId: null, refs: { allowanceIds: reviewAllowances.map(a => a.id) }, count: reviewAllowances.length });
+
+  // ── Project setup ── (18 Oct: missing files in red, information to check in yellow; done work drops off)
+  for (const step of input.setup?.steps ?? []) {
+    if (step.id === "scopes" || step.id === "budget") continue; // the scope review and budget tasks above cover these
+    const entries = step.items.length
+      ? step.items.map(i => ({ key: `${step.id}:${i.id}`, label: i.label, status: i.status, note: i.note || i.why, level: i.level, file: !!i.category, reconsider: i.reconsider, decision: i.decision }))
+      : [{ key: step.id, label: step.title, status: step.status, note: step.detail, level: step.level, file: false, reconsider: step.reconsider, decision: step.decision }];
+    for (const e of entries) {
+      const review = e.status === "needs-review" || e.status === "failed" || e.reconsider;
+      if (!review && e.status !== "missing" && e.status !== "waiting") continue;
+      const flag = review ? { tone: "yellow" as const, label: "Check information" } : { tone: "red" as const, label: e.file ? "Missing file" : "Missing" };
+      const title = e.reconsider ? `Reconsider: ${e.label} marked not applicable` : review ? `${e.label} needs checking` : e.status === "waiting" ? `Waiting for: ${e.label}` : e.file ? `${e.label} not uploaded` : `${e.label} missing`;
+      const detail = e.reconsider ? `The work type or estimate stage changed since it was marked not applicable (${e.decision?.reason ?? ""}).` : e.status === "waiting" && e.decision ? `${e.decision.responsible}: ${e.decision.reason}${e.decision.followUp ? `. Follow up ${e.decision.followUp}` : ""}.` : e.note;
+      add({ id: `setup:${e.key}`, group: "setup", title, detail, status: e.status === "waiting" ? "waiting" : "todo", priority: e.level === "required" ? "high" : "normal", screen: step.screen, packageId: null, flag });
+    }
+  }
 
   // ── Schedule ── (15 Oct: unfinished activities of the next 3 weeks belong on the to-do list)
   if (input.schedule) {

@@ -10,12 +10,14 @@ import { displayDate } from "../../lib/format";
 import { screenLabel, type Screen } from "../../lib/screens";
 import { addProjectMember, CONSTRUCTION_ROLES } from "../../lib/project-team";
 import { Badge, Button, Modal, PageHeader, Panel, usd } from "./shared";
+import { uploadProjectPdf, useProjectDocuments } from "../../lib/project-files-client";
+import { SetupContinueCard } from "./project-health";
 
 function FieldError({ errors, field }: { errors: ProjectFormErrors; field: keyof typeof PROJECT_FORM_FIELDS }) {
   return errors[field] ? <small className="project-field-error" role="alert">{errors[field]}</small> : null;
 }
 
-export function ProjectForm({ project, onSave, onCancel }: { project?: Project; onSave: (project: Project) => void; onCancel: () => void }) {
+export function ProjectForm({ project, onSave, onCancel, onBusyChange }: { project?: Project; onSave: (project: Project) => void; onCancel: () => void; onBusyChange?: (busy: boolean) => void }) {
   const f = PROJECT_FORM_FIELDS;
   const [workType, setWorkType] = useState<WorkType | "">(project?.workType ?? "");
   const [squareFeet, setSquareFeet] = useState(project?.squareFeet ? String(project.squareFeet) : "");
@@ -24,16 +26,32 @@ export function ProjectForm({ project, onSave, onCancel }: { project?: Project; 
   const [certifications, setCertifications] = useState(project?.certifications.length ? project.certifications : [""]);
   const [team, setTeam] = useState(project?.team.length ? project.team : [{ name: "", role: "" }]);
   const [errors, setErrors] = useState<ProjectFormErrors>({});
+  const [saving, setSaving] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState("");
+  const { documents } = useProjectDocuments();
   const combinedArea = (Number(renovationArea) || 0) + (Number(additionArea) || 0);
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const result = parseProjectForm(new FormData(event.currentTarget), project);
+    if (saving) return;
+    const data = new FormData(event.currentTarget);
+    const result = parseProjectForm(data, project);
     setErrors(result.errors);
-    if (result.project) onSave(result.project);
+    if (!result.project) return;
+    const file = data.get(f.rfp);
+    setSaving(true);
+    onBusyChange?.(true);
+    try {
+      if (file instanceof File && file.size) {
+        const revisionOf = project ? [...documents].filter(d => d.category === "RFP" && d.name === file.name).sort((a, b) => b.revision - a.revision)[0] : undefined;
+        await uploadProjectPdf({ projectId: result.project.id, file, category: "RFP", revisionOf, onProgress: p => setUploadStatus(`${p.stage} · ${p.done} / ${p.total}`) });
+      }
+      onSave(result.project);
+    } catch (error) { setErrors({ rfp: error instanceof Error ? error.message : "The RFP could not be stored. Try again." }); }
+    finally { setSaving(false); setUploadStatus(""); onBusyChange?.(false); }
   }
 
-  return <form className="project-form" noValidate onSubmit={submit}>
+  return <form className="project-form" noValidate onSubmit={e => void submit(e)}>
     <section className="project-form-section">
       <h3>Project basics</h3><p>The details used to identify and compare this project.</p>
       <div className="ui-form-grid">
@@ -83,14 +101,16 @@ export function ProjectForm({ project, onSave, onCancel }: { project?: Project; 
 
     <section className="project-form-section">
       <h3>RFP document</h3>
-      <label className="ui-field full">RFP file<input name={f.rfp} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx"/><small>{project?.rfpFileName ? "Current file: " + project.rfpFileName : "The selected filename is recorded; server-side file storage is not connected yet."}</small></label>
+      <label className="ui-field full">RFP file<input name={f.rfp} type="file" accept="application/pdf,.pdf" disabled={saving}/><small>{project?.rfpFileName ? "Current file: " + project.rfpFileName : "Optional PDF. Stored privately in Project files; review AI-extracted details in Project setup."}</small><FieldError errors={errors} field="rfp"/></label>
     </section>
-    <div className="ui-form-actions"><Button onClick={onCancel}>Cancel</Button><Button type="submit" variant="primary">{project ? "Save project" : "Create project"}<ArrowRight size={16}/></Button></div>
+    {uploadStatus && <p role="status">Storing the RFP · {uploadStatus}</p>}
+    <div className="ui-form-actions"><Button disabled={saving} onClick={onCancel}>Cancel</Button><Button disabled={saving} type="submit" variant="primary">{saving ? "Saving…" : project ? "Save project" : "Create project"}<ArrowRight size={16}/></Button></div>
   </form>;
 }
 
 export function ProjectInformation({ project, onSave, navigate, cover }: { project: Project; onSave: (project: Project) => void; navigate: (screen: Screen) => void; cover: ReactNode }) {
   const [editing, setEditing] = useState(false);
+  const [formBusy, setFormBusy] = useState(false);
   const [addingMember, setAddingMember] = useState(false), [memberError, setMemberError] = useState("");
   const workType = WORK_TYPES.find(option => option.value === project.workType)?.label ?? "Not recorded";
   const taxStatus = TAX_STATUSES.find(option => option.value === project.taxStatus)?.label ?? "Not recorded";
@@ -103,12 +123,13 @@ export function ProjectInformation({ project, onSave, navigate, cover }: { proje
 
   return <><PageHeader eyebrow="PROJECT INFORMATION" title={project.name} description="The shared source of project context for your team and trade partners." actions={<><Button onClick={() => navigate("portal")}><HardHat size={16}/>Subcontractor view</Button><Button onClick={()=>navigate("architect")}>Architect view</Button><Button variant="primary" onClick={() => setEditing(true)}>Edit information</Button></>}/>
     <div className="info-cover">{cover}<div><Badge tone="green">{project.status}</Badge><h2>{project.type}</h2><p><MapPin size={16}/>{project.location}</p></div></div>
+    <SetupContinueCard project={project} navigate={navigate}/>
     <div className="ui-two-col"><Panel title="Project brief" subtitle="Visible to the project team and invited partners"><div className="info-body"><p>{project.description || "No project brief has been recorded."}</p><dl className="info-grid">{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></div></Panel>
       <div className="info-side"><Panel title="Project team" action={<Button onClick={() => {setAddingMember(true);setMemberError("");}}><Plus size={14}/>Add member</Button>}><div className="team-list">{project.team.length ? project.team.map(member => <div key={member.name + "-" + member.role}><span className="user-avatar">{member.name.split(/\s+/).map(part => part[0]).join("").slice(0, 2).toUpperCase()}</span><div><strong>{member.name}</strong><small>{member.role || "Role not recorded"}</small></div></div>) : <p className="project-empty-note">No project team recorded.</p>}</div></Panel>
         <Panel title="Internal estimate"><div className="internal-value"><span><ShieldCheck size={15}/>TEAM VIEW</span><strong>{usd(project.value)}</strong><p>Planning value for this project.</p><Button onClick={() => navigate("budget")}>Budget breakdown<ArrowRight size={15}/></Button></div></Panel></div>
     </div>
     <div className="info-links">{[[screenLabel("documents"), "Drawings, manuals and reports", "documents", FileStack], ["RFP & bid requirements", "Owner requirements and key dates", "documents", FileText], [screenLabel("packages"), "Trade scopes and assigned owners", "packages", Box]].map(([title, description, destination, Icon]) => { const LinkIcon = Icon as typeof Box; return <button key={String(title)} onClick={() => navigate(destination as Screen)}><LinkIcon size={24}/><div><strong>{String(title)}</strong><small>{String(description)}</small></div><ArrowUpRight size={18}/></button>; })}</div>
     {addingMember && <Modal title="Add project member" subtitle="Add a person to the project record." onClose={()=>setAddingMember(false)}><form onSubmit={e=>{e.preventDefault();const data=new FormData(e.currentTarget);try{onSave(addProjectMember(project,String(data.get("name")||""),String(data.get("role")||"")));setAddingMember(false);}catch(error){setMemberError(error instanceof Error?error.message:"Member could not be added.");}}}><label className="ui-field"><span>Name</span><input name="name" required maxLength={150}/></label><label className="ui-field"><span>Construction role</span><select name="role" required>{CONSTRUCTION_ROLES.map(r=><option key={r}>{r}</option>)}</select></label>{memberError&&<p role="alert">{memberError}</p>}<Button type="submit" variant="primary">Add member</Button></form></Modal>}
-    {editing && <Modal title="Edit project information" subtitle="Update the project record used across the workspace." wide onClose={() => setEditing(false)}><ProjectForm project={project} onCancel={() => setEditing(false)} onSave={updated => { onSave(updated); setEditing(false); }}/></Modal>}
+    {editing && <Modal title="Edit project information" subtitle="Update the project record used across the workspace." wide onClose={() => { if (!formBusy) setEditing(false); }}><ProjectForm project={project} onBusyChange={setFormBusy} onCancel={() => setEditing(false)} onSave={updated => { onSave(updated); setEditing(false); }}/></Modal>}
   </>;
 }

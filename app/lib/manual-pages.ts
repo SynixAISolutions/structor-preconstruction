@@ -445,6 +445,8 @@ export const pageGuides = [
     title: "Preconstruction to-do",
     purpose: "See what is left to do before the project leaves preconstruction. Every task is worked out from the project itself: scope reviews, published bid forms, invitations, submitted bids, leveling, the budget, allowances, awards, Exhibit A, and the subcontract.",
     steps: [
+      "Project setup warnings are tasks too: a red Missing file or Missing label means a file or detail the project usually needs isn't there; a yellow Check information label means something was uploaded or read but needs a person to check it (an unreviewed RFP, unread title blocks, a not-applicable decision to reconsider).",
+      "Finished tasks drop off the list and move to the Done tab with the time they were done. Choose Scan for task completion to reread the project files and bid leveling and check every task again.",
       "The project schedule feeds this list too: activities past their finish, activities that should have started, and unfinished activities in the next three weeks appear under Project schedule.",
       "Read the overall percent complete. Each trade package counts eight milestones, from scope approved to subcontract executed, plus four project milestones: project information, project files, budget approved, and allowances decided.",
       "Work down the task list. Tasks you need to act on come first, most urgent at the top; tasks waiting on someone else, such as a subcontractor's bid or signature, come after.",
@@ -460,6 +462,28 @@ export const pageGuides = [
     example: "After an estimator approves the last Demolition scope item, the task Approve scope items in Demolition is replaced by Publish the Demolition bid form.",
     reality: "Tasks come from this browser’s demo data for the open project. Leveling tasks use the comparison currently loaded in Bid leveling. Nothing is sent to anyone, and the list does not track work done outside Structor.",
     related: ["scopes", "leveling", "contracts"],
+  },
+  {
+    id: "setup",
+    group: "Preconstruction",
+    title: "Project setup",
+    purpose: "Get a new project from empty to AI-written scopes, then gather the documents a project usually needs. Every step is worked out from what is actually in the project.",
+    steps: [
+      "Follow the four opening steps in order: upload drawings and specifications, review the project details, confirm the trades, write the scopes. Drawings alone are enough to start; the project manual adds specification requirements.",
+      "Each step shows its status: missing, needs review, in progress, ready or failed. A PDF whose pages couldn't be read, or drawings whose title blocks weren't read, is not counted as done.",
+      "Upload the RFP and review what was read from it: each detail shows the current value, the proposed value and the page it came from. Nothing changes until you accept it, and a new RFP revision is reviewed again.",
+      "Confirm the trades suggested from the drawings and the manual; each lists the sections and sheets it came from. Rename, add or remove trades in Bid packages.",
+      "The recommended steps (contract documents, site and reports, budget, schedule, team) say why each item is suggested for this project; reports follow the work type.",
+      "When an item doesn't apply, mark it Not applicable with a reason; it is asked again if the work type or estimate stage changes. When someone else has to provide it, mark it Waiting with who and an optional follow-up date; it stays outstanding.",
+    ],
+    terms: [
+      { name: "Needs review", meaning: "Something was uploaded or read but a person still has to check it, such as RFP details or unread title blocks." },
+      { name: "Not applicable", meaning: "A recorded decision, with a reason, that an item isn't needed for this project." },
+      { name: "Waiting", meaning: "Someone else has to provide the item; it stays on the list until it arrives." },
+    ],
+    example: "Uploading only the drawing set marks the first step ready and suggests Demolition, Drywall, Mechanical and Electrical from the sheet titles; confirming them opens Write scopes with AI.",
+    reality: "Statuses come from the files stored for this project and this browser's project data. Decisions are saved in this browser. Missing reports are suggestions, not requirements, and drawing completeness is not checked yet.",
+    related: ["documents", "information", "scopes", "turnover"],
   },
 ] satisfies {
   id: string;

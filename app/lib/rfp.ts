@@ -48,6 +48,33 @@ export function normalizeFact(field: RfpField, value: unknown): RfpFact["value"]
   return text ? text.slice(0, field === "description" ? 600 : 160) : null;
 }
 
+export type RfpComparison = { rows: (RfpFact & { label: string; current: string; proposed: string; same: boolean; conflict: boolean })[]; issues: string[] };
+
+const shown = (v: unknown) => Array.isArray(v) ? v.join(", ") : v === null || v === undefined || v === 0 ? "" : String(v);
+
+/**
+ * The RFP review as a comparison (never a silent overwrite): each field's current and proposed value
+ * with its page and quote; a conflict when the project already holds a different value; and issues
+ * worth a look before accepting (dates out of order, a renovation/addition split with one side).
+ */
+export function compareRfpFacts(project: Project, facts: RfpFact[]): RfpComparison {
+  const rows = facts.map(f => {
+    const current = shown((project as unknown as Record<string, unknown>)[f.field]), proposed = shown(f.value);
+    const same = current.toLowerCase() === proposed.toLowerCase();
+    return { ...f, label: RFP_FIELDS[f.field], current, proposed, same, conflict: !!current && !same };
+  });
+  const value = (field: RfpField) => (facts.find(f => f.field === field)?.value ?? (project as unknown as Record<string, unknown>)[field]) as string | number | undefined;
+  const issues: string[] = [];
+  const due = value("due"), rfi = value("rfi"), start = value("start"), finish = value("finish");
+  if (rfi && due && String(rfi) > String(due)) issues.push("The last day for questions falls after the bid due date.");
+  if (start && finish && String(finish) < String(start)) issues.push("Construction completion falls before construction start.");
+  const workType = value("workType"), reno = value("renovationSquareFeet"), add = value("additionSquareFeet");
+  if (workType === "both" && !(Number(reno) > 0 && Number(add) > 0)) issues.push("Renovation and addition work needs both areas; one is missing.");
+  const area = facts.find(f => f.field === "squareFeet");
+  if (area && Number(area.value) < 1000) issues.push(`A building area of ${area.value} SF is unusually small; check the units.`);
+  return { rows, issues };
+}
+
 /** The project with the accepted facts applied; area totals follow the work type as the project form does. */
 export function applyRfpFacts(project: Project, facts: RfpFact[]): Project {
   const changes: Record<string, unknown> = {};
