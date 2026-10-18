@@ -12,7 +12,7 @@ const empty: Fields = { id: "", name: "", code: "", owner: "", due: "", splitFro
 export function TradePackageControls({ state, run, notify }: { state: Procurement; run: (action: (current: Procurement) => Procurement) => string | null; notify: (text: string) => void }) {
   const [open, setOpen] = useState(false), [fields, setFields] = useState<Fields | null>(null), [error, setError] = useState("");
   const [selected, setSelected] = useState<string[]>([]), [combine, setCombine] = useState<{ from: string; to: string } | null>(null), [removing, setRemoving] = useState<TradePackage | null>(null);
-  function edit(pkg?: TradePackage, split = false) { setOpen(true); setError(""); setCombine(null); setSelected([]); setFields(pkg ? { id: split ? "" : pkg.id, name: split ? "" : pkg.name, code: pkg.code, owner: pkg.owner, due: pkg.due, splitFrom: split ? pkg.id : "" } : { ...empty }); }
+  function edit(pkg?: TradePackage, split = false) { setOpen(true); setError(""); setCombine(null); setRemoving(null); setSelected([]); setFields(pkg ? { id: split ? "" : pkg.id, name: split ? "" : pkg.name, code: pkg.code, owner: pkg.owner, due: pkg.due, splitFrom: split ? pkg.id : "" } : { ...empty }); }
   function save(event: FormEvent) {
     event.preventDefault(); if (!fields) return;
     const message = run(current => {
@@ -38,7 +38,7 @@ export function TradePackageControls({ state, run, notify }: { state: Procuremen
     setError(message ?? "");
     if (!message) { setCombine(null); notify("Trade scopes combined. Review the destination bid form before publishing."); }
   }
-  return <><Button onClick={() => edit()}><Plus size={15}/>Add trade package</Button><Button onClick={() => { setOpen(true); setFields(null); setError(""); }}>Manage trades</Button>
+  return <><Button onClick={() => edit()}><Plus size={15}/>Add trade package</Button><Button onClick={() => { setOpen(true); setFields(null); setCombine(null); setRemoving(null); setError(""); }}>Manage trades</Button>
     {open && <Modal title={fields ? fields.splitFrom ? "Split a trade package" : fields.id ? "Edit trade package" : "Add trade package" : "Manage trade packages"} subtitle="Trade packages determine which scopes each subcontractor prices. Published bid forms retain their issued snapshots." wide onClose={() => setOpen(false)}>
       {fields ? <form onSubmit={save}>
         {!fields.id && !fields.splitFrom && <label className="ui-field">Start from a standard trade<select defaultValue="" onChange={e => { const trade = STANDARD_TRADES.find(t => t.id === e.target.value); if (trade) setFields(f => f && ({ ...f, name: trade.name, code: trade.code })); }}><option value="">Custom trade</option>{STANDARD_TRADES.map(t => <option key={t.id} value={t.id}>{t.code} · {t.name}</option>)}</select></label>}

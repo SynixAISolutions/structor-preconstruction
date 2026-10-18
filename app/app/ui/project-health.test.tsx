@@ -17,6 +17,7 @@ test("an empty project has honest zero progress and a path to its first trade", 
   assert.match(html, /Project completion: 0%/);
   assert.match(html, /0 of 4 workflow milestones/);
   assert.match(html, /Your first trade starts here/);
+  assert.match(html, /Project milestones only. Trade milestones appear after you confirm trades./);
   assert.match(html, /No open tasks/);
   assert.doesNotMatch(html, /NaN|Infinity|100%/);
 });

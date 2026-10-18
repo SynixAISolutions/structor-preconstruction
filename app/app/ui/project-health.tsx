@@ -56,7 +56,7 @@ export function ProjectHealthCharts({ summary, navigate }: { summary: HealthSumm
     <div className="health-overview-grid">
       <section className="health-workflow-card" aria-label="Project completion">
         <div className="health-card-heading"><span><ClipboardCheck size={16}/>Project completion</span><span>WORKFLOW</span></div>
-        <div className="health-ring-layout"><ProgressRing percent={summary.progress.percent} label="Project completion" detail={`${summary.progress.done} of ${summary.progress.total} workflow milestones`} pending={!summary.ready}/><div><span className="health-big-number">{summary.ready ? summary.progress.done : "—"}<small> / {summary.progress.total}</small></span><h3>Milestones complete</h3><p>From the first scope review to the final executed subcontract.</p></div></div>
+        <div className="health-ring-layout"><ProgressRing percent={summary.progress.percent} label="Project completion" detail={`${summary.progress.done} of ${summary.progress.total} workflow milestones`} pending={!summary.ready}/><div><span className="health-big-number">{summary.ready ? summary.progress.done : "—"}<small> / {summary.progress.total}</small></span><h3>Milestones complete</h3><p>{summary.packages.length ? "From the first scope review to the final executed subcontract." : "Project milestones only. Trade milestones appear after you confirm trades."}</p></div></div>
         <div className="health-card-footer"><span><CheckCheck size={15}/>Updates as work gets done</span><button onClick={() => navigate("turnover")}>View project to-do<ArrowRight size={15}/></button></div>
       </section>
       <section className="health-readiness-card" aria-label="Project information and files">
