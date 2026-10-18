@@ -16,6 +16,7 @@ import { trades, type TakeoffOrigin, type TakeoffRow } from "./data/preconstruct
 import type { BudgetLine, BudgetState, LevelingCandidate } from "./budget";
 import type { Procurement, TradePackage } from "./procurement";
 import type { QuantityDraft } from "./extraction";
+import type { EstimateDraftLine } from "./estimate-ai";
 
 export class EstimateRuleError extends Error {
   constructor(message: string) { super(message); this.name = "EstimateRuleError"; }
@@ -115,6 +116,19 @@ export function addAcceptedQuantity(rows: TakeoffRow[], procurement: Procurement
   if (rows.some(r => r.origin?.kind === "ai" && r.origin.draftId === draft.id)) fail(`${draft.item} is already in the estimate.`);
   const source = draft.citations.map(c => c.sheet ?? `${c.document} p.${c.page}`).join(", ");
   return [...rows, { id: newId(), ...clean({ packageId: draft.packageId, item: draft.item, unit: draft.unit, quantity: draft.quantity, rate, source }, procurement), reviewed: false, origin: { kind: "ai", draftId: draft.id } }];
+}
+
+/**
+ * Adds the lines "Estimate with AI" drafted for a trade, unreviewed, each remembering its basis and
+ * rate source. A line the trade already has from an earlier AI draft (same item) is not added again.
+ */
+export function addAiEstimateLines(rows: TakeoffRow[], procurement: Procurement, packageId: string, lines: EstimateDraftLine[]): TakeoffRow[] {
+  const existing = new Set(rows.filter(r => r.packageId === packageId && r.origin?.kind === "ai-estimate").map(r => r.item.toLowerCase()));
+  const added = lines.filter(l => !existing.has(l.item.toLowerCase())).map(l => ({
+    id: newId(), ...clean({ packageId, item: l.item, unit: l.unit, quantity: l.quantity, rate: l.rate, source: `${l.quantityBasis || "No quantity basis"} · rate: ${l.rateNote}` }, procurement),
+    reviewed: false, origin: { kind: "ai-estimate" as const, basis: l.quantityBasis, rateSource: l.rateSource, flags: l.flags },
+  }));
+  return added.length ? [...rows, ...added] : rows;
 }
 
 /** Changing what a line says or costs needs a fresh review; moving it to another trade does not. */

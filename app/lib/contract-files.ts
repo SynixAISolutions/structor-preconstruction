@@ -1,7 +1,8 @@
-import { AwardRuleError, type AwardState, type DocumentContent } from "./award";
+import { AwardRuleError, type AwardState, type DocumentContent, type DocumentTemplate } from "./award";
 import { assetId, assetUrl, type DocumentAsset } from "./document-assets";
 export const EXHIBITS = { C: "Insurance requirements", D: "Safety plan", E: "Schedule", F: "Billing package", G: "Quality control plan" } as const;
-export type CompanyForm = { name: string; logo?: DocumentAsset; form?: DocumentAsset };
+/** `exhibitTemplate` / `subcontractTemplate`: the company's own forms mapped by AI (lib/company-forms), used for new packages. */
+export type CompanyForm = { name: string; logo?: DocumentAsset; form?: DocumentAsset; exhibitTemplate?: DocumentTemplate; subcontractTemplate?: DocumentTemplate };
 export type ContractFiles = { company: CompanyForm; b: DocumentContent | null; files: Partial<Record<keyof typeof EXHIBITS, DocumentAsset>> };
 export const EMPTY_CONTRACT_FILES: ContractFiles = { company: { name: "General contractor" }, b: null, files: {} };
 export function setContractFiles(state: AwardState, id: string, files: ContractFiles): AwardState {

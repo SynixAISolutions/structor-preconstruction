@@ -45,4 +45,25 @@ assert(applied.lines.every(line => line.status === "draft" && line.committed ===
 assert.equal(applied.conceptSource.area, 200);
 assert.throws(() => H.applyConceptBudget(applied, concept, "Estimator"), /already/);
 assert.equal(empty.lines.length, 0, "Applying builds a new state; original data stays untouched");
+// The concept budget's AI step: the AI ranks stored projects and proposes factors; the math stays here.
+const C = await import("../lib/concept-ai.ts");
+const { EXTRA_JOBS } = await import("../lib/ai-jobs-more.ts");
+const facts = C.comparableFacts([base, second]);
+assert.ok(facts.every(r => !("lines" in r) && !("source" in r)), "The AI sees facts and cost per SF, not lines or sources");
+assert.equal(facts[0].costPerSf, Math.round(base.lines.filter(l => !l.byOwner).reduce((n, l) => n + l.amount, 0) / base.squareFeet * 100) / 100);
+const suggestion = C.screenConceptSuggestion({ comparables: [{ id: "h2", score: 70, reasons: "Same type, bigger." }, { id: "ghost", score: 99 }, { id: "h1", score: 140, reasons: "Same type and size." }, { id: "h1", score: 10 }], factors: { profileFactor: 1.1, locationIndex: -3 } }, facts);
+assert.deepEqual(suggestion.comparables.map(c => [c.id, c.score]), [["h1", 100], ["h2", 70]], "Only stored projects, once each, scores clamped, best first");
+assert.deepEqual([suggestion.factors.locationIndex, suggestion.factors.costIndex, suggestion.factors.profileFactor], [base.locationIndex, base.costIndex, 1.1], "Invalid indexes fall back to the best comparable's");
+assert.match(suggestion.factors.basis, /Suggested by AI/, "A changed factor always carries a basis");
+const reset = C.screenConceptSuggestion({ comparables: [{ id: "h1", score: 50 }], factors: { profileFactor: 7 } }, facts);
+assert.equal(reset.factors.profileFactor, 1); assert.match(reset.notes[0], /reset to 1/);
+assert.match(C.screenConceptSuggestion({ comparables: [] }, facts).notes[0], /No stored historical project/);
+const chosen = [base, second].filter(r => suggestion.comparables.some(c => c.id === r.id));
+assert.ok(H.generateConceptBudget(project, chosen, suggestion.factors).total > 0, "The suggested factors are accepted by the concept budget");
+const CJ = EXTRA_JOBS["concept-comparables"];
+assert.throws(() => CJ.parse({ project: { name: "X" }, records: facts }), /building area/);
+assert.throws(() => CJ.parse({ project: C.targetFacts(project), records: [] }), /historical project/);
+assert.equal(CJ.parse({ project: C.targetFacts(project), records: facts }).records.length, 2);
+assert.match(CJ.messages(CJ.parse({ project: C.targetFacts(project), records: facts }))[0].content, /Never state or invent costs/);
+
 console.log("Historical budgets checked: flat/Contractor import, source reconciliation, cache errors, owner exclusions, area weighting, missing-line coverage, factors, estimate stages and non-destructive application.");
