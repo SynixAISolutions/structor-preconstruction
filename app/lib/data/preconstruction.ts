@@ -19,7 +19,9 @@ export const sampleFiles: LibraryFile[] = [
 ];
 
 /** Where an estimate line's quantity came from, when not typed in: a model quantity row or an accepted AI finding. */
-export type TakeoffOrigin = { kind: "model"; rowId: string; measured: number } | { kind: "ai"; draftId: string } | { kind: "scope"; draftId: string; scopeId: string };
+export type TakeoffOrigin = { kind: "model"; rowId: string; measured: number } | { kind: "ai"; draftId: string } | { kind: "scope"; draftId: string; scopeId: string }
+  /** Drafted by "Estimate with AI" (lib/estimate-ai): the quantity's basis, the rate's reference id or "assumption", and what to check. */
+  | { kind: "ai-estimate"; basis: string; rateSource: string; flags: string[] };
 /**
  * One line of the contractor's own estimate (Quantity takeoffs → Manual quantities). `packageId` is the trade it
  * belongs to (Marcel, 7 Oct: takeoffs by trade, like Scopes & bid forms); rows saved before it existed
