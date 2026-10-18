@@ -8,6 +8,7 @@ import { ActivityInbox } from "./ui/activity-inbox";
 import { CommercialView } from "./ui/commercial";
 import { UserManual } from "./ui/user-manual";
 import { ProjectForm, ProjectInformation } from "./ui/project-record";
+import { ProjectSetupView } from "./ui/project-setup";
 import { SidebarNavigation } from "./ui/sidebar-navigation";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, SearchBox, Tabs, usd, type Screen } from "./ui/shared";
 import { DEFAULT_SCREEN, resolveScreen, screenGroup, screenLabel, searchScreens } from "../lib/screens";
@@ -44,9 +45,10 @@ export default function StructorApp(){
  useEffect(()=>{if(ready)saveProjects(projects);},[projects,ready]);
  useEffect(()=>{if(!toast)return;const id=setTimeout(()=>setToast(""),4500);return()=>clearTimeout(id);},[toast]);
  useEffect(()=>{const handler=(e:KeyboardEvent)=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();setSearchOpen(v=>!v);}};window.addEventListener("keydown",handler);return()=>window.removeEventListener("keydown",handler);},[]);
+ const [newProjectBusy,setNewProjectBusy]=useState(false);
  const props={navigate,notify,projectName:project.name};
  function inspectModel(target:ModelInspection){navigate("model");setModelInspection(target);}
- function createProject(p:Project){setProjects(v=>[...v,p]);selectProject(p.id);setNewProject(false);navigate("information");notify("Project draft created.");}
+ function createProject(p:Project){setProjects(v=>[...v,p]);selectProject(p.id);setNewProject(false);navigate("setup");notify("Project created. Start with your drawings or project manual.");}
  return <div className={`product-app ${reduced?"motion-off":""}`}>
   {menuOpen&&<button className="mobile-scrim" aria-label="Close navigation" onClick={()=>setMenuOpen(false)}/>}
   <aside className={`product-sidebar ${menuOpen?"is-open":""}`}>
@@ -62,6 +64,7 @@ export default function StructorApp(){
     <div className="page-enter" key={screen}>
       {activeId===SAMPLE_PROJECT_ID&&<SampleRefreshBanner refresh={sampleRefresh}/>}
      {screen==="overview"&&<ProjectOverview project={project} navigate={navigate} onNew={()=>setNewProject(true)} cover={<BuildingModel/>}/>}
+     {screen==="setup"&&<ProjectSetupView key={project.id} project={project} navigate={navigate} notify={notify} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Reviewed project information saved.");}}/>}
      {modelView&&<ModelStudio view={modelView} projectId={project.id} projectName={project.name} navigate={navigate} notify={notify} inspection={modelView==="interior"?modelInspection:null}/>}
      {screen==="projects"&&<Projects projects={projects} onNew={()=>setNewProject(true)} onOpen={p=>{selectProject(p.id);navigate("information");}}/>}
      {screen==="architect"&&<ArchitectView {...props}/>}
@@ -78,7 +81,7 @@ export default function StructorApp(){
    {searchOpen&&<Modal title="Find your next step" subtitle="Jump to any part of your workspace." onClose={()=>setSearchOpen(false)}><SearchBox value={search} onChange={setSearch} placeholder="Search scopes, budget, drawings…"/><div className="command-list">{searchScreens(search).map(s=><button key={s.id} onClick={()=>navigate(s.id)}><NavIcon id={s.id} name={s.icon} size={19}/>{s.label}<ArrowRight size={15}/></button>)}</div></Modal>}
   <UserManual open={helpOpen} onOpen={()=>setHelpOpen(true)} onClose={()=>setHelpOpen(false)} currentScreen={screen} onNavigate={id=>{const next=resolveScreen(id);if(next&&next!==screen)navigate(next);}}/>
   <PageVoiceFeedback page={{screen,projectId:projectOpen?project.id:null,projectName:projectOpen?project.name:null}} notify={notify} onOpenPage={message=>{if(message.projectId){if(!projects.some(p=>p.id===message.projectId)){notify(`The message is for ${message.projectName}. That project is not saved in this browser.`);return false;}selectProject(message.projectId);}navigate(message.screen);return true;}}/>
-   {newProject&&<Modal title="A new project starts here" subtitle="Set up the workspace, then add your RFP and project documents." wide onClose={()=>setNewProject(false)}><ProjectForm onCancel={()=>setNewProject(false)} onSave={createProject}/></Modal>}
+   {newProject&&<Modal title="A new project starts here" subtitle="Set up the workspace, then add your RFP and project documents." wide onClose={()=>{if(!newProjectBusy)setNewProject(false);}}><ProjectForm onBusyChange={setNewProjectBusy} onCancel={()=>setNewProject(false)} onSave={createProject}/></Modal>}
  </div>;
 }
 
