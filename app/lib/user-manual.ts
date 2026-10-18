@@ -60,6 +60,7 @@ const workspaceGuides: ManualGuide[] = [
       "Read the large project card for the selected project name, location, type, and estimated value. Open project takes you to Project information.",
       "Use Add documents to open the document library, or New project to create a local project record.",
       "Read the metric cards: Scope requirements counts saved checklist items; Submitted bids counts companies with a submitted revision; Open document issues counts pending-review, open and in-RFI issues; Published bid forms counts packages whose current form is published.",
+      "Project health shows two rings: Project completion (workflow milestones from approved scopes to executed subcontracts) and Project information & files (how much of what a project usually needs is in place, with missing items in red and items to check in yellow). Check to-do list for missing information opens the to-do; the bars show each trade's progress and the open tasks by area.",
       "Use the next-step cards and workflow links to jump to scopes, document checks, or bid leveling. Trade and activity links also open the relevant screen.",
       "The bell at the top opens Reminders: the open project's most urgent actions from its preconstruction to-do (late or unstarted schedule activities, scope items to approve, bids to review), each opening the page where it is done. Quick find searches destinations. The profile initials open Settings.",
     ],

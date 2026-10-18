@@ -13,7 +13,7 @@ import { useSchedule } from "./use-schedule";
  * The open project's setup guide (lib/project-setup) from its saved state, under "project-setup".
  * `run` applies one action (decide, clearDecision, markReviewed) and returns null or the error to show.
  */
-export function useProjectSetup(project: Project): { summary: SetupSummary; state: SetupState; ready: boolean; run: (action: (s: SetupState) => SetupState) => string | null } {
+export function useProjectSetup(project: Project | null): { summary: SetupSummary | null; state: SetupState; ready: boolean; refresh: () => Promise<unknown>; run: (action: (s: SetupState) => SetupState) => string | null } {
   const [state, setState] = useLocalDraft<SetupState>("project-setup", EMPTY_SETUP);
   const latest = useRef(state);
   latest.current = state;
@@ -27,14 +27,14 @@ export function useProjectSetup(project: Project): { summary: SetupSummary; stat
       throw error;
     }
   }, [setState]);
-  const { documents, ready } = useProjectDocuments();
+  const { documents, ready, refresh } = useProjectDocuments();
   const { extraction, procurement } = useExtraction();
   const { state: budget } = useBudget();
   const { state: schedule } = useSchedule();
-  const summary = projectSetup({
+  const summary = project && projectSetup({
     project, documents, procurement, state,
     pendingProposals: extraction.drafts.filter(d => d.kind === "scope" && d.status === "pending-review").length,
     budgetLines: budget.lines.length, scheduleActivities: schedule.activities.length,
   });
-  return { summary, state, ready, run };
+  return { summary, state, ready, refresh, run };
 }

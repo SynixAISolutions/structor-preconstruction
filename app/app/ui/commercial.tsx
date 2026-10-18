@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, type FormEvent, type ReactNode } from "react";
-import { ArrowRight, Building2, Check, Clock3, Download, Pencil, Plus, Star, UserCheck } from "lucide-react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { ArrowRight, Building2, Check, CheckCircle2, Clock3, Download, Pencil, Plus, RefreshCw, Star, UserCheck } from "lucide-react";
 import { Badge, Button, Empty, ExportButton, Modal, PageHeader, Panel, PreviewNote, SearchBox, Stats, Tabs, downloadText, exportRows, type Screen, type ViewProps } from "./shared";
 import "./commercial.css";
 import { useLocalDraft } from "../../lib/use-local-draft";
@@ -11,7 +11,7 @@ import type { Project } from "../../lib/projects";
 import { ProcurementPackagesView } from "./procurement";
 import { SubmissionPortalView } from "./submission-ui";
 import { ScheduleView } from "./schedule-ui";
-import { useTodoSummary } from "../../lib/use-todo-summary";
+import { useTodo } from "../../lib/use-todo-summary";
 import { AllowancesView, BudgetView } from "./budget-ui";
 import { AwardView } from "./award-ui";
 import { ValueEngineeringView } from "./value-engineering-ui";
@@ -43,7 +43,12 @@ function PrequalificationView({ navigate }: ViewProps) {
 
 function TurnoverView({ notify, navigate, projectName, project }: ViewProps & { project: Project }) {
   const [filter, setFilter] = useState("My actions");
-  const summary = useTodoSummary(project);
+  const { summary, history, scanning, lastScan, scanForCompletion } = useTodo(project);
+  useEffect(() => {
+    if (!lastScan) return;
+    notify(lastScan.completed.length ? `${lastScan.completed.length} task${lastScan.completed.length === 1 ? "" : "s"} done since the last check: ${lastScan.completed.slice(0, 3).map(d => d.title).join("; ")}${lastScan.completed.length > 3 ? "…" : ""}` : `Checked: ${lastScan.open} open task${lastScan.open === 1 ? "" : "s"}, nothing new done.`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastScan]);
   const teamActions = summary.tasks.filter(task => task.status === "todo").length;
   const waiting = summary.tasks.filter(task => task.status === "waiting").length;
   const visible = summary.tasks.filter(task => filter === "All work" || (filter === "My actions" ? task.status === "todo" : task.status === "waiting"));
@@ -57,7 +62,7 @@ function TurnoverView({ notify, navigate, projectName, project }: ViewProps & { 
   }
 
   return <div className="cm-view">
-    <PageHeader eyebrow="PRECONSTRUCTION → OPERATIONS" title={screenLabel("turnover")} description="See the next action calculated from the project’s scopes, outreach, bids, budget, and awards." actions={<Button variant="primary" onClick={exportTodo}><Download size={16}/>Export to-do list</Button>}/>
+    <PageHeader eyebrow="PRECONSTRUCTION → OPERATIONS" title={screenLabel("turnover")} description="See the next action calculated from the project’s scopes, outreach, bids, budget, and awards." actions={<><Button disabled={scanning} onClick={() => void scanForCompletion()}><RefreshCw size={16}/>{scanning ? "Scanning…" : "Scan for task completion"}</Button><Button variant="primary" onClick={exportTodo}><Download size={16}/>Export to-do list</Button></>}/>
     <PreviewNote>Calculated from current project state · Complete work on its source screen and this list updates automatically.</PreviewNote>
     <div className="cm-turnover-hero">
       <div className="cm-completion-ring" style={{background:`conic-gradient(#ef743d ${summary.progress.percent}%, #e8ece9 0)`}}><span>{summary.progress.percent}<small>%</small></span></div>
@@ -65,10 +70,13 @@ function TurnoverView({ notify, navigate, projectName, project }: ViewProps & { 
       <div className="cm-todo-summary"><span><strong>{teamActions}</strong><small>Team actions</small></span><span><strong>{waiting}</strong><small>Waiting outside team</small></span><span><strong>{summary.packages.length}</strong><small>Trade packages</small></span></div>
     </div>
     <Panel title="Current work" subtitle="Team actions appear first; waiting items remain visible without blocking the action queue." action={<Badge>{visible.length} shown</Badge>}>
-      <div className="ui-toolbar"><Tabs tabs={["My actions", "Waiting", "All work"]} value={filter} onChange={setFilter}/><div className="cm-todo-groups">{summary.groups.filter(group => group.todo || group.waiting).map(group => <span key={group.group}>{group.label}<b>{group.todo + group.waiting}</b></span>)}</div></div>
-      {visible.length ? <div className="cm-turnover-list">{visible.map(task => <div key={task.id}>
+      <div className="ui-toolbar"><Tabs tabs={["My actions", "Waiting", "All work", "Done"]} value={filter} onChange={setFilter}/><div className="cm-todo-groups">{summary.groups.filter(group => group.todo || group.waiting).map(group => <span key={group.group}>{group.label}<b>{group.todo + group.waiting}</b></span>)}</div></div>
+      {filter === "Done" ? (history.done.length ? <div className="cm-turnover-list">{history.done.map(task => <div key={`${task.id}-${task.at}`} className="done">
+        <span className="cm-todo-state done"><CheckCircle2 size={15}/></span>
+        <div><strong>{task.title}<Badge>{groupLabel(task.group)}</Badge><Badge tone="green">Done</Badge></strong><p>Done {new Date(task.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p></div>
+      </div>)}</div> : <Empty title="Nothing done yet" description="Finished tasks move here when they disappear from the list, or when Scan for task completion finds them done."/>) : visible.length ? <div className="cm-turnover-list">{visible.map(task => <div key={task.id}>
         <span className={`cm-todo-state ${task.status}`}>{task.status === "waiting" ? <Clock3 size={15}/> : <ArrowRight size={15}/>}</span>
-        <div><strong>{task.title}<Badge>{groupLabel(task.group)}</Badge>{task.priority === "high" && <Badge tone="orange">High priority</Badge>}{task.status === "waiting" && <Badge tone="blue">Waiting</Badge>}</strong><p>{task.detail}</p></div>
+        <div><strong>{task.title}{task.flag && <Badge tone={task.flag.tone}>{task.flag.label}</Badge>}<Badge>{groupLabel(task.group)}</Badge>{task.priority === "high" && <Badge tone="orange">High priority</Badge>}{task.status === "waiting" && <Badge tone="blue">Waiting</Badge>}</strong><p>{task.detail}</p></div>
         <Button onClick={() => navigate(task.screen)}>Open {screenLabel(task.screen)}<ArrowRight size={14}/></Button>
       </div>)}</div> : <Empty title={filter === "Waiting" ? "Nothing is waiting" : "Preconstruction is caught up"} description={filter === "Waiting" ? "No subcontractor or outside response is holding the workflow." : "The current project state has no open team actions."}/>}
     </Panel>

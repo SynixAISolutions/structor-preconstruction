@@ -84,6 +84,14 @@ assert.throws(() => S.decide(S.EMPTY_SETUP, { target: "nonsense", kind: "waiting
 assert.equal(S.clearDecision(waiting, "budget").decisions.length, 0);
 assert.equal(S.decide(waiting, { target: "budget", kind: "not-applicable", reason: "Owner holds the budget" }, complete, "Marcel", at).decisions.length, 1, "One decision per target");
 
+// Completeness counts items (a step without items once): done, missing (red), to check (yellow), waiting.
+const full = run({ project: complete, documents: [drawings, rfp], procurement: proc, state: waiting });
+const c = full.completeness;
+assert.equal(c.total, full.steps.reduce((n, s) => n + (s.items.length || 1), 0));
+assert.equal(c.done + c.missing + c.review + c.waiting + full.steps.flatMap(s => s.items.length ? s.items : [s]).filter(u => u.status === "in-progress").length, c.total, "Every item is counted once");
+assert.ok(c.review >= 1 && c.waiting === 1 && c.percent === Math.round(c.done / c.total * 100));
+assert.deepEqual([empty.completeness.done, empty.completeness.review], [0, 0]);
+
 // RFP review is a comparison, never a silent overwrite.
 const cmp = compareRfpFacts(complete, [
   { field: "due", value: "2026-12-15", page: 3, quote: "q" }, { field: "location", value: "arlington, va", page: 1, quote: "q" },

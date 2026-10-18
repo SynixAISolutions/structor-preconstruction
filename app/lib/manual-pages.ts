@@ -445,6 +445,8 @@ export const pageGuides = [
     title: "Preconstruction to-do",
     purpose: "See what is left to do before the project leaves preconstruction. Every task is worked out from the project itself: scope reviews, published bid forms, invitations, submitted bids, leveling, the budget, allowances, awards, Exhibit A, and the subcontract.",
     steps: [
+      "Project setup warnings are tasks too: a red Missing file or Missing label means a file or detail the project usually needs isn't there; a yellow Check information label means something was uploaded or read but needs a person to check it (an unreviewed RFP, unread title blocks, a not-applicable decision to reconsider).",
+      "Finished tasks drop off the list and move to the Done tab with the time they were done. Choose Scan for task completion to reread the project files and bid leveling and check every task again.",
       "The project schedule feeds this list too: activities past their finish, activities that should have started, and unfinished activities in the next three weeks appear under Project schedule.",
       "Read the overall percent complete. Each trade package counts eight milestones, from scope approved to subcontract executed, plus four project milestones: project information, project files, budget approved, and allowances decided.",
       "Work down the task list. Tasks you need to act on come first, most urgent at the top; tasks waiting on someone else, such as a subcontractor's bid or signature, come after.",
