@@ -136,4 +136,48 @@ assert.deepEqual([steel.budget, steel.bid, steel.bidOverEstimate, steel.estimate
 assert.deepEqual([report.find(r => r.packageId === "carpentry").estimate, report.find(r => r.packageId === "carpentry").budgetOverEstimate], [null, null], "No estimate lines: nothing to compare");
 assert.equal(E.varianceReport({ rows: [legacy("09 · Finishes", { packageId: "drywall", quantity: 1, rate: 0 })], procurement: proc, budget, candidates }).find(r => r.packageId === "drywall").bidOverEstimate.percent, null, "A zero estimate has no percentage");
 
+// Estimate with AI: references, aiScreened lines (the math is ours), the area aiFallback, and adding lines once.
+const A = await import("../lib/estimate-ai.ts");
+const { EXTRA_JOBS } = await import("../lib/ai-jobs-more.ts");
+const aiRows = [
+  { id: "r1", division: "09 · Finishes", packageId: "drywall", item: "GWB partition", unit: "SF", quantity: 100, rate: 7.85, source: "A1.1", reviewed: true },
+  { id: "r2", division: "09 · Finishes", packageId: "flooring", item: "LVT", unit: "SF", quantity: 50, rate: 9, source: "A12.1", reviewed: true },
+  { id: "r3", division: "03 · Concrete", packageId: "concrete", item: "Slab", unit: "CY", quantity: 10, rate: 265, source: "S101", reviewed: true },
+  { id: "r4", division: "09 · Finishes", packageId: "drywall", item: "Unpriced", unit: "SF", quantity: 10, rate: 0, source: "", reviewed: false },
+];
+const aiConcept = { lines: [{ description: "Finishes", csiCode: "09 00 00", unitCost: 38.456, observations: 2, amount: 1, costCenter: "", classification: "direct", byOwner: false }, { description: "Concrete", csiCode: "03 00 00", unitCost: 20, observations: 2, amount: 1, costCenter: "", classification: "direct", byOwner: false }], total: 0, area: 1, records: [], factors: {}, warnings: [] };
+const aiRefs = A.estimateReferences(aiRows, { id: "drywall", code: "09 29 00" }, aiConcept);
+assert.deepEqual(aiRefs.map(r => [r.id, r.rate]), [["r1", 7.85], ["r2", 9], ["concept:09 00 00:Finishes", 38.46]], "Own lines first, then the division, then historical cost per SF; unpriced and other divisions left out");
+const aiIn = { trade: { id: "drywall", name: "Drywall", code: "09 29 00" }, project: { name: "P", type: "", location: "", squareFeet: 20000, workType: "", stage: "" }, scope: ["Partitions"], quantities: [], sheets: [], references: aiRefs };
+const aiScreened = A.screenEstimateLines({ lines: [
+  { item: "GWB partitions", quantity: 3000, unit: "sf", rate: 9.99, quantityBasis: "A1.1 partition lengths x 14 ft", rateSource: "r1" },
+  { item: "gwb partitions", quantity: 1, unit: "SF", rate: 1, quantityBasis: "duplicate", rateSource: "r1" },
+  { item: "Shaft wall", quantity: 400, unit: "SF", rate: 12.5, quantityBasis: "x", rateSource: "assumption" },
+  { item: "Ceiling grid", quantity: 900, unit: "LF", rate: 4, quantityBasis: "RCP grid lines", rateSource: "r2" },
+  { item: "Mystery", quantity: 5, unit: "BAGS", rate: 3, quantityBasis: "basis here", rateSource: "assumption" },
+  { item: "Huge", quantity: 1e9, unit: "SF", rate: 1, quantityBasis: "too big", rateSource: "assumption" },
+  { item: "Invented ref", quantity: 10, unit: "EA", rate: 50, quantityBasis: "door count on A8.2", rateSource: "q999" },
+] }, aiIn);
+assert.deepEqual(aiScreened.map(l => [l.item, l.rate, l.amount, l.rateSource, l.flags.join("|")]), [
+  ["GWB partitions", 7.85, 23550, "r1", "Rate set to the cited reference"],
+  ["Shaft wall", 12.5, 5000, "assumption", "Assumed rate|No quantity basis"],
+  ["Ceiling grid", 4, 3600, "assumption", "Cited reference uses another unit|Assumed rate"],
+  ["Invented ref", 50, 500, "assumption", "Assumed rate"],
+], "Known units, one per item, cited rates enforced, other rates flagged as assumptions, impossible lines dropped");
+const aiFallback = A.screenEstimateLines({ lines: [] }, aiIn);
+assert.deepEqual(aiFallback.map(l => [l.quantity, l.unit, l.rate, l.amount, l.flags[0]]), [[20000, "SF", 38.46, 769200, "Area-based allowance"]]);
+assert.deepEqual(A.screenEstimateLines({ lines: [] }, { ...aiIn, references: aiRefs.slice(0, 2) }), [], "No historical rate, no allowance");
+const aiProc = sampleProcurement;
+const aiAdded = E.addAiEstimateLines([], aiProc, "drywall", aiScreened);
+assert.equal(aiAdded.length, 4);
+assert.ok(aiAdded.every(r => r.reviewed === false && r.origin.kind === "ai-estimate" && r.packageId === "drywall"));
+assert.equal(aiAdded[0].origin.rateSource, "r1");
+assert.match(aiAdded[1].source, /No quantity basis|x · rate/);
+assert.equal(E.addAiEstimateLines(aiAdded, aiProc, "drywall", aiScreened), aiAdded, "The same AI lines are not aiAdded twice");
+assert.equal(E.estimateByTrade(aiAdded, aiProc).trades.find(t => t.packageId === "drywall").total, 32650);
+const J = EXTRA_JOBS["estimate-draft"];
+assert.throws(() => J.parse({ trade: { id: "drywall", name: "Drywall" }, project: {} }), /no scope lines/);
+assert.equal(J.parse({ trade: { id: "drywall", name: "Drywall" }, scope: ["a"], references: [{ id: "r1", rate: -5 }, { id: "r2", rate: 3, unit: "sf" }] }).references.map(r => r.id + r.unit).join(), "r2SF");
+assert.match(J.messages(J.parse({ trade: { id: "drywall", name: "Drywall", code: "09 29 00" }, scope: ["Partitions"] }))[0].content, /never reuse numbers/);
+
 console.log(`Estimate checked: ${list.trades.length} trades, legacy placement, add/model/AI/edit/move/remove lines, budget lines by 5-digit code, In-house estimate as budget basis, variance against leveled bids.`);
