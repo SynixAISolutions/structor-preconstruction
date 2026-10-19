@@ -8,4 +8,5 @@
 .concept-budget td { max-width: 330px; overflow-wrap: anywhere; }
 .concept-budget .ui-table-wrap { margin: 16px 0; }
 .concept-budget input[type="file"] { max-width: 100%; }
+.concept-ranking{display:grid;gap:14px;margin:20px 0}.concept-ranking article{border:1px solid #dde7e7;border-radius:10px;padding:18px}.concept-ranking label{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}.concept-ranking label strong{flex:1;min-width:140px;overflow-wrap:anywhere}.concept-ranking p{font-size:13px;line-height:1.8;color:#6c7e88}.concept-score{background:#e9eeee;height:6px;border-radius:4px;margin:14px 0;overflow:hidden}.concept-score i{display:block;height:100%;background:#578982}.concept-ai-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px}
 @media(max-width: 650px) { .concept-budget .ui-form-grid { grid-template-columns: 1fr; } .concept-budget .ui-table-wrap { max-width: 100%; overflow-x: auto; } }
