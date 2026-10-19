@@ -9,6 +9,7 @@ import { uploadProjectPdf, useProjectDocuments, type UploadProgress } from "../.
 import { useProjectSetup } from "../../lib/use-project-setup";
 import { ProjectForm } from "./project-record";
 import { RfpReview } from "./rfp-review";
+import { SetupFileDrop } from "./setup-file-drop";
 import { Badge, Button, Modal, PageHeader, type Screen } from "./shared";
 import "./project-setup.css";
 
@@ -16,6 +17,11 @@ const STATUS: Record<SetupStatus, { label: string; tone: string }> = { missing: 
 export function SetupStatusBadge({ status, reconsider = false }: { status: SetupStatus; reconsider?: boolean }) {
   const value = reconsider ? { label: "Reconsider", tone: "yellow" } : STATUS[status];
   return <Badge tone={value.tone}>{value.label}</Badge>;
+}
+
+export function SetupCheckStatus({ checking, error, onRetry }: { checking: boolean; error: string | null; onRetry: () => void }) {
+  if (error) return <div className="setup-check-error" role="alert"><p><strong>Some document checks did not finish.</strong> Completed results are kept. {error}</p><Button onClick={onRetry}>Retry checks</Button></div>;
+  return checking ? <p role="status" className="setup-honesty-note">Checking documents… Reading the drawing index, manual contents and referenced reports.</p> : null;
 }
 
 function SetupUpload({ projectId, category, documents, notify }: { projectId: string; category: string; documents: StoredDocument[]; notify: (text: string) => void }) {
@@ -41,7 +47,7 @@ export function ProjectSetupView({ project, onSave, navigate, notify }: { projec
   const summary = setup.summary;
   if (!summary) return null;
   const step = summary.steps.find(s => s.id === selected) ?? summary.next ?? summary.steps[0];
-  const rfps = latestDocuments(documents).filter(d => d.category === "RFP");
+  const detailDocuments = latestDocuments(documents).filter(d => d.category === "RFP" || d.category === "Addenda");
   function decisionActions(target: string, title: string, status: SetupStatus, level: string, saved: SetupDecision | null) {
     if (saved) return <button className="setup-text-button" onClick={() => { const message = setup.run(s => clearDecision(s, target)); notify(message ?? "Decision cleared. The project state is checked again."); }}>Clear saved decision</button>;
     if (status === "ready") return null;
@@ -53,13 +59,15 @@ export function ProjectSetupView({ project, onSave, navigate, notify }: { projec
     </article>;
   }
   return <div className="setup-view"><PageHeader eyebrow="FROM FIRST FILE TO FIRST SCOPE" title="Project setup" description="Start with your documents. Review the details, confirm the trades and let the AI draft scopes." actions={<Button onClick={() => navigate("turnover")}><ListChecks size={15}/>Preconstruction to-do</Button>}/>
+    <SetupFileDrop key={project.id} projectId={project.id} documents={documents} notify={notify}/>
     <div className="setup-route-note"><FolderOpen size={19}/><p><strong>Your route to scopes.</strong> Drawings or a project manual are enough to start. The recommended steps can be completed as the project develops.</p><span>{summary.progress.done} / {summary.progress.total} steps ready</span></div>
     <div className="setup-layout"><aside className="setup-step-rail" aria-label="Project setup steps">{summary.steps.map((s, i) => <button key={s.id} aria-current={s.id === step.id ? "step" : undefined} onClick={() => setSelected(s.id)}><span className={`setup-step-number ${s.status}`}>{s.status === "ready" || s.status === "not-applicable" ? <Check size={15}/> : String(i + 1).padStart(2, "0")}</span><span><strong>{s.title}</strong><small>{s.route ? "Path to scopes" : "Recommended"}</small><SetupStatusBadge status={s.status} reconsider={s.reconsider}/></span><ArrowRight size={14}/></button>)}</aside>
-      <section className="setup-step-content" aria-busy={!setup.ready}><header><span className="health-eyebrow">{step.route ? "YOUR FIRST SCOPES" : "BUILD THE PROJECT RECORD"}</span><h2>{step.title}</h2><p>{step.detail}</p><SetupStatusBadge status={step.status} reconsider={step.reconsider}/></header>
+      <section className="setup-step-content" aria-busy={!setup.ready || setup.checking}><header><span className="health-eyebrow">{step.route ? "YOUR FIRST SCOPES" : "BUILD THE PROJECT RECORD"}</span><h2>{step.title}</h2><p>{step.detail}</p><SetupStatusBadge status={step.status} reconsider={step.reconsider}/></header>
         {!setup.ready && <p role="status">Checking stored project documents…</p>}
+        <SetupCheckStatus checking={setup.checking} error={setup.checkError} onRetry={setup.retryChecks}/>
         {step.items.map(itemView)}
-        {step.id === "details" && <div className="setup-detail-actions"><Button onClick={() => setEditing(true)}>Edit project details</Button>{rfps.map(doc => <div className="setup-rfp-file" key={doc.id}><strong>{doc.name}</strong><small>Version {doc.revision}{setup.state.reviews.some(r => r.docId === doc.id) ? " · Reviewed" : " · Awaiting review"}</small><RfpReview project={project} doc={doc} onSave={onSave} onReviewed={() => setup.run(s => markReviewed(s, doc.id, "Marcel Khoury"))}/></div>)}</div>}
-        {step.id === "documents" && <p className="setup-honesty-note">Sheet numbers and titles are read during upload. Drawing-index completeness has not been checked.</p>}
+        {step.id === "details" && <div className="setup-detail-actions"><Button onClick={() => setEditing(true)}>Edit project details</Button>{detailDocuments.map(doc => <div className="setup-rfp-file" key={doc.id}><strong>{doc.name}</strong><small>{doc.category === "Addenda" ? "Addendum" : "RFP"} · Version {doc.revision}{setup.state.reviews.some(r => r.docId === doc.id) ? " · Reviewed" : " · Awaiting review"}</small><RfpReview project={project} doc={doc} onSave={onSave} onReviewed={() => setup.run(s => markReviewed(s, doc.id, "Marcel Khoury"))}/></div>)}</div>}
+        {step.id === "documents" && <p className="setup-honesty-note">Sheet numbers and titles are read during upload. Completeness is reported only when the drawing index or manual contents can be read with confidence.</p>}
         <div className="setup-step-footer"><Button variant="primary" onClick={() => navigate(step.screen)}>{step.id === "trades" ? "Review and manage trade packages" : step.id === "scopes" ? "Open Write scopes with AI" : step.id === "details" || step.id === "team" ? "Open project information" : step.id === "budget" ? "Open budget" : step.id === "schedule" ? "Open project schedule" : "Open Project files"}<ArrowRight size={15}/></Button>{!step.items.length && decisionActions(step.id, step.title, step.status, step.level, step.decision)}{step.decision && !step.items.length && <p>{step.decision.reason}{step.decision.responsible ? ` · ${step.decision.responsible}` : ""} · {step.decision.by}</p>}</div>
       </section>
     </div>
