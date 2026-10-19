@@ -7,6 +7,7 @@ import {
   Send, ShieldCheck, Signature, Trash2, UserRoundCheck,
 } from "lucide-react";
 import {
+  DEFAULT_EXHIBIT_TEMPLATE, DEFAULT_SUBCONTRACT_TEMPLATE,
   activeAward, addExhibitComment, agreeExhibit, awardCandidates, awardStage,
   cancelAward, createAward, executeSubcontract, generateSubcontract,
   latestExhibit, markAwardNotificationsRead, renderDocumentText,
@@ -28,9 +29,11 @@ import {
   Badge, Button, Empty, Modal, PageHeader, Panel, PreviewNote, Stats, Tabs,
   downloadText, usd, type ViewProps,
 } from "./shared";
-import { OtherExhibits, CompanyFormSettings, ContractScopeDraft, AssetLink } from "./contract-files";
+import { OtherExhibits, ContractScopeDraft, AssetLink } from "./contract-files";
 import { useValueEngineering } from "../../lib/use-value-engineering";
 import { veLevelingBidders } from "../../lib/ve-bids";
+import { templateFor } from "../../lib/company-forms";
+import type { CompanyForm } from "../../lib/contract-files";
 import { setContractFiles } from "../../lib/contract-files";
 import { assetUrl } from "../../lib/document-assets";
 import "./award-ui.css";
@@ -79,7 +82,7 @@ function DocumentPreview({ content, status, company }: { content: DocumentConten
     <header><span className="award-paper-brand">{company?.logo && <img src={assetUrl(company.logo)} alt={`${company.name} logo`} style={{maxWidth:120,maxHeight:45}}/>}{company?.name || "General contractor"}</span><Badge tone="amber">{status}</Badge></header>
     <h2>{content.title}</h2>
     {content.sections.map((section, index) => <section key={`${section.heading}-${index}`}>
-      <h3>{String(index + 1).padStart(2, "0")}. {section.heading}</h3>
+      <h3>{/^\d+(?:\.\d+)*[.)]\s/.test(section.heading) ? section.heading : `${String(index + 1).padStart(2, "0")}. ${section.heading}`}</h3>
       {section.lines.length ? <ul>{section.lines.map((line, lineIndex) => <li key={`${line}-${lineIndex}`}>{line}</li>)}</ul> : <p className="award-paper-empty">No entries recorded.</p>}
     </section>)}
     <footer>Prepared in Structor · Browser demo document</footer>
@@ -122,6 +125,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
   const [agreementParty, setAgreementParty] = useState<Party>("subcontractor");
   const [agreementName, setAgreementName] = useState("");
   const [contractorOpen, setContractorOpen] = useState(false);
+  const [company] = useLocalDraft<CompanyForm>("company-form", { name: "General contractor" });
   const [contractorName, setContractorName] = useState("General contractor");
   const [signatureParty, setSignatureParty] = useState<Party | null>(null);
   const [signer, setSigner] = useState<Signer>({ name: "", title: "", email: "" });
@@ -175,7 +179,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
       projectId, projectName, procurement, submissions, candidates, budget, directory,
       projectAddress: project.location, projectStart: project.start, projectFinish: project.finish,
     };
-    if (perform(current => createAward(current, context, { levelingBidderId: selectedCandidateId, basis, budgetLineId: budgetLineId || null, allowanceIds }, actor), `${selectedCandidate?.bidderName ?? "Bidder"} selected for ${pkg?.name ?? "the package"}.`)) {
+    if (perform(current => createAward(current, context, { levelingBidderId: selectedCandidateId, basis, budgetLineId: budgetLineId || null, allowanceIds }, actor, undefined, undefined, templateFor(company, "exhibit-a", DEFAULT_EXHIBIT_TEMPLATE)), `${selectedCandidate?.bidderName ?? "Bidder"} selected for ${pkg?.name ?? "the package"}.`)) {
       setTab("Exhibit A"); setRevisionNumber(0);
     }
   }
@@ -218,7 +222,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
 
   return <div className="award-view">
     <PageHeader eyebrow="BID → AWARD → CONTRACT" title="Contracts & exhibits" description="Select the reviewed bid, agree the trade scope, and carry one award through execution." actions={<>
-      <CompanyFormSettings/>{unread > 0 && <Button onClick={() => { setTab("Activity"); if (!award) notify(`${unread} recorded contract notifications across this project.`); }}><Bell size={16}/>{unread} unread</Button>}
+      <Button onClick={() => navigate("settings")}>Company forms & logo</Button>{unread > 0 && <Button onClick={() => { setTab("Activity"); if (!award) notify(`${unread} recorded contract notifications across this project.`); }}><Bell size={16}/>{unread} unread</Button>}
       <Button onClick={() => navigate("leveling")}>Bid leveling<ArrowRight size={15}/></Button>
     </>}/>
     <PreviewNote>Browser-only demo · Shares, signature requests, and notifications are recorded here; no email is sent. Typed signatures are demonstration records.</PreviewNote>
@@ -303,11 +307,11 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
           </Panel>}
 
           {tab === "Subcontract" && <>
-            {award.exhibit.status !== "agreed" ? <Panel><Empty title="Agree Exhibit A first" description="The subcontract incorporates the agreed Exhibit A revision. Resolve comments and record agreement before generating it." action={<Button onClick={() => setTab("Exhibit A")}>Review Exhibit A<ArrowRight size={15}/></Button>}/></Panel> : !award.subcontract ? <Panel><Empty title="Exhibit A is agreed" description="Generate the complete subcontract using the agreed scope and selected award amount." action={<Button variant="primary" onClick={() => { setContractorOpen(true); setErrors({}); }}>Generate subcontract<FileText size={15}/></Button>}/></Panel> : <div className="award-document-layout">
+            {award.exhibit.status !== "agreed" ? <Panel><Empty title="Agree Exhibit A first" description="The subcontract incorporates the agreed Exhibit A revision. Resolve comments and record agreement before generating it." action={<Button onClick={() => setTab("Exhibit A")}>Review Exhibit A<ArrowRight size={15}/></Button>}/></Panel> : !award.subcontract ? <Panel><Empty title="Exhibit A is agreed" description="Generate the complete subcontract using the agreed scope and selected award amount." action={<Button variant="primary" onClick={() => { setContractorName(company.name || "General contractor"); setContractorOpen(true); setErrors({}); }}>Generate subcontract<FileText size={15}/></Button>}/></Panel> : <div className="award-document-layout">
               <Panel title="Subcontract agreement" subtitle={`${award.subcontract.template.name} · Exhibit A revision ${award.subcontract.exhibitRevision}`} action={<Badge tone={award.subcontract.status === "executed" ? "green" : "amber"}>{award.subcontract.status.replaceAll("-", " ")}</Badge>}>
                 <div className="award-document-actions">
                   <Button onClick={() => downloadText(`${slug(award.snapshot.packageName)}-${award.subcontract!.status === "executed" ? "executed-" : ""}subcontract.txt`, award.subcontract!.executedCopy ?? renderDocumentText(award.subcontract!.content))}><Download size={15}/>Download {award.subcontract.status === "executed" ? "executed copy" : "draft"}</Button>
-                  {award.subcontract.status === "draft" && <><Button onClick={() => setContractorOpen(true)}><PenLine size={15}/>Regenerate</Button><Button variant="primary" onClick={() => perform(current => sendSubcontract(current, award.id), "Signature request recorded. No email was sent.")}><Send size={15}/>Send for signature</Button></>}
+                  {award.subcontract.status === "draft" && <><Button onClick={() => { setContractorName(award.subcontract?.contractorName || company.name || "General contractor"); setContractorOpen(true); }}><PenLine size={15}/>Regenerate</Button><Button variant="primary" onClick={() => perform(current => sendSubcontract(current, award.id), "Signature request recorded. No email was sent.")}><Send size={15}/>Send for signature</Button></>}
                   {award.subcontract.status === "signature-pending" && <Button variant="primary" onClick={() => openSignature("subcontractor")}><Signature size={15}/>Record subcontractor signature</Button>}
                   {award.subcontract.status === "subcontractor-signed" && <Button variant="primary" onClick={() => openSignature("contractor")}><Signature size={15}/>Countersign</Button>}
                   {award.subcontract.status === "countersigned" && <Button variant="primary" onClick={() => perform(current => executeSubcontract(current, award.id), "Subcontract executed and final copy frozen.")}><FileCheck2 size={15}/>Execute subcontract</Button>}
@@ -350,7 +354,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
       <ErrorSummary errors={errors}/><div className="award-modal-actions"><Button onClick={() => setAgreementOpen(false)}>Cancel</Button><Button type="submit" variant="primary">Agree revision</Button></div>
     </form></Modal>}
 
-    {contractorOpen && award && <Modal title={award.subcontract ? "Regenerate subcontract" : "Generate subcontract"} subtitle="The agreed Exhibit A revision and award value will be attached." onClose={() => setContractorOpen(false)}><form onSubmit={event => { event.preventDefault(); if (!award.contractFiles) { setErrors({ subcontract: "Prepare All other exhibits before generating the subcontract." }); setContractorOpen(false); setTab("All other exhibits"); return; } perform(current => generateSubcontract(current, award.id, contractorName, actor), "Subcontract draft generated.", () => setContractorOpen(false)); }}>
+    {contractorOpen && award && <Modal title={award.subcontract ? "Regenerate subcontract" : "Generate subcontract"} subtitle="The agreed Exhibit A revision and award value will be attached." onClose={() => setContractorOpen(false)}><form onSubmit={event => { event.preventDefault(); if (!award.contractFiles) { setErrors({ subcontract: "Prepare All other exhibits before generating the subcontract." }); setContractorOpen(false); setTab("All other exhibits"); return; } perform(current => generateSubcontract(current, award.id, contractorName, actor, undefined, undefined, award.subcontract?.template ?? templateFor(company, "subcontract", DEFAULT_SUBCONTRACT_TEMPLATE)), "Subcontract draft generated.", () => setContractorOpen(false)); }}>
       <label className="ui-field"><span>General contractor legal name</span><input required value={contractorName} onChange={event => setContractorName(event.target.value)}/></label>
       <div className="award-modal-note"><FileText size={17}/><span>The current template is identified inside the generated document. Review every term before signature.</span></div>
       <ErrorSummary errors={errors}/><div className="award-modal-actions"><Button onClick={() => setContractorOpen(false)}>Cancel</Button><Button type="submit" variant="primary">Generate draft</Button></div>
