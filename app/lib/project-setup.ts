@@ -16,6 +16,7 @@ import type { Procurement } from "./procurement";
 import { suggestTrades } from "./project-scopes";
 import type { EstimateStage, Project, WorkType } from "./projects";
 import type { Screen } from "./screens";
+import type { CompletenessCheck, ReferencedDoc } from "./setup-checks";
 import { missingProjectFacts } from "./todo";
 
 export type SetupStepId = "documents" | "details" | "trades" | "scopes" | "contracts" | "reports" | "budget" | "schedule" | "team";
@@ -36,7 +37,9 @@ export type SetupDecision = {
   workType: WorkType | null;
   estimateStage: EstimateStage | null;
 };
-export type SetupState = { decisions: SetupDecision[]; reviews: { docId: string; by: string; at: string }[] };
+/** Phase 2 checks (lib/setup-checks), saved per document version so they run once: the drawing index, the manual's contents, and reports the manual refers to. */
+export type SetupChecks = { drawingIndex?: CompletenessCheck; specToc?: CompletenessCheck; references?: { docId: string; documents: ReferencedDoc[] } };
+export type SetupState = { decisions: SetupDecision[]; reviews: { docId: string; by: string; at: string }[]; checks?: SetupChecks };
 export const EMPTY_SETUP: SetupState = { decisions: [], reviews: [] };
 
 export type SetupItem = {
@@ -114,7 +117,18 @@ export function projectSetup(input: SetupInput): SetupSummary {
     item("documents", "drawings", "Drawing set", "required", fromDocs(drawings), drawings.map(d => documentReadiness(d).note).join(" ") || "Upload the drawings; sheet numbers and titles are read from the title blocks.", { category: "Drawings" }),
     item("documents", "manual", "Project manual (specifications)", "recommended", fromDocs(manuals), manuals.map(d => documentReadiness(d).note).join(" ") || "Scopes from drawings alone can miss specification requirements.", { category: "Specifications", why: "Specification sections carry products, submittals and requirements the drawings don't show." }),
   ];
-  const docsStatus: SetupStatus = !drawings.length && !manuals.length ? "missing" : worst(docItems.filter(i => i.status !== "missing").map(i => i.status));
+  // Completeness (phase 2): only a confirmed index or contents list can call something missing.
+  const listMissing = (codes: string[]) => `${codes.slice(0, 8).join(", ")}${codes.length > 8 ? ` and ${codes.length - 8} more` : ""}`;
+  const index = state.checks?.drawingIndex, toc = state.checks?.specToc;
+  if (index && drawings.some(d => d.id === index.docId)) {
+    if (index.status === "checked") docItems.push(item("documents", "sheets", "Sheets in the drawing index", "recommended", index.missing.length ? "missing" : "ready", index.missing.length ? `Listed in the index but not uploaded: ${listMissing(index.missing)}.` : `All ${index.listed} sheets in the index are uploaded.`, { category: "Drawings", why: "Missing sheets mean missing scope." }));
+    else docItems[0] = { ...docItems[0], note: `${docItems[0].note} Completeness not checked: ${index.reason}`.trim() };
+  }
+  if (toc && manuals.some(d => d.id === toc.docId)) {
+    if (toc.status === "checked") docItems.push(item("documents", "sections", "Sections in the table of contents", "recommended", toc.missing.length ? "needs-review" : "ready", toc.missing.length ? `Listed in the contents but not found in the manual: ${listMissing(toc.missing)}. Check with the architect.` : `All ${toc.listed} sections in the contents were found.`, { category: "Specifications", why: "A section in the contents but not in the manual may be missing from the issued set." }));
+    else docItems[1] = { ...docItems[1], note: `${docItems[1].note} Completeness not checked: ${toc.reason}`.trim() };
+  }
+  const docsStatus: SetupStatus = !drawings.length && !manuals.length ? "missing" : worst(docItems.slice(0, 2).filter(i => i.status !== "missing").map(i => i.status));
 
   // ── Project details ──
   const missing = missingProjectFacts(project);
@@ -125,7 +139,11 @@ export function projectSetup(input: SetupInput): SetupSummary {
     item("details", "rfp", "RFP / invitation to bid", "recommended", !rfps.length ? "missing" : unreviewed.length ? "needs-review" : fromDocs(rfps),
       !rfps.length ? "Upload the RFP and its details are read for you to review." : unreviewed.length ? `Review the details read from ${unreviewed.map(d => d.name).join(", ")}.` : "Reviewed.", { category: "RFP", why: "Due dates, areas, tax status and participation programs come from it." }),
   ];
-  const detailsStatus: SetupStatus = detailItems[1].status === "needs-review" ? "needs-review" : detailItems[0].status;
+  // Addenda (phase 2): each one is reviewed like the RFP, for changed dates and details.
+  const addenda = docs.filter(d => d.category === "Addenda");
+  const openAddenda = addenda.filter(d => !state.reviews.some(r => r.docId === d.id));
+  if (addenda.length) detailItems.push(item("details", "addenda", "Addenda", "recommended", openAddenda.length ? "needs-review" : fromDocs(addenda), openAddenda.length ? `Review what ${openAddenda.map(d => d.name).join(", ")} change${openAddenda.length === 1 ? "s" : ""}: bid dates, areas and other details are compared with the project's.` : `${plural(addenda.length, "addendum", "addenda")} reviewed.`, { category: "Addenda", why: "An addendum can move the bid date or change the scope." }));
+  const detailsStatus: SetupStatus = detailItems.slice(1).some(i => i.status === "needs-review") ? "needs-review" : detailItems[0].status;
 
   // ── Trades ──
   const suggestions = suggestTrades(procurement.packages, { sections: manuals.flatMap(d => d.sections), sheets: drawingRegister(docs) });
@@ -152,6 +170,21 @@ export function projectSetup(input: SetupInput): SetupSummary {
     oldWork && item("reports", "hazmat", "Hazardous materials survey", "recommended", docsMatching(docs, /hazard|asbestos|lead[- ]based|abatement|environmental/i).length ? "ready" : "missing", "", { category: "Reports", why: "Renovation can disturb asbestos, lead or other regulated materials." }),
     oldWork && item("reports", "existing", "Existing-conditions drawings", "recommended", docsMatching(docs, /existing|as-?built|record drawing/i).length ? "ready" : "missing", "", { category: "Drawings", why: "Shows what is being demolished or tied into." }),
   ].filter((i): i is SetupItem => !!i);
+  // Reports the manual refers to (phase 2): they are wanted whatever the work type, and say where they're named.
+  const refs = state.checks?.references && manuals.some(d => d.id === state.checks!.references!.docId) ? state.checks.references.documents : [];
+  const KIND: Record<string, { label: string; re: RegExp; category: string }> = {
+    geotech: { label: "Geotechnical report", re: /geotech|soils?\b|boring|subsurface/i, category: "Reports" }, survey: { label: "Site survey", re: /survey|topograph|\bALTA\b/i, category: "Reports" },
+    hazmat: { label: "Hazardous materials survey", re: /hazard|asbestos|lead[- ]based|abatement|environmental/i, category: "Reports" }, existing: { label: "Existing-conditions drawings", re: /existing|as-?built|record drawing/i, category: "Drawings" },
+  };
+  refs.forEach((ref, n) => {
+    const named = `Referenced in the project manual, p. ${ref.page}: "${ref.quote.slice(0, 160)}${ref.quote.length > 160 ? "…" : ""}"`;
+    const kind = KIND[ref.kind];
+    const at = kind ? reportItems.findIndex(i => i.id === ref.kind) : -1;
+    if (at >= 0) { if (!reportItems[at].why.startsWith("Referenced")) reportItems[at] = { ...reportItems[at], label: ref.title.slice(0, 120), why: named }; return; }
+    if (kind) { reportItems.push(item("reports", ref.kind, ref.title.slice(0, 120), "recommended", docsMatching(docs, kind.re).length ? "ready" : "missing", "", { category: kind.category, why: named })); return; }
+    const words = ref.title.toLowerCase().match(/[a-z]{5,}/g)?.slice(0, 2) ?? [];
+    reportItems.push(item("reports", `ref-${n}`, ref.title.slice(0, 120), "recommended", words.length && docs.some(d => words.every(w => d.name.toLowerCase().includes(w))) ? "ready" : "missing", "", { category: "Reports", why: named }));
+  });
 
   // ── Team ──
   const teamItems = [
