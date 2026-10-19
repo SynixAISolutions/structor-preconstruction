@@ -22,6 +22,12 @@ export type SchematicLevel = {
   source: { documentId: string; sheet: string; page: number };
   /** How the size was found: the printed scale, or the building area. */
   sizing: string;
+  /**
+   * The source sheet image in feet: a point at image fraction [fx, fy] is [fx * widthFeet, fy * heightFeet]
+   * (fromFraction / toFraction). Kept from the build, so a correction drawn on the sheet uses the same
+   * calibration after edits and reloads. Missing on models built before 20 Oct.
+   */
+  frame?: { widthFeet: number; heightFeet: number };
 };
 export type SchematicModel = { levels: SchematicLevel[]; warnings: string[]; builtAt: string };
 
@@ -72,18 +78,58 @@ export const polygonArea = (pts: Point[]) => Math.abs(pts.reduce((s, [x, y], i) 
  * A level's outline and rooms in feet, from 0–1 image positions. With a scale the page size gives
  * the feet; without one the outline is scaled to `targetSf` (its share of the building area).
  */
-export function toFeet(input: { outline: Point[]; rooms: SchematicRoom[]; page: { widthIn: number; heightIn: number }; feetPerInch: number | null; targetSf: number }): { outline: Point[]; rooms: SchematicRoom[]; sizing: string } {
-  const round = (n: number) => Math.round(n * 10) / 10;
+export function toFeet(input: { outline: Point[]; rooms: SchematicRoom[]; page: { widthIn: number; heightIn: number }; feetPerInch: number | null; targetSf: number }): { outline: Point[]; rooms: SchematicRoom[]; sizing: string; frame: { widthFeet: number; heightFeet: number } } {
+  let widthFeet: number, heightFeet: number, sizing: string;
   if (input.feetPerInch) {
-    const fx = input.page.widthIn * input.feetPerInch, fy = input.page.heightIn * input.feetPerInch;
-    const map = ([x, y]: Point): Point => [round(x * fx), round(y * fy)];
-    return { outline: input.outline.map(map), rooms: input.rooms.map(r => ({ ...r, at: map(r.at) })), sizing: `Printed scale, ${input.feetPerInch} ft per inch` };
+    widthFeet = input.page.widthIn * input.feetPerInch; heightFeet = input.page.heightIn * input.feetPerInch;
+    sizing = `Printed scale, ${input.feetPerInch} ft per inch`;
+  } else {
+    const aspect = input.page.heightIn / input.page.widthIn;
+    const unitArea = polygonArea(input.outline.map(([x, y]) => [x, y * aspect] as Point));
+    const k = unitArea > 0 && input.targetSf > 0 ? Math.sqrt(input.targetSf / unitArea) : 100;
+    widthFeet = k; heightFeet = aspect * k;
+    sizing = input.targetSf > 0 ? "Sized to the building area (no scale read)" : "Proportional only (no scale or building area)";
   }
-  const aspect = input.page.heightIn / input.page.widthIn;
-  const unitArea = polygonArea(input.outline.map(([x, y]) => [x, y * aspect] as Point));
-  const k = unitArea > 0 && input.targetSf > 0 ? Math.sqrt(input.targetSf / unitArea) : 100;
-  const map = ([x, y]: Point): Point => [round(x * k), round(y * aspect * k)];
-  return { outline: input.outline.map(map), rooms: input.rooms.map(r => ({ ...r, at: map(r.at) })), sizing: input.targetSf > 0 ? "Sized to the building area (no scale read)" : "Proportional only (no scale or building area)" };
+  const frame = { widthFeet: Math.round(widthFeet * 1000) / 1000, heightFeet: Math.round(heightFeet * 1000) / 1000 };
+  const map = (p: Point) => fromFraction(frame, p);
+  return { outline: input.outline.map(map), rooms: input.rooms.map(r => ({ ...r, at: map(r.at) })), sizing, frame };
+}
+
+type Frame = { widthFeet: number; heightFeet: number };
+/** Image fraction → feet in a level's frame (to 0.1 ft). */
+export const fromFraction = (frame: Frame, [x, y]: Point): Point => [Math.round(x * frame.widthFeet * 10) / 10, Math.round(y * frame.heightFeet * 10) / 10];
+/** Feet → image fraction in a level's frame: where to draw a point over the source sheet. */
+export const toFraction = (frame: Frame, [x, y]: Point): Point => [x / frame.widthFeet, y / frame.heightFeet];
+
+const side = (p: Point, q: Point, r: Point) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]));
+const segmentsCross = (a: Point, b: Point, c: Point, d: Point) => side(a, b, c) * side(a, b, d) < 0 && side(c, d, a) * side(c, d, b) < 0;
+
+/** Whether a closed polygon's edges cross each other (neighbouring edges share a corner and don't count). */
+export function selfCrossing(pts: Point[]): boolean {
+  const n = pts.length;
+  for (let i = 0; i < n; i++) for (let j = i + 2; j < n; j++) {
+    if (i === 0 && j === n - 1) continue;
+    if (segmentsCross(pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n])) return true;
+  }
+  return false;
+}
+
+/**
+ * A read outline made usable: repeated points and a closing repeat of the first point removed; if its
+ * edges cross, the points re-ordered around their centre (which fixes a footprint read out of order).
+ * Null, with the reason, when it still crosses or has fewer than 4 corners.
+ */
+export function cleanOutline(points: Point[]): { outline: Point[] | null; note: string } {
+  const same = (a: Point, b: Point) => Math.abs(a[0] - b[0]) < 0.002 && Math.abs(a[1] - b[1]) < 0.002;
+  const pts = points.filter((p, i) => i === 0 || !same(p, points[i - 1]));
+  while (pts.length > 1 && same(pts[0], pts[pts.length - 1])) pts.pop();
+  if (pts.length < 4) return { outline: null, note: "The outline has fewer than 4 corners." };
+  if (!selfCrossing(pts)) return { outline: pts, note: "" };
+  const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length, cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+  const sorted = [...pts].sort((a, b) => Math.atan2(a[1] - cy, a[0] - cx) - Math.atan2(b[1] - cy, b[0] - cx));
+  return selfCrossing(sorted)
+    ? { outline: null, note: "The outline's edges cross each other." }
+    : { outline: sorted, note: "The outline's points were read out of order and were re-ordered around the building's centre; check the shape." };
 }
 
 /**
@@ -122,6 +168,62 @@ export function levelHeights(levels: number[], read: { name: string; elevation: 
   });
   if (assumed) warnings.push(`${assumed} floor-to-floor height${assumed === 1 ? " was" : "s were"} not read and use${assumed === 1 ? "s" : ""} 14 ft.`);
   return { elevations, heights, warnings };
+}
+
+/** A level marker read off a section; `at` is where its elevation was read, 0–1 in the image it came from. */
+export type Marker = { name: string; elevation: number; at?: Point };
+/** The level a marker names ("LEVEL 03 - LOW ROOF" → 3); an unnumbered roof ("T.O. ROOF") sorts last. */
+const markerKey = (name: string): number | null => levelOfTitle(`${name} FLOOR`) ?? levelOfTitle(name) ?? (/ROOF/i.test(name) ? Infinity : null);
+
+/**
+ * One elevation per level from several readings of the same section sheet (the client reads it in
+ * tiles so small print is legible; `weights` lets a close-up re-read count more). Each level keeps the
+ * value with the most votes (within 0.5 ft); a level whose two best values are within one vote is
+ * `disputed`, with where it was read, so the client can read it again close up.
+ * Then the set has to make sense, lowest first: each marker 7 to 40 ft per level above the one below
+ * (a roof level at least 2 ft). While a pair doesn't fit, its less supported marker is dropped (on a
+ * tie, the one that fits fewer of the others) and the warnings say so: a wrong height is worse than
+ * the 14 ft default, which levelHeights reports.
+ */
+export function consensusMarkers(readings: Marker[][], weights: number[] = []): { markers: (Marker & { votes: number })[]; disputed: { name: string; reading: number; at: Point }[]; warnings: string[] } {
+  const groups = new Map<number, { name: string; votes: { value: number; weight: number; reading: number; at?: Point }[] }>();
+  readings.forEach((reading, r) => {
+    const seen = new Set<string>();
+    for (const m of reading) {
+      const key = markerKey(m.name), id = `${key}|${m.elevation}`;
+      if (key === null || !Number.isFinite(m.elevation) || seen.has(id)) continue;
+      seen.add(id);
+      const group = groups.get(key) ?? { name: m.name.toUpperCase(), votes: [] };
+      group.votes.push({ value: m.elevation, weight: weights[r] ?? 1, reading: r, at: m.at });
+      groups.set(key, group);
+    }
+  });
+  type Pick = { key: number; name: string; elevation: number; votes: number };
+  const disputed: { name: string; reading: number; at: Point }[] = [];
+  let picked: Pick[] = [...groups].map(([key, { name, votes }]) => {
+    const clusters = votes.map(v => ({ v: v.value, votes: votes.filter(w => Math.abs(w.value - v.value) <= 0.5).reduce((s, w) => s + w.weight, 0) }))
+      .sort((a, b) => b.votes - a.votes || a.v - b.v);
+    const best = clusters[0], rival = clusters.find(c => Math.abs(c.v - best.v) > 0.5);
+    const where = votes.find(v => v.at);
+    if (rival && best.votes - rival.votes <= 1 && where?.at) disputed.push({ name, reading: where.reading, at: where.at });
+    return { key, name, elevation: best.v, votes: best.votes };
+  }).sort((a, b) => a.key - b.key);
+  const fits = (x: Pick, y: Pick) => {
+    const [lower, upper] = x.key < y.key ? [x, y] : [y, x];
+    const rise = upper.elevation - lower.elevation, levels = Number.isFinite(upper.key) ? upper.key - lower.key : 1;
+    return rise >= (/ROOF|PARAPET|PENTHOUSE/i.test(upper.name) ? 2 : 7 * levels) && rise <= 40 * levels;
+  };
+  const warnings: string[] = [];
+  for (;;) {
+    const i = picked.findIndex((m, n) => n > 0 && !fits(picked[n - 1], m));
+    if (i < 0) break;
+    const [a, b] = [picked[i - 1], picked[i]];
+    const support = (m: Pick) => picked.filter(o => o !== m && fits(o, m)).length;
+    const drop = a.votes !== b.votes ? (a.votes < b.votes ? a : b) : support(a) < support(b) ? a : b;
+    warnings.push(`${drop.name} read as ${drop.elevation} ft doesn't fit the other level markers and was not used.`);
+    picked = picked.filter(m => m !== drop);
+  }
+  return { markers: picked.map(({ name, elevation, votes }) => ({ name, elevation, votes })), disputed, warnings };
 }
 
 export function levelName(level: number): string { return level === 0 ? "Basement" : `Level ${String(level).padStart(2, "0")}`; }
