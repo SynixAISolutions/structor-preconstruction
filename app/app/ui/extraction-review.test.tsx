@@ -81,3 +81,15 @@ test("a trade remains available in the drawing filter on a sheet without its reg
   assert.match(filter, /<option value="drywall">09 · Drywall \(0\)<\/option>/);
   assert.match(filter, /<option value="demolition">02 · Demolition \(3\)<\/option>/);
 });
+
+test("a selected sheet with no highlights still renders its drawing and an empty-state note", () => {
+  const regions = sampleDrawingFlip.regions, image = sampleDrawingFlip.pages[0].image;
+  try {
+    sampleDrawingFlip.regions = [];
+    sampleDrawingFlip.pages[0].image = "/original-sheet.png";
+    const html = renderToStaticMarkup(<DrawingFlipWorkspace projectName="Empty drawing review" notify={() => {}} navigate={() => {}}/>);
+    assert.match(html, /href="\/original-sheet.png"/);
+    assert.match(html, /No highlights yet/);
+    assert.ok(!html.includes("No regions match these filters"));
+  } finally { sampleDrawingFlip.regions = regions; sampleDrawingFlip.pages[0].image = image; }
+});
