@@ -9,6 +9,7 @@ import { useLocalDraft } from "../../lib/use-local-draft";
 import { draftStorageKey } from "../../lib/project-scope";
 import { Button, Empty, Panel, Stats, exportRows, type ViewProps, usd } from "./shared";
 import "./concept-budget.css";
+import { ConceptAiReview } from "./concept-ai-review";
 
 const rate = (value: number) => `${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)}/SF`;
 const total = (record: BudgetHistory) => record.lines.filter(line => !line.byOwner).reduce((sum, line) => sum + line.amount, 0);
@@ -77,7 +78,7 @@ export function ConceptBudgetView({ project, budget, notify, navigate }: { proje
   }
   const result = comparison.result, snapshot = budget.state.conceptSource;
   return <div className="concept-budget">
-    <Panel title="Historical concept budget" subtitle={`${estimateStageLabel(project.estimateStage)} · ${project.squareFeet.toLocaleString()} SF gross building area · ${project.type}`}>
+    <Panel title="Historical concept budget" subtitle={`${estimateStageLabel(project.estimateStage)} · ${project.squareFeet.toLocaleString()} SF gross building area · ${project.type}`} action={<ConceptAiReview key={project.id} project={project} history={history} onUse={(ids, factors) => { setSelected(ids); setFactors(factors); setError(""); notify("Comparable projects applied to the concept preview. Review before creating the project budget."); }}/> }>
       <p>Select comparable uploaded budgets, then review their cost-per-square-foot build and adjustments. No project history is preloaded.</p>
       {!project.estimateStage && <p role="status">Record this project's estimate stage before generating a budget. <Button onClick={() => navigate("information")}>Open project information</Button></p>}
       <details><summary>Upload a historical budget</summary><p>Choose an Estimate Summary workbook or the app's budget CSV export. Flat imports need Description, Class (direct/indirect) and Budget columns; optional Cost center, CSI and By owner columns retain the cost breakdown.</p><label className="ui-field">Historical budget file<input type="file" accept=".xlsx,.csv" disabled={busy} onChange={event => openFile(event.target.files?.[0])}/></label>{busy && <p role="status">Reading budget…</p>}
