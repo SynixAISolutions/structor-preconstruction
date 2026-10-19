@@ -41,6 +41,29 @@ export function estimateReferences(rows: TakeoffRow[], trade: { id: string; code
   return [...fromRows, ...fromConcept].slice(0, max);
 }
 
+/**
+ * The value of an arithmetic expression (numbers, + - * / and parentheses only), or null. The AI
+ * states each quantity's formula and the app does the arithmetic: a model's own multiplication
+ * is not to be trusted to the cent.
+ */
+export function evalArithmetic(expr: string): number | null {
+  const src = expr.replace(/,(?=\d{3}\b)/g, "").replace(/[×x]/g, "*").replace(/÷/g, "/");
+  if (!/^[\d.+\-*/()\s]+$/.test(src) || src.length > 200) return null;
+  const tokens = src.match(/\d+(?:\.\d+)?|[+\-*/()]/g) ?? [];
+  let i = 0;
+  const peek = () => tokens[i];
+  const factor = (): number => {
+    const tok = tokens[i++];
+    if (tok === "-") return -factor();
+    if (tok === "(") { const v = sum(); if (tokens[i++] !== ")") throw new Error(); return v; }
+    if (tok === undefined || !/^\d/.test(tok)) throw new Error();
+    return Number(tok);
+  };
+  const product = (): number => { let v = factor(); while (peek() === "*" || peek() === "/") { const op = tokens[i++], r = factor(); v = op === "*" ? v * r : v / r; } return v; };
+  const sum = (): number => { let v = product(); while (peek() === "+" || peek() === "-") { const op = tokens[i++], r = product(); v = op === "+" ? v + r : v - r; } return v; };
+  try { const v = sum(); return i === tokens.length && Number.isFinite(v) ? v : null; } catch { return null; }
+}
+
 const STOP = new Set(["and", "the", "with", "for", "including", "incl", "per", "all", "new", "from", "into"]);
 const words = (s: string) => new Set(s.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter(w => w.length > 2 && !STOP.has(w)).map(w => w.length > 4 ? w.replace(/ies$/, "y").replace(/s$/, "") : w));
 /** Whether two estimate items describe the same work: their significant words mostly overlap. */
@@ -63,12 +86,18 @@ export function screenEstimateLines(output: unknown, input: EstimateDraftInput):
     const o = (value ?? {}) as Record<string, unknown>;
     const item = typeof o.item === "string" ? o.item.trim().slice(0, 200) : "";
     const unit = typeof o.unit === "string" ? o.unit.trim().toUpperCase() : "";
-    const quantity = Number(o.quantity), proposed = Number(o.rate);
+    const proposed = Number(o.rate), formula = typeof o.quantityFormula === "string" ? o.quantityFormula.trim().slice(0, 200) : "";
+    const computed = formula ? evalArithmetic(formula) : null;
+    // The formula wins when the stated quantity doesn't match it (the model's arithmetic slipped).
+    let quantity = Number(o.quantity);
+    const corrected = computed !== null && computed > 0 && Math.abs(computed - quantity) > Math.max(0.5, computed * 0.02);
+    if (corrected) quantity = Math.round(computed! * 100) / 100;
     if (!item || seen.has(item.toLowerCase()) || !(ESTIMATE_UNITS as readonly string[]).includes(unit)) return [];
     // Already in the trade's estimate: accepting it again would count the work twice.
     if (input.existing?.some(e => sameWork(e.item, item))) return [];
     if (!(Number.isFinite(quantity) && quantity > 0 && quantity <= 1e7) || !(Number.isFinite(proposed) && proposed >= 0 && proposed <= 1e6)) return [];
-    const basis = typeof o.quantityBasis === "string" ? o.quantityBasis.trim().slice(0, 300) : "";
+    const stated = typeof o.quantityBasis === "string" ? o.quantityBasis.trim().slice(0, 300) : "";
+    const basis = computed !== null && computed > 0 ? `${stated}${stated ? " " : ""}[${formula} = ${Math.round(computed * 100) / 100}]`.trim() : stated;
     const ref = input.references.find(r => r.id === o.rateSource);
     const flags: string[] = [];
     let rate = proposed, rateSource = "assumption", rateNote = "AI assumption: check against current pricing.";
@@ -79,8 +108,9 @@ export function screenEstimateLines(output: unknown, input: EstimateDraftInput):
       if (ref) flags.push("Cited reference uses another unit");
       flags.push("Assumed rate");
     }
-    if (basis.length < 8) flags.push("No quantity basis");
-    else if (/\b\d+(\.\d+)?\s*%|\bpercent\b|\bshare of\b/i.test(basis)) flags.push("Quantity is a share of the area");
+    if (corrected) flags.push("Quantity corrected to its formula");
+    if (stated.length < 8) flags.push("No quantity basis");
+    else if (/\b\d+(\.\d+)?\s*%|\bpercent\b|\bshare of\b/i.test(stated)) flags.push("Quantity is a share of the area");
     const amount = cents(quantity * rate) / 100;
     if (!Number.isSafeInteger(cents(quantity * rate)) || amount > 1e9) return [];
     seen.add(item.toLowerCase());

@@ -177,6 +177,23 @@ const withExisting = A.screenEstimateLines({ lines: [
   { item: "Sidewalk, curb and gutter demolition", quantity: 450, unit: "LF", rate: 12.5, quantityBasis: "Lengths along the frontages on CIV0102", rateSource: "assumption" },
 ] }, { ...aiIn, existing: [{ item: "Asphalt pavement removal, full depth", quantity: 18650, unit: "SF", rate: 2.75 }] });
 assert.deepEqual(withExisting.map(l => [l.item, l.flags.join("|")]), [["Reinforced CMU partitions", "Assumed rate|Quantity is a share of the area"], ["Sidewalk, curb and gutter demolition", "Assumed rate"]]);
+// The AI gives each quantity's formula and the app does the arithmetic.
+assert.equal(A.evalArithmetic("4,280 * (8/12) / 27 * 0.5"), 4280 * (8 / 12) / 27 * 0.5);
+assert.equal(A.evalArithmetic("2 * (165 + 115) + 15"), 575);
+assert.equal(A.evalArithmetic("-3 + 5 × 2"), 7);
+for (const bad of ["4280 SF * 2", "2 *", "(1 + 2", "alert(1)", "1/0", ""]) assert.equal(A.evalArithmetic(bad), null, bad);
+const withMath = A.screenEstimateLines({ lines: [
+  { item: "Grout for CMU walls", quantity: 214, unit: "CY", rate: 580, quantityBasis: "4,280 SF of 8-inch CMU, half the cores grouted", quantityFormula: "4280 * (8/12) / 27 * 0.5", rateSource: "assumption" },
+  { item: "Brick anchors", quantity: 1070, unit: "EA", rate: 3.5, quantityBasis: "One anchor per 4 SF of veneer", quantityFormula: "4280 / 4", rateSource: "assumption" },
+  { item: "Sealant", quantity: 900, unit: "LF", rate: 6, quantityBasis: "Joints along the frontages", quantityFormula: "lots", rateSource: "assumption" },
+] }, aiIn);
+assert.deepEqual(withMath.map(l => [l.item, l.quantity, l.amount, l.flags.join("|")]), [
+  ["Grout for CMU walls", 52.84, 30647.2, "Assumed rate|Quantity corrected to its formula"],
+  ["Brick anchors", 1070, 3745, "Assumed rate"],
+  ["Sealant", 900, 5400, "Assumed rate"],
+], "A quantity that disagrees with its own formula is replaced by it; an unreadable formula is ignored");
+assert.equal(withMath[0].quantityBasis, "4,280 SF of 8-inch CMU, half the cores grouted [4280 * (8/12) / 27 * 0.5 = 52.84]");
+assert.match(J0.messages(J0.parse({ trade: { id: "drywall", name: "Drywall", code: "09 29 00" }, scope: ["Partitions"] }))[0].content, /quantityFormula/);
 const jobIn = J0.parse({ trade: { id: "demolition", name: "Demolition", code: "02 41 00" }, scope: ["Remove asphalt"], existing: [{ item: "Asphalt pavement removal, full depth", quantity: 18650, unit: "SF", rate: 2.75 }, { item: "" }] });
 assert.deepEqual(jobIn.existing, [{ item: "Asphalt pavement removal, full depth", quantity: 18650, unit: "SF", rate: 2.75 }]);
 assert.match(J0.messages(jobIn)[1].content, /Already in this trade's estimate \(do not price again\):\n- Asphalt pavement removal, full depth: 18650 SF at \$2\.75/);
