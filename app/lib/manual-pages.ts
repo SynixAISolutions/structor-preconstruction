@@ -469,6 +469,7 @@ export const pageGuides = [
     title: "Project setup",
     purpose: "Get a new project from empty to AI-written scopes, then gather the documents a project usually needs. Every step is worked out from what is actually in the project.",
     steps: [
+      "Structor also checks the documents themselves: sheets the drawing index lists that weren't uploaded (red), sections the manual's contents list but the manual doesn't contain (yellow, check with the architect), reports the specifications refer to such as the geotechnical report (each with the page and quote), and addenda to review for changed dates.",
       "Follow the four opening steps in order: upload drawings and specifications, review the project details, confirm the trades, write the scopes. Drawings alone are enough to start; the project manual adds specification requirements.",
       "Each step shows its status: missing, needs review, in progress, ready or failed. A PDF whose pages couldn't be read, or drawings whose title blocks weren't read, is not counted as done.",
       "Upload the RFP and review what was read from it: each detail shows the current value, the proposed value and the page it came from. Nothing changes until you accept it, and a new RFP revision is reviewed again.",
@@ -482,7 +483,7 @@ export const pageGuides = [
       { name: "Waiting", meaning: "Someone else has to provide the item; it stays on the list until it arrives." },
     ],
     example: "Uploading only the drawing set marks the first step ready and suggests Demolition, Drywall, Mechanical and Electrical from the sheet titles; confirming them opens Write scopes with AI.",
-    reality: "Statuses come from the files stored for this project and this browser's project data. Decisions are saved in this browser. Missing reports are suggestions, not requirements, and drawing completeness is not checked yet.",
+    reality: "Statuses come from the files stored for this project and this browser's project data. Decisions are saved in this browser. Missing reports are suggestions, not requirements. Missing sheets are reported only when the set's index sheet was read and lists them; contents entries not found in the manual are flagged for review. Reports the manual refers to are found by AI with the page and quote. These checks run once per document version.",
     related: ["documents", "information", "scopes", "turnover"],
   },
 ] satisfies {

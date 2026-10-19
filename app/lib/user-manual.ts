@@ -80,8 +80,8 @@ const workspaceGuides: ManualGuide[] = [
       "Choose Back to All projects at the top of the menu to switch projects. Each project keeps its own files, scopes, takeoffs, budget, bid leveling workbook, and other saved screen data; the subcontractor directory is shared by every project. Keep exports of important work.",
     ],
     terms: [{ name: "Design development", meaning: "A stage where the design is being refined before final construction details are complete." }, { name: "Bidding", meaning: "The stage when companies are being asked to submit prices." }],
-    example: "Create a school modernization project to demonstrate its project brief and dates. A new project starts with empty lists and an unchecked to-do list. It does not generate scopes or costs from its documents, and the 3D model remains the Jelleff reconstruction.",
-    reality: "Project records are saved in this browser. The optional RFP file input is a selection preview: it does not parse or store the RFP. The Jelleff Recreation Center project holds the sample content; other projects hold only what is entered for them. Bid leveling shows labelled demo data until a workbook is imported for the project.",
+    example: "Create a school modernization project to demonstrate its project brief and dates. A new project opens Project setup: upload its drawings (and the project manual when you have it), and Structor suggests its trades and writes their scopes with AI. Its 3D studio stays empty; the traced model is the Jelleff sample's.",
+    reality: "Project records are saved in this browser. The RFP field on the form keeps the file's name only; upload the RFP in Project setup (or Project files, category RFP) to have its details read and reviewed. The Jelleff Recreation Center project holds the sample content; other projects hold only what is entered for them. Bid leveling shows labelled demo data until a workbook is imported for the project.",
     related: ["information", "saving", "documents"],
   },
   {

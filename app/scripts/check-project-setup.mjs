@@ -102,4 +102,73 @@ assert.deepEqual(cmp.rows.map(r => [r.field, r.conflict, r.same]), [["due", true
 assert.deepEqual(cmp.issues, ["The last day for questions falls after the bid due date.", "Renovation and addition work needs both areas; one is missing."]);
 assert.match(compareRfpFacts(complete, [{ field: "squareFeet", value: 450, page: 1, quote: "q" }]).issues[0], /check the units/);
 
+// ── Phase 2: completeness only when proven, referenced reports, addenda, file classification ──
+const K = await import("../lib/setup-checks.ts");
+const { EXTRA_JOBS } = await import("../lib/ai-jobs-more.ts");
+const set = ["G0.1", "A1.1", "A1.2", "A8.1", "A8.2", "M101", "M201", "S101", "CIV0102", "E1.1", "K-101"];
+const indexText = "SHEET INDEX G0.1 COVER A1.1 FIRST FLOOR A1.2 SECOND FLOOR A8.1 PARTITIONS A8.2 DOORS M101 HVAC M201 PIPING M202 PIPING L2 S101 FRAMING CIV0102 DEMO E1.1 LIGHTING K-101 KITCHEN NFPA13 A1 GRID B4";
+assert.equal(K.indexSheet([{ sheet: "A0.1", title: "PROJECT DATA" }, { sheet: "G0.1", title: "COVER SHEET" }]).sheet, "G0.1");
+const idx = K.drawingIndexCheck("d1", indexText, set.filter(s => s !== "M201"));
+assert.deepEqual([idx.status, idx.missing], ["checked", ["M201", "M202"]], "Only tokens shaped like the set's sheets count; grid A1, B4 and NFPA13 never do");
+assert.equal(K.drawingIndexCheck("d1", "", set).status, "not-checked");
+assert.equal(K.drawingIndexCheck("d1", "A1.1 A1.2 M101", set).status, "not-checked", "Too short an index is not trusted");
+assert.equal(K.drawingIndexCheck("d1", indexText.replace(/A1.1|A1.2|A8.1|A8.2|M101|S101|CIV0102|E1.1/g, ""), set).status, "not-checked", "An index missing most uploaded sheets is not trusted");
+const contents = Array.from({ length: 12 }, (_, n) => `09 ${String(21 + n).padStart(2, "0")} 00 SECTION TITLE ${n}`).join("\n") + "\n13 34 16.53 METAL BUILDING\n00 00 00 COVER";
+assert.equal(K.tocSections(contents).length, 13, "The 00 00 00 cover line is not a section");
+assert.equal(K.tocText([{ page: 2, text: contents }, { page: 3, text: "A page of prose." }, { page: 90, text: contents }]), contents, "Contents pages: dense section lines within the first 40 pages");
+const found = Array.from({ length: 10 }, (_, n) => ({ section: `09 ${String(21 + n).padStart(2, "0")} 00`, title: "", first: 1, last: 2 }));
+const tocCheck = K.specTocCheck("m1", contents, found, code => K.sectionInText(code, "SECTION 093100 - FLOORING\nTITLE 133416.53 - 4"));
+assert.deepEqual([tocCheck.status, tocCheck.missing], ["checked", ["09 32 00"]], "A candidate confirmed in the full text is not missing");
+assert.equal(K.sectionInText("13 34 16.53", "METAL BUILDING 133416.53 - 2"), true);
+assert.equal(K.sectionInText("05 73 00", "RAILINGS 057300.13 - 1"), false, "A decimal subsection does not stand for its parent");
+assert.equal(K.specTocCheck("m1", "09 21 00 A", found).status, "not-checked");
+const refPages = K.referencePages([{ page: 5, text: contents }, { page: 9, text: "A Geotechnical Investigation Report prepared by ECS. Boring logs attached." }, { page: 12, text: "Nothing here." }, { page: 43, text: "Hazardous materials: an asbestos report is on file." }]);
+assert.deepEqual(refPages.map(p => p.page), [9, 43], "Pages naming reports, contents pages skipped");
+const R = EXTRA_JOBS["referenced-documents"];
+const rIn = R.parse({ pages: refPages });
+assert.deepEqual(R.screen({ documents: [{ kind: "geotech", title: "Geotechnical Investigation Report (ECS)", page: 9, quote: "Geotechnical Investigation Report prepared by ECS" }, { kind: "geotech", title: "Geotechnical Investigation Report (ECS)", page: 9, quote: "Geotechnical Investigation Report prepared by ECS" }, { kind: "hazmat", title: "Asbestos report", page: 43, quote: "a lead paint report signed by nobody" }, { kind: "weird", title: "Boring logs", page: 9, quote: "Boring logs attached" }] }, rIn).documents.map(d => [d.kind, d.page]), [["geotech", 9], ["other", 9]], "Quote on its page, once each; unknown kinds become other");
+assert.throws(() => R.parse({ pages: [] }), /specification pages/);
+for (const [name, text, sheets, category] of [["Addendum 02.pdf", "", 0, "Addenda"], ["Jelleff ITB.pdf", "", 0, "RFP"], ["x.pdf", "REQUEST FOR PROPOSALS for construction", 0, "RFP"], ["Project Manual.pdf", "", 0, "Specifications"], ["set.pdf", "", 12, "Drawings"], ["Subcontract Agreement.pdf", "", 0, "Contracts"], ["Geotech Report.pdf", "", 0, "Reports"], ["scan.pdf", "", 0, "Other"]])
+  assert.equal(K.classifyFile(name, text, sheets).category, category, name);
+assert.equal(K.classifyFile("misc.pdf", "", 0).confidence, "low");
+
+// Phase 2 in the guide: items appear only with a check result for the current document version.
+const manualDoc = doc({ id: "m1", name: "Manual.pdf", category: "Specifications", kind: "manual", sections: found.map(s => ({ ...s })) });
+const withChecks = (checks, docs = [drawings, manualDoc], project = complete) => run({ project, documents: docs, state: { ...S.EMPTY_SETUP, checks } });
+const p2 = withChecks({ drawingIndex: { ...idx, docId: "d1" }, specToc: { ...tocCheck, docId: "m1" }, references: { docId: "m1", documents: [{ kind: "geotech", title: "Geotechnical Investigation Report (ECS, 2023)", page: 9, quote: "Geotechnical Investigation Report prepared by ECS" }, { kind: "hazmat", title: "Hazardous Materials Survey (2022)", page: 43, quote: "asbestos report is on file" }, { kind: "other", title: "Traffic impact study", page: 12, quote: "traffic study" }] } });
+const docItemsOf = s => st(s, "documents").items.map(i => `${i.id}:${i.status}`);
+assert.deepEqual(docItemsOf(p2), ["drawings:ready", "manual:ready", "sheets:missing", "sections:needs-review"]);
+assert.match(st(p2, "documents").items.find(i => i.id === "sheets").note, /M201, M202/);
+assert.equal(st(p2, "documents").status, "ready", "Missing index sheets don't block the route; they are their own item");
+assert.deepEqual(docItemsOf(withChecks({ drawingIndex: { ...idx, docId: "old-version" } })), ["drawings:ready", "manual:ready"], "A check for another version is ignored");
+const reportsP2 = st(p2, "reports").items;
+assert.deepEqual(reportsP2.map(i => i.id), ["geotech", "survey", "hazmat", "ref-2"], "New work + a referenced hazmat survey: the referenced one is added; others get a new item");
+assert.match(reportsP2.find(i => i.id === "geotech").why, /^Referenced in the project manual, p. 9/);
+assert.equal(reportsP2.find(i => i.id === "geotech").label, "Geotechnical Investigation Report (ECS, 2023)");
+const addendum = doc({ id: "ad1", name: "Addendum 01.pdf", category: "Addenda" });
+assert.equal(st(withChecks({}, [drawings, addendum]), "details").items.find(i => i.id === "addenda").status, "needs-review");
+assert.equal(st(withChecks({}, [drawings, addendum]), "details").status, "needs-review");
+assert.equal(st(run({ project: complete, documents: [drawings, addendum], state: S.markReviewed(S.EMPTY_SETUP, "ad1", "Marcel", at) }), "details").items.find(i => i.id === "addenda").status, "ready");
+
+// Running the checks: a failed step keeps the others' results and says what failed; a retry runs only what's missing.
+const indexed = doc({ id: "d2", name: "Set.pdf", category: "Drawings", kind: "drawings", sheets: [sheet(1, "G0.1", "COVER SHEET"), ...set.slice(1).map((s, n) => sheet(n + 2, s, "PLAN"))] });
+const manualPages = [{ page: 2, text: contents }, { page: 9, text: "A Geotechnical Investigation Report prepared by ECS." }];
+const calls = [];
+const io = (fail = {}) => ({
+  text: async (d, range) => { calls.push(`text:${d.id}`); if (fail.text === d.id) throw new Error("chunk unavailable"); return d.id === "d2" ? [{ page: range.first, text: indexText }] : manualPages; },
+  references: async pages => { calls.push("ai"); if (fail.ai) throw new Error("AI request failed (502)"); return [{ kind: "geotech", title: "Geotechnical report", page: pages[0].page, quote: "Geotechnical Investigation Report" }]; },
+});
+assert.deepEqual(K.dueChecks(indexed, manualDoc, {}), ["drawingIndex", "specToc", "references"]);
+const failed = await K.runSetupChecks(indexed, manualDoc, {}, io({ ai: true }));
+assert.deepEqual(Object.keys(failed.found), ["drawingIndex", "specToc"], "The AI failing keeps the index and contents results");
+assert.match(failed.error, /^Referenced reports: AI request failed \(502\)$/);
+assert.deepEqual(K.dueChecks(indexed, manualDoc, failed.found), ["references"], "Only the failed check is still due");
+calls.length = 0;
+const retried = await K.runSetupChecks(indexed, manualDoc, failed.found, io());
+assert.deepEqual([Object.keys(retried.found), retried.error, calls], [["references"], null, ["text:m1", "ai"]], "The retry reads the manual and asks the AI only");
+assert.deepEqual(K.dueChecks(indexed, manualDoc, { ...failed.found, ...retried.found }), [], "Nothing is due after the retry");
+const noText = await K.runSetupChecks(indexed, manualDoc, {}, io({ text: "m1" }));
+assert.deepEqual([Object.keys(noText.found), noText.error], [["drawingIndex"], "Project manual: chunk unavailable"]);
+assert.deepEqual(await K.runSetupChecks(null, null, {}, io()), { found: {}, error: null }, "Nothing uploaded, nothing to run");
+
 console.log(`Project setup checked: ${empty.steps.length} steps, drawings-only start, readiness, RFP review per version, scopes per trade, reports by work type, decisions (not applicable, waiting, reconsider), RFP comparison.`);
