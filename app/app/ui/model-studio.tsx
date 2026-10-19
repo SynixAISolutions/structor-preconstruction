@@ -1,5 +1,8 @@
 "use client";
 
+import { SchematicModelStudio } from "./schematic-model";
+import { SAMPLE_PROJECT_ID } from "../../lib/project-scope";
+import type { Project } from "../../lib/projects";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import * as THREE from "three";
@@ -21,7 +24,7 @@ import { displayedFinishHeight, wallFinishColors, wallFinishDisplay } from "./wa
 import type { ModelInspection } from "./model-quantity-rows";
 import "./model-studio.css";
 
-type StudioProps = { inspection?: ModelInspection | null; view: ModelView; projectId: string; projectName: string; navigate: (screen: Screen) => void; notify: (message: string) => void };
+type StudioProps = { project: Project; inspection?: ModelInspection | null; view: ModelView; projectId: string; projectName: string; navigate: (screen: Screen) => void; notify: (message: string) => void };
 import { ModelSourceSheet as SourceSheet } from "./model-source-sheet";
 import { ModelAssemblyCard } from "./model-assembly-card";
 import { assemblyInspection, disposeInspection, elevationFixtures } from "./model-inspection";
@@ -281,7 +284,11 @@ function RoomFinishPanel({ objects, bases, records, onSource, onInspect, onInspe
   return <details className="ms-room-schedule"><summary><span><span className="ms-section-label">INTERIOR FINISHES BY ROOM</span><strong>Room finish schedule</strong></span><small>{schedule.length} rooms</small><ChevronDown size={16}/></summary><p>Prepared model quantities. Base runs include door openings and exclude internal finish lines. Base types follow the finish schedule; supported WB-02 / WB-03 accent runs replace the same length of WB-01. Shared transitions appear in both rooms; count each strip once. Door counts use the assigned room; wall runs cover modeled objects only.</p><div className="ms-room-scroll"><table><thead><tr><th scope="col">Room / level</th><th scope="col">Floor finish</th><th scope="col">Floor SF</th><th scope="col">Base · gross LF</th><th scope="col">Transitions</th><th scope="col">Door openings EA</th><th scope="col">Wall run LF</th></tr></thead><tbody>{schedule.map(row => <tr key={`${row.level}-${row.room}`}><th scope="row"><button onClick={() => onInspectRoom(row.room, row.level)} aria-label={`Select room ${row.room} on ${row.level === "L2" ? "Level 02" : "Level 01"}`}><strong>{row.room}</strong><small>{allRooms.find(room => room.number === row.room && room.level === row.level)?.name ?? "Modeled room"} · {row.level}</small><ArrowUpRight size={12}/></button></th><td>{row.floors.map(floor => <button key={floor.id} onClick={() => onInspect(floor.id)} aria-label={`Inspect ${floor.tag ?? floor.assembly} in room ${row.room}`}><strong>{floor.tag ?? "No finish tag"}</strong><small>{floor.assembly} · {number.format(floor.areaSf)} SF</small><ArrowUpRight size={12}/></button>)}</td><td>{number.format(row.areaSf)}</td><td>{row.baseTags.length ? row.floors.map(floor => { const object = findObject(objects, floor.id); const base = bases.find(item => item.floorId === floor.id); return object?.baseTag && base ? <div key={floor.id}><BaseRuns row={base} records={records} onSource={onSource}/><small>{floor.tag ?? floor.assembly}</small></div> : null; }) : "—"}</td><td>{row.transitions.length ? row.transitions.map(item => <button key={item.id} onClick={() => onInspect(item.id)} aria-label={`Inspect ${item.tag} ${number.format(item.lengthFt)} LF ${item.to === row.room ? `within room ${row.room}` : `from room ${row.room} to ${item.to}`}`}><strong>{item.tag} · {number.format(item.lengthFt)} LF</strong><small>{item.to === row.room ? "Within this room" : `To room ${item.to}`}</small><ArrowUpRight size={12}/></button>) : "—"}</td><td>{row.doors}</td><td>{number.format(row.wallLf)}</td></tr>)}</tbody></table></div></details>;
 }
 
-export default function ModelStudio({ view, projectId, projectName, navigate, notify, inspection }: StudioProps) {
+export default function ModelStudio(props: StudioProps) {
+  return props.projectId === SAMPLE_PROJECT_ID ? <PreparedModelStudio {...props}/> : <SchematicModelStudio key={props.projectId} project={props.project} navigate={props.navigate} notify={props.notify}/>;
+}
+
+function PreparedModelStudio({ view, projectId, projectName, navigate, notify, inspection }: StudioProps) {
   const prepared = usePreparedModel(projectId), objects = prepared.objects;
   const viewObjects = useMemo(() => objects.filter(object => object.views.includes(view)), [objects, view]);
   const records = useMemo(() => view === "interior" && objects.length ? prepared.records : [], [objects, prepared.records, view]);
