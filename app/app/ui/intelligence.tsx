@@ -14,6 +14,7 @@ import { RfiWorkspace } from "./rfi-ui";
 import { DrawingFlipWorkspace } from "./drawing-flip-ui";
 import { SubmittalLogWorkspace } from "./submittal-log-ui";
 import { type ModelQuantityProps } from "./model-quantity-takeoffs";
+import type { Project } from "../../lib/projects";
 import { TradeEstimatesView } from "./trade-estimates";
 import { ProjectFilesScreen } from "./project-files-screen";
 import { StoredDrawingRegister, StoredSpecRegister } from "./document-registers";
@@ -138,7 +139,7 @@ function SampleRevisionsScreen({ projectName, notify, navigate }: ViewProps) {
   </div>;
 }
 
-export function IntelligenceView(props: ViewProps & ModelQuantityProps & { screen: Screen }) {
+export function IntelligenceView(props: ViewProps & ModelQuantityProps & { screen: Screen; project: Project }) {
   switch (props.screen) {
     case "documents": return <ProjectFilesScreen {...props}/>;
     case "scopes": return <ProcurementScopesView {...props}/>;
