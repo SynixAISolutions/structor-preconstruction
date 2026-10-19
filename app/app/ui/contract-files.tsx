@@ -4,7 +4,7 @@ import { Button, Modal, Panel, Badge, downloadText } from "./shared";
 import { useLocalDraft } from "../../lib/use-local-draft";
 import { EXHIBITS, EMPTY_CONTRACT_FILES, documentRegister, type CompanyForm, type ContractFiles } from "../../lib/contract-files";
 import { assetUrl, uploadDocument, type DocumentAsset } from "../../lib/document-assets";
-import { DEFAULT_EXHIBIT_TEMPLATE, generateSampleExhibit, latestExhibit, renderDocumentText, type Award, type DocumentContent } from "../../lib/award";
+import { generateSampleExhibit, latestExhibit, renderDocumentText, type Award, type DocumentContent } from "../../lib/award";
 import type { ContractScopeOutput } from "../../lib/contract-scope-ai";
 import { useProjectDocuments } from "../../lib/project-files-client";
 import { drawingRegister, latestDocuments } from "../../lib/project-files";
@@ -13,11 +13,6 @@ export function AssetLink({ asset }: { asset?: DocumentAsset }) { return asset ?
 export function AssetUpload({ label, accept = "application/pdf", onSave }: { label: string; accept?: string; onSave: (asset: DocumentAsset) => void }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   return <label className="ui-field"><span>{label} · up to 3 MB</span><input type="file" accept={accept} disabled={busy} onChange={async e => { const file = e.target.files?.[0]; e.target.value = ""; if (!file) return; setBusy(true); setError(""); try { if (!accept.split(",").includes(file.type)) throw new Error("Choose the requested file type."); onSave(await uploadDocument(file)); } catch (err) { setError(err instanceof Error ? err.message : "Upload failed."); } finally { setBusy(false); } }}/>{busy && <small role="status">Saving private file…</small>}{error && <small role="alert">{error}</small>}</label>;
-}
-export function CompanyFormSettings() {
-  const [company, setCompany] = useLocalDraft<CompanyForm>("company-form", { name: "General contractor" });
-  const [open, setOpen] = useState(false);
-  return <><Button onClick={() => setOpen(true)}>Company form & logo</Button>{open && <Modal title="Company form & logo" subtitle="New contract packages copy these settings. Sent contracts keep their saved files." onClose={() => setOpen(false)}><label className="ui-field"><span>Company legal name</span><input value={company.name} onChange={e => setCompany(c => ({ ...c, name: e.target.value }))}/></label><AssetUpload label="Company logo" accept="image/png,image/jpeg" onSave={logo => setCompany(c => ({ ...c, logo }))}/><AssetLink asset={company.logo}/><AssetUpload label="Company agreement form" accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onSave={form => setCompany(c => ({ ...c, form }))}/><AssetLink asset={company.form}/><p>The original company form accompanies the generated agreement and exhibits.</p><Button onClick={() => setOpen(false)}>Done</Button></Modal>}</>;
 }
 export function OtherExhibits({ award, save }: { award: Award; save: (files: ContractFiles) => void }) {
   const [company] = useLocalDraft<CompanyForm>("company-form", { name: "General contractor" });
@@ -37,7 +32,26 @@ export function OtherExhibits({ award, save }: { award: Award; save: (files: Con
     {(Object.entries(EXHIBITS) as [keyof typeof EXHIBITS, string][]).map(([code, label]) => <section className="contract-file-row" key={code}><h3>{code} · {label}</h3><AssetLink asset={files.files[code]}/>{!locked && <AssetUpload label={`Upload Exhibit ${code}`} onSave={asset => save({ ...files, files: { ...files.files, [code]: asset } })}/>}</section>)}
   </Panel>;
 }
+export function contractScopeDraft(award: Award, lines: string[]): { content: DocumentContent; index: number } {
+  const revision = latestExhibit(award), block = revision.template.layout?.blocks.find(b => b.kind === "scope");
+  const section = block ? generateSampleExhibit(award.snapshot, award, { ...revision.template, layout: { title: revision.content.title, blocks: [block] } }).sections[0] : null;
+  const index = section ? revision.content.sections.findIndex(s => s.heading === section.heading) : revision.template.layout ? -1 : 2;
+  if (index < 0 || !revision.content.sections[index]) throw new Error("The scope section could not be matched in this revision. Review the mapped form in Settings.");
+  const before = block?.kind === "scope" && block.intro ? section!.lines.slice(0, 1) : [];
+  const after = block?.kind === "scope" && block.append?.length ? section!.lines.slice(-block.append.length) : [];
+  return { index, content: { ...revision.content, sections: revision.content.sections.map((s, i) => i === index ? { ...s, lines: [...before, ...lines, ...after] } : { ...s, lines: [...s.lines] }) } };
+}
 export function ContractScopeDraft({ award, save }: { award: Award; save: (content: DocumentContent, note: string) => void }) {
-  const [busy, setBusy] = useState(false), [error, setError] = useState(""), [draft, setDraft] = useState<DocumentContent | null>(null);
-  return <><Button disabled={busy} onClick={async () => { setBusy(true); setError(""); try { const response = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job: "contract-scope", input: { trade: award.snapshot.packageName, scope: award.snapshot.scope } }) }); const result = await response.json() as ContractScopeOutput & { error?: string }; if (!response.ok) throw new Error(result.error || "AI drafting failed."); const base = generateSampleExhibit(award.snapshot, award, DEFAULT_EXHIBIT_TEMPLATE); base.sections[2].lines = result.lines.map(l => l.text); setDraft(base); } catch (e) { setError(e instanceof Error ? e.message : "Drafting failed."); } finally { setBusy(false); } }}>{busy ? "Drafting Section 3…" : "AI draft · Scope of Work"}</Button>{error && <p role="alert">{error}</p>}{draft && <Modal title="Review Exhibit A · Section 3" subtitle="Review the contractual wording against the retained bid scope. Exclusions and partials stay in the document. Saving creates a new draft revision." onClose={() => setDraft(null)} wide><p>Current revision {latestExhibit(award).number} remains unchanged until you save.</p>{draft.sections[2].lines.map((line, index) => <label className="ui-field" key={index}><span>Scope obligation {index + 1}</span><textarea rows={5} value={line} onChange={e => setDraft(d => d ? { ...d, sections: d.sections.map((s, i) => i === 2 ? { ...s, lines: s.lines.map((l, j) => j === index ? e.target.value : l) } : s) } : d)}/></label>)}<Button variant="primary" onClick={() => { save(draft, "Reviewed AI contractual wording in Section 3; original bid scope and limitations retained."); setDraft(null); }}>Save reviewed draft revision</Button></Modal>}</>;
+  const [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const [draft, setDraft] = useState<{ content: DocumentContent; index: number } | null>(null);
+  return <><Button disabled={busy} onClick={async () => {
+    setBusy(true); setError("");
+    try {
+      const response = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job: "contract-scope", input: { trade: award.snapshot.packageName, scope: award.snapshot.scope } }) });
+      const result = await response.json() as ContractScopeOutput & { error?: string };
+      if (!response.ok) throw new Error(result.error || "AI drafting failed.");
+      setDraft(contractScopeDraft(award, result.lines.map(l => l.text)));
+    } catch (e) { setError(e instanceof Error ? e.message : "Drafting failed."); }
+    finally { setBusy(false); }
+  }}>{busy ? "Drafting scope wording…" : "AI draft · Scope of Work"}</Button>{error && <p role="alert">{error}</p>}{draft && <Modal title="Review Exhibit A · Scope of Work" subtitle="Review the contractual wording against the retained bid scope. Saving creates a new revision in this award's template." onClose={() => setDraft(null)} wide><p>Current revision {latestExhibit(award).number} remains unchanged until you save.</p>{draft.content.sections[draft.index].lines.map((line, index) => <label className="ui-field" key={index}><span>Scope paragraph {index + 1}</span><textarea rows={5} value={line} onChange={e => setDraft(d => d ? { ...d, content: { ...d.content, sections: d.content.sections.map((s, i) => i === d.index ? { ...s, lines: s.lines.map((l, j) => j === index ? e.target.value : l) } : s) } } : d)}/></label>)}<Button variant="primary" onClick={() => { save(draft.content, "Reviewed AI scope wording in the saved company form; other sections retained."); setDraft(null); }}>Save reviewed draft revision</Button></Modal>}</>;
 }
