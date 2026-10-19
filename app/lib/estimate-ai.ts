@@ -97,7 +97,7 @@ export function screenEstimateLines(output: unknown, input: EstimateDraftInput):
     if (input.existing?.some(e => sameWork(e.item, item))) return [];
     if (!(Number.isFinite(quantity) && quantity > 0 && quantity <= 1e7) || !(Number.isFinite(proposed) && proposed >= 0 && proposed <= 1e6)) return [];
     const stated = typeof o.quantityBasis === "string" ? o.quantityBasis.trim().slice(0, 300) : "";
-    const basis = computed !== null && computed > 0 ? `${stated}${stated ? " " : ""}[${formula} = ${Math.round(computed * 100) / 100}]`.trim() : stated;
+    const basis = computed !== null && computed > 0 && /\d\s*[-+*/]/.test(formula) ? `${stated}${stated ? " " : ""}[${formula} = ${Math.round(computed * 100) / 100}]`.trim() : stated;
     const ref = input.references.find(r => r.id === o.rateSource);
     const flags: string[] = [];
     let rate = proposed, rateSource = "assumption", rateNote = "AI assumption: check against current pricing.";

@@ -193,6 +193,7 @@ assert.deepEqual(withMath.map(l => [l.item, l.quantity, l.amount, l.flags.join("
   ["Sealant", 900, 5400, "Assumed rate"],
 ], "A quantity that disagrees with its own formula is replaced by it; an unreadable formula is ignored");
 assert.equal(withMath[0].quantityBasis, "4,280 SF of 8-inch CMU, half the cores grouted [4280 * (8/12) / 27 * 0.5 = 52.84]");
+assert.equal(A.screenEstimateLines({ lines: [{ item: "Pool protection", quantity: 1, unit: "LS", rate: 2500, quantityBasis: "Whole pool, per the scope", quantityFormula: "1", rateSource: "assumption" }] }, aiIn)[0].quantityBasis, "Whole pool, per the scope", "A bare number is not shown as a formula");
 assert.match(J0.messages(J0.parse({ trade: { id: "drywall", name: "Drywall", code: "09 29 00" }, scope: ["Partitions"] }))[0].content, /quantityFormula/);
 const jobIn = J0.parse({ trade: { id: "demolition", name: "Demolition", code: "02 41 00" }, scope: ["Remove asphalt"], existing: [{ item: "Asphalt pavement removal, full depth", quantity: 18650, unit: "SF", rate: 2.75 }, { item: "" }] });
 assert.deepEqual(jobIn.existing, [{ item: "Asphalt pavement removal, full depth", quantity: 18650, unit: "SF", rate: 2.75 }]);
