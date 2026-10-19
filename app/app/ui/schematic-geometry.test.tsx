@@ -1,0 +1,31 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { alignSheetFrame, footprintValid, openOutline, printedSheetFrame, schematicGeometry, sheetPoint } from "./schematic-geometry";
+import { moveOutlinePoint, setLevelHeight, type SchematicLevel, type SchematicModel } from "../../lib/schematic-model";
+
+const level: SchematicLevel = { id: "L1", name: "Level 01", order: 1, elevation: 0, height: 14, outline: [[10, 20], [50, 20], [50, 60], [10, 60]], rooms: [{ name: "Lobby", number: "101", at: [20, 30] }], source: { documentId: "qa", sheet: "A1.1", page: 1 }, sizing: "Printed scale, 8 ft per inch" };
+test("schematic geometry flips drawing y, extrudes to the read height, and corrections move upper levels", () => {
+  const geometry = schematicGeometry(level); geometry.computeBoundingBox();
+  assert.deepEqual(geometry.boundingBox!.min.toArray().map(n => Math.round(n * 1e6) / 1e6), [10, 0, -60]); assert.deepEqual(geometry.boundingBox!.max.toArray().map(n => Math.round(n * 1e6) / 1e6), [50, 14, -20]); geometry.dispose();
+  const model: SchematicModel = { levels: [level, { ...level, id: "L2", order: 2, elevation: 14, height: 16 }], builtAt: "qa", warnings: [] };
+  assert.equal(setLevelHeight(model, "L1", 15).levels[1].elevation, 15);
+  const edited = moveOutlinePoint(model, "L1", 0, [12, 21]); assert.equal(edited.levels[0].outline[0][0], 12); assert.equal(model.levels[0].outline[0][0], 10);
+});
+test("sheet overlay uses printed paper scale or explicit alignment, retains the frame after outline edits", () => {
+  const frame = printedSheetFrame(level.sizing, 42, 30)!;
+  assert.deepEqual(frame, { width: 336, height: 240 }); assert.deepEqual(sheetPoint([.25, .5], frame), [84, 120]);
+  assert.equal(printedSheetFrame("Sized to building area", 42, 30), null);
+  const aligned = alignSheetFrame([84, 120], [.25, .5]); assert.deepEqual(aligned, frame);
+  assert.deepEqual(sheetPoint([.5, .25], aligned), [168, 60]);
+  assert.throws(() => alignSheetFrame([0, 120], [0, .5]), /Choose a corner/);
+  assert.deepEqual(sheetPoint([-1, 2], aligned), [0, 240]);
+});
+test("outline edits reject crossing edges, collapsed footprints and non-finite coordinates", () => {
+  assert.equal(footprintValid(level.outline), true);
+  assert.equal(footprintValid([...level.outline, level.outline[0]]), true);
+  assert.equal(openOutline([...level.outline, level.outline[0]]).length, 4);
+  assert.equal(footprintValid([[0, 0], [10, 10], [0, 10], [10, 0]]), false);
+  assert.equal(footprintValid([[0, 0], [10, 0], [10, 10], [5, 5], [0, 10]]), true);
+  assert.equal(footprintValid([[0, 0], [1, 0], [2, 0]]), false);
+  assert.equal(footprintValid([[0, 0], [Infinity, 0], [10, 10]]), false);
+});
