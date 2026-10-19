@@ -150,4 +150,25 @@ assert.equal(st(withChecks({}, [drawings, addendum]), "details").items.find(i =>
 assert.equal(st(withChecks({}, [drawings, addendum]), "details").status, "needs-review");
 assert.equal(st(run({ project: complete, documents: [drawings, addendum], state: S.markReviewed(S.EMPTY_SETUP, "ad1", "Marcel", at) }), "details").items.find(i => i.id === "addenda").status, "ready");
 
+// Running the checks: a failed step keeps the others' results and says what failed; a retry runs only what's missing.
+const indexed = doc({ id: "d2", name: "Set.pdf", category: "Drawings", kind: "drawings", sheets: [sheet(1, "G0.1", "COVER SHEET"), ...set.slice(1).map((s, n) => sheet(n + 2, s, "PLAN"))] });
+const manualPages = [{ page: 2, text: contents }, { page: 9, text: "A Geotechnical Investigation Report prepared by ECS." }];
+const calls = [];
+const io = (fail = {}) => ({
+  text: async (d, range) => { calls.push(`text:${d.id}`); if (fail.text === d.id) throw new Error("chunk unavailable"); return d.id === "d2" ? [{ page: range.first, text: indexText }] : manualPages; },
+  references: async pages => { calls.push("ai"); if (fail.ai) throw new Error("AI request failed (502)"); return [{ kind: "geotech", title: "Geotechnical report", page: pages[0].page, quote: "Geotechnical Investigation Report" }]; },
+});
+assert.deepEqual(K.dueChecks(indexed, manualDoc, {}), ["drawingIndex", "specToc", "references"]);
+const failed = await K.runSetupChecks(indexed, manualDoc, {}, io({ ai: true }));
+assert.deepEqual(Object.keys(failed.found), ["drawingIndex", "specToc"], "The AI failing keeps the index and contents results");
+assert.match(failed.error, /^Referenced reports: AI request failed \(502\)$/);
+assert.deepEqual(K.dueChecks(indexed, manualDoc, failed.found), ["references"], "Only the failed check is still due");
+calls.length = 0;
+const retried = await K.runSetupChecks(indexed, manualDoc, failed.found, io());
+assert.deepEqual([Object.keys(retried.found), retried.error, calls], [["references"], null, ["text:m1", "ai"]], "The retry reads the manual and asks the AI only");
+assert.deepEqual(K.dueChecks(indexed, manualDoc, { ...failed.found, ...retried.found }), [], "Nothing is due after the retry");
+const noText = await K.runSetupChecks(indexed, manualDoc, {}, io({ text: "m1" }));
+assert.deepEqual([Object.keys(noText.found), noText.error], [["drawingIndex"], "Project manual: chunk unavailable"]);
+assert.deepEqual(await K.runSetupChecks(null, null, {}, io()), { found: {}, error: null }, "Nothing uploaded, nothing to run");
+
 console.log(`Project setup checked: ${empty.steps.length} steps, drawings-only start, readiness, RFP review per version, scopes per trade, reports by work type, decisions (not applicable, waiting, reconsider), RFP comparison.`);

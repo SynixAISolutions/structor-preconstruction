@@ -2,7 +2,8 @@
 // "missing" when they can prove it, documents the specifications refer to, what an uploaded file
 // is, and addenda. Pure; the browser runs them once per document version (lib/use-project-setup).
 
-import { sheetKey, type StoredSection } from "./project-files";
+import { drawingRegister, sheetKey, type StoredDocument, type StoredSection } from "./project-files";
+import type { SetupChecks } from "./project-setup";
 
 export type CompletenessCheck = { docId: string; status: "checked" | "not-checked"; reason: string; listed: number; missing: string[] };
 export type ReferencedDoc = { kind: "geotech" | "survey" | "hazmat" | "existing" | "other"; title: string; page: number; quote: string };
@@ -74,6 +75,54 @@ export const REFERENCE_WORDS = /geotechnical|subsurface (investigation|explorati
 export function referencePages(pages: { page: number; text: string }[], max = 14): { page: number; text: string }[] {
   const count = (text: string) => (text.match(new RegExp(REFERENCE_WORDS.source, "gi")) ?? []).length;
   return pages.filter(p => count(p.text) > 0 && tocSections(p.text).length < 8).sort((a, b) => count(b.text) - count(a.text) || a.page - b.page).slice(0, max).sort((a, b) => a.page - b.page);
+}
+
+// ── Running the checks ──────────────────────────────────────────────────────
+
+export type CheckName = "drawingIndex" | "specToc" | "references";
+type PageText = { page: number; text: string };
+export type CheckIo = {
+  text: (doc: StoredDocument, pages?: { first: number; last: number }) => Promise<PageText[]>;
+  /** The "referenced-documents" AI job; only called when some page names a report. */
+  references: (pages: PageText[]) => Promise<ReferencedDoc[]>;
+};
+
+/** The checks still due for the newest drawing set and manual, given the results so far. */
+export function dueChecks(drawings: StoredDocument | null, manual: StoredDocument | null, have: SetupChecks): CheckName[] {
+  const due: CheckName[] = [];
+  if (drawings && have.drawingIndex?.docId !== drawings.id) due.push("drawingIndex");
+  if (manual && have.specToc?.docId !== manual.id) due.push("specToc");
+  if (manual && have.references?.docId !== manual.id) due.push("references");
+  return due;
+}
+
+/**
+ * Runs the due checks. Each is independent: one failing (the AI request, a text chunk) keeps the
+ * others' results, and its message comes back in `error` so the screen can offer a retry. Never throws.
+ */
+export async function runSetupChecks(drawings: StoredDocument | null, manual: StoredDocument | null, have: SetupChecks, io: CheckIo): Promise<{ found: SetupChecks; error: string | null }> {
+  const due = dueChecks(drawings, manual, have), found: SetupChecks = {}, errors: string[] = [];
+  const attempt = async (what: string, step: () => Promise<void>) => {
+    try { await step(); } catch (error) { errors.push(`${what}: ${error instanceof Error ? error.message : String(error)}`); }
+  };
+  if (drawings && due.includes("drawingIndex")) await attempt("Drawing index", async () => {
+    const register = drawingRegister([drawings]), row = indexSheet(register);
+    const [page] = row ? await io.text(drawings, { first: row.page, last: row.page }) : [];
+    found.drawingIndex = drawingIndexCheck(drawings.id, page?.text ?? "", register.map(r => r.sheet));
+  });
+  if (manual && (due.includes("specToc") || due.includes("references"))) await attempt("Project manual", async () => {
+    const pages = await io.text(manual);
+    if (due.includes("specToc")) {
+      const full = pages.map(p => p.text).join("\n");
+      found.specToc = specTocCheck(manual.id, tocText(pages), manual.sections, code => sectionInText(code, full));
+    }
+    if (due.includes("references")) await attempt("Referenced reports", async () => {
+      const chosen = referencePages(pages).map(p => ({ page: p.page, text: p.text.slice(0, 9000) }));
+      found.references = { docId: manual.id, documents: chosen.length ? await io.references(chosen) : [] };
+    });
+  });
+  if (!errors.length && dueChecks(drawings, manual, { ...have, ...found }).length) errors.push("Some document checks did not finish.");
+  return { found, error: errors.length ? errors.join(" ") : null };
 }
 
 // ── What an uploaded file is ────────────────────────────────────────────────
