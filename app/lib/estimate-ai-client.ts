@@ -37,6 +37,7 @@ export async function draftTradeEstimate(args: { trade: TradePackage; project: P
     trade: { id: trade.id, name: trade.name, code: trade.code },
     project: { name: project.name, type: project.type, location: project.location, squareFeet: project.squareFeet, workType: project.workType ?? "", stage: project.estimateStage ?? "" },
     scope, quantities, sheets, references: estimateReferences(args.rows, trade, args.concept),
+    existing: args.rows.filter(r => r.packageId === trade.id).map(r => ({ item: r.item, quantity: r.quantity, unit: r.unit, rate: r.rate })),
   };
   return (await aiJob<{ lines: EstimateDraftLine[] }>("estimate-draft", input, args.signal)).lines;
 }

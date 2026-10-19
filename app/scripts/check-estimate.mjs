@@ -139,6 +139,7 @@ assert.equal(E.varianceReport({ rows: [legacy("09 · Finishes", { packageId: "dr
 // Estimate with AI: references, aiScreened lines (the math is ours), the area aiFallback, and adding lines once.
 const A = await import("../lib/estimate-ai.ts");
 const { EXTRA_JOBS } = await import("../lib/ai-jobs-more.ts");
+const J0 = EXTRA_JOBS["estimate-draft"];
 const aiRows = [
   { id: "r1", division: "09 · Finishes", packageId: "drywall", item: "GWB partition", unit: "SF", quantity: 100, rate: 7.85, source: "A1.1", reviewed: true },
   { id: "r2", division: "09 · Finishes", packageId: "flooring", item: "LVT", unit: "SF", quantity: 50, rate: 9, source: "A12.1", reviewed: true },
@@ -164,6 +165,21 @@ assert.deepEqual(aiScreened.map(l => [l.item, l.rate, l.amount, l.rateSource, l.
   ["Ceiling grid", 4, 3600, "assumption", "Cited reference uses another unit|Assumed rate"],
   ["Invented ref", 50, 500, "assumption", "Assumed rate"],
 ], "Known units, one per item, cited rates enforced, other rates flagged as assumptions, impossible lines dropped");
+assert.equal(aiScreened[0].rateNote, "GWB partition: rate from this project's estimate line (line source: A1.1)", "A row's source is where its quantity came from, so the note says whose rate it is");
+// Lines the trade already has are not drafted again (accepting them would count the work twice), and
+// quantities taken as a share of the area say so. The Jelleff case: asphalt removal was already 18,650 SF.
+assert.equal(A.sameWork("Asphalt pavement removal full depth", "Asphalt pavement removal, full depth"), true);
+assert.equal(A.sameWork("GWB partitions", "GWB partition"), true);
+assert.equal(A.sameWork("Building demolition including foundations and slabs", "Existing building demolition (perimeter)"), false);
+const withExisting = A.screenEstimateLines({ lines: [
+  { item: "Asphalt pavement removal full depth", quantity: 8000, unit: "SF", rate: 2.75, quantityBasis: "Estimated 30% of site area", rateSource: "assumption" },
+  { item: "Reinforced CMU partitions", quantity: 2385, unit: "SF", rate: 32, quantityBasis: "9% of 26,500 SF building area, typical", rateSource: "assumption" },
+  { item: "Sidewalk, curb and gutter demolition", quantity: 450, unit: "LF", rate: 12.5, quantityBasis: "Lengths along the frontages on CIV0102", rateSource: "assumption" },
+] }, { ...aiIn, existing: [{ item: "Asphalt pavement removal, full depth", quantity: 18650, unit: "SF", rate: 2.75 }] });
+assert.deepEqual(withExisting.map(l => [l.item, l.flags.join("|")]), [["Reinforced CMU partitions", "Assumed rate|Quantity is a share of the area"], ["Sidewalk, curb and gutter demolition", "Assumed rate"]]);
+const jobIn = J0.parse({ trade: { id: "demolition", name: "Demolition", code: "02 41 00" }, scope: ["Remove asphalt"], existing: [{ item: "Asphalt pavement removal, full depth", quantity: 18650, unit: "SF", rate: 2.75 }, { item: "" }] });
+assert.deepEqual(jobIn.existing, [{ item: "Asphalt pavement removal, full depth", quantity: 18650, unit: "SF", rate: 2.75 }]);
+assert.match(J0.messages(jobIn)[1].content, /Already in this trade's estimate \(do not price again\):\n- Asphalt pavement removal, full depth: 18650 SF at \$2\.75/);
 const aiFallback = A.screenEstimateLines({ lines: [] }, aiIn);
 assert.deepEqual(aiFallback.map(l => [l.quantity, l.unit, l.rate, l.amount, l.flags[0]]), [[20000, "SF", 38.46, 769200, "Area-based allowance"]]);
 assert.deepEqual(A.screenEstimateLines({ lines: [] }, { ...aiIn, references: aiRefs.slice(0, 2) }), [], "No historical rate, no allowance");
