@@ -20,6 +20,7 @@ import { levelingCandidates, type LevelingBasis, type LevelingCandidate } from "
 import { initialBidders, type Bidder } from "../../lib/data/commercial";
 import type { BidProvenance, LevelingBidder, LevelingScopeItem } from "../../lib/leveling-import";
 import { useAward } from "../../lib/use-award";
+import { useClarifications } from "../../lib/clarifications-client";
 import type { Project } from "../../lib/projects";
 import { useBudget } from "../../lib/use-budget";
 import { useLocalDraft } from "../../lib/use-local-draft";
@@ -99,6 +100,7 @@ function CandidateValues({ candidate }: { candidate: LevelingCandidate }) {
 
 export function AwardView({ projectName, notify, navigate, project }: ViewProps & { project: Project }) {
   const { projectId, procurement, submissions } = useSubmissions();
+  const { requests: clarifications, loading: clarificationsLoading, error: clarificationsError, reload: reloadClarifications } = useClarifications(projectId);
   const { state: budget } = useBudget();
   const { state, run } = useAward();
   const { state: ve } = useValueEngineering();
@@ -174,9 +176,10 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
   }
 
   function makeAward() {
+    if (clarificationsLoading || clarificationsError) return;
     if (!selectedCandidateId) { setErrors({ candidate: "Choose an eligible submitted bid." }); return; }
     const context: AwardContext = {
-      projectId, projectName, procurement, submissions, candidates, budget, directory,
+      projectId, projectName, procurement, submissions, candidates, budget, directory, clarifications,
       projectAddress: project.location, projectStart: project.start, projectFinish: project.finish,
     };
     if (perform(current => createAward(current, context, { levelingBidderId: selectedCandidateId, basis, budgetLineId: budgetLineId || null, allowanceIds }, actor, undefined, undefined, templateFor(company, "exhibit-a", DEFAULT_EXHIBIT_TEMPLATE)), `${selectedCandidate?.bidderName ?? "Bidder"} selected for ${pkg?.name ?? "the package"}.`)) {
@@ -264,7 +267,9 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
             </div>
             <div className="award-allowances"><header><strong>Allowances included in the award</strong><small>Excluded allowances cannot be selected.</small></header>{availableAllowances.length ? availableAllowances.map(item => <label key={item.id}><input type="checkbox" checked={allowanceIds.includes(item.id)} onChange={event => setAllowanceIds(current => event.target.checked ? [...current, item.id] : current.filter(id => id !== item.id))}/><span><strong>{item.name}</strong><small>{item.source || "No source recorded"}</small></span><b>{usd(item.amount)}</b></label>) : <p>No reviewable or included allowances are recorded.</p>}</div>
             <ErrorSummary errors={errors}/>
-            <div className="award-submit"><div><AwardIcon size={20}/><span><strong>{selectedCandidate?.bidderName ?? "Choose a bidder"}</strong><small>{selectedAmount === null ? "Choose an available award value" : `${basisLabels[basis]} · ${usd(selectedAmount)}`}</small></span></div><Button variant="primary" disabled={!selectedCandidateId} onClick={makeAward}>Create award & Exhibit A<ArrowRight size={16}/></Button></div>
+            {clarificationsLoading && <p role="status">Loading written clarification answers…</p>}
+            {clarificationsError && <div role="alert"><p>{clarificationsError} Reload before creating the award so written answers are included.</p><Button onClick={reloadClarifications}>Reload clarifications</Button></div>}
+            <div className="award-submit"><div><AwardIcon size={20}/><span><strong>{selectedCandidate?.bidderName ?? "Choose a bidder"}</strong><small>{selectedAmount === null ? "Choose an available award value" : `${basisLabels[basis]} · ${usd(selectedAmount)}`}</small></span></div><Button variant="primary" disabled={!selectedCandidateId || clarificationsLoading || !!clarificationsError} onClick={makeAward}>Create award & Exhibit A<ArrowRight size={16}/></Button></div>
           </Panel>}
         </> : <>
           <section className="award-summary">
