@@ -35,6 +35,11 @@ test("already applied and unanswered lines preview no change", () => {
   assert.match(preview({ ...request, lines: [{ ...request.lines[0], appliedAt: "2026-10-20" }] }), /No change/);
   assert.match(preview({ ...request, lines: [{ ...request.lines[0], answer: null }] }), /Awaiting answer/);
 });
+test("a lost server apply record previews the stored answer without a stale warning", () => {
+  const html = preview(request, [{ ...bidders[0], responses: { fire: { status: "P", note: "Adds $4200.75. Confirmed in writing 2026-10-20 by Test sub", adjustment: 4200.75, resolved: true, adjustmentApproved: true } } }]);
+  assert.match(html, /P · \$4,200.75 · Resolved/);
+  assert.ok(!html.includes("This line will be skipped"));
+});
 test("portal question has named controls, cited requirement and decimal money validation", () => {
   const html = renderToStaticMarkup(<PortalQuestion line={request.lines[0]} value={{ kind: "add", amount: "4200.75", note: "All penetrations" }} disabled={false} onChange={() => {}}/>);
   for (const text of ["<legend>", "Your proposal said", "By others", "Spec page 42", "Included", "Add $", "Excluded", 'step="0.01"', 'min="0.01"', 'maxLength="1000"']) assert.ok(html.includes(text), text);

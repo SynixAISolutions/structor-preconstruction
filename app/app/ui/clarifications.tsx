@@ -83,20 +83,18 @@ export function ClarificationsPanel({ projectId, projectName, packageId, trade, 
     {(error || failure) && <p role="alert" className="clarify-warning">{error || failure}</p>}
     {pending && <div role="alert" className="clarify-warning">Leveling is saved locally, but the server has not confirmed the applied status. Keep this panel open and retry the status update. If the request changed, refresh and recheck its answers before reconciling with the estimator.<button className="ui-btn" disabled={busy} onClick={() => void run(async () => { await recordApplied(pending.request, pending.applied, actor); setPending(null); reload(); setNotice("Applied status saved."); })}>Retry status update</button></div>}
     {link && <div className="clarify-link" role="status"><strong>Reply link for {link.bidder}</strong><p>Nothing was emailed. Copy and share this link with the recipient.</p><label>Signed reply link<input readOnly value={link.url} onFocus={e => e.target.select()}/></label><button className="ui-btn" disabled={busy} onClick={() => void run(async () => { await navigator.clipboard.writeText(link.url); setNotice("Reply link copied. Nothing was emailed."); })}>Copy link</button></div>}
-    {!loading && !error && <>
-      <h3>Prepare clarifications</h3>
-      {!drafts.length && <p>No new gaps to ask about. Existing requests and resolved items are not drafted again.</p>}
-      {drafts.map(draft => <DraftLetter key={draft.id} draft={draft} bidders={bidders} disabled={busy || !!pending} onSend={(d, recipient, due) => run(async () => { const sent = await sendClarificationRequest(d, recipient, due, actor); setLink({ bidder: d.bidder, url: sent.link }); reload(); setNotice("Request sent. Nothing was emailed."); })}/>)}
+    <h3>Prepare clarifications</h3>
+      {!loading && !drafts.length && <p>No new gaps to ask about. Existing requests and resolved items are not drafted again.</p>}
+      {drafts.map(draft => <DraftLetter key={draft.bidderId} draft={draft} bidders={bidders} disabled={busy || !!pending || loading || !!error} onSend={(d, recipient, due) => run(async () => { const sent = await sendClarificationRequest(d, recipient, due, actor); setLink({ bidder: d.bidder, url: sent.link }); reload(); setNotice("Request sent. Nothing was emailed."); })}/>)}
       <h3>Requests &amp; apply preview</h3>
-      {!requests.length && <p>No requests sent for this trade yet.</p>}
+      {!loading && !requests.length && <p>No requests sent for this trade yet.</p>}
       {requests.map(request => <details className="clarify-card" key={request.id}><summary>{request.bidder}<span>{request.status === "cancelled" ? "Cancelled" : request.status === "applied" ? "Applied" : `${request.lines.filter(l => l.answer).length}/${request.lines.length} answered${isOverdue(request, new Date().toISOString().slice(0, 10)) ? " · Overdue" : request.status === "answered" ? " · Answered" : " · Sent"}`}</span></summary>
         <p>To {request.recipient?.name} · {request.recipient?.email} · Reply by {request.dueAt}</p>
         {request.status === "cancelled" ? <p>This request was withdrawn. Its link no longer accepts answers.</p> : <ApplyClarificationPreview request={request} bidders={bidders}/>}
         <div className="clarify-actions">
-          {request.status !== "cancelled" && <button className="ui-btn" disabled={busy || !!pending || loading || staleLines(request, bidders).baseBidChanged || !request.lines.some(l => l.answer)} onClick={() => void apply(request)}>{request.status === "applied" ? "Apply again" : "Apply answers"}</button>}
-          {!["cancelled", "applied"].includes(request.status) && <><button className="ui-btn" disabled={busy || !!pending} onClick={() => void run(async () => { setLink({ bidder: request.bidder, url: await clarificationLink(request) }); })}>Get reply link</button><button className="ui-btn" disabled={busy || !!pending} onClick={() => void run(async () => { await cancelClarificationRequest(request, actor); reload(); setNotice("Request cancelled. Its reply link is withdrawn."); })}>Cancel request</button></>}
+          {request.status !== "cancelled" && <button className="ui-btn" disabled={busy || !!pending || loading || !!error || staleLines(request, bidders).baseBidChanged || !request.lines.some(l => l.answer)} onClick={() => void apply(request)}>{request.status === "applied" ? "Apply again" : "Apply answers"}</button>}
+          {!["cancelled", "applied"].includes(request.status) && <><button className="ui-btn" disabled={busy || !!pending || loading || !!error} onClick={() => void run(async () => { setLink({ bidder: request.bidder, url: await clarificationLink(request) }); })}>Get reply link</button><button className="ui-btn" disabled={busy || !!pending || loading || !!error} onClick={() => void run(async () => { await cancelClarificationRequest(request, actor); reload(); setNotice("Request cancelled. Its reply link is withdrawn."); })}>Cancel request</button></>}
         </div>
       </details>)}
-    </>}
   </section>;
 }
