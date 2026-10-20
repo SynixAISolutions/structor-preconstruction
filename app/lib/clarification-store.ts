@@ -16,10 +16,13 @@ const pathOf = (projectId: string, id: string) => {
   return `clarifications/${projectId}/${id}.json`;
 };
 
+/** A compressed response can carry the weak form (W/"..."); a conditional write needs the strong one. */
+export const strongEtag = (etag: string) => etag.replace(/^W\//, "");
+
 export async function readRequest(projectId: string, id: string): Promise<{ request: ClarificationRequest; etag: string } | null> {
   const result = await get(pathOf(projectId, id), { access: "private", useCache: false }).catch(() => null);
   if (!result || result.statusCode !== 200) return null;
-  return { request: await new Response(result.stream).json() as ClarificationRequest, etag: result.blob.etag };
+  return { request: await new Response(result.stream).json() as ClarificationRequest, etag: strongEtag(result.blob.etag) };
 }
 
 /** Writes `request`. `etag` null = it must not exist yet; otherwise the stored copy must still carry that ETag. */

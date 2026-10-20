@@ -103,4 +103,8 @@ assert.equal(L.verifyPortalToken(`${payload}.${sig.slice(0, -2)}xx`, now), null)
 for (const bad of [null, "", "abc", `${payload}.${sig}.x`]) assert.equal(L.verifyPortalToken(bad, now), null);
 assert.throws(() => L.issuePortalToken({ projectId: "../x", requestId: "cl-1", bidderId: "b1" }), /unsafe/);
 
+const { strongEtag } = await import("../lib/clarification-store.ts");
+assert.equal(strongEtag('W/"88572374b7"'), '"88572374b7"', "The server's read can carry a weak ETag; the conditional write needs the strong one (19 Oct: every apply got 409)");
+assert.equal(strongEtag('"abc"'), '"abc"');
+
 console.log("Clarifications checked: gaps per bidder, no repeats, letter from the bid and the documents only, strict draft parsing, send / answer / cancel with versions, stale lines, repeat-safe apply replacing the plug, the server's apply record, signed portal links.");
