@@ -94,6 +94,23 @@ assert(section(gdoc, "Scope of work").some(line => line.includes(`${form[2].titl
 assert.deepEqual(section(gdoc, "Clarifications"), ["Work hours 7–5."]);
 assert.deepEqual(section(gdoc, "Alternates offered (not included unless accepted in writing)"), ["Deduct $12,000: Reuse crushed concrete on site"]);
 
+// Close the gap: written answers applied in leveling override the bid's answer in Exhibit A, quoted.
+const ans = (kind, amount, note) => ({ kind, amount, note, by: "Jordan Davis", at: "2026-09-29T15:00:00.000Z" });
+const cline = (item, bid, answer) => ({ scopeItemId: item.id, number: "", item: item.title, section: "", requirement: "", bid, answer, appliedAt: "2026-09-29T16:00:00.000Z" });
+const creq = (lines, extra = {}) => ({ id: "cl-1", projectId: "jelleff", projectName: "Jelleff Recreation Center", packageId: "demolition", trade: "Demolition", bidderId: green.levelingBidderId, bidder: "Greenline Civil", baseBid: 450000, recipient: null, lines, status: "sent", createdAt: at, sentAt: at, dueAt: null, appliedAt: null, version: 3, history: [], ...extra });
+const clines = [cline(form[1], { status: "N", note: "" }, ans("add", 4200.5, "UL systems")), cline(form[2], { status: "P", note: "Salvage only." }, ans("excluded", null, ""))];
+const exhibitWith = (clarifications) => A.latestExhibit(A.createAward(cancelled, { ...ctx, clarifications }, { levelingBidderId: green.levelingBidderId, basis: "base" }, "Safi", at, ...SAMPLE_EXHIBIT).awards[1]).content;
+const cdoc = exhibitWith([creq(clines)]);
+assert(section(cdoc, "Scope of work").some(line => line.includes(form[1].title)), "The item the sub agreed to add is in the scope of work");
+assert.deepEqual(section(cdoc, "Excluded from this subcontract"), [`${form[2].title} (Excluded, confirmed in writing 2026-09-29 by Jordan Davis)`, "Hazardous materials abatement"]);
+assert.deepEqual(section(cdoc, "Clarifications"), ["Work hours 7–5.", `${form[1].title}: Included for an added $4,200.50, confirmed in writing 2026-09-29 by Jordan Davis: "UL systems".`, `${form[2].title}: Excluded, confirmed in writing 2026-09-29 by Jordan Davis.`]);
+for (const [why, requests] of [
+  ["not applied", [creq(clines.map(l => ({ ...l, appliedAt: null })))]],
+  ["cancelled", [creq(clines, { status: "cancelled" })]],
+  ["another bidder's", [creq(clines, { bidderId: capital.levelingBidderId })]],
+  ["about an answer this revision no longer gives", [creq(clines.map(l => ({ ...l, bid: { status: "Y", note: "" } })))]],
+]) assert.deepEqual(exhibitWith(requests), gdoc, `A clarification ${why} leaves Exhibit A as bid`);
+
 // Exhibit A negotiation: share → changes requested → revise → share → resolve → agree.
 fails(() => A.agreeExhibit(s, id, "Michael Brooks", "subcontractor", at), "exhibit", /Only a shared revision/);
 fails(() => A.generateSubcontract(s, id, "Marcel's company", "Safi", at), "subcontract", /Agree Exhibit A/);
