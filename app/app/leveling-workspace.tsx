@@ -42,6 +42,7 @@ import { BidGapCostDialog } from "./ui/bid-gap-cost";
 import { approveGapCost, type CostBasis } from "../lib/bid-gap-cost";
 import { refreshPortalComparison, type SavedTradeComparison } from "../lib/leveling-sync";
 import { PortalBidInbox } from "./ui/portal-bid-inbox";
+import { ClarificationsPanel } from "./ui/clarifications";
 
 type ScopeStatus = "" | "Y" | "N" | "P" | "N/A";
 type Response = {
@@ -263,6 +264,7 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
   const [glossaryOpen, setGlossaryOpen] = useState(false);
   const [walkthroughOpen, setWalkthroughOpen] = useState(false);
   const [costSuggestionsOpen, setCostSuggestionsOpen] = useState(false);
+  const [clarificationsOpen, setClarificationsOpen] = useState(false);
   const [editingBidderId, setEditingBidderId] = useState<string | "new" | null>(null);
   const [reviewBidderId, setReviewBidderId] = useState<string | null>(null);
   const [sourcePackageId, setSourcePackageId] = useState("");
@@ -643,7 +645,7 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
   }
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${clarificationsOpen ? "clarifications-active" : ""}`}>
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark"><i /><i /><i /></span><span>Structor</span></div>
         <nav aria-label="Primary navigation">
@@ -683,6 +685,7 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
           <button className="button secondary" disabled={bidders.length >= BIDDER_SLOT_COUNT} onClick={() => setEditingBidderId("new")}><UserPlus />Add bidder</button>
           <button className="button secondary" onClick={() => setInboxOpen(true)}><Mail />Proposal inbox</button>
           <button className="button secondary" onClick={() => setCostSuggestionsOpen(true)}><Calculator />Cost suggestions</button>
+          <button className="button secondary" aria-expanded={clarificationsOpen} aria-controls="trade-clarifications" disabled={!storageReady || !storageEnabled || !loadedPackageId || !!historicalRevisions} onClick={() => setClarificationsOpen(value => !value)}><Mail />Prepare clarifications</button>
           <button className="button secondary" onClick={() => setGlossaryOpen(true)}><BookOpen />Glossary</button>
           <button className="button secondary" onClick={() => setWalkthroughOpen(true)}><CircleHelp />How it works</button>
           <button className={`button ghost ${exceptionsOnly ? "pressed" : ""}`} aria-pressed={exceptionsOnly} onClick={() => setExceptionsOnly((value) => !value)}><SlidersHorizontal />{exceptionsOnly ? "Showing exceptions" : "Exceptions only"}</button>
@@ -692,6 +695,13 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
           <button className="button ghost" onClick={downloadBackup}><Download />Backup JSON</button>
           <button className="button secondary export" onClick={exportWorkbook}><Download />Export Excel</button>
         </div>
+
+        {clarificationsOpen && <div id="trade-clarifications"><ClarificationsPanel key={`${projectId}-${loadedPackageId}`} projectId={projectId} projectName={projectName} packageId={loadedPackageId} trade={project.trade} items={items} bidders={bidders} onSave={async next => {
+          const updated = bidders.map(bidder => ({ ...bidder, responses: next.find(b => b.id === bidder.id)?.responses ?? bidder.responses }));
+          setBidders(updated);
+          try { await saveWorkspace({ project, items, bidders: updated }); }
+          catch (error) { setBidders(bidders); throw error; }
+        }}/></div>}
 
         <div className={`content-grid ${selected ? "" : "inspector-closed"}`}>
           <div className="table-wrap">
