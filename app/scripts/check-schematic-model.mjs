@@ -68,4 +68,54 @@ assert.throws(() => P.screen({ outline: [[0.1, 0.1], [0.11, 0.1], [0.11, 0.11], 
 assert.deepEqual(H.screen({ levels: [{ name: "LEVEL 01", elevation: "100'-0\"" }, { name: "LEVEL 02", elevation: "114'-6\"" }, { name: "ROOF", elevation: 132.25 }, { name: "BAD", elevation: "tall" }, { name: "", elevation: 3 }] }).levels,
   [{ name: "LEVEL 01", elevation: 100 }, { name: "LEVEL 02", elevation: 114.5 }, { name: "ROOF", elevation: 132.25 }], "Feet-and-inches parsed; unreadable markers dropped");
 
-console.log("Schematic model checked: levels from plan titles, plan and section sheets, printed scale and area sizing, level heights (including a missing base level), corrections, screened AI readings.");
+// The source frame in feet is kept, so corrections drawn on the sheet use the build's calibration.
+assert.deepEqual(scaled.frame, { widthFeet: 288, heightFeet: 192 });
+assert.deepEqual(M.fromFraction(byArea.frame, square[1]), byArea.outline[1], "Area sizing: the frame maps fractions to the same feet as the outline");
+assert.deepEqual(M.toFraction(scaled.frame, [216, 48]), [0.75, 0.25]);
+
+// Read outlines: a closing repeat is dropped; points read out of order are re-ordered, and that is said.
+const bowtie = [[0.1, 0.1], [0.9, 0.9], [0.9, 0.1], [0.1, 0.9]];
+assert.equal(M.selfCrossing(bowtie), true);
+assert.equal(M.selfCrossing(square), false);
+assert.deepEqual(M.cleanOutline([...square, square[0]]), { outline: square, note: "" });
+const fixed = M.cleanOutline(bowtie);
+assert.equal(M.selfCrossing(fixed.outline), false);
+assert.match(fixed.note, /re-ordered/);
+assert.equal(M.cleanOutline([[0.1, 0.1], [0.5, 0.1], [0.5, 0.5], [0.1, 0.1]]).outline, null, "Fewer than 4 corners");
+const repaired = P.screen({ outline: [...bowtie, bowtie[0]], rooms: [], scale: "" });
+assert.equal(repaired.outline.length, 4);
+assert.match(repaired.note, /re-ordered/);
+assert.equal(P.screen({ outline: square, rooms: [], scale: "" }).note, "");
+assert.deepEqual(P.screen({ outline: square, rooms: [], scale: "", scaleAt: [0.13, 0.94] }).scaleAt, [0.13, 0.94], "Where the scale was seen, for the close-up read");
+assert.equal("scaleAt" in P.screen({ outline: square, rooms: [], scale: "", scaleAt: null }), false);
+const SC = EXTRA_JOBS["drawing-scale"];
+assert.throws(() => SC.parse({ image: "x" }), /JPEG/);
+assert.deepEqual(SC.screen({ scale: `SCALE: 1/8" = 1'-0"`, title: "SECOND FLOOR PLAN", extra: 1 }), { scale: `SCALE: 1/8" = 1'-0"`, title: "SECOND FLOOR PLAN" });
+assert.equal(M.feetPerInch(SC.screen({ scale: `SCALE: 1/8" = 1'-0"` }).scale), 8);
+assert.deepEqual(SC.screen({}), { scale: "", title: "" });
+
+// Level markers from the tiles of a section (the Jelleff A5.1 readings, 19 Oct): numbered roof levels
+// stay their own level, the value most tiles agree on wins, and a tie is disputed until a close-up decides.
+const at = [0.5, 0.5];
+const tilesRead = [
+  [],
+  [{ name: "LEVEL 04 - HIGH ROOF", elevation: 33 }, { name: "LEVEL 03 - LOW ROOF", elevation: 26, at }, { name: "LEVEL 02 - SECOND FLOOR", elevation: 14 }],
+  [{ name: "LEVEL 03 - LOW ROOF", elevation: 28, at }, { name: "LEVEL 02 - SECOND FLOOR", elevation: 14 }, { name: "LEVEL 01 - FIRST FLOOR", elevation: 0 }],
+  [],
+  [{ name: "LEVEL 04 - HIGH ROOF", elevation: 33 }, { name: "LEVEL 03 - LOW ROOF", elevation: 26 }, { name: "LEVEL 02 - SECOND FLOOR", elevation: 14 }, { name: "LEVEL 01 - FIRST FLOOR", elevation: 0 }],
+  [{ name: "LEVEL 01 - FIRST FLOOR", elevation: 0 }, { name: "LEVEL 02 - SECOND FLOOR", elevation: 14 }, { name: "LEVEL 03 - LOW ROOF", elevation: 28 }, { name: "LEVEL 04 - HIGH ROOF", elevation: 33 }],
+];
+const tied = M.consensusMarkers(tilesRead);
+assert.deepEqual(tied.markers.map(m => [m.name, m.elevation, m.votes]), [["LEVEL 01 - FIRST FLOOR", 0, 3], ["LEVEL 02 - SECOND FLOOR", 14, 4], ["LEVEL 03 - LOW ROOF", 26, 2], ["LEVEL 04 - HIGH ROOF", 33, 3]]);
+assert.deepEqual(tied.disputed, [{ name: "LEVEL 03 - LOW ROOF", reading: 1, at }], "26 or 28: read again close up, where it was read");
+const decided = M.consensusMarkers([...tilesRead, [{ name: "LEVEL 03 - LOW ROOF", elevation: 28 }]], [...tilesRead.map(() => 1), 2]);
+assert.deepEqual(decided.markers.map(m => m.elevation), [0, 14, 28, 33], "The close-up counts double");
+assert.deepEqual([decided.disputed, decided.warnings], [[], []]);
+const jelleffRead = M.levelHeights([1, 2], decided.markers);
+assert.deepEqual([[...jelleffRead.elevations.values()], [...jelleffRead.heights.values()], jelleffRead.warnings], [[0, 14], [14, 14], []], "Printed: Level 01 0', Level 02 14', low roof 28'");
+const misread = M.consensusMarkers([[{ name: "LEVEL 01", elevation: 0 }, { name: "LEVEL 02", elevation: 51 }, { name: "LEVEL 02", elevation: 14 }, { name: "ROOF", elevation: 68 }], [{ name: "LEVEL 02", elevation: 14 }]]);
+assert.deepEqual(misread.markers.map(m => m.elevation), [0, 14], "The value more tiles agree on wins; a roof that no longer fits is dropped");
+assert.match(misread.warnings[0], /ROOF read as 68 ft doesn't fit/);
+assert.deepEqual(H.screen({ levels: [{ name: "LEVEL 02", elevation: "14'-0\"", at: [0.81, 0.4] }, { name: "LEVEL 01", elevation: 0, at: [3, 1] }] }).levels, [{ name: "LEVEL 02", elevation: 14, at: [0.81, 0.4] }, { name: "LEVEL 01", elevation: 0 }], "A position outside the image is dropped, not the marker");
+
+console.log("Schematic model checked: levels from plan titles, plan and section sheets, printed scale and area sizing, source frames, outline repair, level markers by tile consensus with close-up tie-breaks, level heights (including a missing base level), corrections, screened AI readings.");

@@ -240,6 +240,36 @@ export function renderStoredPage(doc: StoredDocument, pageNumber: number, size =
   return renders.get(key)!;
 }
 
+type Box = [number, number, number, number];
+
+/** One part of a page, `box` = [x, y, width, height] in 0–1 page fractions, as a JPEG with longest side `size`. */
+export async function renderStoredRegion(doc: StoredDocument, pageNumber: number, box: Box, size = 2000): Promise<string> {
+  const page = await (await openStoredPdf(doc)).getPage(pageNumber);
+  const original = page.getViewport({ scale: 1 });
+  const [x, y, w, h] = box;
+  const scale = size / Math.max(w * original.width, h * original.height);
+  const viewport = page.getViewport({ scale, offsetX: -x * original.width * scale, offsetY: -y * original.height * scale });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(w * original.width * scale); canvas.height = Math.ceil(h * original.height * scale);
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("This browser cannot render a drawing page.");
+  await page.render({ canvas, canvasContext: context, viewport }).promise;
+  return canvas.toDataURL("image/jpeg", 0.82);
+}
+
+/**
+ * A page cut into `cols` × `rows` slightly overlapping tiles, each a JPEG with longest side `size`, so
+ * small print (level markers, room tags) is legible without one huge image. Boxes are 0–1 page fractions.
+ */
+export async function renderStoredTiles(doc: StoredDocument, pageNumber: number, cols: number, rows: number, size = 2000, overlap = 0.06): Promise<{ image: string; box: Box }[]> {
+  const w = Math.min(1, 1 / cols + overlap), h = Math.min(1, 1 / rows + overlap);
+  const boxes: Box[] = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) boxes.push([Math.min(1 - w, Math.max(0, c / cols - overlap / 2)), Math.min(1 - h, Math.max(0, r / rows - overlap / 2)), w, h]);
+  const tiles: { image: string; box: Box }[] = [];
+  for (const box of boxes) tiles.push({ image: await renderStoredRegion(doc, pageNumber, box, size), box });
+  return tiles;
+}
+
 /** Reads a stored RFP and returns the project details it states, each with its page and quote, for the user to accept (lib/rfp applyRfpFacts). */
 export async function readRfpFacts(doc: StoredDocument, signal?: AbortSignal): Promise<RfpFact[]> {
   const pages = rfpPages(await readStoredText(doc, { first: 1, last: Math.min(doc.pageCount, 150) }));
