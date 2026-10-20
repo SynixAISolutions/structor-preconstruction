@@ -49,14 +49,16 @@ export function estimateReferences(rows: TakeoffRow[], trade: { id: string; code
 export function evalArithmetic(expr: string): number | null {
   const src = expr.replace(/,(?=\d{3}\b)/g, "").replace(/[×x]/g, "*").replace(/÷/g, "/");
   if (!/^[\d.+\-*/()\s]+$/.test(src) || src.length > 200) return null;
-  const tokens = src.match(/\d+(?:\.\d+)?|[+\-*/()]/g) ?? [];
+  const tokens = src.match(/\d+(?:\.\d*)?|\.\d+|[+\-*/()]/g) ?? [];
+  // Every character must be part of a token: ".5" is one number, and a stray "." or "1.2.3" is refused.
+  if (tokens.join("") !== src.replace(/\s+/g, "")) return null;
   let i = 0;
   const peek = () => tokens[i];
   const factor = (): number => {
     const tok = tokens[i++];
     if (tok === "-") return -factor();
     if (tok === "(") { const v = sum(); if (tokens[i++] !== ")") throw new Error(); return v; }
-    if (tok === undefined || !/^\d/.test(tok)) throw new Error();
+    if (tok === undefined || !/^\.?\d/.test(tok)) throw new Error();
     return Number(tok);
   };
   const product = (): number => { let v = factor(); while (peek() === "*" || peek() === "/") { const op = tokens[i++], r = factor(); v = op === "*" ? v * r : v / r; } return v; };
