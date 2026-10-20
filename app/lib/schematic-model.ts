@@ -8,7 +8,9 @@
 // it the outline is sized so the floor areas add up to the project's building area, and says so.
 // People can correct the outline and heights afterwards. Pure functions.
 
+import type { Segment } from "./plan-vectors";
 import type { RegisterRow } from "./project-files";
+import { planWalls } from "./wall-detection";
 
 export type Point = [number, number];
 export type SchematicRoom = { name: string; number: string; at: Point };
@@ -28,7 +30,16 @@ export type SchematicLevel = {
    * calibration after edits and reloads. Missing on models built before 20 Oct.
    */
   frame?: { widthFeet: number; heightFeet: number };
+  /**
+   * Walls read from the plan's own vector lines (levelWalls), in the same feet as the outline. Missing on
+   * models built before 21 Oct; empty when the sheet is a scan or its walls can't be told apart.
+   */
+  walls?: SchematicWall[];
+  /** How the walls were found, or why there are none. */
+  wallNote?: string;
 };
+/** A wall centerline from a to b with its thickness, in feet. */
+export type SchematicWall = { a: Point; b: Point; thickness: number };
 export type SchematicModel = { levels: SchematicLevel[]; warnings: string[]; builtAt: string };
 
 const ORDINALS: Record<string, number> = { BASEMENT: 0, GROUND: 1, FIRST: 1, SECOND: 2, THIRD: 3, FOURTH: 4, FIFTH: 5, SIXTH: 6 };
@@ -96,6 +107,26 @@ export function toFeet(input: { outline: Point[]; rooms: SchematicRoom[]; page: 
 }
 
 type Frame = { widthFeet: number; heightFeet: number };
+
+/**
+ * A level's walls from the plan sheet's vector lines (lib/plan-vectors segments, in page points), in the
+ * level's frame, so they sit on the outline. Only the area around the read outline counts (title block,
+ * key plan and details stay out). Thickness limits are in feet, so walls need a true scale: with the size
+ * taken from the building area they are kept but flagged.
+ */
+export function levelWalls(segments: Segment[], page: { widthPt: number; heightPt: number }, frame: Frame, outline: Point[], printedScale: boolean): { walls: SchematicWall[]; note: string } {
+  const pointsPerFoot = page.widthPt / frame.widthFeet;
+  let box: [number, number, number, number] | undefined;
+  if (outline.length >= 3) {
+    const xs = outline.map(p => p[0] * page.widthPt), ys = outline.map(p => p[1] * page.heightPt);
+    const margin = 0.1 * Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) + 20 * pointsPerFoot;
+    box = [Math.min(...xs) - margin, Math.min(...ys) - margin, Math.max(...xs) + margin, Math.max(...ys) + margin];
+  }
+  const found = planWalls(segments, pointsPerFoot, box);
+  const r1 = (n: number) => Math.round(n * 10) / 10;
+  const walls = found.walls.map(w => ({ a: [r1(w.a[0]), r1(w.a[1])] as Point, b: [r1(w.b[0]), r1(w.b[1])] as Point, thickness: Math.round(w.thickness * 100) / 100 }));
+  return { walls, note: found.walls.length && !printedScale ? `${found.note} No printed scale was read, so wall sizes follow the building area; check them.` : found.note };
+}
 /** Image fraction → feet in a level's frame (to 0.1 ft). */
 export const fromFraction = (frame: Frame, [x, y]: Point): Point => [Math.round(x * frame.widthFeet * 10) / 10, Math.round(y * frame.heightFeet * 10) / 10];
 /** Feet → image fraction in a level's frame: where to draw a point over the source sheet. */
