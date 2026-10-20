@@ -70,11 +70,13 @@ const BID_SAID: Record<string, string> = { "": "does not say whether it is inclu
 /** The letter, from the data only: each line quotes the bid's answer and where the documents require the work. */
 export function clarificationLetter(request: ClarificationRequest): string {
   const due = request.dueAt ? ` by ${request.dueAt.slice(0, 10)}` : "";
+  const bare = (s: string) => s.trim().replace(/[.\s]+$/, ""); // the sentence supplies its own full stop
+  const ref = (l: ClarificationLine) => [l.number && `item ${l.number}`, l.section].filter(Boolean).join(", ");
   return [
     `${request.projectName}: ${request.trade}. Clarification of your proposal`,
     `To ${request.recipient?.name || request.bidder},`,
     `Before we can compare proposals on the same basis, please confirm each item below${due}: Included in your price, Add (with the amount), or Excluded.`,
-    ...request.lines.map((l, i) => `${i + 1}. ${l.number ? `${l.number} ` : ""}${l.item}${l.section ? ` (${l.section})` : ""}. Your proposal ${BID_SAID[l.bid.status] ?? "does not say"}${l.bid.note ? `: "${l.bid.note}"` : ""}. The bid documents require it: ${l.requirement || "see the bid form"}.`),
+    ...request.lines.map((l, i) => `${i + 1}. ${bare(l.item)}${ref(l) ? ` (${ref(l)})` : ""}. Your proposal ${BID_SAID[l.bid.status] ?? "does not say"}${bare(l.bid.note) ? `: "${bare(l.bid.note)}"` : ""}. The bid documents require it: ${bare(l.requirement) || "see the bid form"}.`),
     "Answer each line through the link you received; your answers become part of your proposal.",
   ].join("\n\n");
 }
