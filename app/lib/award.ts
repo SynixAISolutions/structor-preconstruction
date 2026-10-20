@@ -14,6 +14,7 @@
 import type { BudgetState, LevelingBasis, LevelingCandidate } from "./budget";
 import type { DirectoryCompany, Procurement } from "./procurement";
 import type { Alternate, ScopeAnswer, Submission } from "./submissions";
+import type { ClarificationLine, ClarificationRequest } from "./clarifications";
 import { MCN_EXHIBIT_TEMPLATE, MCN_SUBCONTRACT_TEMPLATE } from "./data/templates";
 import { contractFileLines, missingContractFiles, type ContractFiles } from "./contract-files";
 
@@ -130,6 +131,8 @@ export type AwardContext = {
   directory: DirectoryCompany[];
   /** Optional, for customer templates (owner name, street address, schedule dates). */
   owner?: string; projectAddress?: string; projectStart?: string; projectFinish?: string;
+  /** The project's clarification requests. Written answers applied in leveling are carried into Exhibit A. */
+  clarifications?: ClarificationRequest[];
 };
 
 export type AwardErrors = Partial<Record<"candidate" | "basis" | "budgetLineId" | "allowanceIds" | "award" | "exhibit" | "comment" | "subcontract" | "contractorName" | "signature" | "name" | "email" | "reason", string>>;
@@ -150,7 +153,7 @@ const now = () => new Date().toISOString();
 const newId = () => crypto.randomUUID();
 const fail = (errors: AwardErrors): never => { throw new AwardRuleError(errors); };
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const usd = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+const usd = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;
 const BASIS_LABEL: Record<LevelingBasis, string> = { base: "base bid", provisional: "provisional leveled total", reviewed: "reviewed leveled total" };
 
 // ── Reading ─────────────────────────────────────────────────────────────────
@@ -291,6 +294,9 @@ function validContent(content: DocumentContent): DocumentContent {
  * Awards a package to the chosen leveled bidder at the chosen value basis, freezes what was
  * awarded, and drafts Exhibit A revision 1. One live award per package.
  */
+const writtenAnswer = (a: NonNullable<ClarificationLine["answer"]>) =>
+  `${a.kind === "included" ? "Included at no added cost" : a.kind === "add" ? `Included for an added ${usd(a.amount!)}` : "Excluded"}, confirmed in writing ${a.at.slice(0, 10)} by ${a.by}${a.note ? `: "${a.note}"` : ""}`;
+
 export function createAward(
   state: AwardState, ctx: AwardContext,
   input: { levelingBidderId: string; basis: LevelingBasis; budgetLineId?: string | null; allowanceIds?: string[] },
@@ -322,12 +328,23 @@ export function createAward(
   if (allowances.some(a => a.status === "excluded")) fail({ allowanceIds: "Excluded allowances cannot be part of an award." });
 
   const answers = new Map(revision.responses.map(r => [r.scopeItemId, r]));
+  // Written answers applied in leveling, if they answer this revision's own response (a newer revision makes them moot).
+  // They override the bid's answer, so an item the sub agreed to add is in the scope of work, not excluded.
+  const clarified = new Map((ctx.clarifications ?? [])
+    .filter(r => r.bidderId === candidate.levelingBidderId && r.packageId === pkg!.id && r.status !== "cancelled")
+    .flatMap(r => r.lines.filter(l => l.appliedAt && l.answer && (answers.get(l.scopeItemId)?.answer ?? "") === l.bid.status && (answers.get(l.scopeItemId)?.note ?? "") === l.bid.note))
+    .sort((a, b) => a.appliedAt!.localeCompare(b.appliedAt!))
+    .map(l => [l.scopeItemId, l]));
   const company = ctx.directory.find(c => c.id === submission.bidderId);
   const snapshot: AwardSnapshot = {
     projectName: ctx.projectName, packageName: pkg!.name, packageCode: pkg!.code, packageOwner: pkg!.owner, formVersion: revision.formVersion,
     owner: ctx.owner?.trim() ?? "", projectAddress: ctx.projectAddress?.trim() ?? "", projectStart: ctx.projectStart ?? "", projectFinish: ctx.projectFinish ?? "",
-    scope: form.items.map(item => ({ ...item, answer: answers.get(item.id)?.answer ?? null, note: answers.get(item.id)?.note ?? "" })),
-    exclusions: [...revision.exclusions], alternates: structuredClone(revision.alternates), clarifications: [...revision.clarifications],
+    scope: form.items.map(item => {
+      const c = clarified.get(item.id)?.answer;
+      return { ...item, answer: c ? (c.kind === "excluded" ? "N" : "Y") : answers.get(item.id)?.answer ?? null, note: c ? writtenAnswer(c) : answers.get(item.id)?.note ?? "" };
+    }),
+    exclusions: [...revision.exclusions], alternates: structuredClone(revision.alternates),
+    clarifications: [...revision.clarifications, ...[...clarified.values()].map(l => `${l.item}: ${writtenAnswer(l.answer!)}.`)],
     allowances: allowances.map(a => ({ id: a.id, name: a.name, amount: a.amount, source: a.source, status: a.status })),
     company: { name: company?.company ?? submission.bidderId, contact: revision.submitter.name, email: revision.submitter.email },
   };
