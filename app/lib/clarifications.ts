@@ -129,8 +129,15 @@ export const isOverdue = (r: ClarificationRequest, today: string) => r.status ==
 export function staleLines(request: ClarificationRequest, bidders: LevelingBidder[]): { lines: string[]; baseBidChanged: boolean } {
   const bidder = bidders.find(b => b.id === request.bidderId);
   if (!bidder) return { lines: request.lines.filter(l => !l.appliedAt).map(l => l.scopeItemId), baseBidChanged: true };
-  const lines = request.lines.filter(l => { if (l.appliedAt) return false; const r = bidder.responses[l.scopeItemId]; return (r?.status ?? "") !== l.bid.status || (r?.note ?? "") !== l.bid.note; }).map(l => l.scopeItemId);
+  const lines = request.lines.filter(l => { if (l.appliedAt || inLeveling(bidder.responses[l.scopeItemId], l.answer)) return false; const r = bidder.responses[l.scopeItemId]; return (r?.status ?? "") !== l.bid.status || (r?.note ?? "") !== l.bid.note; }).map(l => l.scopeItemId);
   return { lines, baseBidChanged: bidder.baseBid !== request.baseBid };
+}
+
+/** Leveling already holds this answer: it was applied here, but the server never heard (the tab closed first). */
+function inLeveling(r: { status: string; note: string; adjustment?: number } | undefined, a: ClarificationLine["answer"]): boolean {
+  if (!r || !a) return false;
+  const status = a.kind === "included" ? "Y" : a.kind === "add" ? "P" : "N";
+  return r.status === status && r.note.includes(`Confirmed in writing`) && r.note.includes(` by ${a.by}`) && (a.kind !== "add" || r.adjustment === a.amount);
 }
 
 /**
@@ -138,7 +145,8 @@ export function staleLines(request: ClarificationRequest, bidders: LevelingBidde
  * - included: the item becomes Y and resolved, quoting the answer; any plug on it is dropped
  * - add: it stays P, the sub's amount replaces the plug as the approved adjustment, and it is resolved
  * - excluded: it becomes N and stays unresolved, keeping its plug, so the GC or another trade carries it
- * Lines already applied are left alone, so a second click changes nothing. Unanswered lines and lines
+ * Lines already applied are left alone, so a second click changes nothing; a line leveling already holds
+ * (applied, but the server's record was lost) is reported applied without rewriting it. Unanswered lines and lines
  * whose bid answer changed since drafting (stale) are returned in `skipped`. The request becomes
  * "applied" when every line has been applied.
  */
@@ -153,6 +161,7 @@ export function applyClarification(bidders: LevelingBidder[], request: Clarifica
       const a = l.answer;
       if (l.appliedAt) continue;
       if (!a || stale.has(l.scopeItemId)) { skipped.push(l.scopeItemId); continue; }
+      if (inLeveling(responses[l.scopeItemId], a)) { applied.push(l.scopeItemId); continue; }
       const prior = responses[l.scopeItemId] ?? { status: "", note: "", adjustment: 0 };
       const quote = `Confirmed in writing ${date} by ${a.by}${a.note ? `: "${a.note}"` : ""}`;
       responses[l.scopeItemId] = a.kind === "included" ? { ...prior, status: "Y", note: `Included. ${quote}`, adjustment: 0, resolved: true, adjustmentApproved: false }

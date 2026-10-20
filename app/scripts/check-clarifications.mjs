@@ -72,6 +72,8 @@ assert.deepEqual(first.bidders[0].responses.s2, bidders[0].responses.s2, "Unansw
 assert.equal(first.bidders[1], bidders[1], "Other bidders untouched");
 const again = C.applyClarification(first.bidders, first.request, "Marcel", at);
 assert.deepEqual([again.applied, again.bidders === first.bidders, again.request === first.request], [[], true, true], "A second apply changes nothing");
+const lost = C.applyClarification(first.bidders, req, "Marcel", at);
+assert.deepEqual([lost.applied, lost.skipped, lost.bidders[0].responses.s1, C.staleLines(req, first.bidders).lines], [["s1"], ["s2"], first.bidders[0].responses.s1, []], "Leveling saved but the server's record was lost: applying again records it and rewrites nothing");
 
 let rest = C.answerClarification(first.request, [{ scopeItemId: "s2", kind: "excluded", amount: null, note: "" }], "J. Ortiz", at);
 assert.equal(rest.status, "answered");
