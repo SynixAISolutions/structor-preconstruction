@@ -33,8 +33,10 @@ assert.equal(C.draftClarifications({ ...base, open: [{ ...drafts[0], status: "ca
 // The letter quotes the bid and the requirement; nothing else.
 const letter = C.clarificationLetter({ ...drafts[0], dueAt: "2026-10-23" });
 assert.match(letter, /^Jelleff Recreation Center: Drywall\. Clarification of your proposal\n\nTo Capitol Drywall,/);
-assert.match(letter, /1\. 1 Firestopping at rated partitions \(07 84 00\)\. Your proposal excludes it: "Firestopping by others"\. The bid documents require it: Manual p\. 512, 07 84 00 §1\.2\./);
-assert.match(letter, /2\. 2 Level 4 finish at back of house \(09 29 00\)\. Your proposal includes it only in part: "Level 4 at lobby only"/);
+assert.match(letter, /1\. Firestopping at rated partitions \(item 1, 07 84 00\)\. Your proposal excludes it: "Firestopping by others"\. The bid documents require it: Manual p\. 512, 07 84 00 §1\.2\./);
+assert.match(letter, /2\. Level 4 finish at back of house \(item 2, 09 29 00\)\. Your proposal includes it only in part: "Level 4 at lobby only"/);
+const punctuated = C.clarificationLetter({ ...drafts[0], lines: drafts[0].lines.map(l => ({ ...l, item: `${l.item}.`, bid: { ...l.bid, note: `${l.bid.note}.` }, requirement: `${l.requirement}.` })) });
+assert.doesNotMatch(punctuated, /\.\.|\."\.|\. \(/, "Items, bid notes and references that end in a full stop don't double it (seen on Jelleff, 20 Oct)");
 assert.match(C.clarificationLetter(drafts[1]), /does not say whether it is included/);
 
 // Drafts from the browser are parsed strictly.
