@@ -8,5 +8,29 @@
 .concept-budget td { max-width: 330px; overflow-wrap: anywhere; }
 .concept-budget .ui-table-wrap { margin: 16px 0; }
 .concept-budget input[type="file"] { max-width: 100%; }
+.concept-escalation { min-width: 0; }
+.escalation-target { max-width: 420px; margin: 18px 0; }
+.escalation-headline { display: flex; gap: 22px; align-items: center; padding: 24px; margin: 22px 0; border: 1px solid var(--line); border-radius: 12px; background: var(--canvas); }
+.escalation-headline > strong { font-size: clamp(32px, 4vw, 48px); line-height: 1.1; color: var(--ink); letter-spacing: -1.5px; }
+.escalation-headline span { display: block; margin-top: 8px; color: var(--muted); font-size: 13px; }
+.escalation-trades { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 22px; }
+.escalation-trades article { min-width: 0; border: 1px solid var(--line); border-radius: 12px; padding: 22px; overflow-wrap: anywhere; }
+.escalation-trades article header { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
+.escalation-record { font-size: 12px; color: var(--muted); }
+.escalation-trades h3 { font-size: 16px; line-height: 1.5; margin: 6px 0; }
+.escalation-factor { font-size: 20px; white-space: nowrap; text-align: right; }
+.escalation-factor small, .escalation-trades dd small { display: block; font-size: 11px; font-weight: 400; color: var(--muted); margin-top: 5px; }
+.escalation-index strong, .escalation-index a { display: block; }
+.escalation-index a { font-size: 12px; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.escalation-trades dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 22px 0; }
+.escalation-trades dt { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.escalation-trades dd { margin: 5px 0 0; font-size: 20px; font-variant-numeric: tabular-nums; }
+.escalation-assumption { border-left: 2px solid var(--muted); padding-left: 12px; }
+.concept-budget .escalation-source { font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.escalation-missing { margin: 18px 0; padding: 18px; background: var(--canvas); border: 1px solid var(--line); border-radius: 10px; overflow-wrap: anywhere; }
+.escalation-missing h3 { margin: 0 0 8px; font-size: 15px; }
+.escalation-missing li { line-height: 1.7; }
+@media(max-width: 950px) { .escalation-trades { grid-template-columns: 1fr; } }
+@media(max-width: 650px) { .escalation-headline { align-items: flex-start; flex-direction: column; gap: 14px; padding: 18px; } .escalation-trades article { padding: 16px; } .escalation-trades article header { flex-wrap: wrap; } .escalation-factor { text-align: left; } .concept-escalation .ui-panel-head { align-items: flex-start; flex-wrap: wrap; gap: 14px; } }
 .concept-ranking{display:grid;gap:14px;margin:20px 0}.concept-ranking article{border:1px solid #dde7e7;border-radius:10px;padding:18px}.concept-ranking label{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}.concept-ranking label strong{flex:1;min-width:140px;overflow-wrap:anywhere}.concept-ranking p{font-size:13px;line-height:1.8;color:#6c7e88}.concept-score{background:#e9eeee;height:6px;border-radius:4px;margin:14px 0;overflow:hidden}.concept-score i{display:block;height:100%;background:#578982}.concept-ai-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px}
 @media(max-width: 650px) { .concept-budget .ui-form-grid { grid-template-columns: 1fr; } .concept-budget .ui-table-wrap { max-width: 100%; overflow-x: auto; } }
