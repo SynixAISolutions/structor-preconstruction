@@ -77,6 +77,25 @@ export function normalTag(text: string): string {
   return text.toUpperCase().replace(/\s+/g, "").replace(/^([A-Z]+)\.(?=\d)/, "$1");
 }
 
+/**
+ * A type code for matching across sheets: separators dropped, as schedules print the code in columns
+ * ("SA | 3 | 10") and plans with dots ("SA. 3. 10"): both are SA310.
+ */
+export const tagKey = (text: string) => text.toUpperCase().replace(/[\s.\-_]+/g, "");
+
+export type PartitionType = { tag: string; description: string; thickness: string; rating: string };
+
+/** Rows of the partition type schedule read on several tiles, one per code: the fullest reading wins. */
+export function mergePartitionTypes(rows: PartitionType[]): PartitionType[] {
+  const by = new Map<string, PartitionType>();
+  const score = (r: PartitionType) => r.description.length + (r.thickness ? 50 : 0) + (r.rating ? 20 : 0);
+  for (const r of rows) { const k = tagKey(r.tag), old = by.get(k); if (!old || score(r) > score(old)) by.set(k, { ...r, tag: normalTag(r.tag) }); }
+  return [...by.values()].sort((a, b) => tagKey(a.tag).localeCompare(tagKey(b.tag)));
+}
+
+/** The schedule row for a wall's type, or null when the schedule doesn't list that code (a misread tag, or no schedule). */
+export const scheduleRow = (type: string, schedule: PartitionType[]) => schedule.find(r => tagKey(r.tag) === tagKey(type)) ?? null;
+
 /** The same tag read twice (tiles overlap) or a type repeated within 3 ft counts once, at the mean position. */
 export function mergeTags(tags: PlacedTag[], within = 3): PlacedTag[] {
   const out: (PlacedTag & { n: number })[] = [];

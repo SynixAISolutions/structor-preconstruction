@@ -5,12 +5,13 @@
 
 import { useCallback, useRef } from "react";
 import { aiJob } from "./ai-more-client";
-import type { PlanReading, PlanTag } from "./ai-jobs-more";
+import type { PartitionTypeRead, PlanReading, PlanTag } from "./ai-jobs-more";
+import { mergePartitionTypes, scheduleRow, type PartitionType } from "./tag-placement";
 import { drawingRegister, type StoredDocument } from "./project-files";
 import { openStoredPdf, readStoredText, renderStoredPage, renderStoredRegion, renderStoredTiles } from "./project-files-client";
 import type { Project } from "./projects";
 import { vectorsFromOperators } from "./plan-vectors";
-import { consensusMarkers, feetPerInch, heightSheet, levelHeights, levelName, levelDoors, levelPlanSheets, levelTags, levelWalls, tagTiles, toFeet, type Marker, type SchematicLevel, type SchematicModel } from "./schematic-model";
+import { consensusMarkers, feetPerInch, heightSheet, levelHeights, levelName, contentTiles, levelDoors, levelPlanSheets, levelTags, levelWalls, partitionTypeSheet, tagTiles, toFeet, type Marker, type SchematicLevel, type SchematicModel } from "./schematic-model";
 import { useLocalDraft } from "./use-local-draft";
 
 async function pageSize(doc: StoredDocument, page: number) {
@@ -114,7 +115,30 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
     if (found.tagWarning) warnings.push(`${row.sheet}: ${found.tagWarning}`);
     levels.push({ id: `L${level}`, name: levelName(level), order: level, elevation: heights.elevations.get(level) ?? 0, height: heights.heights.get(level) ?? 14, outline: sized.outline, rooms: sized.rooms, source: { documentId: row.doc.id, sheet: row.sheet, page: row.page }, sizing: sized.sizing, frame: sized.frame, walls: found.walls, wallNote: found.note, doors: found.doors });
   }
-  return { levels, warnings, builtAt: new Date().toISOString() };
+  // The partition type schedule, to describe the wall types and catch codes it doesn't list.
+  const typeSheet = partitionTypeSheet(register);
+  let partitionTypes: PartitionType[] | undefined;
+  if (typeSheet && levels.some(l => l.walls?.some(w => w.type))) {
+    args.onProgress?.(`Reading the partition types on ${typeSheet.sheet}…`);
+    try { partitionTypes = await readPartitionTypes(typeSheet.doc, typeSheet.page, typeSheet.sheet, args.signal); }
+    catch (error) { if (args.signal?.aborted) throw error; warnings.push(`${typeSheet.sheet}: the partition types could not be read.`); }
+    const unknown = [...new Set(levels.flatMap(l => (l.walls ?? []).filter(w => w.type && !w.typeSet && partitionTypes?.length && !scheduleRow(w.type, partitionTypes)).map(w => w.type!)))];
+    if (unknown.length) warnings.push(`Wall tags not in the partition schedule on ${typeSheet.sheet} (check them on the plan; they may be misread): ${unknown.join(", ")}.`);
+  }
+  return { levels, warnings, builtAt: new Date().toISOString(), ...(partitionTypes ? { partitionTypes, partitionSheet: typeSheet!.sheet } : {}) };
+}
+
+/** The wall types a partition type sheet schedules, read on the parts of the sheet that hold drawing (lib/ai-jobs-more "partition-types"). */
+async function readPartitionTypes(doc: StoredDocument, pageNumber: number, sheetName: string, signal?: AbortSignal): Promise<PartitionType[]> {
+  const [pdfjs, pdf] = await Promise.all([import("pdfjs-dist"), openStoredPdf(doc)]);
+  const page = await pdf.getPage(pageNumber), viewport = page.getViewport({ scale: 1 });
+  const { segments } = vectorsFromOperators(await page.getOperatorList(), pdfjs.OPS as unknown as Record<string, number>, viewport.transform);
+  const rows: PartitionType[] = [];
+  const tiles = contentTiles(segments, { widthPt: viewport.width, heightPt: viewport.height });
+  for (let i = 0; i < tiles.length; i += 3) await Promise.all(tiles.slice(i, i + 3).map(async tile => {
+    rows.push(...(await aiJob<{ types: PartitionTypeRead[] }>("partition-types", { sheet: sheetName, image: await renderStoredRegion(doc, pageNumber, tile, 2000) }, signal)).types);
+  }));
+  return mergePartitionTypes(rows);
 }
 
 /**

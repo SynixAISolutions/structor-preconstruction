@@ -78,4 +78,19 @@ const tagged = S.levelTags(read, [], [], sheet, frame, levelWalls, []);
 assert.deepEqual([tagged.walls[0].type, tagged.tags[0].at.map(v => Math.round(v * 10) / 10)], [null, [100.8, 108]], "8 ft away: too far to label the wall");
 assert.equal(S.levelTags([{ ...read[0], tags: [{ ...read[0].tags[0], at: [0.5, 0.2] }] }], [], [], sheet, frame, levelWalls, []).walls[0].type, "SA2.10");
 
+// The partition type schedule: codes match across the schedule's columns and the plan's dots.
+assert.deepEqual(["SA 3 10", "SA. 3. 10", "SA3.10", "sf-4"].map(T.tagKey), ["SA310", "SA310", "SA310", "SF4"]);
+const typesRead = EXTRA_JOBS["partition-types"].screen({ types: [
+  { tag: "SA 3 10", thickness: "4 1/4\"", rating: "NR", description: "Non-rated stud partition" }, { tag: "SA 3 10", thickness: "", rating: "", description: "" },
+  { tag: "M1 8 00", thickness: "7 5/8\"", rating: "1", description: "1-hour rated masonry partition" }, { tag: "GYPSUM WALL BOARD", description: "a label" }, { tag: "", description: "x" },
+] }).types;
+assert.equal(typesRead.length, 3, "A row needs a code with a digit; labels and blanks are dropped");
+const schedule = T.mergePartitionTypes(typesRead);
+assert.deepEqual(schedule.map(r => [r.tag, r.thickness, r.rating]), [["M1800", "7 5/8\"", "1"], ["SA310", "4 1/4\"", "NR"]], "One row per code, the fullest reading; the schedule prints codes in columns");
+assert.equal(T.scheduleRow("SA. 3. 10", schedule)?.thickness, "4 1/4\"");
+assert.equal(T.scheduleRow("SA3.1", schedule), null, "A misread tag is not in the schedule");
+assert.deepEqual(["PARTITION TYPES", "Partition Schedule", "WALL TYPES", "LEVEL 01 - FIRST FLOOR PLAN"].map(title => !!S.partitionTypeSheet([{ title, discipline: "Architectural" }])), [true, true, true, false]);
+const page = { widthPt: 1200, heightPt: 900 }, many = n => Array.from({ length: n }, (_, i) => ({ a: [120 + i, 60], b: [120 + i, 100], width: 0.24, color: "" }));
+assert.deepEqual(S.contentTiles([...many(60), { a: [1100, 800], b: [1110, 800], width: 1, color: "" }], page).length, 1, "Only parts of the sheet with drawing are read");
+
 console.log("Tag placement checked: tag text normalized, AI tags screened (dimensions refused), duplicates merged, tag ovals from curves, leaders followed, leader tip over nearest wall, ovals against walls, runs across door gaps, door numbers one per door, totals by type, untagged walls typed and cleared, tiles and tile positions.");
