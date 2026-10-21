@@ -209,7 +209,8 @@ export const pageGuides = [
       "Upload the newer issue of a drawing set in Project files with Upload revision. Then choose the DRAWING SET, the PREVIOUS and LATEST revisions, and a SHEET; sheets are matched by number.",
       "Overlay puts the new sheet on the old one: red linework was removed, blue was added, grey is unchanged. Numbered boxes mark each changed area. Side by side shows both sheets.",
       "Choose Describe changes with AI. It zooms into each changed area of both revisions and lists what changed, by trade, for an estimator to price.",
-      "Mark each change reviewed, and export the change list.",
+      "Mark each change reviewed, and export the change list. Reopen puts a change back for review.",
+      "Trade impact groups the reviewed changes by the trade package they affect, with each change's sheet, revision and kind, whether that trade's bid form is published, and how many bids are already priced on it. For each trade, Add to bid form adds its changes as draft lines citing the sheet and revision; adding again adds nothing. Then open Scopes & bid forms to review the lines and republish: bids priced on the earlier version are marked out of date and the to-do asks those bidders to resubmit. Changes no trade matches are listed apart; Place changes by hand opens Scopes & bid forms to add them to the right trade.",
     ],
     terms: [
       { name: "Baseline", meaning: "The previous drawing used as the comparison reference." },
@@ -336,6 +337,7 @@ export const pageGuides = [
       "On a direct line, choose Choose forecast basis. Pick In-house estimate and the trade to use that trade's estimate from Quantity takeoffs, or pick Base bid, Provisional total, or Reviewed total and a bidder from the saved Bid leveling comparison. Apply selected value sets the forecast; the budget and the bid figures keep their values.",
       "When In-house estimate is chosen, the dialog shows how the trade meets its budget line: Linked to trade, or Matched by CSI code to check before applying. A trade budgeted on several cost-center lines can't take one estimate total.",
       "Open Trade variance for one row per trade: In-house estimate, the bid it is compared with, budget, current forecast, Bid − estimate in dollars and percent, and Budget − estimate. Refresh bid comparison rereads the saved leveling workspace; Export report downloads the table.",
+      "Choose Basis of estimate to see the document that goes with the number: the documents it is based on with their revisions and dates, the budget totals without owner-carried lines, allowances, contingency and fee, owner exclusions, the setup decisions and clarifications. Every line comes from the project; nothing is written for you. Copy as text, Download .md or Print it, and check it before it goes out.",
       "In Budget versions, choose Save budget version, name the version, select Concept, Schematic design, Design development or Construction documents, and explain the baseline or change. Save another version after editing the cost plan to compare the retained totals and added, removed or changed lines. Earlier copies retain their values. Export the history or comparison as CSV.",
     ],
     terms: [
