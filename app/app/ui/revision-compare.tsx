@@ -10,6 +10,8 @@ import { renderStoredPage } from "../../lib/project-files-client";
 import { changeBoxes, overlayPixels, type ChangeBox } from "../../lib/revision-overlay";
 import { aiJob } from "../../lib/ai-more-client";
 import type { RevisionChange } from "../../lib/ai-jobs-more";
+import { useSubmissions } from "../../lib/use-submissions";
+import { RevisionRipple } from "./revision-ripple";
 
 type SavedChange = RevisionChange & { id: string; key: string; reviewed: boolean };
 /** A JPEG of one box of an image, grown by a margin so the AI sees the surroundings. */
@@ -80,10 +82,16 @@ export function RevisionCompare({ projectName, notify, navigate, documents }: Vi
   const previous = before && current ? before.sheets.find(s => sheetKey(s.sheet) === sheetKey(current.sheet)) : undefined;
   const [mode, setMode] = useState("Overlay");
   const [changes, setChanges] = useLocalDraft<SavedChange[]>("revision-changes", []);
+  const { procurement, runProcurement, submissions } = useSubmissions();
   const [busy, setBusy] = useState(false);
   const [boxes, setBoxes] = useState<ChangeBox[]>([]);
   const key = before && after && current ? `${before.id}>${after.id}:${current.sheet}` : "";
   const listed = changes.filter(c => c.key === key);
+  const comparedSheets = before && after ? sheets.map(s => ({
+    sheet: s.sheet,
+    revision: revisionLabel(after),
+    changes: changes.filter(c => c.reviewed && c.key === `${before.id}>${after.id}:${s.sheet}`),
+  })) : [];
 
   async function describe() {
     if (!before || !after || !current || !previous) return;
@@ -125,5 +133,6 @@ export function RevisionCompare({ projectName, notify, navigate, documents }: Vi
         {listed.length ? <div className="intel-change-list">{listed.map((c, i) => <div key={c.id} className="intel-change-row"><span className="intel-change-index">{String(i + 1).padStart(2, "0")}</span><span><strong>{c.title}</strong><small>{c.trade || "Trade not named"} · {c.detail}</small></span><Badge tone={c.reviewed ? "green" : c.kind === "Added" ? "orange" : c.kind === "Removed" ? "red" : "blue"}>{c.reviewed ? "Reviewed" : c.kind}</Badge><Button onClick={() => setChanges(prev => prev.map(x => x.id === c.id ? { ...x, reviewed: !x.reviewed } : x))}><Check size={14}/>{c.reviewed ? "Reopen" : "Mark reviewed"}</Button></div>)}</div> : <p className="intel-muted">No changes listed yet for this sheet.</p>}
       </Panel>
     </>}
+    <RevisionRipple key={`${before?.id}>${after?.id}`} sheets={comparedSheets} procurement={procurement} submissions={submissions} run={runProcurement} notify={notify} navigate={navigate}/>
   </div>;
 }
