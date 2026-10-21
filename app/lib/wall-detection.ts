@@ -67,6 +67,29 @@ export function planWalls(segments: Segment[], pointsPerFoot: number, box?: [num
 }
 
 /**
+ * Glass: a storefront, window or glass partition's pane is two lines 0.6-1.8" apart, drawn lighter than the
+ * walls (Jelleff: 0.72 pt panes 1" apart between 0.24 pt frame lines, walls at 1.2 pt). Bays join across
+ * their mullions; runs shorter than 2 ft are left out. Nothing without a wall weight (a scan).
+ */
+export function planGlazing(segments: Segment[], pointsPerFoot: number, wallWeight: number | null, walls: Wall[], box?: [number, number, number, number], leaves: [Point, Point][] = []): Wall[] {
+  if (wallWeight === null) return [];
+  const light = segments.filter(inBox(box)).filter(s => s.width >= 0.3 && s.width < wallWeight - 0.005);
+  const panes = detectWalls(light, { pointsPerFoot, minWeight: 0.3, minThickness: 0.05, maxThickness: 0.15, minOverlap: 1, minLength: 2 });
+  // A wall's inner layers (insulation, sheathing) are light lines a pane's width apart too: glass is never inside a wall.
+  const insideWall = (p: Point) => walls.some(w => {
+    const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) || 1, ux = (w.b[0] - w.a[0]) / L, uy = (w.b[1] - w.a[1]) / L;
+    const t = (p[0] - w.a[0]) * ux + (p[1] - w.a[1]) * uy, off = Math.abs((p[0] - w.a[0]) * uy - (p[1] - w.a[1]) * ux);
+    return t >= -0.2 && t <= L + 0.2 && off <= w.thickness / 2 + 0.05;
+  });
+  // An open door leaf is drawn as a thin rectangle a pane's width across: glass is never along a door's leaf.
+  const alongLeaf = (g: Wall) => leaves.some(([h, o]) => {
+    const L = Math.hypot(o[0] - h[0], o[1] - h[1]) || 1, ux = (o[0] - h[0]) / L, uy = (o[1] - h[1]) / L;
+    return [g.a, g.b].every(p => { const t = (p[0] - h[0]) * ux + (p[1] - h[1]) * uy; return t >= -0.5 && t <= L + 0.5 && Math.abs((p[0] - h[0]) * uy - (p[1] - h[1]) * ux) <= 0.4; });
+  });
+  return panes.filter(g => !insideWall([(g.a[0] + g.b[0]) / 2, (g.a[1] + g.b[1]) / 2]) && !alongLeaf(g));
+}
+
+/**
  * Extends wall ends to meet the wall they run into, so corners and tees close: an end moves to the
  * crossing of the two centerlines when that crossing is within the other wall's half-thickness plus a
  * foot of the end, and lies on (or a foot past the end of) the other wall.
