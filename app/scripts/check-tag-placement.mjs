@@ -68,6 +68,19 @@ const set = S.setUntaggedWallType(model, "L1", "sa 3.10");
 assert.deepEqual(set.levels[0].walls.map(w => [w.type, !!w.typeSet]), [["SA3.10", true], ["SA3.10", false], ["SA3.10", false], ["SA3.10", true], ["SA2.10", false]]);
 assert.deepEqual(S.setUntaggedWallType(set, "L1", " ").levels[0].walls.map(w => w.type), [null, "SA3.10", "SA3.10", null, "SA2.10"], "Clearing removes only what the estimator set");
 
+// The estimator's corrections on the plan: a wall's type, not a wall (and back), a door's number.
+let fixed = S.editWall(set, "L1", 3, { type: "sa 6.20" });
+fixed = S.editWall(fixed, "L1", 0, { excluded: true });
+assert.deepEqual(fixed.levels[0].walls.map(w => [w.type, !!w.edited, !!w.excluded]).slice(0, 4), [["SA3.10", false, true], ["SA3.10", false, false], ["SA3.10", false, false], ["SA6.20", true, false]]);
+assert.deepEqual(S.keptWalls(fixed.levels[0]).length, 4, "A wall marked not a wall leaves the totals and the 3D");
+assert.equal(S.setUntaggedWallType(fixed, "L1", " ").levels[0].walls[3].type, "SA6.20", "Clearing the untagged type never undoes a wall the estimator set");
+assert.equal(S.editWall(fixed, "L1", 0, { excluded: false }).levels[0].walls[0].excluded, false, "Restore");
+const doorModel = { ...model, levels: [{ ...model.levels[0], doors: [{ a: [0, 0], b: [3, 0], width: 3, leaves: 1, hinges: [[0, 0]], openTo: [[0, 3]], kind: "door", thickness: 0.4, number: "117A" }] }] };
+assert.equal(S.editDoorNumber(doorModel, "L1", 0, " 117b ").levels[0].doors[0].number, "117B");
+assert.equal(S.editDoorNumber(doorModel, "L1", 0, "").levels[0].doors[0].number, null);
+assert.throws(() => S.editWall(model, "L1", 99, { type: "X" }), /no longer in the model/);
+assert.throws(() => S.editDoorNumber(model, "L9", 0, "1"), /level is no longer/);
+
 // Tiles over the plan's area, and tags read on a tile placed back in the level's feet.
 const sheet = { widthPt: 3024, heightPt: 2160 }, frame = { widthFeet: 336, heightFeet: 240 };
 const tiles = S.tagTiles(sheet, frame, [[0.2, 0.3], [0.8, 0.3], [0.8, 0.8], [0.2, 0.8]]);

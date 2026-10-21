@@ -43,7 +43,7 @@ export type SchematicLevel = {
   doors?: SchematicDoor[];
 };
 /** A wall centerline from a to b with its thickness, in feet; `type` is its partition type from the plan's tags. */
-export type SchematicWall = { a: Point; b: Point; thickness: number; type?: string | null; /** The type was set by the estimator for untagged walls, not read from a tag. */ typeSet?: boolean };
+export type SchematicWall = { a: Point; b: Point; thickness: number; type?: string | null; /** The type was set by the estimator for untagged walls, not read from a tag. */ typeSet?: boolean; /** Corrected by the estimator on this wall. */ edited?: boolean; /** Marked by the estimator as not a wall (kept so it can be restored). */ excluded?: boolean };
 /**
  * A door opening from a to b, its leaves' hinges and where each leaf swings open to, in feet. "compartment"
  * is a leaf under 2.4 ft (toilet stalls): toilet partitions, not the door schedule. `thickness` is the host
@@ -361,9 +361,37 @@ export function moveOutlinePoint(model: SchematicModel, levelId: string, index: 
 export function setUntaggedWallType(model: SchematicModel, levelId: string, type: string): SchematicModel {
   const t = type.trim().toUpperCase().replace(/\s+/g, "").slice(0, 16);
   return { ...model, levels: model.levels.map(l => l.id !== levelId || !l.walls ? l : {
-    ...l, walls: l.walls.map(w => w.type && !w.typeSet ? w : { ...w, type: t || null, typeSet: !!t }),
+    ...l, walls: l.walls.map(w => w.edited || (w.type && !w.typeSet) ? w : { ...w, type: t || null, typeSet: !!t }),
   }) };
 }
+
+const editLevel = (model: SchematicModel, levelId: string, edit: (l: SchematicLevel) => SchematicLevel): SchematicModel => {
+  if (!model.levels.some(l => l.id === levelId)) throw new Error("That level is no longer in the model.");
+  return { ...model, levels: model.levels.map(l => l.id === levelId ? edit(l) : l) };
+};
+
+/** The estimator's correction of one wall: its type (blank = untyped), or that it is not a wall at all (kept, so it can be restored). */
+export function editWall(model: SchematicModel, levelId: string, index: number, change: { type?: string; excluded?: boolean }): SchematicModel {
+  return editLevel(model, levelId, l => {
+    if (!l.walls?.[index]) throw new Error("That wall is no longer in the model.");
+    const t = change.type === undefined ? undefined : change.type.trim().toUpperCase().replace(/\s+/g, "").slice(0, 16);
+    return { ...l, walls: l.walls.map((w, i) => i !== index ? w : {
+      ...w, ...(t !== undefined ? { type: t || null, typeSet: false, edited: true } : {}), ...(change.excluded !== undefined ? { excluded: change.excluded } : {}),
+    }) };
+  });
+}
+
+/** The estimator's correction of one door's number (blank = none). */
+export function editDoorNumber(model: SchematicModel, levelId: string, index: number, number: string): SchematicModel {
+  return editLevel(model, levelId, l => {
+    if (!l.doors?.[index]) throw new Error("That door is no longer in the model.");
+    const n = number.trim().toUpperCase().slice(0, 12);
+    return { ...l, doors: l.doors.map((d, i) => i === index ? { ...d, number: n || null } : d) };
+  });
+}
+
+/** The walls that count: everything read from the plan except what the estimator marked not a wall. */
+export const keptWalls = (level: SchematicLevel) => (level.walls ?? []).filter(w => !w.excluded);
 
 export function setLevelHeight(model: SchematicModel, levelId: string, height: number): SchematicModel {
   if (!(Number.isFinite(height) && height >= 6 && height <= 60)) throw new Error("Use a floor-to-floor height between 6 and 60 ft.");

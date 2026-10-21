@@ -46,7 +46,7 @@ export function schematicGeometry(level: SchematicLevel) {
  * along its centerline with its thickness, full level height. Plan y is world -z, as for the outline.
  */
 export function schematicWalls(level: SchematicLevel): THREE.InstancedMesh | null {
-  const walls = level.walls ?? [];
+  const walls = (level.walls ?? []).filter(w => !w.excluded); // the estimator marked the rest not a wall
   if (!walls.length) return null;
   const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#d8d1c4", roughness: .9 }), walls.length);
   const place = new THREE.Object3D();
@@ -92,9 +92,9 @@ export function schematicDoors(level: SchematicLevel, doorHeight = DEFAULT_DOOR_
 /** Count and total centerline length of a level's walls; null for a model built before walls were read. */
 export function wallTotals(level: SchematicLevel): { count: number; feet: number; doors: number | null; compartments: number } | null {
   if (!level.walls) return null;
-  const doors = level.doors ?? null;
+  const doors = level.doors ?? null, walls = level.walls.filter(w => !w.excluded);
   return {
-    count: level.walls.length, feet: Math.round(level.walls.reduce((sum, w) => sum + Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), 0)),
+    count: walls.length, feet: Math.round(walls.reduce((sum, w) => sum + Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), 0)),
     doors: doors && doors.filter(d => d.kind === "door").length, compartments: doors?.filter(d => d.kind === "compartment").length ?? 0,
   };
 }
