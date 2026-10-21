@@ -5,12 +5,12 @@
 
 import { useCallback, useRef } from "react";
 import { aiJob } from "./ai-more-client";
-import type { PlanReading } from "./ai-jobs-more";
+import type { PlanReading, PlanTag } from "./ai-jobs-more";
 import { drawingRegister, type StoredDocument } from "./project-files";
 import { openStoredPdf, readStoredText, renderStoredPage, renderStoredRegion, renderStoredTiles } from "./project-files-client";
 import type { Project } from "./projects";
 import { vectorsFromOperators } from "./plan-vectors";
-import { consensusMarkers, feetPerInch, heightSheet, levelHeights, levelName, levelDoors, levelPlanSheets, levelWalls, toFeet, type Marker, type SchematicLevel, type SchematicModel } from "./schematic-model";
+import { consensusMarkers, feetPerInch, heightSheet, levelHeights, levelName, levelDoors, levelPlanSheets, levelTags, levelWalls, tagTiles, toFeet, type Marker, type SchematicLevel, type SchematicModel } from "./schematic-model";
 import { useLocalDraft } from "./use-local-draft";
 
 async function pageSize(doc: StoredDocument, page: number) {
@@ -109,21 +109,38 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
     if (borrowed) { sized.sizing += ` (from ${borrowed}; this sheet's scale wasn't read)`; warnings.push(`${row.sheet}: no printed scale was read; ${borrowed}'s scale is used (same set and sheet size).`); }
     else if (!scale) warnings.push(`${row.sheet}: no printed scale was read; ${sized.sizing.toLowerCase()}.`);
     args.onProgress?.(`Finding the walls on ${row.sheet}…`);
-    const found = await planVectorWalls(row.doc, row.page, sized.frame, reading.outline, !!scale).catch(() => ({ walls: [], doors: [], note: "The sheet's lines could not be read for walls." }));
+    const found = await planVectorWalls(row.doc, row.page, row.sheet, sized.frame, reading.outline, !!scale, args.signal, args.onProgress).catch(error => { if (args.signal?.aborted) throw error; return { walls: [], doors: [], note: "The sheet's lines could not be read for walls.", tagWarning: "" }; });
     if (!found.walls.length) warnings.push(`${row.sheet}: ${found.note}`);
+    if (found.tagWarning) warnings.push(`${row.sheet}: ${found.tagWarning}`);
     levels.push({ id: `L${level}`, name: levelName(level), order: level, elevation: heights.elevations.get(level) ?? 0, height: heights.heights.get(level) ?? 14, outline: sized.outline, rooms: sized.rooms, source: { documentId: row.doc.id, sheet: row.sheet, page: row.page }, sizing: sized.sizing, frame: sized.frame, walls: found.walls, wallNote: found.note, doors: found.doors });
   }
   return { levels, warnings, builtAt: new Date().toISOString() };
 }
 
-/** A plan sheet's walls and doors from its vector lines (lib/plan-vectors, wall- and door-detection), in the level's frame. */
-async function planVectorWalls(doc: StoredDocument, pageNumber: number, frame: { widthFeet: number; heightFeet: number }, outline: [number, number][], printedScale: boolean) {
+/**
+ * A plan sheet's walls and doors from its vector lines (lib/plan-vectors, wall- and door-detection), in the
+ * level's frame; then their door numbers and wall types from the tags the AI reads on small tiles of the
+ * plan (3 at a time), placed through the plan's own tag ovals and leaders (lib/tag-placement).
+ */
+async function planVectorWalls(doc: StoredDocument, pageNumber: number, sheetName: string, frame: { widthFeet: number; heightFeet: number }, outline: [number, number][], printedScale: boolean, signal?: AbortSignal, onProgress?: (text: string) => void) {
   const [pdfjs, pdf] = await Promise.all([import("pdfjs-dist"), openStoredPdf(doc)]);
   const page = await pdf.getPage(pageNumber);
   const viewport = page.getViewport({ scale: 1 }), sheet = { widthPt: viewport.width, heightPt: viewport.height };
   const { segments, curves } = vectorsFromOperators(await page.getOperatorList(), pdfjs.OPS as unknown as Record<string, number>, viewport.transform);
   const walls = levelWalls(segments, sheet, frame, outline, printedScale);
-  return { ...walls, doors: levelDoors(segments, curves, sheet, frame, outline, walls.walls) };
+  const doors = levelDoors(segments, curves, sheet, frame, outline, walls.walls);
+  if (!walls.walls.length) return { ...walls, doors, tagWarning: "" };
+  const tiles = tagTiles(sheet, frame, outline), read: { tile: [number, number, number, number]; tags: PlanTag[] }[] = [];
+  let failed = 0;
+  for (let i = 0; i < tiles.length; i += 3) {
+    onProgress?.(`Reading the door and wall tags on ${sheetName} (part ${Math.min(i + 3, tiles.length)} of ${tiles.length})…`);
+    await Promise.all(tiles.slice(i, i + 3).map(async tile => {
+      try { read.push({ tile, tags: (await aiJob<{ tags: PlanTag[] }>("plan-tags", { sheet: sheetName, image: await renderStoredRegion(doc, pageNumber, tile, 1200) }, signal)).tags }); }
+      catch (error) { if (signal?.aborted) throw error; failed++; }
+    }));
+  }
+  const tagged = levelTags(read, segments, curves, sheet, frame, walls.walls, doors);
+  return { note: walls.note, walls: tagged.walls, doors: tagged.doors, tagWarning: failed ? `${failed} of ${tiles.length} parts of the plan could not be read for door and wall tags; some doors and walls have no number or type.` : "" };
 }
 
 /** The open project's schematic model under "schematic-model"; `run` applies a correction (moveOutlinePoint, setLevelHeight) or a rebuild and returns null or the error. */

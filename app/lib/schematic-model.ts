@@ -9,6 +9,7 @@
 // People can correct the outline and heights afterwards. Pure functions.
 
 import { doorsFromSwings, swingArcs } from "./door-detection";
+import { mergeTags, placeTags, tagOvals, type PlacedTag } from "./tag-placement";
 import type { Curve, Segment } from "./plan-vectors";
 import type { RegisterRow } from "./project-files";
 import { planWalls } from "./wall-detection";
@@ -41,14 +42,51 @@ export type SchematicLevel = {
   /** Doors read from the plan's swings (levelDoors), in the same feet. Missing on models built before 21 Oct. */
   doors?: SchematicDoor[];
 };
-/** A wall centerline from a to b with its thickness, in feet. */
-export type SchematicWall = { a: Point; b: Point; thickness: number };
+/** A wall centerline from a to b with its thickness, in feet; `type` is its partition type from the plan's tags. */
+export type SchematicWall = { a: Point; b: Point; thickness: number; type?: string | null; /** The type was set by the estimator for untagged walls, not read from a tag. */ typeSet?: boolean };
 /**
  * A door opening from a to b, its leaves' hinges and where each leaf swings open to, in feet. "compartment"
  * is a leaf under 2.4 ft (toilet stalls): toilet partitions, not the door schedule. `thickness` is the host
  * wall's, for the header above the opening.
  */
-export type SchematicDoor = { a: Point; b: Point; width: number; leaves: number; hinges: Point[]; openTo: Point[]; kind: "door" | "compartment"; thickness: number };
+export type SchematicDoor = { a: Point; b: Point; width: number; leaves: number; hinges: Point[]; openTo: Point[]; kind: "door" | "compartment"; thickness: number; number?: string | null };
+
+/**
+ * Tiles over a plan's area for reading its tags: about `paperPt` points square on the sheet (small enough
+ * that the tag text is legible to the AI: half-sheet tiles misread Jelleff's door numbers), as 0-1 sheet
+ * fractions [x, y, w, h].
+ */
+export function tagTiles(page: { widthPt: number; heightPt: number }, frame: Frame, outline: Point[], paperPt = 400): [number, number, number, number][] {
+  const { box } = planArea(page, frame, outline);
+  const [x0, y0, x1, y1] = box ? [Math.max(0, box[0]), Math.max(0, box[1]), Math.min(page.widthPt, box[2]), Math.min(page.heightPt, box[3])] : [0, 0, page.widthPt, page.heightPt];
+  const cols = Math.max(1, Math.round((x1 - x0) / paperPt)), rows = Math.max(1, Math.round((y1 - y0) / paperPt));
+  const w = (x1 - x0) / cols, h = (y1 - y0) / rows, ov = 0.08;
+  const tiles: [number, number, number, number][] = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const tx0 = Math.max(x0, x0 + c * w - ov * w), ty0 = Math.max(y0, y0 + r * h - ov * h);
+    const tx1 = Math.min(x1, x0 + (c + 1) * w + ov * w), ty1 = Math.min(y1, y0 + (r + 1) * h + ov * h);
+    tiles.push([tx0 / page.widthPt, ty0 / page.heightPt, (tx1 - tx0) / page.widthPt, (ty1 - ty0) / page.heightPt]);
+  }
+  return tiles;
+}
+
+/**
+ * Door numbers and wall types from the tags the AI read on the tiles (each tag at a 0-1 position in its
+ * tile), placed on the level's walls and doors through the plan's own tag ovals and leaders.
+ */
+export function levelTags(read: { tile: [number, number, number, number]; tags: { text: string; kind: "wall" | "door" | "glazing"; at: Point }[] }[], segments: Segment[], curves: Curve[], page: { widthPt: number; heightPt: number }, frame: Frame, walls: SchematicWall[], doors: SchematicDoor[]): { walls: SchematicWall[]; doors: SchematicDoor[]; tags: PlacedTag[] } {
+  const pointsPerFoot = page.widthPt / frame.widthFeet;
+  const toFeet = (tile: [number, number, number, number], at: Point): Point => [(tile[0] + at[0] * tile[2]) * frame.widthFeet, (tile[1] + at[1] * tile[3]) * frame.heightFeet];
+  const tags = mergeTags(read.flatMap(r => r.tags.map(t => ({ text: t.text, kind: t.kind, at: toFeet(r.tile, t.at) }))));
+  const lines = segments.map(s => [[s.a[0] / pointsPerFoot, s.a[1] / pointsPerFoot], [s.b[0] / pointsPerFoot, s.b[1] / pointsPerFoot]] as [Point, Point]);
+  const placed = placeTags(tags, walls, doors.filter(d => d.kind === "door"), { ovals: tagOvals(curves, pointsPerFoot), lines });
+  let k = 0;
+  return {
+    walls: walls.map((w, i) => ({ ...w, type: placed.wallTypes[i] })),
+    doors: doors.map(d => d.kind === "door" ? { ...d, number: placed.doorNumbers[k++] } : d),
+    tags,
+  };
+}
 export type SchematicModel = { levels: SchematicLevel[]; warnings: string[]; builtAt: string };
 
 const ORDINALS: Record<string, number> = { BASEMENT: 0, GROUND: 1, FIRST: 1, SECOND: 2, THIRD: 3, FOURTH: 4, FIFTH: 5, SIXTH: 6 };
@@ -295,6 +333,17 @@ export function moveOutlinePoint(model: SchematicModel, levelId: string, index: 
 }
 
 /** Sets a level's floor-to-floor height and moves the levels above it. */
+/**
+ * Gives every wall on a level that no tag typed the estimator's type (typical partitions are usually not
+ * tagged; a general note covers them). Tagged walls keep theirs. A blank type clears what this set.
+ */
+export function setUntaggedWallType(model: SchematicModel, levelId: string, type: string): SchematicModel {
+  const t = type.trim().toUpperCase().replace(/\s+/g, "").slice(0, 16);
+  return { ...model, levels: model.levels.map(l => l.id !== levelId || !l.walls ? l : {
+    ...l, walls: l.walls.map(w => w.type && !w.typeSet ? w : { ...w, type: t || null, typeSet: !!t }),
+  }) };
+}
+
 export function setLevelHeight(model: SchematicModel, levelId: string, height: number): SchematicModel {
   if (!(Number.isFinite(height) && height >= 6 && height <= 60)) throw new Error("Use a floor-to-floor height between 6 and 60 ft.");
   const levels = model.levels.map(l => l.id === levelId ? { ...l, height } : l);
