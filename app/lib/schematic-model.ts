@@ -74,11 +74,15 @@ export function tagTiles(page: { widthPt: number; heightPt: number }, frame: Fra
  * Door numbers and wall types from the tags the AI read on the tiles (each tag at a 0-1 position in its
  * tile), placed on the level's walls and doors through the plan's own tag ovals and leaders.
  */
+/** Lines at least this heavy (points) are walls or outlines, never a tag's leader (Jelleff: leaders 0.24-0.48, walls 1.2). */
+export const LEADER_MAX_WEIGHT = 1;
+
 export function levelTags(read: { tile: [number, number, number, number]; tags: { text: string; kind: "wall" | "door" | "glazing"; at: Point }[] }[], segments: Segment[], curves: Curve[], page: { widthPt: number; heightPt: number }, frame: Frame, walls: SchematicWall[], doors: SchematicDoor[]): { walls: SchematicWall[]; doors: SchematicDoor[]; tags: PlacedTag[] } {
   const pointsPerFoot = page.widthPt / frame.widthFeet;
   const toFeet = (tile: [number, number, number, number], at: Point): Point => [(tile[0] + at[0] * tile[2]) * frame.widthFeet, (tile[1] + at[1] * tile[3]) * frame.heightFeet];
   const tags = mergeTags(read.flatMap(r => r.tags.map(t => ({ text: t.text, kind: t.kind, at: toFeet(r.tile, t.at) }))));
-  const lines = segments.map(s => [[s.a[0] / pointsPerFoot, s.a[1] / pointsPerFoot], [s.b[0] / pointsPerFoot, s.b[1] / pointsPerFoot]] as [Point, Point]);
+  // Leaders are drawn with the thin pens; a wall's heavy face touching a tag's end is not its leader.
+  const lines = segments.filter(s => s.width < LEADER_MAX_WEIGHT).map(s => [[s.a[0] / pointsPerFoot, s.a[1] / pointsPerFoot], [s.b[0] / pointsPerFoot, s.b[1] / pointsPerFoot]] as [Point, Point]);
   const placed = placeTags(tags, walls, doors.filter(d => d.kind === "door"), { ovals: tagOvals(curves, pointsPerFoot), lines });
   let k = 0;
   return {

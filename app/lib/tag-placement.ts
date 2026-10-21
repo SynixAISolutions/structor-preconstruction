@@ -46,6 +46,15 @@ export function tagOvals(curves: Curve[], pointsPerFoot: number): Oval[] {
 
 /** Distance from p to a stadium's core segment (so the boundary is at r). */
 const toCore = (o: Oval, p: Point) => toSegment(p, o.a, o.b);
+/**
+ * The two tips of an oval, along its length. A tag with no leader is set with an end against the wall it
+ * labels (Jelleff's chase tag lies across the chase with its end on the wall; the wall nearest its middle
+ * is another one).
+ */
+const ovalTips = (o: Oval): [Point, Point] => {
+  const L = dist(o.a, o.b) || 1, u = [(o.b[0] - o.a[0]) / L, (o.b[1] - o.a[1]) / L];
+  return [[o.a[0] - u[0] * o.r, o.a[1] - u[1] * o.r], [o.b[0] + u[0] * o.r, o.b[1] + u[1] * o.r]];
+};
 
 /**
  * Where a tag's leader ends: a line leaving the oval's edge outward, followed through joined pieces (up
@@ -136,7 +145,7 @@ export function placeTags(tags: PlacedTag[], walls: WallLike[], doors: DoorLike[
       const tip = leaderTip(oval, drawn.lines);
       best = tip
         ? nearestWall(w => toSegment(tip, w.a, w.b) - w.thickness / 2, 1.5) // the wall its leader points at
-        : nearestWall(w => Math.min(toSegment(w.a, oval.a, oval.b), toSegment(w.b, oval.a, oval.b), toCore(oval, w.a), toSegment(oval.a, w.a, w.b), toSegment(oval.b, w.a, w.b)) - oval.r - w.thickness / 2, 1.5); // the wall it sits against
+        : nearestWall(w => Math.min(...ovalTips(oval).map(tip => toSegment(tip, w.a, w.b))) - w.thickness / 2, 1.5); // the wall at the end of the oval
     }
     if (best < 0) best = nearestWall(w => toSegment(t.at, w.a, w.b) - w.thickness / 2, 5);
     if (best >= 0) { wallTypes[best] = normalTag(t.text); direct.add(best); }
