@@ -24,6 +24,7 @@ import { EstimateBasisLabel, EstimateBudgetChoice, estimateForecastError } from 
 import { TradeVarianceReport } from "./trade-variance";
 import { ConceptBudgetView } from "./concept-budget";
 import { BudgetVersionsView } from "./budget-versions";
+import { BasisOfEstimateView } from "./basis-of-estimate";
 import { estimateStageLabel, type Project } from "../../lib/projects";
 import { Badge, Button, Empty, ExportButton, Modal, PageHeader, Panel, PreviewNote, Source, Stats, Tabs, exportRows, usd, type ViewProps } from "./shared";
 
@@ -72,6 +73,7 @@ export function BudgetView({ notify, navigate, project }: ViewProps & { project:
   const comparison = useLevelingComparison();
   const { candidates, loading: levelingLoading, message: levelingMessage } = comparison;
   const [view, setView] = useState("Budget lines");
+  const [showBasis, setShowBasis] = useState(false);
   const [tab, setTab] = useState("All costs");
   const [centerFilter, setCenterFilter] = useState("All cost centers");
   const [edit, setEdit] = useState<BudgetLine | "new" | null>(null);
@@ -159,8 +161,9 @@ export function BudgetView({ notify, navigate, project }: ViewProps & { project:
   }
 
   const totalVariance = totals.totalBudget - totals.totalForecast;
+  if (showBasis) return <BasisOfEstimateView project={project} budget={state} navigate={navigate} onBack={() => { setShowBasis(false); requestAnimationFrame(() => document.getElementById("basis-of-estimate-entry")?.focus()); }}/>;
   return <div className="cm-view">
-    <PageHeader eyebrow="COST CONTROL" title="Project budget" description="Set your in-house budget beside the lowest subcontractor price, and review the margin on each line." actions={<><ExportButton onClick={() => exportRows("project-budget.csv", [["Cost center", "Class", "CSI", "Description", "Owner", "By owner", "In-house budget", "Lowest sub budget", "Lowest sub basis", "Cost / SF", "Forecast", "Committed", "Variance", "Status"], ...state.lines.map(line => [line.costCenter, line.classification, line.csiCode ?? "", line.description, line.owner, line.byOwner ? "Yes" : "No", line.budget, (()=>{const p=tradeForBudgetLine(state,submitted.procurement,line);const b=p?lowestTradeBid(submitted.procurement,submitted.submissions,p.id,candidates,directory,ve):null;return p&&b?lowestSubLineValue(state,p,line.id,b.value)??"":"";})(), (()=>{const p=tradeForBudgetLine(state,submitted.procurement,line);return p?lowestTradeBid(submitted.procurement,submitted.submissions,p.id,candidates,directory,ve)?.basis??"":"";})(), costPerSquareFoot(line.budget, centerAreas.get(line.costCenter)) ?? "", line.forecast ?? "", line.committed, line.budget - (line.forecast ?? line.budget), line.status])])}/><Button variant="primary" onClick={() => { setEdit("new"); setErrors({}); }}><Plus size={16}/>Add line</Button></>}/>
+    <PageHeader eyebrow="COST CONTROL" title="Project budget" description="Set your in-house budget beside the lowest subcontractor price, and review the margin on each line." actions={<><button id="basis-of-estimate-entry" type="button" className="ui-btn secondary" onClick={() => setShowBasis(true)}><FileText size={16}/>Basis of estimate</button><ExportButton onClick={() => exportRows("project-budget.csv", [["Cost center", "Class", "CSI", "Description", "Owner", "By owner", "In-house budget", "Lowest sub budget", "Lowest sub basis", "Cost / SF", "Forecast", "Committed", "Variance", "Status"], ...state.lines.map(line => [line.costCenter, line.classification, line.csiCode ?? "", line.description, line.owner, line.byOwner ? "Yes" : "No", line.budget, (()=>{const p=tradeForBudgetLine(state,submitted.procurement,line);const b=p?lowestTradeBid(submitted.procurement,submitted.submissions,p.id,candidates,directory,ve):null;return p&&b?lowestSubLineValue(state,p,line.id,b.value)??"":"";})(), (()=>{const p=tradeForBudgetLine(state,submitted.procurement,line);return p?lowestTradeBid(submitted.procurement,submitted.submissions,p.id,candidates,directory,ve)?.basis??"":"";})(), costPerSquareFoot(line.budget, centerAreas.get(line.costCenter)) ?? "", line.forecast ?? "", line.committed, line.budget - (line.forecast ?? line.budget), line.status])])}/><Button variant="primary" onClick={() => { setEdit("new"); setErrors({}); }}><Plus size={16}/>Add line</Button></>}/>
     <PreviewNote>{state.lines.length ? "Browser-only demo · Owner-carried costs stay visible and are excluded from contractor totals." : "Browser-only demo · This project starts with an empty budget and saves additions in this browser."}</PreviewNote>
     <p>Estimate stage: {estimateStageLabel(project.estimateStage)}</p>
     <Panel title="In-house estimate" subtitle="Live priced takeoffs · Direct costs · Apply a takeoff to a budget line when you are ready."><strong>{estimate.rows.length ? estimateMoney(estimate.byTrade.total) : "Not estimated"}</strong><p>{estimate.rows.length} items · {estimate.rows.filter(r => !r.reviewed).length} need review</p><Button onClick={() => navigate("takeoffs")}>Open trade estimates</Button></Panel>
