@@ -60,8 +60,41 @@ export function schematicWalls(level: SchematicLevel): THREE.InstancedMesh | nul
   mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingBox(); mesh.computeBoundingSphere();
   return mesh;
 }
+/** Door height used until the door schedule supplies each door's own (most doors are 7'-0"). */
+export const DEFAULT_DOOR_HEIGHT = 7;
+/**
+ * A level's doors (level.doors, kind "door") as two instanced meshes: the header above each opening,
+ * up to the level's height, at the host wall's thickness; and each leaf as a thin panel, standing open.
+ */
+export function schematicDoors(level: SchematicLevel, doorHeight = DEFAULT_DOOR_HEIGHT): THREE.Group | null {
+  const doors = (level.doors ?? []).filter(d => d.kind === "door");
+  if (!doors.length) return null;
+  const group = new THREE.Group(), place = new THREE.Object3D();
+  const box = (a: Point, b: Point, base: number, height: number, thickness: number) => {
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    place.position.set((a[0] + b[0]) / 2, base + height / 2, -(a[1] + b[1]) / 2);
+    place.rotation.set(0, Math.atan2(dy, dx), 0);
+    place.scale.set(Math.max(Math.hypot(dx, dy), .01), height, thickness);
+    place.updateMatrix(); return place.matrix.clone();
+  };
+  const above = Math.max(level.height - doorHeight, 0);
+  if (above > 0) {
+    const headers = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#d8d1c4", roughness: .9 }), doors.length);
+    doors.forEach((d, i) => headers.setMatrixAt(i, box(d.a, d.b, doorHeight, above, d.thickness)));
+    headers.instanceMatrix.needsUpdate = true; group.add(headers);
+  }
+  const leaves = doors.flatMap(d => d.hinges.map((h, i) => [h, d.openTo[i]] as [Point, Point]));
+  const panels = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#9a6b3f", roughness: .7 }), leaves.length);
+  leaves.forEach(([h, open], i) => panels.setMatrixAt(i, box(h, open, 0, doorHeight, .15)));
+  panels.instanceMatrix.needsUpdate = true; group.add(panels);
+  return group;
+}
 /** Count and total centerline length of a level's walls; null for a model built before walls were read. */
-export function wallTotals(level: SchematicLevel): { count: number; feet: number } | null {
+export function wallTotals(level: SchematicLevel): { count: number; feet: number; doors: number | null; compartments: number } | null {
   if (!level.walls) return null;
-  return { count: level.walls.length, feet: Math.round(level.walls.reduce((sum, w) => sum + Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), 0)) };
+  const doors = level.doors ?? null;
+  return {
+    count: level.walls.length, feet: Math.round(level.walls.reduce((sum, w) => sum + Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), 0)),
+    doors: doors && doors.filter(d => d.kind === "door").length, compartments: doors?.filter(d => d.kind === "compartment").length ?? 0,
+  };
 }

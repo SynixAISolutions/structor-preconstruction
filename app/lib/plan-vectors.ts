@@ -18,14 +18,22 @@ const apply = (m: Matrix, x: number, y: number): Point => [m[0] * x + m[2] * y +
 /** pdf.js path codes inside constructPath (pdf.js 5+). */
 const MOVE = 0, LINE = 1, CURVE = 2, QUAD = 3, CLOSE = 4;
 
+/** A stroked cubic curve (door swings are drawn as these), in page points: from, two controls, to. */
+export type Curve = { from: Point; c1: Point; c2: Point; to: Point; width: number };
+
 /**
  * Every stroked straight line on the page. `ops` is page.getOperatorList(), `OPS` is pdfjs.OPS and
- * `viewport` is page.getViewport({ scale: 1 }).transform (it carries the page's rotation). Curves become
- * their chord only when short (arcs of door swings stay out of wall finding); fills are skipped.
+ * `viewport` is page.getViewport({ scale: 1 }).transform (it carries the page's rotation). Curves are
+ * not lines (door swings stay out of wall finding; see vectorsFromOperators); fills are skipped.
  */
 export function segmentsFromOperators(ops: { fnArray: number[]; argsArray: unknown[] }, OPS: Record<string, number>, viewport: number[]): Segment[] {
+  return vectorsFromOperators(ops, OPS, viewport).segments;
+}
+
+/** Stroked lines and stroked cubic curves (quadratic ones raised to cubic), as segmentsFromOperators. */
+export function vectorsFromOperators(ops: { fnArray: number[]; argsArray: unknown[] }, OPS: Record<string, number>, viewport: number[]): { segments: Segment[]; curves: Curve[] } {
   const strokes = new Set(["stroke", "closeStroke", "fillStroke", "eoFillStroke", "closeFillStroke", "closeEOFillStroke"].map(k => OPS[k]));
-  const out: Segment[] = [];
+  const out: Segment[] = [], curves: Curve[] = [];
   let state = { ctm: [1, 0, 0, 1, 0, 0] as Matrix, width: 1, color: "#000000" };
   const stack: typeof state[] = [];
   const view = viewport as Matrix;
@@ -46,12 +54,19 @@ export function segmentsFromOperators(ops: { fnArray: number[]; argsArray: unkno
         const code = data[j];
         if (code === MOVE) { at = start = apply(m, data[j + 1], data[j + 2]); j += 3; }
         else if (code === LINE) { const p = apply(m, data[j + 1], data[j + 2]); if (at) out.push({ a: at, b: p, width, color: state.color }); at = p; j += 3; }
-        else if (code === CURVE) { at = apply(m, data[j + 5], data[j + 6]); j += 7; }
-        else if (code === QUAD) { at = apply(m, data[j + 3], data[j + 4]); j += 5; }
+        else if (code === CURVE) {
+          const c1 = apply(m, data[j + 1], data[j + 2]), c2 = apply(m, data[j + 3], data[j + 4]), to = apply(m, data[j + 5], data[j + 6]);
+          if (at) curves.push({ from: at, c1, c2, to, width });
+          at = to; j += 7;
+        } else if (code === QUAD) {
+          const q = apply(m, data[j + 1], data[j + 2]), to = apply(m, data[j + 3], data[j + 4]);
+          if (at) { const from = at; curves.push({ from, c1: [from[0] + (2 / 3) * (q[0] - from[0]), from[1] + (2 / 3) * (q[1] - from[1])], c2: [to[0] + (2 / 3) * (q[0] - to[0]), to[1] + (2 / 3) * (q[1] - to[1])], to, width }); }
+          at = to; j += 5;
+        }
         else if (code === CLOSE) { if (at && start && (at[0] !== start[0] || at[1] !== start[1])) out.push({ a: at, b: start, width, color: state.color }); at = start; j += 1; }
         else break; // an unknown code: stop reading this path rather than misread it
       }
     }
   }
-  return out;
+  return { segments: out, curves };
 }

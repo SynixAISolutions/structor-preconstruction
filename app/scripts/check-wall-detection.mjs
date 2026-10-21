@@ -21,6 +21,13 @@ assert.deepEqual(lines.map(l => [l.a, l.b, l.width, l.color]), [
   [[0, 200], [50, 200], 2, "#ff0000"], [[50, 200], [50, 175], 2, "#ff0000"],
   [[10, 190], [20, 190], 1, "#000000"], [[30, 170], [10, 190], 1, "#000000"],
 ], "Transforms (with the page's flip), line width scaled with them, save/restore, curves skipped, close drawn");
+const withCurves = V.vectorsFromOperators(opList(path(OPS.stroke, 0, 0, 0, 2, 0, 5, 5, 10, 10, 10, 3, 20, 0, 30, 10)), OPS, [1, 0, 0, 1, 0, 0]);
+const rp = p => p.map(n => Math.round(n * 100) / 100);
+assert.equal(withCurves.segments.length, 0);
+assert.deepEqual(withCurves.curves.map(c => [c.from, c.c1, c.c2, c.to].map(rp)), [
+  [[0, 0], [0, 5], [5, 10], [10, 10]],
+  [[10, 10], [16.67, 3.33], [23.33, 3.33], [30, 10]],
+], "Door swings: cubic curves kept with their controls; a quadratic one raised to cubic");
 
 // ── Walls ─────────────────────────────────────────────────────────────────────────────────────────────
 const PPF = 9; // 1/8" = 1'-0"
