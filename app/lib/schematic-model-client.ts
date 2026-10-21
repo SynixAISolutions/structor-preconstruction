@@ -9,8 +9,8 @@ import type { PlanReading } from "./ai-jobs-more";
 import { drawingRegister, type StoredDocument } from "./project-files";
 import { openStoredPdf, readStoredText, renderStoredPage, renderStoredRegion, renderStoredTiles } from "./project-files-client";
 import type { Project } from "./projects";
-import { segmentsFromOperators } from "./plan-vectors";
-import { consensusMarkers, feetPerInch, heightSheet, levelHeights, levelName, levelPlanSheets, levelWalls, toFeet, type Marker, type SchematicLevel, type SchematicModel } from "./schematic-model";
+import { vectorsFromOperators } from "./plan-vectors";
+import { consensusMarkers, feetPerInch, heightSheet, levelHeights, levelName, levelDoors, levelPlanSheets, levelWalls, toFeet, type Marker, type SchematicLevel, type SchematicModel } from "./schematic-model";
 import { useLocalDraft } from "./use-local-draft";
 
 async function pageSize(doc: StoredDocument, page: number) {
@@ -109,20 +109,21 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
     if (borrowed) { sized.sizing += ` (from ${borrowed}; this sheet's scale wasn't read)`; warnings.push(`${row.sheet}: no printed scale was read; ${borrowed}'s scale is used (same set and sheet size).`); }
     else if (!scale) warnings.push(`${row.sheet}: no printed scale was read; ${sized.sizing.toLowerCase()}.`);
     args.onProgress?.(`Finding the walls on ${row.sheet}…`);
-    const found = await planVectorWalls(row.doc, row.page, sized.frame, reading.outline, !!scale).catch(() => ({ walls: [], note: "The sheet's lines could not be read for walls." }));
+    const found = await planVectorWalls(row.doc, row.page, sized.frame, reading.outline, !!scale).catch(() => ({ walls: [], doors: [], note: "The sheet's lines could not be read for walls." }));
     if (!found.walls.length) warnings.push(`${row.sheet}: ${found.note}`);
-    levels.push({ id: `L${level}`, name: levelName(level), order: level, elevation: heights.elevations.get(level) ?? 0, height: heights.heights.get(level) ?? 14, outline: sized.outline, rooms: sized.rooms, source: { documentId: row.doc.id, sheet: row.sheet, page: row.page }, sizing: sized.sizing, frame: sized.frame, walls: found.walls, wallNote: found.note });
+    levels.push({ id: `L${level}`, name: levelName(level), order: level, elevation: heights.elevations.get(level) ?? 0, height: heights.heights.get(level) ?? 14, outline: sized.outline, rooms: sized.rooms, source: { documentId: row.doc.id, sheet: row.sheet, page: row.page }, sizing: sized.sizing, frame: sized.frame, walls: found.walls, wallNote: found.note, doors: found.doors });
   }
   return { levels, warnings, builtAt: new Date().toISOString() };
 }
 
-/** A plan sheet's walls from its vector lines (lib/plan-vectors, lib/wall-detection), in the level's frame. */
+/** A plan sheet's walls and doors from its vector lines (lib/plan-vectors, wall- and door-detection), in the level's frame. */
 async function planVectorWalls(doc: StoredDocument, pageNumber: number, frame: { widthFeet: number; heightFeet: number }, outline: [number, number][], printedScale: boolean) {
   const [pdfjs, pdf] = await Promise.all([import("pdfjs-dist"), openStoredPdf(doc)]);
   const page = await pdf.getPage(pageNumber);
-  const viewport = page.getViewport({ scale: 1 });
-  const segments = segmentsFromOperators(await page.getOperatorList(), pdfjs.OPS as unknown as Record<string, number>, viewport.transform);
-  return levelWalls(segments, { widthPt: viewport.width, heightPt: viewport.height }, frame, outline, printedScale);
+  const viewport = page.getViewport({ scale: 1 }), sheet = { widthPt: viewport.width, heightPt: viewport.height };
+  const { segments, curves } = vectorsFromOperators(await page.getOperatorList(), pdfjs.OPS as unknown as Record<string, number>, viewport.transform);
+  const walls = levelWalls(segments, sheet, frame, outline, printedScale);
+  return { ...walls, doors: levelDoors(segments, curves, sheet, frame, outline, walls.walls) };
 }
 
 /** The open project's schematic model under "schematic-model"; `run` applies a correction (moveOutlinePoint, setLevelHeight) or a rebuild and returns null or the error. */

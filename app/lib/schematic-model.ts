@@ -8,7 +8,8 @@
 // it the outline is sized so the floor areas add up to the project's building area, and says so.
 // People can correct the outline and heights afterwards. Pure functions.
 
-import type { Segment } from "./plan-vectors";
+import { doorsFromSwings, swingArcs } from "./door-detection";
+import type { Curve, Segment } from "./plan-vectors";
 import type { RegisterRow } from "./project-files";
 import { planWalls } from "./wall-detection";
 
@@ -37,9 +38,17 @@ export type SchematicLevel = {
   walls?: SchematicWall[];
   /** How the walls were found, or why there are none. */
   wallNote?: string;
+  /** Doors read from the plan's swings (levelDoors), in the same feet. Missing on models built before 21 Oct. */
+  doors?: SchematicDoor[];
 };
 /** A wall centerline from a to b with its thickness, in feet. */
 export type SchematicWall = { a: Point; b: Point; thickness: number };
+/**
+ * A door opening from a to b, its leaves' hinges and where each leaf swings open to, in feet. "compartment"
+ * is a leaf under 2.4 ft (toilet stalls): toilet partitions, not the door schedule. `thickness` is the host
+ * wall's, for the header above the opening.
+ */
+export type SchematicDoor = { a: Point; b: Point; width: number; leaves: number; hinges: Point[]; openTo: Point[]; kind: "door" | "compartment"; thickness: number };
 export type SchematicModel = { levels: SchematicLevel[]; warnings: string[]; builtAt: string };
 
 const ORDINALS: Record<string, number> = { BASEMENT: 0, GROUND: 1, FIRST: 1, SECOND: 2, THIRD: 3, FOURTH: 4, FIFTH: 5, SIXTH: 6 };
@@ -114,7 +123,8 @@ type Frame = { widthFeet: number; heightFeet: number };
  * key plan and details stay out). Thickness limits are in feet, so walls need a true scale: with the size
  * taken from the building area they are kept but flagged.
  */
-export function levelWalls(segments: Segment[], page: { widthPt: number; heightPt: number }, frame: Frame, outline: Point[], printedScale: boolean): { walls: SchematicWall[]; note: string } {
+/** Page points per foot in a level's frame, and the plan's area on the sheet around the read outline. */
+function planArea(page: { widthPt: number; heightPt: number }, frame: Frame, outline: Point[]) {
   const pointsPerFoot = page.widthPt / frame.widthFeet;
   let box: [number, number, number, number] | undefined;
   if (outline.length >= 3) {
@@ -122,8 +132,28 @@ export function levelWalls(segments: Segment[], page: { widthPt: number; heightP
     const margin = 0.1 * Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) + 20 * pointsPerFoot;
     box = [Math.min(...xs) - margin, Math.min(...ys) - margin, Math.max(...xs) + margin, Math.max(...ys) + margin];
   }
+  return { pointsPerFoot, box };
+}
+
+/**
+ * A level's doors from the plan's swings (lib/door-detection), in the level's frame: the swing arcs in
+ * the plan's area, their openings placed against the level's walls (from levelWalls, same frame).
+ */
+export function levelDoors(segments: Segment[], curves: Curve[], page: { widthPt: number; heightPt: number }, frame: Frame, outline: Point[], walls: SchematicWall[]): SchematicDoor[] {
+  const { pointsPerFoot, box } = planArea(page, frame, outline);
+  const inside = (p: Point) => !box || (p[0] >= box[0] && p[0] <= box[2] && p[1] >= box[1] && p[1] <= box[3]);
+  const swings = swingArcs(segments.filter(s => inside(s.a) && inside(s.b)), curves.filter(c => inside(c.from) && inside(c.to)), pointsPerFoot);
+  const r1 = (p: Point): Point => [Math.round(p[0] * 10) / 10 || 0, Math.round(p[1] * 10) / 10 || 0];
+  return doorsFromSwings(swings, walls.map(w => ({ ...w, weights: [] }))).map(d => ({
+    a: r1(d.a), b: r1(d.b), width: Math.round(d.width * 10) / 10, leaves: d.leaves, hinges: d.hinges.map(r1), openTo: d.openTo.map(r1), kind: d.kind,
+    thickness: d.host === null ? 0.4 : walls[d.host].thickness,
+  }));
+}
+
+export function levelWalls(segments: Segment[], page: { widthPt: number; heightPt: number }, frame: Frame, outline: Point[], printedScale: boolean): { walls: SchematicWall[]; note: string } {
+  const { pointsPerFoot, box } = planArea(page, frame, outline);
   const found = planWalls(segments, pointsPerFoot, box);
-  const r1 = (n: number) => Math.round(n * 10) / 10;
+  const r1 = (n: number) => Math.round(n * 10) / 10 || 0; // no -0
   const walls = found.walls.map(w => ({ a: [r1(w.a[0]), r1(w.a[1])] as Point, b: [r1(w.b[0]), r1(w.b[1])] as Point, thickness: Math.round(w.thickness * 100) / 100 }));
   return { walls, note: found.walls.length && !printedScale ? `${found.note} No printed scale was read, so wall sizes follow the building area; check them.` : found.note };
 }
