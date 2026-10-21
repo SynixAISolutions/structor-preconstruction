@@ -35,7 +35,7 @@
   .ripple-unmatched { margin: 0 12px 16px; }
   .ripple-trade footer > div, .ripple-unmatched > header > .ui-btn { width: 100%; }
   .ripple-trade footer .ui-btn { width: 100%; justify-content: center; }
-  .intel-change-row { flex-wrap: wrap; }
-  .intel-change-row > span:nth-child(2) { flex-basis: calc(100% - 42px); min-width: 0; overflow-wrap: anywhere; }
-  .intel-change-row > .ui-btn { margin-left: auto; min-height: 44px; }
+  .revision-compare-view .intel-change-row { flex-wrap: wrap; }
+  .revision-compare-view .intel-change-row > span:nth-child(2) { flex-basis: calc(100% - 42px); min-width: 0; overflow-wrap: anywhere; }
+  .revision-compare-view .intel-change-row > .ui-btn { margin-left: auto; min-height: 44px; }
 }

@@ -118,7 +118,7 @@ export function RevisionCompare({ projectName, notify, navigate, documents }: Vi
     <Panel><Empty title="No drawing revisions to compare yet" description={sets.length ? `When a newer issue arrives, open Project files and choose Upload revision on ${sets.map(s => s.name).join(" or ")}. Its sheets are matched by number and compared here.` : "Upload the drawing set in Project files first; when a newer issue arrives, upload it as a revision."} action={<Button variant="primary" onClick={() => navigate("documents")}><GitBranchPlus size={15}/>Upload a revision</Button>}/></Panel>
   </div>;
 
-  return <div className="intel-view">
+  return <div className="intel-view revision-compare-view">
     <PageHeader eyebrow={`${projectName} / Document control`} title="Revision comparison" description="Overlay two issues of a drawing to see what changed, then let the AI list the changes for review." actions={<ExportButton onClick={() => exportRows("revision-changes.csv", [["Sheet comparison", "Change", "Kind", "Trade", "Detail", "Reviewed"], ...changes.map(c => [c.key, c.title, c.kind, c.trade, c.detail, c.reviewed ? "Yes" : "No"])])}/>}/>
     <Panel className="intel-comparison-settings"><div className="rev-selects">
       <label className="ui-field">DRAWING SET<select value={series} onChange={e => { setSeries(e.target.value); setFromId(""); setToId(""); setSheet(""); }}>{comparable.map(d => <option key={d.series} value={d.series}>{d.name}</option>)}</select></label>
