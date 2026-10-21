@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as THREE from "three";
-import { alignSheetFrame, footprintValid, openOutline, printedSheetFrame, schematicDoors, schematicGeometry, schematicWalls, sheetPoint, wallTotals } from "./schematic-geometry";
+import { alignSheetFrame, footprintValid, openOutline, printedSheetFrame, schematicDoors, schematicGeometry, schematicGlazing, schematicWalls, sheetPoint, wallTotals } from "./schematic-geometry";
 import { moveOutlinePoint, setLevelHeight, type Point, type SchematicLevel, type SchematicModel } from "../../lib/schematic-model";
 
 const level: SchematicLevel = { id: "L1", name: "Level 01", order: 1, elevation: 0, height: 14, outline: [[10, 20], [50, 20], [50, 60], [10, 60]], rooms: [{ name: "Lobby", number: "101", at: [20, 30] }], source: { documentId: "qa", sheet: "A1.1", page: 1 }, sizing: "Printed scale, 8 ft per inch" };
@@ -24,17 +24,27 @@ test("walls read from the drawing become boxes along their centerlines, at full 
   mesh.getMatrixAt(1, m); m.decompose(p, q, s);
   const along = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
   assert.deepEqual([p.toArray(), along.toArray(), s.toArray()].map(v => v.map(n => Math.round(n * 1e6) / 1e6)), [[30, 7, -40], [0, 0, -1], [40, 14, .4]], "Plan y runs toward world -z, as the outline does");
-  assert.deepEqual(wallTotals(walled), { count: 2, feet: 80, doors: null, compartments: 0 });
+  assert.deepEqual(wallTotals(walled), { count: 2, feet: 80, doors: null, compartments: 0, glassFeet: null });
   assert.equal(schematicWalls({ ...level, walls: [] }), null, "A scan: no walls");
   const excluded: SchematicLevel = { ...walled, walls: [walled.walls![0], { ...walled.walls![1], excluded: true }] };
   assert.deepEqual([schematicWalls(excluded)!.count, wallTotals(excluded)!.count, wallTotals(excluded)!.feet], [1, 1, 40], "A wall the estimator marked not a wall leaves the 3D and the totals");
+  mesh.geometry.dispose();
+});
+test("glass read from the drawing: translucent panels up to 10 ft, minus what the estimator marked not glass", () => {
+  const glazed: SchematicLevel = { ...level, walls: [], glazing: [{ a: [10, 20], b: [30, 20] }, { a: [30, 20], b: [40, 20], excluded: true }] };
+  const mesh = schematicGlazing(glazed)!;
+  const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+  mesh.getMatrixAt(0, m); m.decompose(p, q, s);
+  assert.deepEqual([mesh.count, p.toArray(), s.toArray()].flat().map(n => Math.round(Number(n) * 1e6) / 1e6), [1, 20, 5, -20, 20, 10, .15]);
+  assert.equal(wallTotals(glazed)!.glassFeet, 20);
+  assert.equal(schematicGlazing({ ...level, glazing: [] }), null);
   mesh.geometry.dispose();
 });
 test("doors read from the drawing: a header over each opening and each leaf standing open", () => {
   const door = { a: [10, 20] as Point, b: [13, 20] as Point, width: 3, leaves: 1, hinges: [[10, 20]] as Point[], openTo: [[10, 23]] as Point[], kind: "door" as const, thickness: .4 };
   const stall = { ...door, a: [30, 20] as Point, b: [32, 20] as Point, width: 2, hinges: [[30, 20]] as Point[], openTo: [[30, 22]] as Point[], kind: "compartment" as const };
   const doored: SchematicLevel = { ...level, walls: [{ a: [0, 20], b: [10, 20], thickness: .4 }], doors: [door, stall] };
-  assert.deepEqual(wallTotals(doored), { count: 1, feet: 10, doors: 1, compartments: 1 });
+  assert.deepEqual(wallTotals(doored), { count: 1, feet: 10, doors: 1, compartments: 1, glassFeet: null });
   const group = schematicDoors(doored)!;
   const [headers, leaves] = group.children as THREE.InstancedMesh[];
   assert.deepEqual([headers.count, leaves.count], [1, 1], "Toilet-stall doors are not drawn as building doors");

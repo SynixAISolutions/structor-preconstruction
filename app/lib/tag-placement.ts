@@ -128,7 +128,7 @@ const toSegment = (p: Point, a: Point, b: Point) => {
  * 4 ft (door openings). Walls a tag already labelled keep their own. A door number takes the nearest door
  * within 6 ft, closest pairs first, one number per door.
  */
-export function placeTags(tags: PlacedTag[], walls: WallLike[], doors: DoorLike[], drawn: { ovals: Oval[]; lines: [Point, Point][] } = { ovals: [], lines: [] }): { wallTypes: (string | null)[]; doorNumbers: (string | null)[] } {
+export function placeTags(tags: PlacedTag[], walls: WallLike[], doors: DoorLike[], drawn: { ovals: Oval[]; lines: [Point, Point][] } = { ovals: [], lines: [] }, glazing: DoorLike[] = []): { wallTypes: (string | null)[]; doorNumbers: (string | null)[]; glazingTypes: (string | null)[] } {
   const wallTypes: (string | null)[] = walls.map(() => null);
   const direct = new Set<number>(), usedOvals = new Set<Oval>();
   const nearestWall = (score: (w: WallLike) => number, within: number) => {
@@ -171,7 +171,14 @@ export function placeTags(tags: PlacedTag[], walls: WallLike[], doors: DoorLike[
   const pairs = tags.filter(t => t.kind === "door").flatMap(t => doors.map((d, i) => ({ t, i, d: Math.hypot((d.a[0] + d.b[0]) / 2 - t.at[0], (d.a[1] + d.b[1]) / 2 - t.at[1]) }))).filter(p => p.d < 6).sort((p, q) => p.d - q.d);
   const usedTags = new Set<PlacedTag>();
   for (const p of pairs) if (doorNumbers[p.i] === null && !usedTags.has(p.t)) { doorNumbers[p.i] = normalTag(p.t.text); usedTags.add(p.t); }
-  return { wallTypes, doorNumbers };
+  // A storefront or window type labels the nearest run of glass within 6 ft.
+  const glazingTypes: (string | null)[] = glazing.map(() => null);
+  for (const t of tags.filter(t => t.kind === "glazing")) {
+    let best = -1, bestD = 6;
+    glazing.forEach((g, i) => { const d = toSegment(t.at, g.a, g.b); if (d < bestD) { bestD = d; best = i; } });
+    if (best >= 0) glazingTypes[best] = normalTag(t.text);
+  }
+  return { wallTypes, doorNumbers, glazingTypes };
 }
 
 /** Wall length and face area by type for one level (area = length × height); untagged walls under "Untagged". */
@@ -183,4 +190,11 @@ export function wallTypeTotals(walls: (WallLike & { type?: string | null })[], h
   }
   return [...by.entries()].map(([type, t]) => ({ type, walls: t.walls, feet: Math.round(t.feet), squareFeet: Math.round(t.feet * height) }))
     .sort((p, q) => Number(p.type === "Untagged") - Number(q.type === "Untagged") || p.type.localeCompare(q.type));
+}
+
+/** Glass length by type for one level (storefront and window types from the plan's tags); untyped under "Untagged". */
+export function glazingTotals(glazing: { a: Point; b: Point; type?: string | null }[]): { type: string; runs: number; feet: number }[] {
+  const by = new Map<string, { runs: number; feet: number }>();
+  for (const g of glazing) { const k = g.type ?? "Untagged", t = by.get(k) ?? { runs: 0, feet: 0 }; t.runs++; t.feet += dist(g.a, g.b); by.set(k, t); }
+  return [...by.entries()].map(([type, t]) => ({ type, runs: t.runs, feet: Math.round(t.feet) })).sort((p, q) => Number(p.type === "Untagged") - Number(q.type === "Untagged") || p.type.localeCompare(q.type));
 }

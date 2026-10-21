@@ -81,6 +81,15 @@ assert.equal(S.editDoorNumber(doorModel, "L1", 0, "").levels[0].doors[0].number,
 assert.throws(() => S.editWall(model, "L1", 99, { type: "X" }), /no longer in the model/);
 assert.throws(() => S.editDoorNumber(model, "L9", 0, "1"), /level is no longer/);
 
+// Storefront and window tags type the nearest run of glass; totals by type; the estimator corrects glass.
+const glassRuns = [{ a: [0, 60], b: [20, 60] }, { a: [40, 60], b: [60, 60] }, { a: [100, 60], b: [110, 60] }];
+const glassPlaced = T.placeTags([{ text: "sf-10", kind: "glazing", at: [10, 62] }, { text: "SF-4", kind: "glazing", at: [50, 57] }], [], [], undefined, glassRuns);
+assert.deepEqual(glassPlaced.glazingTypes, ["SF-10", "SF-4", null]);
+assert.deepEqual(T.glazingTotals(glassRuns.map((g, i) => ({ ...g, type: glassPlaced.glazingTypes[i] }))), [{ type: "SF-10", runs: 1, feet: 20 }, { type: "SF-4", runs: 1, feet: 20 }, { type: "Untagged", runs: 1, feet: 10 }]);
+const glassModel = { ...model, levels: [{ ...model.levels[0], glazing: glassRuns }] };
+assert.deepEqual(S.editGlazing(S.editGlazing(glassModel, "L1", 2, { excluded: true }), "L1", 0, { type: " sf 9 " }).levels[0].glazing.map(g => [g.type ?? null, !!g.excluded]), [["SF9", false], [null, false], [null, true]]);
+assert.throws(() => S.editGlazing(glassModel, "L1", 7, { excluded: true }), /glass is no longer/);
+
 // Tiles over the plan's area, and tags read on a tile placed back in the level's feet.
 const sheet = { widthPt: 3024, heightPt: 2160 }, frame = { widthFeet: 336, heightFeet: 240 };
 const tiles = S.tagTiles(sheet, frame, [[0.2, 0.3], [0.8, 0.3], [0.8, 0.8], [0.2, 0.8]]);

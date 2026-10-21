@@ -61,6 +61,19 @@ const found = W.planWalls(plan, PPF);
 assert.deepEqual([found.weight, found.walls.length, found.note], [1.2, 12, "Walls are the 1.2 pt lines (100% of them pair at a wall's thickness)."]);
 assert.equal(W.planWalls(plan, PPF, [0, 0, 45 * PPF, 35 * PPF]).walls.length, 4, "Only the plan's area counts");
 
+// Glass: a pane is two lines ~1" apart drawn lighter than the walls; never inside a wall or along a door leaf.
+const pane = (x0, x1, y, w = 0.72) => [seg(x0, y, x1, y, w), seg(x0, y + 1 / 12, x1, y + 1 / 12, w)];
+const wallsHere = [{ a: [0, 50.2], b: [20, 50.2], thickness: 0.4, weights: [] }];
+const glazed = W.planGlazing([
+  ...pane(30, 36, 50), ...pane(36.2, 42, 50),   // two bays of one storefront, a mullion between
+  ...pane(5, 15, 50.15, 0.48),                    // light layer lines inside the wall
+  ...pane(60, 63, 40),                             // an open door leaf drawn as a thin rectangle
+  ...pane(70, 71, 50),                             // too short to be glass
+  seg(80, 50, 90, 50, 1.2), seg(80, 50.08, 90, 50.08, 1.2), // heavy: walls, not glass
+], PPF, 1.2, wallsHere, undefined, [[[60, 40], [63, 40]]]);
+assert.deepEqual(glazed.map(g => [r(g.a[0]), r(g.b[0]), r(g.thickness * 12)]), [[30, 42, 1]], "One storefront run across its mullion; wall layers, a door leaf, a stub and heavy lines are not glass");
+assert.deepEqual(W.planGlazing(pane(0, 10, 0), PPF, null, []), [], "No wall weight (a scan): no glass");
+
 // Corners and tees close: ends move to where the centerlines meet.
 const joined = W.joinWalls([
   { a: [0, 0], b: [19.8, 0], thickness: 0.4, weights: [] },   // stops short of the corner

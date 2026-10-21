@@ -12,7 +12,7 @@ import { doorsFromSwings, swingArcs } from "./door-detection";
 import { mergeTags, placeTags, tagOvals, type PartitionType, type PlacedTag } from "./tag-placement";
 import type { Curve, Segment } from "./plan-vectors";
 import type { RegisterRow } from "./project-files";
-import { planWalls } from "./wall-detection";
+import { planGlazing, planWalls } from "./wall-detection";
 
 export type Point = [number, number];
 export type SchematicRoom = { name: string; number: string; at: Point };
@@ -41,7 +41,11 @@ export type SchematicLevel = {
   wallNote?: string;
   /** Doors read from the plan's swings (levelDoors), in the same feet. Missing on models built before 21 Oct. */
   doors?: SchematicDoor[];
+  /** Glass read from the plan's panes (levelGlazing). Missing on models built before 21 Oct. */
+  glazing?: SchematicGlazing[];
 };
+/** A run of glass from a to b, in feet; `type` from the plan's storefront/window tags (SF-10). */
+export type SchematicGlazing = { a: Point; b: Point; type?: string | null; excluded?: boolean };
 /** A wall centerline from a to b with its thickness, in feet; `type` is its partition type from the plan's tags. */
 export type SchematicWall = { a: Point; b: Point; thickness: number; type?: string | null; /** The type was set by the estimator for untagged walls, not read from a tag. */ typeSet?: boolean; /** Corrected by the estimator on this wall. */ edited?: boolean; /** Marked by the estimator as not a wall (kept so it can be restored). */ excluded?: boolean };
 /**
@@ -77,17 +81,18 @@ export function tagTiles(page: { widthPt: number; heightPt: number }, frame: Fra
 /** Lines at least this heavy (points) are walls or outlines, never a tag's leader (Jelleff: leaders 0.24-0.48, walls 1.2). */
 export const LEADER_MAX_WEIGHT = 1;
 
-export function levelTags(read: { tile: [number, number, number, number]; tags: { text: string; kind: "wall" | "door" | "glazing"; at: Point }[] }[], segments: Segment[], curves: Curve[], page: { widthPt: number; heightPt: number }, frame: Frame, walls: SchematicWall[], doors: SchematicDoor[]): { walls: SchematicWall[]; doors: SchematicDoor[]; tags: PlacedTag[] } {
+export function levelTags(read: { tile: [number, number, number, number]; tags: { text: string; kind: "wall" | "door" | "glazing"; at: Point }[] }[], segments: Segment[], curves: Curve[], page: { widthPt: number; heightPt: number }, frame: Frame, walls: SchematicWall[], doors: SchematicDoor[], glazing: SchematicGlazing[] = []): { walls: SchematicWall[]; doors: SchematicDoor[]; glazing: SchematicGlazing[]; tags: PlacedTag[] } {
   const pointsPerFoot = page.widthPt / frame.widthFeet;
   const toFeet = (tile: [number, number, number, number], at: Point): Point => [(tile[0] + at[0] * tile[2]) * frame.widthFeet, (tile[1] + at[1] * tile[3]) * frame.heightFeet];
   const tags = mergeTags(read.flatMap(r => r.tags.map(t => ({ text: t.text, kind: t.kind, at: toFeet(r.tile, t.at) }))));
   // Leaders are drawn with the thin pens; a wall's heavy face touching a tag's end is not its leader.
   const lines = segments.filter(s => s.width < LEADER_MAX_WEIGHT).map(s => [[s.a[0] / pointsPerFoot, s.a[1] / pointsPerFoot], [s.b[0] / pointsPerFoot, s.b[1] / pointsPerFoot]] as [Point, Point]);
-  const placed = placeTags(tags, walls, doors.filter(d => d.kind === "door"), { ovals: tagOvals(curves, pointsPerFoot), lines });
+  const placed = placeTags(tags, walls, doors.filter(d => d.kind === "door"), { ovals: tagOvals(curves, pointsPerFoot), lines }, glazing);
   let k = 0;
   return {
     walls: walls.map((w, i) => ({ ...w, type: placed.wallTypes[i] })),
     doors: doors.map(d => d.kind === "door" ? { ...d, number: placed.doorNumbers[k++] } : d),
+    glazing: glazing.map((g, i) => ({ ...g, type: placed.glazingTypes[i] })),
     tags,
   };
 }
@@ -209,12 +214,23 @@ export function levelDoors(segments: Segment[], curves: Curve[], page: { widthPt
   }));
 }
 
-export function levelWalls(segments: Segment[], page: { widthPt: number; heightPt: number }, frame: Frame, outline: Point[], printedScale: boolean): { walls: SchematicWall[]; note: string } {
+export function levelWalls(segments: Segment[], page: { widthPt: number; heightPt: number }, frame: Frame, outline: Point[], printedScale: boolean): { walls: SchematicWall[]; note: string; weight: number | null } {
   const { pointsPerFoot, box } = planArea(page, frame, outline);
   const found = planWalls(segments, pointsPerFoot, box);
   const r1 = (n: number) => Math.round(n * 10) / 10 || 0; // no -0
   const walls = found.walls.map(w => ({ a: [r1(w.a[0]), r1(w.a[1])] as Point, b: [r1(w.b[0]), r1(w.b[1])] as Point, thickness: Math.round(w.thickness * 100) / 100 }));
-  return { walls, note: found.walls.length && !printedScale ? `${found.note} No printed scale was read, so wall sizes follow the building area; check them.` : found.note };
+  return { walls, weight: found.weight, note: found.walls.length && !printedScale ? `${found.note} No printed scale was read, so wall sizes follow the building area; check them.` : found.note };
+}
+
+/**
+ * A level's glass (storefront, windows, glass partitions) from the plan's panes (wall-detection planGlazing):
+ * lighter lines a pane's width apart, never inside a wall or along a door's leaf. Same frame as the walls.
+ */
+export function levelGlazing(segments: Segment[], page: { widthPt: number; heightPt: number }, frame: Frame, outline: Point[], wallWeight: number | null, walls: SchematicWall[], doors: SchematicDoor[]): SchematicGlazing[] {
+  const { pointsPerFoot, box } = planArea(page, frame, outline);
+  const leaves = doors.flatMap(d => d.hinges.map((h, i) => [h, d.openTo[i]] as [Point, Point]));
+  const r1 = (n: number) => Math.round(n * 10) / 10 || 0;
+  return planGlazing(segments, pointsPerFoot, wallWeight, walls.map(w => ({ ...w, weights: [] })), box, leaves).map(g => ({ a: [r1(g.a[0]), r1(g.a[1])] as Point, b: [r1(g.b[0]), r1(g.b[1])] as Point }));
 }
 /** Image fraction → feet in a level's frame (to 0.1 ft). */
 export const fromFraction = (frame: Frame, [x, y]: Point): Point => [Math.round(x * frame.widthFeet * 10) / 10, Math.round(y * frame.heightFeet * 10) / 10];
@@ -387,6 +403,15 @@ export function editDoorNumber(model: SchematicModel, levelId: string, index: nu
     if (!l.doors?.[index]) throw new Error("That door is no longer in the model.");
     const n = number.trim().toUpperCase().slice(0, 12);
     return { ...l, doors: l.doors.map((d, i) => i === index ? { ...d, number: n || null } : d) };
+  });
+}
+
+/** The estimator's correction of one glass run: its type, or that it is not glass. */
+export function editGlazing(model: SchematicModel, levelId: string, index: number, change: { type?: string; excluded?: boolean }): SchematicModel {
+  return editLevel(model, levelId, l => {
+    if (!l.glazing?.[index]) throw new Error("That glass is no longer in the model.");
+    const t = change.type === undefined ? undefined : change.type.trim().toUpperCase().replace(/\s+/g, "").slice(0, 16);
+    return { ...l, glazing: l.glazing.map((g, i) => i !== index ? g : { ...g, ...(t !== undefined ? { type: t || null } : {}), ...(change.excluded !== undefined ? { excluded: change.excluded } : {}) }) };
   });
 }
 

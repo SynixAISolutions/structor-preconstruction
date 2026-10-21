@@ -89,12 +89,31 @@ export function schematicDoors(level: SchematicLevel, doorHeight = DEFAULT_DOOR_
   panels.instanceMatrix.needsUpdate = true; group.add(panels);
   return group;
 }
+/** Glass is drawn up to 10 ft (a storefront's usual head), or the level's height if lower. */
+export const GLASS_HEIGHT = 10;
+/** A level's glass (level.glazing) as one instanced mesh of thin translucent panels from the floor. */
+export function schematicGlazing(level: SchematicLevel): THREE.InstancedMesh | null {
+  const glass = (level.glazing ?? []).filter(g => !g.excluded);
+  if (!glass.length) return null;
+  const height = Math.min(level.height, GLASS_HEIGHT), place = new THREE.Object3D();
+  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#7cc4e8", transparent: true, opacity: .45, roughness: .1 }), glass.length);
+  glass.forEach((g, i) => {
+    const dx = g.b[0] - g.a[0], dy = g.b[1] - g.a[1];
+    place.position.set((g.a[0] + g.b[0]) / 2, height / 2, -(g.a[1] + g.b[1]) / 2);
+    place.rotation.set(0, Math.atan2(dy, dx), 0);
+    place.scale.set(Math.max(Math.hypot(dx, dy), .01), height, .15);
+    place.updateMatrix(); mesh.setMatrixAt(i, place.matrix);
+  });
+  mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingBox(); mesh.computeBoundingSphere();
+  return mesh;
+}
 /** Count and total centerline length of a level's walls; null for a model built before walls were read. */
-export function wallTotals(level: SchematicLevel): { count: number; feet: number; doors: number | null; compartments: number } | null {
+export function wallTotals(level: SchematicLevel): { count: number; feet: number; doors: number | null; compartments: number; glassFeet: number | null } | null {
   if (!level.walls) return null;
   const doors = level.doors ?? null, walls = level.walls.filter(w => !w.excluded);
   return {
     count: walls.length, feet: Math.round(walls.reduce((sum, w) => sum + Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), 0)),
     doors: doors && doors.filter(d => d.kind === "door").length, compartments: doors?.filter(d => d.kind === "compartment").length ?? 0,
+    glassFeet: level.glazing ? Math.round(level.glazing.filter(g => !g.excluded).reduce((sum, g) => sum + Math.hypot(g.b[0] - g.a[0], g.b[1] - g.a[1]), 0)) : null,
   };
 }
