@@ -10,6 +10,8 @@ import { renderStoredPage } from "../../lib/project-files-client";
 import { changeBoxes, overlayPixels, type ChangeBox } from "../../lib/revision-overlay";
 import { aiJob } from "../../lib/ai-more-client";
 import type { RevisionChange } from "../../lib/ai-jobs-more";
+import { useSubmissions } from "../../lib/use-submissions";
+import { RevisionRipple } from "./revision-ripple";
 
 type SavedChange = RevisionChange & { id: string; key: string; reviewed: boolean };
 /** A JPEG of one box of an image, grown by a margin so the AI sees the surroundings. */
@@ -80,10 +82,16 @@ export function RevisionCompare({ projectName, notify, navigate, documents }: Vi
   const previous = before && current ? before.sheets.find(s => sheetKey(s.sheet) === sheetKey(current.sheet)) : undefined;
   const [mode, setMode] = useState("Overlay");
   const [changes, setChanges] = useLocalDraft<SavedChange[]>("revision-changes", []);
+  const { procurement, runProcurement, submissions } = useSubmissions();
   const [busy, setBusy] = useState(false);
   const [boxes, setBoxes] = useState<ChangeBox[]>([]);
   const key = before && after && current ? `${before.id}>${after.id}:${current.sheet}` : "";
   const listed = changes.filter(c => c.key === key);
+  const comparedSheets = before && after ? sheets.map(s => ({
+    sheet: s.sheet,
+    revision: revisionLabel(after),
+    changes: changes.filter(c => c.reviewed && c.key === `${before.id}>${after.id}:${s.sheet}`),
+  })) : [];
 
   async function describe() {
     if (!before || !after || !current || !previous) return;
@@ -110,7 +118,7 @@ export function RevisionCompare({ projectName, notify, navigate, documents }: Vi
     <Panel><Empty title="No drawing revisions to compare yet" description={sets.length ? `When a newer issue arrives, open Project files and choose Upload revision on ${sets.map(s => s.name).join(" or ")}. Its sheets are matched by number and compared here.` : "Upload the drawing set in Project files first; when a newer issue arrives, upload it as a revision."} action={<Button variant="primary" onClick={() => navigate("documents")}><GitBranchPlus size={15}/>Upload a revision</Button>}/></Panel>
   </div>;
 
-  return <div className="intel-view">
+  return <div className="intel-view revision-compare-view">
     <PageHeader eyebrow={`${projectName} / Document control`} title="Revision comparison" description="Overlay two issues of a drawing to see what changed, then let the AI list the changes for review." actions={<ExportButton onClick={() => exportRows("revision-changes.csv", [["Sheet comparison", "Change", "Kind", "Trade", "Detail", "Reviewed"], ...changes.map(c => [c.key, c.title, c.kind, c.trade, c.detail, c.reviewed ? "Yes" : "No"])])}/>}/>
     <Panel className="intel-comparison-settings"><div className="rev-selects">
       <label className="ui-field">DRAWING SET<select value={series} onChange={e => { setSeries(e.target.value); setFromId(""); setToId(""); setSheet(""); }}>{comparable.map(d => <option key={d.series} value={d.series}>{d.name}</option>)}</select></label>
@@ -125,5 +133,6 @@ export function RevisionCompare({ projectName, notify, navigate, documents }: Vi
         {listed.length ? <div className="intel-change-list">{listed.map((c, i) => <div key={c.id} className="intel-change-row"><span className="intel-change-index">{String(i + 1).padStart(2, "0")}</span><span><strong>{c.title}</strong><small>{c.trade || "Trade not named"} · {c.detail}</small></span><Badge tone={c.reviewed ? "green" : c.kind === "Added" ? "orange" : c.kind === "Removed" ? "red" : "blue"}>{c.reviewed ? "Reviewed" : c.kind}</Badge><Button onClick={() => setChanges(prev => prev.map(x => x.id === c.id ? { ...x, reviewed: !x.reviewed } : x))}><Check size={14}/>{c.reviewed ? "Reopen" : "Mark reviewed"}</Button></div>)}</div> : <p className="intel-muted">No changes listed yet for this sheet.</p>}
       </Panel>
     </>}
+    <RevisionRipple key={`${before?.id}>${after?.id}`} sheets={comparedSheets} procurement={procurement} submissions={submissions} run={runProcurement} notify={notify} navigate={navigate}/>
   </div>;
 }

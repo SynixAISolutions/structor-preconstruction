@@ -1,0 +1,41 @@
+.ripple-panel { overflow-wrap: anywhere; }
+.ripple-intro { display: flex; gap: 12px; padding: 18px 22px; background: #f7f9f4; border-top: 1px solid #e2e8db; }
+.ripple-intro > svg { flex-shrink: 0; margin-top: 3px; color: #687a4c; }
+.ripple-intro p { margin: 0; color: #52604b; font-size: 12px; line-height: 1.8; }
+.ripple-intro strong, .ripple-intro span { display: block; }
+.ripple-intro strong { color: #374e36; font-size: 14px; margin-bottom: 4px; }
+.ripple-intro span { margin-top: 5px; font-size: 11px; }
+.ripple-result { margin: 0; padding: 0 22px; font-size: 12px; line-height: 1.8; color: #365238; }
+.ripple-result:not(:empty) { padding-top: 16px; }
+.ripple-trades { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 18px; padding: 20px 22px; }
+.ripple-trade { min-width: 0; border: 1px solid #dfe5da; border-radius: 10px; overflow: hidden; background: #fff; }
+.ripple-trade > header, .ripple-unmatched > header { display: flex; align-items: start; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 18px; }
+.ripple-trade h3, .ripple-unmatched h3 { margin: 4px 0 0; color: #344e3a; font-size: 15px; line-height: 1.5; }
+.ripple-trade header small { font-size: 10px; color: #64715c; }
+.ripple-changes { list-style: none; margin: 0; padding: 0; }
+.ripple-changes li { padding: 16px 18px; border-top: 1px solid #edf0e9; }
+.ripple-source { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 9px; color: #56664f; font-size: 11px; }
+.ripple-changes li > strong { color: #3e503d; font-size: 12px; line-height: 1.7; font-weight: 600; }
+.ripple-changes li > p, .ripple-unmatched header p { margin: 6px 0 0; color: #5d6a57; font-size: 12px; line-height: 1.8; }
+.ripple-bids { margin: 0 18px 16px; padding: 12px; background: #fff8ec; border: 1px solid #eee2c8; border-radius: 7px; color: #78603c; font-size: 12px; line-height: 1.8; }
+.ripple-bids strong { display: block; }
+.ripple-trade footer { padding: 16px 18px; background: #fafbf8; border-top: 1px solid #e7ecdf; }
+.ripple-trade footer p { margin: 0 0 12px; color: #5e6c55; font-size: 11px; line-height: 1.8; }
+.ripple-trade footer p svg { vertical-align: middle; margin-right: 5px; }
+.ripple-trade footer > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.ripple-panel .ui-btn { min-height: 44px; }
+.ripple-panel .ui-btn:focus-visible { outline: 2px solid #9b5925; outline-offset: 3px; }
+.ripple-unmatched { margin: 0 22px 22px; border: 1px solid #e6ddcb; border-radius: 10px; background: #fffdf8; }
+.ripple-unmatched:first-of-type { margin-top: 20px; }
+@media (max-width: 1000px) { .ripple-trades { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) {
+  .ripple-intro { padding: 16px 14px; }
+  .ripple-trades { padding: 16px 12px; gap: 14px; }
+  .ripple-result { padding-left: 14px; padding-right: 14px; }
+  .ripple-unmatched { margin: 0 12px 16px; }
+  .ripple-trade footer > div, .ripple-unmatched > header > .ui-btn { width: 100%; }
+  .ripple-trade footer .ui-btn { width: 100%; justify-content: center; }
+  .revision-compare-view .intel-change-row { flex-wrap: wrap; }
+  .revision-compare-view .intel-change-row > span:nth-child(2) { flex-basis: calc(100% - 42px); min-width: 0; overflow-wrap: anywhere; }
+  .revision-compare-view .intel-change-row > .ui-btn { margin-left: auto; min-height: 44px; }
+}
