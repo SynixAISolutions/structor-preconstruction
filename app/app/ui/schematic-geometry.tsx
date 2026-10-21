@@ -41,3 +41,27 @@ export function schematicGeometry(level: SchematicLevel) {
   const geometry = new THREE.ExtrudeGeometry(schematicShape(level), { depth: level.height, bevelEnabled: false });
   geometry.rotateX(-Math.PI / 2); return geometry;
 }
+/**
+ * The walls the app read from the plan's own lines (level.walls) as one instanced mesh of boxes: each runs
+ * along its centerline with its thickness, full level height. Plan y is world -z, as for the outline.
+ */
+export function schematicWalls(level: SchematicLevel): THREE.InstancedMesh | null {
+  const walls = level.walls ?? [];
+  if (!walls.length) return null;
+  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#d8d1c4", roughness: .9 }), walls.length);
+  const place = new THREE.Object3D();
+  walls.forEach((wall, i) => {
+    const dx = wall.b[0] - wall.a[0], dy = wall.b[1] - wall.a[1];
+    place.position.set((wall.a[0] + wall.b[0]) / 2, level.height / 2, -(wall.a[1] + wall.b[1]) / 2);
+    place.rotation.set(0, Math.atan2(dy, dx), 0);
+    place.scale.set(Math.max(Math.hypot(dx, dy), .01), level.height, Math.max(wall.thickness, .05));
+    place.updateMatrix(); mesh.setMatrixAt(i, place.matrix);
+  });
+  mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingBox(); mesh.computeBoundingSphere();
+  return mesh;
+}
+/** Count and total centerline length of a level's walls; null for a model built before walls were read. */
+export function wallTotals(level: SchematicLevel): { count: number; feet: number } | null {
+  if (!level.walls) return null;
+  return { count: level.walls.length, feet: Math.round(level.walls.reduce((sum, w) => sum + Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), 0)) };
+}

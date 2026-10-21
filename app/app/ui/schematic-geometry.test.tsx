@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { alignSheetFrame, footprintValid, openOutline, printedSheetFrame, schematicGeometry, sheetPoint } from "./schematic-geometry";
+import * as THREE from "three";
+import { alignSheetFrame, footprintValid, openOutline, printedSheetFrame, schematicGeometry, schematicWalls, sheetPoint, wallTotals } from "./schematic-geometry";
 import { moveOutlinePoint, setLevelHeight, type SchematicLevel, type SchematicModel } from "../../lib/schematic-model";
 
 const level: SchematicLevel = { id: "L1", name: "Level 01", order: 1, elevation: 0, height: 14, outline: [[10, 20], [50, 20], [50, 60], [10, 60]], rooms: [{ name: "Lobby", number: "101", at: [20, 30] }], source: { documentId: "qa", sheet: "A1.1", page: 1 }, sizing: "Printed scale, 8 ft per inch" };
@@ -10,6 +11,22 @@ test("schematic geometry flips drawing y, extrudes to the read height, and corre
   const model: SchematicModel = { levels: [level, { ...level, id: "L2", order: 2, elevation: 14, height: 16 }], builtAt: "qa", warnings: [] };
   assert.equal(setLevelHeight(model, "L1", 15).levels[1].elevation, 15);
   const edited = moveOutlinePoint(model, "L1", 0, [12, 21]); assert.equal(edited.levels[0].outline[0][0], 12); assert.equal(model.levels[0].outline[0][0], 10);
+});
+test("walls read from the drawing become boxes along their centerlines, at full level height", () => {
+  assert.equal(schematicWalls(level), null, "A model built before walls were read has none");
+  assert.equal(wallTotals(level), null);
+  const walled: SchematicLevel = { ...level, walls: [{ a: [10, 20], b: [50, 20], thickness: 1 }, { a: [30, 20], b: [30, 60], thickness: .4 }] };
+  const mesh = schematicWalls(walled)!;
+  assert.equal(mesh.count, 2);
+  const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+  mesh.getMatrixAt(0, m); m.decompose(p, q, s);
+  assert.deepEqual([p.toArray(), s.toArray()].map(v => v.map(n => Math.round(n * 1e6) / 1e6)), [[30, 7, -20], [40, 14, 1]]);
+  mesh.getMatrixAt(1, m); m.decompose(p, q, s);
+  const along = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+  assert.deepEqual([p.toArray(), along.toArray(), s.toArray()].map(v => v.map(n => Math.round(n * 1e6) / 1e6)), [[30, 7, -40], [0, 0, -1], [40, 14, .4]], "Plan y runs toward world -z, as the outline does");
+  assert.deepEqual(wallTotals(walled), { count: 2, feet: 80 });
+  assert.equal(schematicWalls({ ...level, walls: [] }), null, "A scan: no walls");
+  mesh.geometry.dispose();
 });
 test("sheet overlay uses printed paper scale or explicit alignment, retains the frame after outline edits", () => {
   const frame = printedSheetFrame(level.sizing, 42, 30)!;
