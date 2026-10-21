@@ -68,6 +68,19 @@ const set = S.setUntaggedWallType(model, "L1", "sa 3.10");
 assert.deepEqual(set.levels[0].walls.map(w => [w.type, !!w.typeSet]), [["SA3.10", true], ["SA3.10", false], ["SA3.10", false], ["SA3.10", true], ["SA2.10", false]]);
 assert.deepEqual(S.setUntaggedWallType(set, "L1", " ").levels[0].walls.map(w => w.type), [null, "SA3.10", "SA3.10", null, "SA2.10"], "Clearing removes only what the estimator set");
 
+// The estimator's corrections on the plan: a wall's type, not a wall (and back), a door's number.
+let fixed = S.editWall(set, "L1", 3, { type: "sa 6.20" });
+fixed = S.editWall(fixed, "L1", 0, { excluded: true });
+assert.deepEqual(fixed.levels[0].walls.map(w => [w.type, !!w.edited, !!w.excluded]).slice(0, 4), [["SA3.10", false, true], ["SA3.10", false, false], ["SA3.10", false, false], ["SA6.20", true, false]]);
+assert.deepEqual(S.keptWalls(fixed.levels[0]).length, 4, "A wall marked not a wall leaves the totals and the 3D");
+assert.equal(S.setUntaggedWallType(fixed, "L1", " ").levels[0].walls[3].type, "SA6.20", "Clearing the untagged type never undoes a wall the estimator set");
+assert.equal(S.editWall(fixed, "L1", 0, { excluded: false }).levels[0].walls[0].excluded, false, "Restore");
+const doorModel = { ...model, levels: [{ ...model.levels[0], doors: [{ a: [0, 0], b: [3, 0], width: 3, leaves: 1, hinges: [[0, 0]], openTo: [[0, 3]], kind: "door", thickness: 0.4, number: "117A" }] }] };
+assert.equal(S.editDoorNumber(doorModel, "L1", 0, " 117b ").levels[0].doors[0].number, "117B");
+assert.equal(S.editDoorNumber(doorModel, "L1", 0, "").levels[0].doors[0].number, null);
+assert.throws(() => S.editWall(model, "L1", 99, { type: "X" }), /no longer in the model/);
+assert.throws(() => S.editDoorNumber(model, "L9", 0, "1"), /level is no longer/);
+
 // Tiles over the plan's area, and tags read on a tile placed back in the level's feet.
 const sheet = { widthPt: 3024, heightPt: 2160 }, frame = { widthFeet: 336, heightFeet: 240 };
 const tiles = S.tagTiles(sheet, frame, [[0.2, 0.3], [0.8, 0.3], [0.8, 0.8], [0.2, 0.8]]);
@@ -77,5 +90,20 @@ const read = [{ tile: [0.25, 0.4, 0.1, 0.1], tags: [{ text: "SA. 2. 10", kind: "
 const tagged = S.levelTags(read, [], [], sheet, frame, levelWalls, []);
 assert.deepEqual([tagged.walls[0].type, tagged.tags[0].at.map(v => Math.round(v * 10) / 10)], [null, [100.8, 108]], "8 ft away: too far to label the wall");
 assert.equal(S.levelTags([{ ...read[0], tags: [{ ...read[0].tags[0], at: [0.5, 0.2] }] }], [], [], sheet, frame, levelWalls, []).walls[0].type, "SA2.10");
+
+// The partition type schedule: codes match across the schedule's columns and the plan's dots.
+assert.deepEqual(["SA 3 10", "SA. 3. 10", "SA3.10", "sf-4"].map(T.tagKey), ["SA310", "SA310", "SA310", "SF4"]);
+const typesRead = EXTRA_JOBS["partition-types"].screen({ types: [
+  { tag: "SA 3 10", thickness: "4 1/4\"", rating: "NR", description: "Non-rated stud partition" }, { tag: "SA 3 10", thickness: "", rating: "", description: "" },
+  { tag: "M1 8 00", thickness: "7 5/8\"", rating: "1", description: "1-hour rated masonry partition" }, { tag: "GYPSUM WALL BOARD", description: "a label" }, { tag: "", description: "x" },
+] }).types;
+assert.equal(typesRead.length, 3, "A row needs a code with a digit; labels and blanks are dropped");
+const schedule = T.mergePartitionTypes(typesRead);
+assert.deepEqual(schedule.map(r => [r.tag, r.thickness, r.rating]), [["M1800", "7 5/8\"", "1"], ["SA310", "4 1/4\"", "NR"]], "One row per code, the fullest reading; the schedule prints codes in columns");
+assert.equal(T.scheduleRow("SA. 3. 10", schedule)?.thickness, "4 1/4\"");
+assert.equal(T.scheduleRow("SA3.1", schedule), null, "A misread tag is not in the schedule");
+assert.deepEqual(["PARTITION TYPES", "Partition Schedule", "WALL TYPES", "LEVEL 01 - FIRST FLOOR PLAN"].map(title => !!S.partitionTypeSheet([{ title, discipline: "Architectural" }])), [true, true, true, false]);
+const page = { widthPt: 1200, heightPt: 900 }, many = n => Array.from({ length: n }, (_, i) => ({ a: [120 + i, 60], b: [120 + i, 100], width: 0.24, color: "" }));
+assert.deepEqual(S.contentTiles([...many(60), { a: [1100, 800], b: [1110, 800], width: 1, color: "" }], page).length, 1, "Only parts of the sheet with drawing are read");
 
 console.log("Tag placement checked: tag text normalized, AI tags screened (dimensions refused), duplicates merged, tag ovals from curves, leaders followed, leader tip over nearest wall, ovals against walls, runs across door gaps, door numbers one per door, totals by type, untagged walls typed and cleared, tiles and tile positions.");

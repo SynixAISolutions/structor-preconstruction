@@ -9,7 +9,7 @@
 // People can correct the outline and heights afterwards. Pure functions.
 
 import { doorsFromSwings, swingArcs } from "./door-detection";
-import { mergeTags, placeTags, tagOvals, type PlacedTag } from "./tag-placement";
+import { mergeTags, placeTags, tagOvals, type PartitionType, type PlacedTag } from "./tag-placement";
 import type { Curve, Segment } from "./plan-vectors";
 import type { RegisterRow } from "./project-files";
 import { planWalls } from "./wall-detection";
@@ -43,7 +43,7 @@ export type SchematicLevel = {
   doors?: SchematicDoor[];
 };
 /** A wall centerline from a to b with its thickness, in feet; `type` is its partition type from the plan's tags. */
-export type SchematicWall = { a: Point; b: Point; thickness: number; type?: string | null; /** The type was set by the estimator for untagged walls, not read from a tag. */ typeSet?: boolean };
+export type SchematicWall = { a: Point; b: Point; thickness: number; type?: string | null; /** The type was set by the estimator for untagged walls, not read from a tag. */ typeSet?: boolean; /** Corrected by the estimator on this wall. */ edited?: boolean; /** Marked by the estimator as not a wall (kept so it can be restored). */ excluded?: boolean };
 /**
  * A door opening from a to b, its leaves' hinges and where each leaf swings open to, in feet. "compartment"
  * is a leaf under 2.4 ft (toilet stalls): toilet partitions, not the door schedule. `thickness` is the host
@@ -74,11 +74,15 @@ export function tagTiles(page: { widthPt: number; heightPt: number }, frame: Fra
  * Door numbers and wall types from the tags the AI read on the tiles (each tag at a 0-1 position in its
  * tile), placed on the level's walls and doors through the plan's own tag ovals and leaders.
  */
+/** Lines at least this heavy (points) are walls or outlines, never a tag's leader (Jelleff: leaders 0.24-0.48, walls 1.2). */
+export const LEADER_MAX_WEIGHT = 1;
+
 export function levelTags(read: { tile: [number, number, number, number]; tags: { text: string; kind: "wall" | "door" | "glazing"; at: Point }[] }[], segments: Segment[], curves: Curve[], page: { widthPt: number; heightPt: number }, frame: Frame, walls: SchematicWall[], doors: SchematicDoor[]): { walls: SchematicWall[]; doors: SchematicDoor[]; tags: PlacedTag[] } {
   const pointsPerFoot = page.widthPt / frame.widthFeet;
   const toFeet = (tile: [number, number, number, number], at: Point): Point => [(tile[0] + at[0] * tile[2]) * frame.widthFeet, (tile[1] + at[1] * tile[3]) * frame.heightFeet];
   const tags = mergeTags(read.flatMap(r => r.tags.map(t => ({ text: t.text, kind: t.kind, at: toFeet(r.tile, t.at) }))));
-  const lines = segments.map(s => [[s.a[0] / pointsPerFoot, s.a[1] / pointsPerFoot], [s.b[0] / pointsPerFoot, s.b[1] / pointsPerFoot]] as [Point, Point]);
+  // Leaders are drawn with the thin pens; a wall's heavy face touching a tag's end is not its leader.
+  const lines = segments.filter(s => s.width < LEADER_MAX_WEIGHT).map(s => [[s.a[0] / pointsPerFoot, s.a[1] / pointsPerFoot], [s.b[0] / pointsPerFoot, s.b[1] / pointsPerFoot]] as [Point, Point]);
   const placed = placeTags(tags, walls, doors.filter(d => d.kind === "door"), { ovals: tagOvals(curves, pointsPerFoot), lines });
   let k = 0;
   return {
@@ -87,7 +91,24 @@ export function levelTags(read: { tile: [number, number, number, number]; tags: 
     tags,
   };
 }
-export type SchematicModel = { levels: SchematicLevel[]; warnings: string[]; builtAt: string };
+/** `partitionTypes`: the wall types the partition type sheet lists (read by AI), to describe and check wall types. */
+export type SchematicModel = { levels: SchematicLevel[]; warnings: string[]; builtAt: string; partitionTypes?: PartitionType[]; partitionSheet?: string };
+
+/** The sheet that schedules the partition (wall) types, by its title; null when the set has none. */
+export function partitionTypeSheet<T extends Pick<RegisterRow, "title" | "discipline">>(register: T[]): T | null {
+  return register.find(r => r.discipline === "Architectural" && /PARTITION\s*(TYPES?|SCHEDULES?)|WALL\s*TYPES?/i.test(r.title)) ?? null;
+}
+
+/** Tiles of a whole sheet that hold enough drawn lines to be worth reading (blank paper is skipped), as 0-1 [x, y, w, h]. */
+export function contentTiles(segments: Segment[], page: { widthPt: number; heightPt: number }, cols = 4, rows = 3, minLines = 40): [number, number, number, number][] {
+  const out: [number, number, number, number][] = [], ov = 0.08, w = 1 / cols, h = 1 / rows;
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const x0 = Math.max(0, c * w - ov * w), y0 = Math.max(0, r * h - ov * h), x1 = Math.min(1, (c + 1) * w + ov * w), y1 = Math.min(1, (r + 1) * h + ov * h);
+    const inside = (p: Point) => p[0] >= x0 * page.widthPt && p[0] <= x1 * page.widthPt && p[1] >= y0 * page.heightPt && p[1] <= y1 * page.heightPt;
+    if (segments.filter(s => inside(s.a) && inside(s.b)).length >= minLines) out.push([x0, y0, x1 - x0, y1 - y0]);
+  }
+  return out;
+}
 
 const ORDINALS: Record<string, number> = { BASEMENT: 0, GROUND: 1, FIRST: 1, SECOND: 2, THIRD: 3, FOURTH: 4, FIFTH: 5, SIXTH: 6 };
 const NOT_A_FLOOR_PLAN = /ENLARGED|REFLECTED|CEILING|FINISH|FF&E|COORDINATION|DEMOLITION|FURNITURE|SIGNAGE|DETAIL|POOL|KITCHEN|ROOF/;
@@ -340,9 +361,37 @@ export function moveOutlinePoint(model: SchematicModel, levelId: string, index: 
 export function setUntaggedWallType(model: SchematicModel, levelId: string, type: string): SchematicModel {
   const t = type.trim().toUpperCase().replace(/\s+/g, "").slice(0, 16);
   return { ...model, levels: model.levels.map(l => l.id !== levelId || !l.walls ? l : {
-    ...l, walls: l.walls.map(w => w.type && !w.typeSet ? w : { ...w, type: t || null, typeSet: !!t }),
+    ...l, walls: l.walls.map(w => w.edited || (w.type && !w.typeSet) ? w : { ...w, type: t || null, typeSet: !!t }),
   }) };
 }
+
+const editLevel = (model: SchematicModel, levelId: string, edit: (l: SchematicLevel) => SchematicLevel): SchematicModel => {
+  if (!model.levels.some(l => l.id === levelId)) throw new Error("That level is no longer in the model.");
+  return { ...model, levels: model.levels.map(l => l.id === levelId ? edit(l) : l) };
+};
+
+/** The estimator's correction of one wall: its type (blank = untyped), or that it is not a wall at all (kept, so it can be restored). */
+export function editWall(model: SchematicModel, levelId: string, index: number, change: { type?: string; excluded?: boolean }): SchematicModel {
+  return editLevel(model, levelId, l => {
+    if (!l.walls?.[index]) throw new Error("That wall is no longer in the model.");
+    const t = change.type === undefined ? undefined : change.type.trim().toUpperCase().replace(/\s+/g, "").slice(0, 16);
+    return { ...l, walls: l.walls.map((w, i) => i !== index ? w : {
+      ...w, ...(t !== undefined ? { type: t || null, typeSet: false, edited: true } : {}), ...(change.excluded !== undefined ? { excluded: change.excluded } : {}),
+    }) };
+  });
+}
+
+/** The estimator's correction of one door's number (blank = none). */
+export function editDoorNumber(model: SchematicModel, levelId: string, index: number, number: string): SchematicModel {
+  return editLevel(model, levelId, l => {
+    if (!l.doors?.[index]) throw new Error("That door is no longer in the model.");
+    const n = number.trim().toUpperCase().slice(0, 12);
+    return { ...l, doors: l.doors.map((d, i) => i === index ? { ...d, number: n || null } : d) };
+  });
+}
+
+/** The walls that count: everything read from the plan except what the estimator marked not a wall. */
+export const keptWalls = (level: SchematicLevel) => (level.walls ?? []).filter(w => !w.excluded);
 
 export function setLevelHeight(model: SchematicModel, levelId: string, height: number): SchematicModel {
   if (!(Number.isFinite(height) && height >= 6 && height <= 60)) throw new Error("Use a floor-to-floor height between 6 and 60 ft.");

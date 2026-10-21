@@ -26,6 +26,8 @@ test("walls read from the drawing become boxes along their centerlines, at full 
   assert.deepEqual([p.toArray(), along.toArray(), s.toArray()].map(v => v.map(n => Math.round(n * 1e6) / 1e6)), [[30, 7, -40], [0, 0, -1], [40, 14, .4]], "Plan y runs toward world -z, as the outline does");
   assert.deepEqual(wallTotals(walled), { count: 2, feet: 80, doors: null, compartments: 0 });
   assert.equal(schematicWalls({ ...level, walls: [] }), null, "A scan: no walls");
+  const excluded: SchematicLevel = { ...walled, walls: [walled.walls![0], { ...walled.walls![1], excluded: true }] };
+  assert.deepEqual([schematicWalls(excluded)!.count, wallTotals(excluded)!.count, wallTotals(excluded)!.feet], [1, 1, 40], "A wall the estimator marked not a wall leaves the 3D and the totals");
   mesh.geometry.dispose();
 });
 test("doors read from the drawing: a header over each opening and each leaf standing open", () => {
