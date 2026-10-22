@@ -25,3 +25,16 @@
 .ask-proposal-actions button { padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); color: var(--ink); font-size: 12px; cursor: pointer; }
 .ask-proposal-actions button.apply { border-color: var(--nav); background: var(--nav); color: #fff; }
 .ask-header-actions { display: inline-flex; gap: 4px; align-items: center; }
+.ask-report { display: grid; gap: 6px; margin-top: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
+.ask-report > small, .ask-report td small { color: var(--muted); font-size: 12px; }
+.ask-report table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ask-report th, .ask-report td { padding: 4px 4px; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: top; }
+.ask-report th:last-child, .ask-report td:last-child { text-align: right; white-space: nowrap; }
+.ask-report td small { display: block; }
+.ask-tasks { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--canvas); }
+.ask-tasks > small { color: var(--muted); font-size: 12px; }
+.ask-task { display: grid; gap: 6px; padding-top: 6px; border-top: 1px solid var(--line-soft); }
+.ask-task span { display: grid; gap: 2px; }
+.ask-task small { color: var(--muted); font-size: 12px; }
+.ask-task select { min-width: 0; flex: 1; padding: 4px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); font-size: 12px; }
+.ask-starters button svg, .ask-proposal-actions button svg { vertical-align: -2px; }

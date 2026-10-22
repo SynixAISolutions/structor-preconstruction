@@ -3,16 +3,18 @@
 // pages show, edits included. Nothing here writes (changes: assistant-actions.ts). Results are
 // compact JSON for the AI.
 
-import { levelingCandidates, budgetTotals, type BudgetState, type LevelingCandidate } from "./budget";
+import { activeAward, awardStage, type AwardState } from "./award";
+import { bidPackageReport, type BidPackageReport } from "./bid-package-report";
+import { levelingCandidates, budgetTotals, type BudgetState } from "./budget";
+import { budgetLinesForTrade } from "./estimate";
 import { initialBidders, type Bidder } from "./data/commercial";
 import { sampleBudget } from "./data/budget";
 import { sampleProcurement } from "./data/procurement";
 import { sampleSchedule } from "./data/schedule";
 import { sampleStructorCheck } from "./data/rfi";
-import { sampleSubmissions } from "./data/sample-award";
+import { sampleAwards, sampleSubmissions } from "./data/sample-award";
 import { buildLevelingImport, type BidProvenance, type LevelingBidder, type LevelingProject, type LevelingScopeItem } from "./leveling-import";
-import type { SavedTradeComparison } from "./leveling-sync";
-import { portalComparisonCandidates } from "./portal-comparisons";
+import { refreshPortalComparison, type SavedTradeComparison } from "./leveling-sync";
 import type { Procurement, TradePackage } from "./procurement";
 import { loadProjects, sampleProjectRecords, type Project } from "./projects";
 import { getActiveProjectId } from "./project-scope";
@@ -125,50 +127,65 @@ function tradePackages(d: Data, trade?: string) {
   };
 }
 
-async function bidLeveling(d: Data, ctx: Context, trade?: string) {
-  const { projectId } = ctx;
-  // The open comparison lives in IndexedDB, which only the browser has: loaded when this tool runs.
+/** One trade's comparison as Bid leveling and the budget read it (use-leveling-comparison, portalComparisonCandidates). */
+export type LevelingPackage = {
+  /** "" for an imported workbook not tied to a trade package. */
+  packageId: string; trade: string; code: string;
+  items: LevelingScopeItem[]; bidders: LevelingBidder[]; provenance: Record<string, BidProvenance>;
+  /** Portal bids nobody has loaded into Bid leveling: built as loading them there would, before any review. */
+  unreviewed: boolean;
+  /** The trade budget the saved comparison carries, when there is one. */
+  savedBudget: number | null;
+};
+
+/**
+ * Every trade with bids: the open comparison, every saved trade (refreshed from the portal and with
+ * accepted VE, as portalComparisonCandidates does), then trades with portal bids not yet loaded.
+ */
+export async function levelingPackages(projectId: string, d: Data = projectData(projectId)): Promise<LevelingPackage[]> {
+  // The open comparison lives in IndexedDB, which only the browser has: loaded when this runs.
   const workspace = await import("./workspace-storage").then(m => m.loadWorkspace<LevelingProject, LevelingScopeItem, LevelingBidder>()).catch(() => null);
   const comparisons = readDraft<Record<string, SavedTradeComparison>>(projectId, "leveling-trades", {});
   const provenance = readDraft<Record<string, BidProvenance>>(projectId, "leveling-submission-provenance", {});
   const activePackage = readDraft(projectId, "leveling-submission-package", "");
-  // As in Bid leveling (use-leveling-comparison): the open comparison, then every saved trade.
   const current = workspace && activePackage && !Object.values(provenance).some(p => p.superseded) ? { [activePackage]: { ...workspace, provenance } } : {};
-  const all: Record<string, Pick<SavedTradeComparison, "project" | "items" | "bidders">> = { ...comparisons, ...current };
-  const candidates: LevelingCandidate[] = portalComparisonCandidates({ projectId, projectName: workspace?.project.name ?? "", procurement: d.procurement, submissions: d.submissions, directory: d.directory, comparisons: { ...comparisons, ...current }, ve: d.ve });
-  if (workspace && !activePackage) {
-    candidates.push(...levelingCandidates({ packageId: null, items: workspace.items, bidders: veLevelingBidders(workspace.bidders, provenance, d.ve, d.submissions), provenance }));
-    all[""] = workspace;
-  }
-  // Trades with portal bids that nobody has loaded into Bid leveling yet: built the way loading
-  // them there would, so their totals are the bids as submitted, before any estimator review.
-  const unreviewed = new Set<string>();
-  for (const pkg of d.procurement.packages) {
-    if (pkg.id in all || !d.submissions.some(s => s.packageId === pkg.id && s.revisions.length)) continue;
-    const built = buildLevelingImport({ projectId, projectName: d.project?.name ?? "", packageId: pkg.id, procurement: d.procurement, submissions: d.submissions, directory: d.directory });
-    if (!built.bidders.length) continue;
-    candidates.push(...levelingCandidates({ packageId: pkg.id, items: built.items, bidders: veLevelingBidders(built.bidders, built.provenance, d.ve, d.submissions), provenance: built.provenance }));
-    all[pkg.id] = built;
-    unreviewed.add(pkg.id);
-  }
-  const groups = [...Map.groupBy(candidates, c => c.packageId ?? "").entries()].filter(([packageId]) => {
-    const pkg = d.procurement.packages.find(p => p.id === packageId);
-    return pkg ? matchesTrade(pkg, trade) : !trade || norm(all[packageId]?.project.trade ?? "").includes(norm(trade));
+  const projectName = workspace?.project.name ?? "";
+  const pkgOf = (id: string) => d.procurement.packages.find(p => p.id === id);
+  const open: Record<string, SavedTradeComparison> = { ...comparisons, ...current };
+  const packages: LevelingPackage[] = Object.entries(open).map(([packageId, saved]) => {
+    const fresh = refreshPortalComparison(buildLevelingImport({ projectId, projectName, packageId, procurement: d.procurement, submissions: d.submissions, directory: d.directory }), saved);
+    return { packageId, trade: pkgOf(packageId)?.name ?? saved.project.trade, code: pkgOf(packageId)?.code ?? "", items: fresh.items, bidders: veLevelingBidders(fresh.bidders, fresh.provenance, d.ve, d.submissions), provenance: fresh.provenance, unreviewed: false, savedBudget: saved.project.budget || null };
   });
-  if (!groups.length) return { trades: [], note: trade ? `No leveled bids for "${trade}". Bids are leveled in Bid leveling after they're submitted or imported.` : "No bids have been leveled yet. Load or import bids in Bid leveling first." };
+  if (workspace && !activePackage) packages.push({ packageId: "", trade: workspace.project.trade || "Imported workbook", code: "", items: workspace.items, bidders: veLevelingBidders(workspace.bidders, provenance, d.ve, d.submissions), provenance, unreviewed: false, savedBudget: workspace.project.budget || null });
+  for (const pkg of d.procurement.packages) {
+    if (packages.some(p => p.packageId === pkg.id) || !d.submissions.some(s => s.packageId === pkg.id && s.revisions.length)) continue;
+    const built = buildLevelingImport({ projectId, projectName: d.project?.name ?? "", packageId: pkg.id, procurement: d.procurement, submissions: d.submissions, directory: d.directory });
+    if (built.bidders.length) packages.push({ packageId: pkg.id, trade: pkg.name, code: pkg.code, items: built.items, bidders: veLevelingBidders(built.bidders, built.provenance, d.ve, d.submissions), provenance: built.provenance, unreviewed: true, savedBudget: null });
+  }
+  return packages;
+}
+
+const packagesForTrade = (d: Data, packages: LevelingPackage[], trade?: string) => packages.filter(p => {
+  const pkg = d.procurement.packages.find(x => x.id === p.packageId);
+  return pkg ? matchesTrade(pkg, trade) : !trade || norm(p.trade).includes(norm(trade));
+});
+
+async function bidLeveling(d: Data, ctx: Context, trade?: string) {
+  const packages = packagesForTrade(d, await levelingPackages(ctx.projectId, d), trade);
+  if (!packages.length) return { trades: [], note: trade ? `No leveled bids for "${trade}". Bids are leveled in Bid leveling after they're submitted or imported.` : "No bids have been leveled yet. Load or import bids in Bid leveling first." };
   return {
-    trades: groups.map(([packageId, list]) => {
-      const comparison = all[packageId];
+    trades: packages.map(p => {
+      const list = levelingCandidates({ packageId: p.packageId || null, items: p.items, bidders: p.bidders, provenance: p.provenance });
       const bidders = [...list].sort((a, b) => (a.eligible === b.eligible ? 0 : a.eligible ? -1 : 1) || (a.reviewedTotal ?? a.provisionalTotal ?? Infinity) - (b.reviewedTotal ?? b.provisionalTotal ?? Infinity));
-      const exceptions = comparison ? comparison.items.flatMap(item => comparison.bidders.flatMap(b => {
+      const exceptions = p.items.flatMap(item => p.bidders.flatMap(b => {
         const r = b.responses[item.id];
         return r && (r.status === "N" || r.status === "P") ? [{ item: `${item.number} ${clip(item.description, 90)}`, required: item.required, company: b.name, answer: r.status, note: clip(r.note, 160), adjustment: r.adjustment || 0, adjustmentApproved: !!r.adjustmentApproved, resolved: !!r.resolved }] : [];
-      })).slice(0, 30) : [];
+      })).slice(0, 30);
       return {
-        trade: packageName(d.procurement, packageId || null) || comparison?.project.trade || "Imported workbook",
-        reviewState: unreviewed.has(packageId) ? "Not loaded into Bid leveling yet: totals are the bids as submitted, with no estimator review, so none is a leveled total." : "Leveled in Bid leveling with the estimator's review.",
-        tradeBudget: comparison?.project.budget || null,
-        scopeItems: comparison?.items.length ?? null,
+        trade: p.trade,
+        reviewState: p.unreviewed ? "Not loaded into Bid leveling yet: totals are the bids as submitted, with no estimator review, so none is a leveled total." : "Leveled in Bid leveling with the estimator's review.",
+        tradeBudget: p.savedBudget,
+        scopeItems: p.items.length,
         bidders: bidders.map(c => ({
           company: c.bidderName, baseBid: c.baseBid, provisionalTotal: c.provisionalTotal, reviewedTotal: c.reviewedTotal,
           rankable: c.eligible, notRankableBecause: c.eligibilityReasons.map(readable), bidRevision: c.revisionNumber, outdatedForm: c.stale,
@@ -176,6 +193,37 @@ async function bidLeveling(d: Data, ctx: Context, trade?: string) {
         excludedOrPartial: exceptions,
       };
     }),
+  };
+}
+
+/** The bid package summary (bid-package-report.ts) for one trade: its budget, selected bidder and leveled bids. */
+export async function bidPackageSummary(projectId: string, trade: string | undefined, today: string, d: Data = projectData(projectId)): Promise<{ report: BidPackageReport } | { error: string; trades: string[] }> {
+  const all = await levelingPackages(projectId, d);
+  const matches = packagesForTrade(d, all, trade);
+  if (matches.length !== 1) return { error: !all.length ? "No trade has bids yet. Bids are leveled in Bid leveling after they're submitted or imported." : !trade ? "Name the trade to summarize." : matches.length ? `"${trade}" matches several trades: name one.` : `No trade with bids matches "${trade}".`, trades: all.map(p => p.trade) };
+  const p = matches[0];
+  // The trade budget as Quantity takeoffs finds it: the linked lines, else the line with the nearest CSI code.
+  const pkg = d.procurement.packages.find(x => x.id === p.packageId);
+  const tb = pkg ? budgetLinesForTrade(d.budget, pkg) : null;
+  const award = p.packageId ? activeAward(readDraft<AwardState>(projectId, "awards", sampleAwards), p.packageId) : undefined;
+  return {
+    report: bidPackageReport({
+      projectName: d.project?.name ?? "", trade: p.trade, code: p.code, packageId: p.packageId, asOf: today,
+      items: p.items, bidders: p.bidders, asSubmitted: p.unreviewed,
+      budget: tb?.lines.length ? tb.lines.reduce((n, l) => n + l.budget, 0) : p.savedBudget,
+      budgetBasis: tb?.lines.length ? (tb.basis === "linked" ? "the linked budget line" : `budget line ${tb.codes.join(", ")}, matched by CSI code`) : p.savedBudget ? "the saved comparison's trade budget" : null,
+      selected: award ? { company: award.leveling.bidderName, amount: award.amount, stage: awardStage(award).replace(/-/g, " ") } : null,
+    }),
+  };
+}
+
+/** What the AI is told about a report: the figures that matter, not every line (the panel shows the tables). */
+function reportBrief(r: BidPackageReport) {
+  return {
+    shownToUser: "The report's tables and its Excel download are shown to the user under your answer.",
+    summary: r.summary, asSubmitted: r.asSubmitted, budget: r.budget, selected: r.selected,
+    ranked: r.ranked.map(b => ({ rank: b.rank, company: b.company, status: b.status, baseBid: b.baseBid, adjustments: b.adjustments, leveledTotal: b.leveledTotal, provisionalTotal: b.provisionalTotal })),
+    adjustments: r.adjustments.length, gaps: r.gaps.slice(0, 12).map(g => `${g.company}: ${g.answer} ${clip(g.item, 90)}${g.note ? ` (${clip(g.note, 100)})` : ""}`),
   };
 }
 
@@ -265,7 +313,7 @@ function structorGuide(query: string) {
 }
 
 /** Runs one tool call on the open project. `screens` are the pages its facts come from. */
-export async function runAssistantTool(call: AssistantToolCall, ctx: Partial<Context> = {}): Promise<{ content: string; screens: Screen[] }> {
+export async function runAssistantTool(call: AssistantToolCall, ctx: Partial<Context> = {}): Promise<{ content: string; screens: Screen[]; reports?: BidPackageReport[] }> {
   const context: Context = { projectId: ctx.projectId ?? getActiveProjectId(), today: ctx.today ?? new Date().toISOString().slice(0, 10), fetchImpl: ctx.fetchImpl };
   const d = projectData(context.projectId);
   const a = call.arguments;
@@ -276,6 +324,10 @@ export async function runAssistantTool(call: AssistantToolCall, ctx: Partial<Con
       case "project_overview": return { content: toolResultText(projectOverview(d)), screens: [screen!] };
       case "trade_packages": return { content: toolResultText(tradePackages(d, a.trade)), screens: [screen!] };
       case "bid_leveling": return { content: toolResultText(await bidLeveling(d, context, a.trade)), screens: [screen!] };
+      case "bid_package_summary": {
+        const r = await bidPackageSummary(context.projectId, a.trade, context.today, d);
+        return "report" in r ? { content: toolResultText(reportBrief(r.report)), screens: [screen!], reports: [r.report] } : { content: toolResultText(r), screens: [] };
+      }
       case "bid_submissions": return { content: toolResultText(bidSubmissions(d, a.trade)), screens: [screen!] };
       case "budget": return { content: toolResultText(budget(d, a.costCenter)), screens: [screen!] };
       case "value_engineering": return { content: toolResultText(valueEngineering(d)), screens: [screen!] };
