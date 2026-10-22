@@ -7,7 +7,7 @@
 import type { Screen } from "./screens";
 
 export type ReadToolName =
-  | "all_projects" | "project_overview" | "trade_packages" | "bid_leveling" | "bid_submissions" | "budget"
+  | "all_projects" | "project_overview" | "trade_packages" | "bid_leveling" | "bid_package_summary" | "bid_submissions" | "budget"
   | "value_engineering" | "issues_and_rfis" | "schedule" | "search_project_files" | "structor_guide";
 export type ProposalToolName =
   | "propose_ve_idea" | "propose_issue" | "propose_rfi" | "propose_schedule_activity" | "propose_activity_progress" | "propose_budget_version";
@@ -44,6 +44,9 @@ export const ASSISTANT_TOOLS: ToolDef[] = [
   { name: "bid_leveling", screen: "leveling", args: { trade: TRADE },
     description: "Leveled bids by trade: each bidder's base bid, provisional and reviewed (leveled) totals, whether the bid can be ranked and why not, and the scope items a bidder excluded (N) or partly included (P) with notes and adjustments.",
     label: a => a.trade ? `Looking at bid leveling for ${a.trade}` : "Looking at bid leveling" },
+  { name: "bid_package_summary", screen: "leveling", args: { trade: "The trade to summarize, e.g. \"Drywall\" or \"09 29 00\". Leave out only when one trade has bids." },
+    description: "Saved task: the bid package summary for one trade. The leveled low, the apparent low, the selected bidder, the spread and the trade budget, every bid ranked with its plugs and adjustments, and the scope bidders exclude or cover in part. The user sees its tables and an Excel download under your answer.",
+    label: a => `Running the bid package summary${a.trade ? ` for ${a.trade}` : ""}` },
   { name: "bid_submissions", screen: "packages", args: { trade: TRADE },
     description: "Bids subcontractors submitted through the portal: package, company, base bid, revision number and date, exclusions, alternates and clarifications.",
     label: a => a.trade ? `Reading submitted bids for ${a.trade}` : "Reading submitted bids" },
@@ -94,6 +97,17 @@ export const ASSISTANT_TOOLS: ToolDef[] = [
 ];
 
 export const isProposalTool = (name: AssistantToolName): name is ProposalToolName => name.startsWith("propose_");
+
+/**
+ * Saved tasks: repeatable jobs with a fixed output (Concntric calls them Skills). The panel lists them to
+ * run at once, without the AI, and the AI runs the same tool when asked in words. `choose`: what the
+ * user picks before it runs.
+ */
+export type SavedTask = { id: string; title: string; description: string; tool: ReadToolName; choose: "trade" };
+export const SAVED_TASKS: SavedTask[] = [
+  { id: "bid-package-summary", title: "Bid package summary", tool: "bid_package_summary", choose: "trade",
+    description: "One trade's bids side by side: leveled and apparent low, spread, budget, plugs and gaps, with an Excel file." },
+];
 
 /** Most tool rounds before the AI must answer with what it has. */
 export const MAX_STEPS = 5;
