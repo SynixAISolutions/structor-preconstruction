@@ -5,7 +5,7 @@
 
 import type { Curve, Point, Segment } from "./plan-vectors";
 
-export type PlacedTag = { text: string; kind: "wall" | "door" | "glazing"; at: Point };
+export type PlacedTag = { text: string; kind: "wall" | "door" | "glazing" | "room"; at: Point; name?: string };
 /** A tag oval (a stadium): its two semicircle ends' centers and their radius, in feet. */
 export type Oval = { a: Point; b: Point; r: number };
 
@@ -105,13 +105,22 @@ export function mergePartitionTypes(rows: PartitionType[]): PartitionType[] {
 /** The schedule row for a wall's type, or null when the schedule doesn't list that code (a misread tag, or no schedule). */
 export const scheduleRow = (type: string, schedule: PartitionType[]) => schedule.find(r => tagKey(r.tag) === tagKey(type)) ?? null;
 
-/** The same tag read twice (tiles overlap) or a type repeated within 3 ft counts once, at the mean position. */
+/**
+ * The same tag read twice (tiles overlap) or a type repeated within 3 ft counts once, at the mean position.
+ * A room tag (a bigger block of text, read from a different center on each tile) merges within 5 ft by its
+ * number, or its name when it has none, keeping the longest name read; one whose name has no letters is a
+ * detail or section callout, not a room.
+ */
 export function mergeTags(tags: PlacedTag[], within = 3): PlacedTag[] {
   const out: (PlacedTag & { n: number })[] = [];
+  const key = (t: PlacedTag) => t.kind === "room" ? normalTag(t.text) || normalTag(t.name ?? "") : normalTag(t.text);
   for (const t of tags) {
-    const text = normalTag(t.text), same = out.find(o => o.kind === t.kind && o.text === text && Math.hypot(o.at[0] - t.at[0], o.at[1] - t.at[1]) < within);
-    if (same) { same.at = [(same.at[0] * same.n + t.at[0]) / (same.n + 1), (same.at[1] * same.n + t.at[1]) / (same.n + 1)]; same.n++; }
-    else out.push({ text, kind: t.kind, at: t.at, n: 1 });
+    if (t.kind === "room" && !/[A-Za-z]{2}/.test(t.name ?? "")) continue;
+    const k = key(t), same = out.find(o => o.kind === t.kind && key(o) === k && Math.hypot(o.at[0] - t.at[0], o.at[1] - t.at[1]) < (t.kind === "room" ? 5 : within));
+    if (same) {
+      same.at = [(same.at[0] * same.n + t.at[0]) / (same.n + 1), (same.at[1] * same.n + t.at[1]) / (same.n + 1)]; same.n++;
+      if ((t.name ?? "").length > (same.name ?? "").length) same.name = t.name;
+    } else out.push({ text: normalTag(t.text), kind: t.kind, at: t.at, ...(t.kind === "room" ? { name: t.name } : {}), n: 1 });
   }
   return out.map(({ n, ...t }) => t);
 }

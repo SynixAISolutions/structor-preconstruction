@@ -12,6 +12,7 @@ import { doorsFromSwings, swingArcs } from "./door-detection";
 import { mergeTags, placeTags, tagOvals, type PartitionType, type PlacedTag } from "./tag-placement";
 import type { Curve, Segment } from "./plan-vectors";
 import type { RegisterRow } from "./project-files";
+import { levelRooms, type Room } from "./room-detection";
 import { planGlazing, planWalls } from "./wall-detection";
 
 export type Point = [number, number];
@@ -81,10 +82,10 @@ export function tagTiles(page: { widthPt: number; heightPt: number }, frame: Fra
 /** Lines at least this heavy (points) are walls or outlines, never a tag's leader (Jelleff: leaders 0.24-0.48, walls 1.2). */
 export const LEADER_MAX_WEIGHT = 1;
 
-export function levelTags(read: { tile: [number, number, number, number]; tags: { text: string; kind: "wall" | "door" | "glazing"; at: Point }[] }[], segments: Segment[], curves: Curve[], page: { widthPt: number; heightPt: number }, frame: Frame, walls: SchematicWall[], doors: SchematicDoor[], glazing: SchematicGlazing[] = []): { walls: SchematicWall[]; doors: SchematicDoor[]; glazing: SchematicGlazing[]; tags: PlacedTag[] } {
+export function levelTags(read: { tile: [number, number, number, number]; tags: PlacedTag[] }[], segments: Segment[], curves: Curve[], page: { widthPt: number; heightPt: number }, frame: Frame, walls: SchematicWall[], doors: SchematicDoor[], glazing: SchematicGlazing[] = []): { walls: SchematicWall[]; doors: SchematicDoor[]; glazing: SchematicGlazing[]; tags: PlacedTag[] } {
   const pointsPerFoot = page.widthPt / frame.widthFeet;
   const toFeet = (tile: [number, number, number, number], at: Point): Point => [(tile[0] + at[0] * tile[2]) * frame.widthFeet, (tile[1] + at[1] * tile[3]) * frame.heightFeet];
-  const tags = mergeTags(read.flatMap(r => r.tags.map(t => ({ text: t.text, kind: t.kind, at: toFeet(r.tile, t.at) }))));
+  const tags = mergeTags(read.flatMap(r => r.tags.map(t => ({ ...t, at: toFeet(r.tile, t.at) }))));
   // Leaders are drawn with the thin pens; a wall's heavy face touching a tag's end is not its leader.
   const lines = segments.filter(s => s.width < LEADER_MAX_WEIGHT).map(s => [[s.a[0] / pointsPerFoot, s.a[1] / pointsPerFoot], [s.b[0] / pointsPerFoot, s.b[1] / pointsPerFoot]] as [Point, Point]);
   const placed = placeTags(tags, walls, doors.filter(d => d.kind === "door"), { ovals: tagOvals(curves, pointsPerFoot), lines }, glazing);
@@ -96,6 +97,16 @@ export function levelTags(read: { tile: [number, number, number, number]; tags: 
     tags,
   };
 }
+/**
+ * The enclosed rooms of a level, from its walls, doors and glass as they stand now (the estimator's "Not a
+ * wall" and "Not glass" corrections included), named by its room tags. Computed, not stored, so a
+ * correction reflows the rooms; empty for a level without walls read from its lines.
+ */
+export function levelSpaces(level: Pick<SchematicLevel, "walls" | "doors" | "glazing" | "rooms">): Room[] {
+  if (!level.walls?.length) return [];
+  return levelRooms({ walls: level.walls.filter(w => !w.excluded), doors: (level.doors ?? []).filter(d => d.kind === "door"), glazing: (level.glazing ?? []).filter(g => !g.excluded), tags: level.rooms });
+}
+
 /** `partitionTypes`: the wall types the partition type sheet lists (read by AI), to describe and check wall types. */
 export type SchematicModel = { levels: SchematicLevel[]; warnings: string[]; builtAt: string; partitionTypes?: PartitionType[]; partitionSheet?: string };
 

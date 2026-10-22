@@ -13,12 +13,19 @@ assert.deepEqual(["SA. 3. 10", "sa.6.20", "SF-4", "117B", " S202 "].map(T.normal
 const screen = EXTRA_JOBS["plan-tags"].screen;
 assert.deepEqual(screen({ tags: [
   { text: "SA. 3. 10", kind: "wall", at: [0.2, 0.3] }, { text: "117B", kind: "door", at: [0.5, 0.5] }, { text: "SF-4", kind: "glazing", at: [0.1, 0.9] },
-  { text: "4'-8\"", kind: "wall", at: [0.3, 0.3] }, { text: "6 1/2\"", kind: "wall", at: [0.3, 0.3] }, { text: "101", kind: "room", at: [0.3, 0.3] }, { text: "X", kind: "door", at: [1.4, 0.3] },
-] }).tags.map(t => t.text), ["SA. 3. 10", "117B", "SF-4"], "Dimensions, room tags and positions outside the tile are dropped (the AI called '4'-8\"' a wall tag on Jelleff)");
+  { text: "4'-8\"", kind: "wall", at: [0.3, 0.3] }, { text: "6 1/2\"", kind: "wall", at: [0.3, 0.3] }, { text: "X", kind: "door", at: [1.4, 0.3] },
+  { text: "103", kind: "room", name: "GYM (100' x 70')", at: [0.6, 0.2] }, { text: "", kind: "room", name: "CORRIDOR", at: [0.7, 0.2] }, { text: "", kind: "room", at: [0.7, 0.2] },
+] }).tags.map(t => `${t.text}${t.name ? ` ${t.name}` : ""}`), ["SA. 3. 10", "117B", "SF-4", "103 GYM (100' x 70')", " CORRIDOR"], "Dimensions and positions outside the tile are dropped (the AI called '4'-8\"' a wall tag on Jelleff); a room tag keeps its name, dimensions and all, and needs a number or a name");
 
 // Overlapping tiles read a tag twice: one tag, at the mean position.
 assert.deepEqual(T.mergeTags([{ text: "SA. 3. 10", kind: "wall", at: [10, 10] }, { text: "SA3.10", kind: "wall", at: [11, 10] }, { text: "SA3.10", kind: "wall", at: [30, 10] }, { text: "SA3.10", kind: "door", at: [10, 10] }]),
   [{ text: "SA3.10", kind: "wall", at: [10.5, 10] }, { text: "SA3.10", kind: "wall", at: [30, 10] }, { text: "SA3.10", kind: "door", at: [10, 10] }]);
+// Room tags (Jelleff L1 tiles): one per number within 5 ft, keeping the longest name; a read with no name, or a callout ("A10.6" / "17"), is not a room.
+assert.deepEqual(T.mergeTags([
+  { text: "104", kind: "room", name: "OFF.(DPR)", at: [176.4, 150.4] }, { text: "104", kind: "room", name: "OFF. (DPR)", at: [172.1, 151] },
+  { text: "106", kind: "room", name: "", at: [209.5, 170.7] }, { text: "106", kind: "room", name: "FITNESS CENTER", at: [208.5, 169.3] },
+  { text: "A10.6", kind: "room", name: "17", at: [150, 100] }, { text: "", kind: "room", name: "CORRIDOR", at: [160, 120] },
+]).map(t => `${t.text}|${t.name}|${t.at.map(Math.round)}`), ["104|OFF. (DPR)|174,151", "106|FITNESS CENTER|209,169", "|CORRIDOR|160,120"]);
 
 // Tag ovals from curves: two semicircle ends (quarter curves sharing a center), 3-11 pt in radius on paper.
 const PPF = 9, k = 0.5523;

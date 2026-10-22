@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { polygonArea, type Point, type SchematicLevel } from "../../lib/schematic-model";
+import type { Room } from "../../lib/room-detection";
 
 export type SheetFrame = { width: number; height: number };
 export function openOutline(points: Point[]): Point[] {
@@ -106,6 +107,17 @@ export function schematicGlazing(level: SchematicLevel): THREE.InstancedMesh | n
   });
   mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingBox(); mesh.computeBoundingSphere();
   return mesh;
+}
+/** A level's rooms (levelSpaces) as flat floors just above the slab: named rooms warm, unnamed spaces grey. */
+export function schematicRoomFloors(rooms: Room[]): THREE.Group | null {
+  if (!rooms.length) return null;
+  const group = new THREE.Group(), named = new THREE.MeshStandardMaterial({ color: "#e6cf9f", roughness: .9, side: THREE.DoubleSide }), unnamed = new THREE.MeshStandardMaterial({ color: "#cdd8d4", roughness: .9, side: THREE.DoubleSide });
+  for (const room of rooms) {
+    const geometry = new THREE.ShapeGeometry(new THREE.Shape(room.outline.map(([x, y]) => new THREE.Vector2(x, y))));
+    geometry.rotateX(-Math.PI / 2);
+    const floor = new THREE.Mesh(geometry, room.name ? named : unnamed); floor.position.y = .05; group.add(floor);
+  }
+  return group;
 }
 /** Count and total centerline length of a level's walls; null for a model built before walls were read. */
 export function wallTotals(level: SchematicLevel): { count: number; feet: number; doors: number | null; compartments: number; glassFeet: number | null } | null {
