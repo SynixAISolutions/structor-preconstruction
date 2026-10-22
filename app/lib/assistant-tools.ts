@@ -60,7 +60,7 @@ export const ASSISTANT_TOOLS: ToolDef[] = [
     description: "Structor Check issues (conflicts and missing information in the drawings and specifications) and RFIs to the design team: number, title, trade, source sheet, severity, status, due date and answer.",
     label: () => "Reading issues and RFIs" },
   { name: "schedule", screen: "schedule", args: { phase: "Phase to narrow to, e.g. \"Procurement\". Leave out for every phase." },
-    description: "The project schedule: activities with code, phase, owner, start date, duration in working days, finish, progress and predecessors.",
+    description: "The project schedule: activities with code, phase, owner, start date, duration in working days, finish, progress and predecessors. Bids-due milestones take their dates from the bid packages and buyout activities their progress from bids, award and subcontract; those can't be changed by hand.",
     label: () => "Reading the schedule" },
   { name: "search_project_files", screen: "documents", args: { query: "Words to look for, e.g. \"fire caulking at rated walls\" or a sheet number.", category: "Optional file category: Drawings, Specifications, Reports, RFP, Contracts, Addenda or Other." }, required: ["query"],
     description: "Searches the text of the project's uploaded drawings, specifications and other files. Returns the best-matching pages with the file, page, sheet or specification section, and a snippet. Drawings whose text is drawn as shapes have little searchable text.",

@@ -13,11 +13,18 @@
 // Successors never move earlier on their own — pulling work in is a decision, not a side effect.
 // Activities that have started (progress > 0) keep their start date; finished ones don't move.
 //
+// PROCUREMENT: an activity tied to a trade package can follow it (`procurement`): a bids-due milestone
+// takes the package's bid due date, a buyout activity takes its progress from bids, award and
+// subcontract. Those values are worked out by lib/schedule-procurement, never typed here.
+//
 // Pure functions; rule violations throw ScheduleRuleError with field-level errors.
 
 export type LinkType = "FS" | "SS" | "FF" | "SF";
 /** `lag` in working days (negative = lead). */
 export type Dependency = { activityId: string; type: LinkType; lag: number };
+/** What an activity tied to a trade package takes from it: the bid due date, or buyout progress. */
+export type ProcurementLink = "bids-due" | "buyout";
+export const PROCUREMENT_LINKS: Record<ProcurementLink, string> = { "bids-due": "Bid due date", buyout: "Buyout progress" };
 
 export type Activity = {
   id: string;
@@ -37,6 +44,8 @@ export type Activity = {
   progress: number;
   /** Predecessors of this activity. */
   predecessors: Dependency[];
+  /** Follows its trade package (lib/schedule-procurement); absent or null = planned by hand. */
+  procurement?: ProcurementLink | null;
 };
 
 export type ScheduleLogEntry = { at: string; by: string; action: string; shifted: { id: string; code: string; from: string; to: string }[] };
@@ -49,8 +58,8 @@ export type ScheduleState = {
 };
 export const EMPTY_SCHEDULE: ScheduleState = { activities: [], log: [], importedFrom: null };
 
-export type ActivityInput = { name: string; phase?: string; owner?: string; packageId?: string | null; start: string; duration: number; code?: string };
-export type ScheduleErrors = Partial<Record<"activity" | "name" | "start" | "duration" | "progress" | "code" | "link" | "lag" | "type" | "file" | "by", string>>;
+export type ActivityInput = { name: string; phase?: string; owner?: string; packageId?: string | null; start: string; duration: number; code?: string; procurement?: ProcurementLink | null };
+export type ScheduleErrors = Partial<Record<"activity" | "name" | "start" | "duration" | "progress" | "code" | "link" | "lag" | "type" | "file" | "by" | "procurement", string>>;
 
 export class ScheduleRuleError extends Error {
   readonly errors: ScheduleErrors;
@@ -166,15 +175,21 @@ const needBy = (by: string) => { if (!by?.trim()) fail({ by: "Say who made the c
 
 function validActivity(input: Partial<ActivityInput>, errors: ScheduleErrors) {
   if (!input.name?.trim()) errors.name = "Name the activity.";
+  if (input.procurement && !(input.procurement in PROCUREMENT_LINKS)) errors.procurement = "Choose the bid due date or buyout progress.";
+  else if (input.procurement && !input.packageId) errors.procurement = "Choose the trade package it follows.";
   if (!isDate(input.start)) errors.start = "Choose a start date.";
   if (!(Number.isInteger(input.duration) && input.duration! >= 0 && input.duration! <= MAX_DURATION)) errors.duration = `Use whole working days from 0 (a milestone) to ${MAX_DURATION}.`;
 }
 
 const nextCode = (state: ScheduleState) => `A${Math.max(1000, ...state.activities.map(a => Number(a.code.replace(/\D/g, "")) || 0)) + 10}`;
 
+/** A bids-due activity is always a milestone. */
+const shaped = <T extends Partial<ActivityInput>>(input: T): T => input.procurement === "bids-due" ? { ...input, duration: 0 } : input;
+
 /** A new activity (duration 0 = milestone). A weekend start moves to the Monday. */
 export function addActivity(state: ScheduleState, input: ActivityInput, by: string, at = now()): ScheduleState {
   needBy(by);
+  input = shaped(input);
   const errors: ScheduleErrors = {};
   validActivity(input, errors);
   const code = input.code?.trim() || nextCode(state);
@@ -184,6 +199,7 @@ export function addActivity(state: ScheduleState, input: ActivityInput, by: stri
   const activity: Activity = {
     id: newId(), code, name: input.name.trim(), phase: input.phase?.trim() || "General", owner: input.owner?.trim() ?? "",
     packageId: input.packageId ?? null, start: input.start, duration: input.duration, progress: 0, predecessors: [],
+    ...(input.procurement ? { procurement: input.procurement } : {}),
   };
   return commit(state, [...state.activities, activity], `Added ${code} ${activity.name}`, by, at);
 }
@@ -192,7 +208,7 @@ export function addActivity(state: ScheduleState, input: ActivityInput, by: stri
 export function editActivity(state: ScheduleState, id: string, patch: Partial<ActivityInput>, by: string, at = now()): ScheduleState {
   needBy(by);
   const a = findActivity(state, id);
-  const merged = { name: a.name, phase: a.phase, owner: a.owner, packageId: a.packageId, start: a.start, duration: a.duration, code: a.code, ...patch };
+  const merged = shaped({ name: a.name, phase: a.phase, owner: a.owner, packageId: a.packageId, start: a.start, duration: a.duration, code: a.code, procurement: a.procurement ?? null, ...patch });
   const errors: ScheduleErrors = {};
   validActivity(merged, errors);
   if (merged.code !== a.code && state.activities.some(x => x.code === merged.code?.trim())) errors.code = `${merged.code} is already used.`;
@@ -203,7 +219,7 @@ export function editActivity(state: ScheduleState, id: string, patch: Partial<Ac
     if (blocking && a.progress === 0) errors.start = `${a.code} can't start before ${blocking.allowed}: it follows ${blocking.pred.code} (${blocking.link.type}${blocking.link.lag ? (blocking.link.lag > 0 ? "+" : "") + blocking.link.lag : ""}).`;
   }
   check(errors);
-  const next: Activity = { ...a, name: merged.name.trim(), phase: merged.phase?.trim() || "General", owner: merged.owner?.trim() ?? "", packageId: merged.packageId ?? null, start, duration: merged.duration, code: merged.code?.trim() || a.code };
+  const next: Activity = { ...a, name: merged.name.trim(), phase: merged.phase?.trim() || "General", owner: merged.owner?.trim() ?? "", packageId: merged.packageId ?? null, start, duration: merged.duration, code: merged.code?.trim() || a.code, procurement: merged.procurement ?? null };
   return commit(state, state.activities.map(x => x.id === id ? next : x), `Changed ${next.code} ${next.name}`, by, at);
 }
 
@@ -212,8 +228,45 @@ export function setProgress(state: ScheduleState, id: string, progress: number, 
   needBy(by);
   const a = findActivity(state, id);
   if (!(Number.isInteger(progress) && progress >= 0 && progress <= 100)) fail({ progress: "Use a whole percent from 0 to 100." });
+  if (a.procurement) fail({ progress: `${a.code}'s ${a.procurement === "buyout" ? "progress comes from its trade's bids, award and subcontract" : "milestone is reached when its bids are due and in"}. To set it by hand, stop it following procurement in Edit activity.` });
   if (a.duration === 0 && progress !== 0 && progress !== 100) fail({ progress: "A milestone is either reached (100) or not (0)." });
   return commit(state, state.activities.map(x => x.id === id ? { ...a, progress } : x), `${a.code} ${progress}% complete`, by, at);
+}
+
+/** A new buyout activity runs through bidding and then this many working days: leveling, award and subcontract. */
+export const BUYOUT_DAYS = 15;
+/** Bidding time a new buyout activity assumes when no company has been invited yet. */
+export const BIDDING_DAYS = 10;
+
+/**
+ * For each trade package without them, in the Procurement phase: a buyout activity from the first
+ * invitation (`bidsFrom`, else BIDDING_DAYS before bids are due) to BUYOUT_DAYS after bids are due,
+ * and a bids-due milestone on the due date inside it (start-to-start). A package with no due date yet
+ * gets one BIDDING_DAYS from today until it has one.
+ */
+export function addBuyoutActivities(state: ScheduleState, packages: { id: string; name: string; owner: string; due: string; bidsFrom?: string | null }[], today: string, by: string, at = now()): ScheduleState {
+  needBy(by);
+  const activities = [...state.activities];
+  let added = 0, number = Math.max(1000, ...activities.map(a => Number(a.code.replace(/\D/g, "")) || 0));
+  const code = () => { number += 10; while (activities.some(a => a.code === `A${number}`)) number += 10; return `A${number}`; };
+  const make = (pkg: (typeof packages)[number], procurement: ProcurementLink, start: string, duration: number, predecessors: Dependency[]): Activity =>
+    ({ id: newId(), code: code(), name: `${procurement === "bids-due" ? "Bids due" : "Buyout"} · ${pkg.name}`, phase: "Procurement", owner: pkg.owner, packageId: pkg.id, start, duration, progress: 0, predecessors, procurement });
+  for (const pkg of packages) {
+    // A buyout milestone (e.g. "subcontract executed") is not the buyout activity itself.
+    const follows = (kind: ProcurementLink) => activities.find(a => a.packageId === pkg.id && a.procurement === kind && (kind === "bids-due" || a.duration > 0));
+    const due = follows("bids-due")?.start ?? addWorkdays(isDate(pkg.due) ? pkg.due : addWorkdays(today, BIDDING_DAYS), 0);
+    let buyout = follows("buyout");
+    if (!buyout) {
+      const from = isDate(pkg.bidsFrom) ? addWorkdays(pkg.bidsFrom, 0) : addWorkdays(due, -BIDDING_DAYS);
+      const start = from > due ? due : from;
+      buyout = make(pkg, "buyout", start, workdaysBetween(start, due) + 1 + BUYOUT_DAYS, []);
+      activities.push(buyout); added++;
+    }
+    if (!follows("bids-due")) { activities.push(make(pkg, "bids-due", due, 0, [{ activityId: buyout.id, type: "SS", lag: Math.max(0, workdaysBetween(buyout.start, due)) }])); added++; }
+  }
+  if (!added) return state;
+  if (activities.length > MAX_ACTIVITIES) fail({ activity: `A schedule holds at most ${MAX_ACTIVITIES} activities.` });
+  return commit(state, activities, `Added ${added} bids-due and buyout activit${added === 1 ? "y" : "ies"} from the bid packages`, by, at);
 }
 
 /** Deletes an activity and every link to it. */

@@ -25,6 +25,7 @@ import { getActiveProjectId } from "./project-scope";
 import { readDraft } from "./use-local-draft";
 import type { StructorCheckState } from "./rfi";
 import { scheduleRows, type ScheduleState } from "./schedule";
+import { procurementSchedule } from "./schedule-procurement";
 import type { Screen } from "./screens";
 import type { Submission } from "./submissions";
 import { guideText, manualGuides } from "./user-manual";
@@ -338,13 +339,16 @@ function issuesAndRfis(d: Data, status?: string) {
 }
 
 function schedule(d: Data, today: string, phase?: string) {
-  const rows = scheduleRows(d.schedule, today).filter(r => !phase || norm(r.phase).includes(norm(phase)));
+  // Bids-due dates and buyout progress as the Schedule page shows them (lib/schedule-procurement).
+  const plan = procurementSchedule(d.schedule, { procurement: d.procurement, awards: d.awards }, today);
+  const rows = scheduleRows(plan.state, today).filter(r => !phase || norm(r.phase).includes(norm(phase)));
+  const follows = (id: string) => { const s = plan.sources[id]; return s ? `${s.kind === "bids-due" ? "date from the bid package" : "progress from the buyout, not set by hand"}: ${s.detail}` : ""; };
   const code = (id: string) => d.schedule.activities.find(a => a.id === id)?.code ?? id;
   return {
     phases: [...new Set(d.schedule.activities.map(a => a.phase))],
     // code · name · phase · owner · start → finish (working days) · progress · flags · after predecessors
     activities: rows.slice(0, 90).map(r => [r.code, r.name, r.phase, r.owner, `${r.start} → ${r.finish} (${r.duration} working days)`, `${r.progress}% done`,
-      r.milestone ? "milestone" : "", r.critical ? "critical" : "", r.late ? "late" : "", r.predecessors.length ? `after ${r.predecessors.map(p => code(p.activityId)).join(", ")}` : ""].filter(Boolean).join(" · ")),
+      r.milestone ? "milestone" : "", r.critical ? "critical" : "", r.late ? "late" : "", r.predecessors.length ? `after ${r.predecessors.map(p => code(p.activityId)).join(", ")}` : "", follows(r.id)].filter(Boolean).join(" · ")),
     moreActivities: Math.max(0, rows.length - 90),
   };
 }
