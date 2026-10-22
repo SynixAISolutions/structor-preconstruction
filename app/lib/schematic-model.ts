@@ -159,12 +159,29 @@ export function heightSheet<T extends Pick<RegisterRow, "title" | "discipline">>
   return null;
 }
 
-/** Feet per inch of paper from a printed architectural scale: 1/8" = 1'-0" → 8; 3/16" = 1'-0" → 5.333. Null when none is found. */
+/** The metric drawing ratios read as scales; other "1:n" (a time, 1:7) are not. */
+const METRIC_RATIOS = new Set([5, 10, 20, 25, 50, 75, 100, 125, 150, 200, 250, 300, 400, 500, 750, 1000, 1250, 1500, 2000, 2500, 5000]);
+const INCH = `(?:"|''|”|″|\\s*IN\\.?)`, FOOT = `(?:'|’|′)`;
+const IMPERIAL = new RegExp(`(\\d+)(?:\\s*\\/\\s*(\\d+))?\\s*${INCH}\\s*=\\s*(\\d+)\\s*${FOOT}(?:\\s*-?\\s*(\\d+)\\s*(?:"|''|”|″))?`, "i");
+
+/**
+ * Feet per inch of paper from a printed scale. Architectural: 1/8" = 1'-0" → 8, 3/16" = 1'-0" → 5.333.
+ * Engineering: 1" = 40'-0" → 40 (public sets' site and concept plans). Metric: 1:50 → 4.167, as US
+ * Army Corps and other metric sets print it (22 Oct: a public 1:25 / 1:50 set was otherwise sized by
+ * floor area). Null when none is found, or for a detail larger than 3" = 1'-0" or 1:4.
+ */
 export function feetPerInch(text: string): number | null {
-  const m = text.match(/(\d+)\s*\/\s*(\d+)\s*(?:"|''|”|IN\.?)\s*=\s*1\s*'\s*-?\s*0\s*(?:"|''|”)?/i) ?? text.match(/(1)\s*(?:"|''|”)\s*=\s*1\s*'\s*-?\s*0/i);
-  if (!m) return null;
-  const inches = m[2] ? Number(m[1]) / Number(m[2]) : 1;
-  return inches > 0 && inches <= 3 ? Math.round((1 / inches) * 1000) / 1000 : null;
+  let ratio: number | null = null;
+  const imperial = text.match(IMPERIAL);
+  if (imperial) {
+    const inches = imperial[2] ? Number(imperial[1]) / Number(imperial[2]) : Number(imperial[1]);
+    const feet = Number(imperial[3]) + (imperial[4] ? Number(imperial[4]) / 12 : 0);
+    ratio = inches > 0 ? feet / inches : null;
+  } else {
+    const metric = text.match(/(?<![\d.:])1\s*:\s*(\d{1,4})(?![\d.:])/);
+    if (metric && METRIC_RATIOS.has(Number(metric[1]))) ratio = Number(metric[1]) / 12;
+  }
+  return ratio !== null && ratio >= 1 / 3 - 1e-9 && ratio <= 1000 ? Math.round(ratio * 1000) / 1000 : null;
 }
 
 export const polygonArea = (pts: Point[]) => Math.abs(pts.reduce((s, [x, y], i) => { const [nx, ny] = pts[(i + 1) % pts.length]; return s + x * ny - nx * y; }, 0)) / 2;
