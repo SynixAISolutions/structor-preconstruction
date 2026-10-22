@@ -10,7 +10,8 @@ const localNoon = (date: string) => { const d = new Date(`${date}T12:00:00`); re
 export const displayDate = (date: string) =>
   localNoon(date)?.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) ?? "Not set";
 
-export function downloadText(name: string, content: string, type = "text/plain") {
+/** Saves `content` (text, or bytes such as a PDF) as a file named `name`. */
+export function downloadText(name: string, content: BlobPart, type = "text/plain") {
   const url = URL.createObjectURL(new Blob([content], { type }));
   const a = document.createElement("a");
   a.href = url;

@@ -5,7 +5,11 @@
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { useActiveProject } from "./project-scope";
-import { emptyContent, type ContentOp, type ProjectContent } from "./project-content";
+import { emptyContent, type ContentOp, type Markup, type ProjectContent } from "./project-content";
+import { markupsPdf } from "./markup-export";
+import { renderStoredRegion } from "./project-files-client";
+import type { StoredDocument } from "./project-files";
+import { downloadText } from "./format";
 
 const contents = new Map<string, ProjectContent>();
 const listeners = new Set<() => void>();
@@ -34,4 +38,22 @@ export function useProjectContent(projectId?: string) {
   const refresh = useCallback(() => loadContent(id), [id]);
   const change = useCallback((ops: ContentOp[], by: string) => api({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ projectId: id, ops, by }) }).then(set), [id]);
   return { content: content ?? emptyContent(id), ready: !!content, refresh, change };
+}
+
+/**
+ * Downloads "<file> markups.pdf": the marked-up pages of `doc` (this revision) with `markups` drawn and
+ * numbered in the order given (pass docMarkups' order, as the viewer lists them), then the list of markups.
+ * Pages render one at a time, so a large set stays within memory.
+ */
+export async function exportMarkups(doc: StoredDocument, markups: Markup[], onProgress?: (done: number, total: number) => void): Promise<void> {
+  const numbers = [...new Set(markups.map(m => m.page))].sort((a, b) => a - b), pages = [];
+  for (const [i, page] of numbers.entries()) {
+    onProgress?.(i, numbers.length);
+    const image = await renderStoredRegion(doc, page, [0, 0, 1, 1], 2400);
+    pages.push({ page, jpeg: Uint8Array.from(atob(image.slice(image.indexOf(",") + 1)), c => c.charCodeAt(0)) });
+  }
+  onProgress?.(numbers.length, numbers.length);
+  const title = `${doc.name.replace(/\.pdf$/i, "")} V${doc.revision}`;
+  const bytes = await markupsPdf({ title, exportedAt: new Date().toLocaleString("en-US"), markups, pages });
+  downloadText(`${title} markups.pdf`, bytes as Uint8Array<ArrayBuffer>, "application/pdf");
 }
