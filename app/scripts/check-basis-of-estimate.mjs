@@ -41,5 +41,7 @@ assert.deepEqual(by["Open items"], ["Geotechnical report: waiting on Owner, foll
 assert.match(out.markdown, /^# Basis of estimate: Riverside Library\n\n## Basis\n\n- Riverside Library/);
 const bare = basisOfEstimate({ project, documents: [], budget: { lines: [], allowances: [], costCenters: [] }, setup: { decisions: [], reviews: [] } });
 assert.deepEqual(bare.sections.map(s => s.heading), ["Basis"], "Empty sections are left out");
+const escalated = basisOfEstimate({ project, documents: [], budget: { lines: [], allowances: [], costCenters: [], conceptSource: { records: [], factors: { escalation: { byRecord: {}, target: "2027-03", basis: "Escalated to 2027-03 with BLS producer price indexes (WPU101)." } } } }, setup: { decisions: [], reviews: [] } });
+assert.ok(escalated.sections[0].lines.includes("Concept budget price escalation: Escalated to 2027-03 with BLS producer price indexes (WPU101)."), "An applied escalation is part of the basis");
 
-console.log("Basis of estimate checked: documents, totals without owner lines, allowances, contingency and fee, owner exclusions, assumptions from setup, clarifications, open items.");
+console.log("Basis of estimate checked: documents, totals without owner lines, allowances, contingency and fee, owner exclusions, assumptions from setup, clarifications, open items, applied price escalation.");

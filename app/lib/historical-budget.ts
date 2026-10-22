@@ -7,7 +7,8 @@ export type BudgetHistory = {
   stage: EstimateStage; workType: WorkType | null; taxStatus: TaxStatus | null; certifications: string[];
   locationIndex: number; costIndex: number; source: string; lines: HistoryLine[];
 };
-export type ConceptFactors = { locationIndex: number; costIndex: number; profileFactor: number; basis: string };
+/** `escalation`: each history record's price escalation factor by record id, applied on top of the indexes (lib/escalation conceptEscalation). */
+export type ConceptFactors = { locationIndex: number; costIndex: number; profileFactor: number; basis: string; escalation?: { byRecord: Record<string, number>; target: string; basis: string } | null };
 export type ConceptBudget = { lines: (HistoryLine & { unitCost: number; observations: number })[]; total: number; area: number; records: { id: string; name: string; source: string }[]; factors: ConceptFactors; warnings: string[] };
 type Cell = { v?: unknown; f?: string; t?: string };
 export type BudgetSheet = Record<string, Cell>;
@@ -115,6 +116,9 @@ export function generateConceptBudget(project: Project, history: BudgetHistory[]
   if ((factors.profileFactor !== 1 || history.some(record => record.locationIndex !== factors.locationIndex || record.costIndex !== factors.costIndex)) && !factors.basis.trim()) fail("Explain the source and reason for the adjustment factors.");
   const groups = new Map<string, { line: HistoryLine; cost: number; area: number; observations: number }>();
   const warnings: string[] = [];
+  const escalated = factors.escalation ?? null;
+  if (escalated && (!escalated.target || !escalated.basis.trim() || !Object.values(escalated.byRecord).every(f => Number.isFinite(f) && f >= 0.5 && f <= 3))) fail("Escalation factors must be between 0.5 and 3, with a target month and a basis.");
+  if (escalated) for (const record of history) if (!(record.id in escalated.byRecord)) warnings.push(`${record.name}: no escalation applied (no price index data for its costs).`);
   for (const record of history) {
     if (record.location !== project.location) warnings.push(`${record.name}: location differs. Review the location index against the same source and base.`);
     if (record.type !== project.type || record.workType !== project.workType || record.taxStatus !== project.taxStatus || [...record.certifications].sort().join() !== [...project.certifications].sort().join()) warnings.push(`${record.name}: project type, work, tax or certification profile differs. Review scope and any profile adjustment.`);
@@ -125,7 +129,7 @@ export function generateConceptBudget(project: Project, history: BudgetHistory[]
     }
     for (const [id, item] of perProject) {
       const group = groups.get(id) ?? { line: item.line, cost: 0, area: 0, observations: 0 };
-      group.cost += item.cost * factors.locationIndex / record.locationIndex * factors.costIndex / record.costIndex;
+      group.cost += item.cost * factors.locationIndex / record.locationIndex * factors.costIndex / record.costIndex * (escalated?.byRecord[record.id] ?? 1);
       group.area += record.squareFeet; group.observations++; groups.set(id, group);
     }
   }

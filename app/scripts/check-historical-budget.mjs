@@ -34,6 +34,11 @@ assert.equal(weighted.lines[0].amount, 3500, "Area weighting is sum of observed 
 assert.equal(weighted.lines.find(line => line.description === "Fee").amount, 200, "A missing line is never treated as zero");
 assert(weighted.warnings.some(message => message.includes("absent")));
 assert.equal(H.generateConceptBudget(project, [base], { locationIndex: 120, costIndex: 110, profileFactor: 1.1, basis: "Illustrative index and labor adjustment" }).total, 3194.4);
+// Escalation multiplies each record by its own factor; a record without one is flagged, never guessed; factors are bounded.
+const esc = { byRecord: { [base.id]: 1.2 }, target: "2026-09", basis: "Escalated to 2026-09 with BLS producer price indexes" };
+assert.equal(H.generateConceptBudget(project, [base], { ...factors, escalation: esc }).total, Math.round(concept.total * 1.2 * 100) / 100);
+assert.ok(H.generateConceptBudget(project, [base, second], { ...factors, escalation: esc }).warnings.some(w => w.startsWith(`${second.name}: no escalation applied`)));
+for (const bad of [{ ...esc, byRecord: { [base.id]: 4 } }, { ...esc, basis: " " }, { ...esc, target: "" }]) assert.throws(() => H.generateConceptBudget(project, [base], { ...factors, escalation: bad }), /between 0.5 and 3/);
 for (const change of [{ squareFeet: 0 }, { year: 1 }, { locationIndex: 0 }, { costIndex: Infinity }, { stage: "Bidding" }, { name: 5 }, { workType: "unknown" }, { certifications: [5] }]) assert.throws(() => H.generateConceptBudget(project, [{ ...base, ...change }], factors));
 assert.throws(() => H.generateConceptBudget(project, [base, base], factors));
 assert.throws(() => H.generateConceptBudget(project, [base], { ...factors, profileFactor: 1.2 }), /Explain/);

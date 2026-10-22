@@ -70,17 +70,33 @@ export function parseBls(json: unknown): Record<string, IndexPoint[]> {
  * year, and the total is weighted by cost, so a budget heavy in steel follows steel. Lines whose index has
  * no data are left out of the weighting and listed. Null factor when nothing could be escalated.
  */
-export function historyEscalation(history: { name: string; year: number; lines: { csiCode: string | null; amount: number }[] }[], points: Record<string, IndexPoint[]>, target: string): { factor: number | null; rows: { record: string; division: string; amount: number; escalation: Escalation }[]; missing: string[] } {
-  const rows: { record: string; division: string; amount: number; escalation: Escalation }[] = [], missing: string[] = [];
+export type EscalationRow = { record: string; recordId: string; division: string; amount: number; escalation: Escalation };
+export function historyEscalation(history: { id?: string; name: string; year: number; lines: { csiCode: string | null; amount: number }[] }[], points: Record<string, IndexPoint[]>, target: string): { factor: number | null; rows: EscalationRow[]; missing: string[] } {
+  const rows: EscalationRow[] = [], missing: string[] = [];
   for (const record of history) {
     const byDivision = new Map<string, number>();
     for (const line of record.lines) { const d = (line.csiCode ?? "").replace(/\D/g, "").slice(0, 2) || "—"; byDivision.set(d, (byDivision.get(d) ?? 0) + line.amount); }
     for (const [division, amount] of byDivision) {
       if (!(amount > 0)) continue;
       const series = seriesFor(division), e = escalation(series, points[series.id] ?? [], `${record.year}-07-01`, target);
-      if (e) rows.push({ record: record.name, division, amount, escalation: e }); else missing.push(`${record.name} · division ${division}`);
+      if (e) rows.push({ record: record.name, recordId: record.id ?? record.name, division, amount, escalation: e }); else missing.push(`${record.name} · division ${division}`);
     }
   }
   const total = rows.reduce((t, r) => t + r.amount, 0);
   return { factor: total ? Math.round(rows.reduce((t, r) => t + r.amount * r.escalation.factor, 0) / total * 10000) / 10000 : null, rows, missing };
+}
+
+/**
+ * The escalation to apply to a concept budget: each history record's own cost-weighted factor (records
+ * differ in year, so one factor for all would misstate the older ones), with the target month and a basis
+ * line naming the indexes. Null when nothing could be escalated.
+ */
+export function conceptEscalation(result: { rows: EscalationRow[]; missing: string[] }): { byRecord: Record<string, number>; target: string; basis: string } | null {
+  if (!result.rows.length) return null;
+  const sums = new Map<string, { amount: number; weighted: number }>();
+  for (const r of result.rows) { const s = sums.get(r.recordId) ?? { amount: 0, weighted: 0 }; s.amount += r.amount; s.weighted += r.amount * r.escalation.factor; sums.set(r.recordId, s); }
+  const byRecord = Object.fromEntries([...sums].map(([id, s]) => [id, Math.round(s.weighted / s.amount * 10000) / 10000]));
+  const target = result.rows[0].escalation.target, series = [...new Set(result.rows.map(r => r.escalation.series.id))];
+  const basis = `Escalated to ${target} with BLS producer price indexes (${series.join(", ")}): measured to the latest month, then projected at each index's trailing annual rate (an assumption).${result.missing.length ? ` Not escalated, no index data: ${result.missing.join("; ")}.` : ""}`;
+  return { byRecord, target, basis };
 }

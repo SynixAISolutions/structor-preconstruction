@@ -45,4 +45,11 @@ const hist = E.historyEscalation([{ name: "School 2022", year: 2022, lines: [{ c
 assert.deepEqual([hist.factor, hist.rows.map(r => [r.division, r.amount, r.escalation.factor]), hist.missing], [1.4, [["05", 300, 1.5], ["09", 100, 1.1]], ["School 2022 · division 11"]], "(300 × 1.5 + 100 × 1.1) / 400; a division with no index data is listed, not guessed");
 assert.equal(E.historyEscalation([], pts, "2026-09").factor, null);
 
-console.log("Escalation checked: series by division, midpoint, measured change, trailing-rate projection labelled as an assumption, no data, BLS parsing, cost-weighted history escalation.");
+// Applying it: each record keeps its own factor (an older record escalates more), with the target and a basis naming the indexes.
+const two = E.historyEscalation([{ id: "a", name: "School 2022", year: 2022, lines: [{ csiCode: "05", amount: 300 }, { csiCode: "09", amount: 100 }] }, { id: "b", name: "Gym", year: 2022, lines: [{ csiCode: "09", amount: 100 }, { csiCode: "11", amount: 50 }] }], pts, "2026-09");
+const applied = E.conceptEscalation(two);
+assert.deepEqual([applied.byRecord, applied.target], [{ a: 1.4, b: 1.1 }, "2026-09"]);
+assert.match(applied.basis, /WPU101, WPU1371.*an assumption.*no index data: Gym · division 11/);
+assert.equal(E.conceptEscalation({ rows: [], missing: [] }), null);
+
+console.log("Escalation checked: series by division, midpoint, measured change, trailing-rate projection labelled as an assumption, no data, BLS parsing, cost-weighted history escalation, per-record factors to apply.");
