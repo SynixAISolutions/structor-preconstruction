@@ -29,6 +29,7 @@ export function basisOfEstimate(input: { project: Project; documents: StoredDocu
     ...latest.filter(d => d.kind === "drawings").map(d => `Drawings: ${d.name}, ${sheetsOf(d)} sheets, uploaded ${day(d.uploadedAt)}.`),
     ...latest.filter(d => d.kind === "manual").map(d => `Project manual: ${d.name}, ${d.sections.length} section${d.sections.length === 1 ? "" : "s"}, uploaded ${day(d.uploadedAt)}.`),
     ...latest.filter(d => d.category === "Addenda").map(d => `Addendum: ${d.name}, uploaded ${day(d.uploadedAt)}.`),
+    ...(budget.conceptSource?.factors.escalation ? [`Concept budget price escalation: ${budget.conceptSource.factors.escalation.basis}`] : []),
   ];
   const allowances = budget.allowances.filter(a => a.status === "included").map(a => `${a.name}: ${usd(a.amount)}${a.source ? ` (${a.source})` : ""}.`);
   const contingencyAndFee = counted.filter(l => /contingenc|\bfee\b/i.test(l.description) && l.budget > 0).map(l => `${l.description}${l.costCenter ? `, ${l.costCenter}` : ""}: ${usd(l.budget)}.`);
