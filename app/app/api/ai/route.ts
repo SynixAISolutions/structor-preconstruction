@@ -6,6 +6,8 @@ import { veJob } from "../../../lib/ve-ai";
 import { gapCostJob } from "../../../lib/gap-cost-ai";
 import { EXTRA_JOBS } from "../../../lib/ai-jobs-more";
 import { assistantStep } from "../../../lib/assistant-agent";
+import { readJson } from "../../../lib/drawing-reader";
+import { OpenAiError } from "../../../lib/openai";
 
 // Structor's AI: one fixed job per request (scope from specification pages, or a proposal reading),
 // never free-form prompts. Ask Structor ("assistant-agent") is the one conversation: a question, then
@@ -34,15 +36,16 @@ export async function POST(request: Request) {
     if (body.job === "value-engineering") return await veJob(body.input, key, request.signal);
     if (body.job === "gap-cost") return await gapCostJob(body.input, key, request.signal);
     const extra = typeof body.job === "string" && Object.hasOwn(EXTRA_JOBS, body.job) ? EXTRA_JOBS[body.job] : null;
+    // Jobs that send a drawing image go to the drawing reader the server is set to (lib/drawing-reader).
     if (extra) {
       const input = extra.parse(body.input);
-      const output = await deepseekJson(key, extra.messages(input), { model: extra.model, maxTokens: extra.maxTokens, budgetMs: 55_000, signal: request.signal });
-      return json({ model: extra.model, ...extra.screen(output, input) });
+      const { output, model: used } = await readJson(extra.messages(input), { deepseekKey: key, model: extra.model, maxTokens: extra.maxTokens, budgetMs: 55_000, signal: request.signal });
+      return json({ model: used, ...extra.screen(output, input) });
     }
     if (body.job === "drawing") {
       const job = parseDrawingJob(body.input);
-      const output = await deepseekJson(key, drawingMessages(job), { model, maxTokens: 6000, budgetMs: 55_000, signal: request.signal });
-      return json({ model, ...screenDrawing(output, job) });
+      const { output, model: used } = await readJson(drawingMessages(job), { deepseekKey: key, model, maxTokens: 6000, budgetMs: 55_000, signal: request.signal });
+      return json({ model: used, ...screenDrawing(output, job) });
     }
     if (body.job === "scope") {
       const job = parseScopeJob(body.input);
@@ -57,7 +60,7 @@ export async function POST(request: Request) {
     return json({ error: "Unknown AI job." }, 400);
   } catch (error) {
     if (error instanceof AiJobError) return json({ error: error.message }, 400);
-    if (error instanceof DeepSeekError) return json({ error: error.message }, 502);
+    if (error instanceof DeepSeekError || error instanceof OpenAiError) return json({ error: error.message }, 502);
     console.error("AI route failed", error);
     return json({ error: "Structor's AI failed unexpectedly." }, 500);
   }
