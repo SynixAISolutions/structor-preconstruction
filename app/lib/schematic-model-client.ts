@@ -5,11 +5,13 @@
 
 import { useCallback, useRef } from "react";
 import { aiJob } from "./ai-more-client";
-import type { PlanReading } from "./ai-jobs-more";
+import type { PartitionTypeRead, PlanReading, PlanTag } from "./ai-jobs-more";
+import { mergePartitionTypes, scheduleRow, type PartitionType } from "./tag-placement";
 import { drawingRegister, type StoredDocument } from "./project-files";
 import { openStoredPdf, readStoredText, renderStoredPage, renderStoredRegion, renderStoredTiles } from "./project-files-client";
 import type { Project } from "./projects";
-import { consensusMarkers, feetPerInch, heightSheet, levelHeights, levelName, levelPlanSheets, toFeet, type Marker, type SchematicLevel, type SchematicModel } from "./schematic-model";
+import { vectorsFromOperators } from "./plan-vectors";
+import { consensusMarkers, feetPerInch, heightSheet, levelHeights, levelName, contentTiles, levelDoors, levelGlazing, levelPlanSheets, levelTags, levelWalls, partitionTypeSheet, tagTiles, toFeet, type Marker, type SchematicLevel, type SchematicModel, type SchematicRoom } from "./schematic-model";
 import { useLocalDraft } from "./use-local-draft";
 
 async function pageSize(doc: StoredDocument, page: number) {
@@ -102,13 +104,70 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
   }
   const scales = plansRead.filter(o => o.scale && !o.borrowed);
   if (new Set(scales.map(o => o.scale)).size > 1) warnings.push(`The floor plans read different scales (${scales.map(o => `${o.row.sheet} ${o.scale} ft per inch`).join(", ")}); check them on the sheets.`);
-  const levels: SchematicLevel[] = plansRead.map(({ level, row, reading, page, scale, borrowed }) => {
+  const levels: SchematicLevel[] = [];
+  for (const { level, row, reading, page, scale, borrowed } of plansRead) {
     const sized = toFeet({ outline: reading.outline, rooms: reading.rooms, page, feetPerInch: scale, targetSf: args.project.squareFeet > 0 ? args.project.squareFeet / plans.length : 0 });
     if (borrowed) { sized.sizing += ` (from ${borrowed}; this sheet's scale wasn't read)`; warnings.push(`${row.sheet}: no printed scale was read; ${borrowed}'s scale is used (same set and sheet size).`); }
     else if (!scale) warnings.push(`${row.sheet}: no printed scale was read; ${sized.sizing.toLowerCase()}.`);
-    return { id: `L${level}`, name: levelName(level), order: level, elevation: heights.elevations.get(level) ?? 0, height: heights.heights.get(level) ?? 14, outline: sized.outline, rooms: sized.rooms, source: { documentId: row.doc.id, sheet: row.sheet, page: row.page }, sizing: sized.sizing, frame: sized.frame };
-  });
-  return { levels, warnings, builtAt: new Date().toISOString() };
+    args.onProgress?.(`Finding the walls on ${row.sheet}…`);
+    const found = await planVectorWalls(row.doc, row.page, row.sheet, sized.frame, reading.outline, !!scale, args.signal, args.onProgress).catch(error => { if (args.signal?.aborted) throw error; return { walls: [], doors: [], glazing: [], rooms: [], note: "The sheet's lines could not be read for walls.", tagWarning: "" }; });
+    if (!found.walls.length) warnings.push(`${row.sheet}: ${found.note}`);
+    if (found.tagWarning) warnings.push(`${row.sheet}: ${found.tagWarning}`);
+    levels.push({ id: `L${level}`, name: levelName(level), order: level, elevation: heights.elevations.get(level) ?? 0, height: heights.heights.get(level) ?? 14, outline: sized.outline, rooms: found.rooms.length ? found.rooms : sized.rooms, source: { documentId: row.doc.id, sheet: row.sheet, page: row.page }, sizing: sized.sizing, frame: sized.frame, walls: found.walls, wallNote: found.note, doors: found.doors, glazing: found.glazing });
+  }
+  // The partition type schedule, to describe the wall types and catch codes it doesn't list.
+  const typeSheet = partitionTypeSheet(register);
+  let partitionTypes: PartitionType[] | undefined;
+  if (typeSheet && levels.some(l => l.walls?.some(w => w.type))) {
+    args.onProgress?.(`Reading the partition types on ${typeSheet.sheet}…`);
+    try { partitionTypes = await readPartitionTypes(typeSheet.doc, typeSheet.page, typeSheet.sheet, args.signal); }
+    catch (error) { if (args.signal?.aborted) throw error; warnings.push(`${typeSheet.sheet}: the partition types could not be read.`); }
+    const unknown = [...new Set(levels.flatMap(l => (l.walls ?? []).filter(w => w.type && !w.typeSet && partitionTypes?.length && !scheduleRow(w.type, partitionTypes)).map(w => w.type!)))];
+    if (unknown.length) warnings.push(`Wall tags not in the partition schedule on ${typeSheet.sheet} (check them on the plan; they may be misread): ${unknown.join(", ")}.`);
+  }
+  return { levels, warnings, builtAt: new Date().toISOString(), ...(partitionTypes ? { partitionTypes, partitionSheet: typeSheet!.sheet } : {}) };
+}
+
+/** The wall types a partition type sheet schedules, read on the parts of the sheet that hold drawing (lib/ai-jobs-more "partition-types"). */
+async function readPartitionTypes(doc: StoredDocument, pageNumber: number, sheetName: string, signal?: AbortSignal): Promise<PartitionType[]> {
+  const [pdfjs, pdf] = await Promise.all([import("pdfjs-dist"), openStoredPdf(doc)]);
+  const page = await pdf.getPage(pageNumber), viewport = page.getViewport({ scale: 1 });
+  const { segments } = vectorsFromOperators(await page.getOperatorList(), pdfjs.OPS as unknown as Record<string, number>, viewport.transform);
+  const rows: PartitionType[] = [];
+  const tiles = contentTiles(segments, { widthPt: viewport.width, heightPt: viewport.height });
+  for (let i = 0; i < tiles.length; i += 3) await Promise.all(tiles.slice(i, i + 3).map(async tile => {
+    rows.push(...(await aiJob<{ types: PartitionTypeRead[] }>("partition-types", { sheet: sheetName, image: await renderStoredRegion(doc, pageNumber, tile, 2000) }, signal)).types);
+  }));
+  return mergePartitionTypes(rows);
+}
+
+/**
+ * A plan sheet's walls and doors from its vector lines (lib/plan-vectors, wall- and door-detection), in the
+ * level's frame; then their door numbers and wall types from the tags the AI reads on small tiles of the
+ * plan (3 at a time), placed through the plan's own tag ovals and leaders (lib/tag-placement).
+ */
+async function planVectorWalls(doc: StoredDocument, pageNumber: number, sheetName: string, frame: { widthFeet: number; heightFeet: number }, outline: [number, number][], printedScale: boolean, signal?: AbortSignal, onProgress?: (text: string) => void) {
+  const [pdfjs, pdf] = await Promise.all([import("pdfjs-dist"), openStoredPdf(doc)]);
+  const page = await pdf.getPage(pageNumber);
+  const viewport = page.getViewport({ scale: 1 }), sheet = { widthPt: viewport.width, heightPt: viewport.height };
+  const { segments, curves } = vectorsFromOperators(await page.getOperatorList(), pdfjs.OPS as unknown as Record<string, number>, viewport.transform);
+  const walls = levelWalls(segments, sheet, frame, outline, printedScale);
+  const doors = levelDoors(segments, curves, sheet, frame, outline, walls.walls);
+  const glazing = levelGlazing(segments, sheet, frame, outline, walls.weight, walls.walls, doors);
+  if (!walls.walls.length) return { ...walls, doors, glazing, rooms: [] as SchematicRoom[], tagWarning: "" };
+  const tiles = tagTiles(sheet, frame, outline), read: { tile: [number, number, number, number]; tags: PlanTag[] }[] = [];
+  let failed = 0;
+  for (let i = 0; i < tiles.length; i += 3) {
+    onProgress?.(`Reading the door, wall and room tags on ${sheetName} (part ${Math.min(i + 3, tiles.length)} of ${tiles.length})…`);
+    await Promise.all(tiles.slice(i, i + 3).map(async tile => {
+      try { read.push({ tile, tags: (await aiJob<{ tags: PlanTag[] }>("plan-tags", { sheet: sheetName, image: await renderStoredRegion(doc, pageNumber, tile, 1200) }, signal)).tags }); }
+      catch (error) { if (signal?.aborted) throw error; failed++; }
+    }));
+  }
+  const tagged = levelTags(read, segments, curves, sheet, frame, walls.walls, doors, glazing);
+  // Room tags read on the tiles are sharper than the whole-sheet reading's; the level keeps those when there are any.
+  const rooms: SchematicRoom[] = tagged.tags.filter(t => t.kind === "room").map(t => ({ name: t.name ?? "", number: t.text, at: t.at }));
+  return { note: walls.note, walls: tagged.walls, doors: tagged.doors, glazing: tagged.glazing, rooms, tagWarning: failed ? `${failed} of ${tiles.length} parts of the plan could not be read for door and wall tags; some doors and walls have no number or type.` : "" };
 }
 
 /** The open project's schematic model under "schematic-model"; `run` applies a correction (moveOutlinePoint, setLevelHeight) or a rebuild and returns null or the error. */

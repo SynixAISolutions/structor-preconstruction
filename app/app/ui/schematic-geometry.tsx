@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { polygonArea, type Point, type SchematicLevel } from "../../lib/schematic-model";
+import type { Room } from "../../lib/room-detection";
 
 export type SheetFrame = { width: number; height: number };
 export function openOutline(points: Point[]): Point[] {
@@ -40,4 +41,91 @@ export function schematicShape(level: SchematicLevel) {
 export function schematicGeometry(level: SchematicLevel) {
   const geometry = new THREE.ExtrudeGeometry(schematicShape(level), { depth: level.height, bevelEnabled: false });
   geometry.rotateX(-Math.PI / 2); return geometry;
+}
+/**
+ * The walls the app read from the plan's own lines (level.walls) as one instanced mesh of boxes: each runs
+ * along its centerline with its thickness, full level height. Plan y is world -z, as for the outline.
+ */
+export function schematicWalls(level: SchematicLevel): THREE.InstancedMesh | null {
+  const walls = (level.walls ?? []).filter(w => !w.excluded); // the estimator marked the rest not a wall
+  if (!walls.length) return null;
+  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#d8d1c4", roughness: .9 }), walls.length);
+  const place = new THREE.Object3D();
+  walls.forEach((wall, i) => {
+    const dx = wall.b[0] - wall.a[0], dy = wall.b[1] - wall.a[1];
+    place.position.set((wall.a[0] + wall.b[0]) / 2, level.height / 2, -(wall.a[1] + wall.b[1]) / 2);
+    place.rotation.set(0, Math.atan2(dy, dx), 0);
+    place.scale.set(Math.max(Math.hypot(dx, dy), .01), level.height, Math.max(wall.thickness, .05));
+    place.updateMatrix(); mesh.setMatrixAt(i, place.matrix);
+  });
+  mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingBox(); mesh.computeBoundingSphere();
+  return mesh;
+}
+/** Door height used until the door schedule supplies each door's own (most doors are 7'-0"). */
+export const DEFAULT_DOOR_HEIGHT = 7;
+/**
+ * A level's doors (level.doors, kind "door") as two instanced meshes: the header above each opening,
+ * up to the level's height, at the host wall's thickness; and each leaf as a thin panel, standing open.
+ */
+export function schematicDoors(level: SchematicLevel, doorHeight = DEFAULT_DOOR_HEIGHT): THREE.Group | null {
+  const doors = (level.doors ?? []).filter(d => d.kind === "door");
+  if (!doors.length) return null;
+  const group = new THREE.Group(), place = new THREE.Object3D();
+  const box = (a: Point, b: Point, base: number, height: number, thickness: number) => {
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    place.position.set((a[0] + b[0]) / 2, base + height / 2, -(a[1] + b[1]) / 2);
+    place.rotation.set(0, Math.atan2(dy, dx), 0);
+    place.scale.set(Math.max(Math.hypot(dx, dy), .01), height, thickness);
+    place.updateMatrix(); return place.matrix.clone();
+  };
+  const above = Math.max(level.height - doorHeight, 0);
+  if (above > 0) {
+    const headers = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#d8d1c4", roughness: .9 }), doors.length);
+    doors.forEach((d, i) => headers.setMatrixAt(i, box(d.a, d.b, doorHeight, above, d.thickness)));
+    headers.instanceMatrix.needsUpdate = true; group.add(headers);
+  }
+  const leaves = doors.flatMap(d => d.hinges.map((h, i) => [h, d.openTo[i]] as [Point, Point]));
+  const panels = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#9a6b3f", roughness: .7 }), leaves.length);
+  leaves.forEach(([h, open], i) => panels.setMatrixAt(i, box(h, open, 0, doorHeight, .15)));
+  panels.instanceMatrix.needsUpdate = true; group.add(panels);
+  return group;
+}
+/** Glass is drawn up to 10 ft (a storefront's usual head), or the level's height if lower. */
+export const GLASS_HEIGHT = 10;
+/** A level's glass (level.glazing) as one instanced mesh of thin translucent panels from the floor. */
+export function schematicGlazing(level: SchematicLevel): THREE.InstancedMesh | null {
+  const glass = (level.glazing ?? []).filter(g => !g.excluded);
+  if (!glass.length) return null;
+  const height = Math.min(level.height, GLASS_HEIGHT), place = new THREE.Object3D();
+  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#7cc4e8", transparent: true, opacity: .45, roughness: .1 }), glass.length);
+  glass.forEach((g, i) => {
+    const dx = g.b[0] - g.a[0], dy = g.b[1] - g.a[1];
+    place.position.set((g.a[0] + g.b[0]) / 2, height / 2, -(g.a[1] + g.b[1]) / 2);
+    place.rotation.set(0, Math.atan2(dy, dx), 0);
+    place.scale.set(Math.max(Math.hypot(dx, dy), .01), height, .15);
+    place.updateMatrix(); mesh.setMatrixAt(i, place.matrix);
+  });
+  mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingBox(); mesh.computeBoundingSphere();
+  return mesh;
+}
+/** A level's rooms (levelSpaces) as flat floors just above the slab: named rooms warm, unnamed spaces grey. */
+export function schematicRoomFloors(rooms: Room[]): THREE.Group | null {
+  if (!rooms.length) return null;
+  const group = new THREE.Group(), named = new THREE.MeshStandardMaterial({ color: "#e6cf9f", roughness: .9, side: THREE.DoubleSide }), unnamed = new THREE.MeshStandardMaterial({ color: "#cdd8d4", roughness: .9, side: THREE.DoubleSide });
+  for (const room of rooms) {
+    const geometry = new THREE.ShapeGeometry(new THREE.Shape(room.outline.map(([x, y]) => new THREE.Vector2(x, y))));
+    geometry.rotateX(-Math.PI / 2);
+    const floor = new THREE.Mesh(geometry, room.name ? named : unnamed); floor.position.y = .05; group.add(floor);
+  }
+  return group;
+}
+/** Count and total centerline length of a level's walls; null for a model built before walls were read. */
+export function wallTotals(level: SchematicLevel): { count: number; feet: number; doors: number | null; compartments: number; glassFeet: number | null } | null {
+  if (!level.walls) return null;
+  const doors = level.doors ?? null, walls = level.walls.filter(w => !w.excluded);
+  return {
+    count: walls.length, feet: Math.round(walls.reduce((sum, w) => sum + Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), 0)),
+    doors: doors && doors.filter(d => d.kind === "door").length, compartments: doors?.filter(d => d.kind === "compartment").length ?? 0,
+    glassFeet: level.glazing ? Math.round(level.glazing.filter(g => !g.excluded).reduce((sum, g) => sum + Math.hypot(g.b[0] - g.a[0], g.b[1] - g.a[1]), 0)) : null,
+  };
 }

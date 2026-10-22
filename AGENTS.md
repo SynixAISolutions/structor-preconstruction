@@ -21,6 +21,18 @@ whole mechanism.
 
 Anything not listed: ask before taking it.
 
+### Exception: drawings to 3D belongs to Core dev, end to end (Danial, 20 October 2026)
+
+The app itself converts uploaded drawings into the 3D model. Core dev builds all of it, **including
+its screens**:
+- the reading code (`lib/plan-vectors.ts`, `lib/wall-detection.ts`, `lib/schematic-model*.ts`)
+- the 3D and sheet-overlay files (`app/app/ui/schematic-geometry.tsx`, `app/app/ui/schematic-model.tsx`)
+- any part of `model-studio.tsx` that shows a generated model
+
+UI dev does not work on drawings to 3D and does not edit those files. No agent ever creates, traces or
+types in model geometry by hand. Every wall, door and level in a project's model must come from the
+app's own code running on that project's drawings.
+
 ## What changed before you start
 
 Core dev pulled logic and data out of the `.tsx` files so the boundary exists at all.
