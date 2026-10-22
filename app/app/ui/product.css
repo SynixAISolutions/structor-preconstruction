@@ -27,3 +27,6 @@
 .active-leveling-trade{display:flex;flex-direction:column;gap:4px;padding-right:14px;border-right:1px solid var(--line);min-width:110px}.active-leveling-trade span{font-size:10px;color:var(--muted)}.active-leveling-trade strong{font-size:13px}.submission-load-controls{display:flex;align-items:center;flex-wrap:wrap;gap:12px}.submission-load-controls .trade-select{flex-wrap:wrap}.submission-load-controls .trade-select select{max-width:100%}
 @media(max-width:700px){.submission-load-controls{width:100%}.active-leveling-trade{width:100%;border-right:0;border-bottom:1px solid var(--line);padding:0 0 10px}.submission-load-controls .trade-select{width:100%}.submission-load-controls .trade-select select{width:100%;min-width:0}.submission-load-controls .submission-load-button{width:100%}}
 .ui-modal>header{gap:14px}.ui-modal>header>div{min-width:0;flex:1}.ui-modal>header>.ui-icon-btn{flex-shrink:0}.ui-modal>header p{overflow-wrap:anywhere;line-height:1.6}
+
+/* Five stat tiles (Overview with Bought out) sit on one row on wide screens instead of leaving one alone. */
+@media(min-width:1200px){.ui-stats:has(>.ui-stat:nth-child(5):last-child){grid-template-columns:repeat(5,minmax(0,1fr))}}

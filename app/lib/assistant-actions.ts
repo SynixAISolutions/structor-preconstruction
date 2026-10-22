@@ -6,8 +6,11 @@
 
 import { budgetTotals, type BudgetState } from "./budget";
 import { BUDGET_VERSION_STAGES, saveBudgetVersion, type BudgetVersion, type BudgetVersionStage } from "./budget-versions";
+import { budgetCommitments, withCommitments } from "./commitments";
 import { sampleBudget } from "./data/budget";
 import { sampleProcurement } from "./data/procurement";
+import { sampleAwards } from "./data/sample-award";
+import type { AwardState } from "./award";
 import { sampleSchedule } from "./data/schedule";
 import { sampleStructorCheck } from "./data/rfi";
 import { usd } from "./format";
@@ -119,7 +122,10 @@ const CHANGES: { [K in ProposalToolName]: Change<any> } = {
     key: "budget-versions", initial: [],
     apply: (versions: BudgetVersion[], a, ctx) => {
       const stage = STAGE_WORDS[a.stage.toLowerCase().trim()] ?? fail("Stage must be concept, schematic, dd or cd.");
-      return saveBudgetVersion(versions, readDraft<BudgetState>(ctx.projectId, "budget-state-v2", sampleBudget), { projectId: ctx.projectId, name: a.name, stage, reason: a.reason, by: ASSISTANT_ACTOR, at: ctx.at });
+      // The budget as the Budget page shows it, committed worked out from the awards, as Save version saves it.
+      const typed = readDraft<BudgetState>(ctx.projectId, "budget-state-v2", sampleBudget);
+      const commitments = budgetCommitments(typed, readDraft<AwardState>(ctx.projectId, "awards", sampleAwards), readDraft<Procurement>(ctx.projectId, "procurement", sampleProcurement));
+      return saveBudgetVersion(versions, withCommitments(typed, commitments), { projectId: ctx.projectId, name: a.name, stage, reason: a.reason, by: ASSISTANT_ACTOR, at: ctx.at });
     },
     describe: (_before: BudgetVersion[], after: BudgetVersion[]) => {
       const v = after.at(-1)!;
