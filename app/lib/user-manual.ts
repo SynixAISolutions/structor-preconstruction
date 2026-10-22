@@ -318,3 +318,6 @@ export function manualMarkdown() {
     `## Glossary\n\n${glossary.map(t => `- **${t.name}:** ${t.meaning}`).join("\n\n")}`,
   ].join("\n\n");
 }
+
+/** A guide as plain text for the AI: title, purpose, numbered steps, the version note and terms. */
+export const guideText = (g: ManualGuide) => [`# ${g.title} (screen id: ${g.id}, group: ${g.group})`, g.purpose, ...g.steps.map((s, i) => `${i + 1}. ${s}`), g.reality ? `Note: ${g.reality}` : "", ...(g.terms ?? []).map(t => `${t.name}: ${t.meaning}`)].filter(Boolean).join("\n");

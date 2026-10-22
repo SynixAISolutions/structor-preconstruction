@@ -5,9 +5,12 @@ import { contractScopeJob } from "../../../lib/contract-scope-ai";
 import { veJob } from "../../../lib/ve-ai";
 import { gapCostJob } from "../../../lib/gap-cost-ai";
 import { EXTRA_JOBS } from "../../../lib/ai-jobs-more";
+import { assistantStep } from "../../../lib/assistant-agent";
 
 // Structor's AI: one fixed job per request (scope from specification pages, or a proposal reading),
-// never free-form prompts. The demo password (proxy.ts) guards this route like every page.
+// never free-form prompts. Ask Structor ("assistant-agent") is the one conversation: a question, then
+// rounds of project tools the browser runs (reads, and changes it only proposes for the user to
+// apply). The demo password (proxy.ts) guards this route like every page.
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
@@ -26,6 +29,7 @@ export async function POST(request: Request) {
 
   const model = body.job === "drawing" ? "deepseek-flash" : textModel(body.job === "proposal" ? "deepseek-v4-pro" : "deepseek-flash");
   try {
+    if (body.job === "assistant-agent") return json(await assistantStep(body.input, key, request.signal));
     if (body.job === "contract-scope") return await contractScopeJob(body.input, key, request.signal);
     if (body.job === "value-engineering") return await veJob(body.input, key, request.signal);
     if (body.job === "gap-cost") return await gapCostJob(body.input, key, request.signal);

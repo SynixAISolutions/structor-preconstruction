@@ -11,7 +11,7 @@ import type { FormParagraph } from "./docx-text";
 import { screenConceptSuggestion, type ComparableFacts, type ConceptSuggestion, type targetFacts } from "./concept-ai";
 import type { ReferencedDoc } from "./setup-checks";
 import { cleanOutline, polygonArea } from "./schematic-model";
-import { glossary, manualGuides } from "./user-manual";
+import { glossary, guideText, manualGuides } from "./user-manual";
 
 type Job<I, O> = { parse: (raw: unknown) => I; messages: (input: I) => ChatMessage[]; screen: (output: unknown, input: I) => O; model: "deepseek-flash" | "deepseek-v4-pro"; maxTokens: number };
 const job = <I, O>(j: Job<I, O>) => j;
@@ -158,7 +158,6 @@ const submittalRequirements = job({
 // of About & help. Answers come only from the built-in guide; it says so when the guide doesn't cover it.
 
 type AssistantInput = { question: string; screen: string; history: { role: "user" | "assistant"; text: string }[] };
-const guideText = (g: (typeof manualGuides)[number]) => [`# ${g.title} (screen id: ${g.id}, group: ${g.group})`, g.purpose, ...g.steps.map((s, i) => `${i + 1}. ${s}`), g.reality ? `Note: ${g.reality}` : "", ...(g.terms ?? []).map(t => `${t.name}: ${t.meaning}`)].filter(Boolean).join("\n");
 const assistant = job({
   model: "deepseek-flash", maxTokens: 1500,
   parse: (raw: unknown): AssistantInput => {
