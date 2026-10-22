@@ -74,6 +74,7 @@ import {
   type ViewProps,
 } from "./shared";
 import "./rfi-ui.css";
+import { LinkedProjectContent } from "./project-content-links";
 
 const CURRENT_USER = "Marcel Khoury";
 const origins: IssueOrigin[] = ["ai", "team", "subcontractor", "email"];
@@ -321,7 +322,7 @@ export function RfiWorkspace({ projectName, notify }: ViewProps) {
       </Panel>
       <div className="rfi-detail-column">{selectedRfi && <Panel title={selectedRfi.number} subtitle={`${selectedRfi.discipline || "No discipline"} · ${selectedRfi.issueIds.length} issue${selectedRfi.issueIds.length === 1 ? "" : "s"}`} action={<Badge tone={rfiTone(selectedRfi.status)}>{selectedRfi.status}</Badge>}>
         <div className="rfi-detail"><div className="rfi-rfi-header"><h2>{selectedRfi.subject}</h2><p>{selectedRfi.question}</p></div>
-          <div className="rfi-route"><span><UserRoundCheck size={17}/><small>To</small><strong>{selectedRfi.to.name || "Not assigned"}</strong><em>{selectedRfi.to.company || "Design team"}</em></span><span><Mail size={17}/><small>Email</small><strong>{selectedRfi.to.email || "Required before send"}</strong></span><span><CircleHelp size={17}/><small>Answer due</small><strong>{selectedRfi.due ? displayDate(selectedRfi.due) : "Not set"}</strong></span></div>
+          <LinkedProjectContent kind="rfi" recordId={selectedRfi.id}/><div className="rfi-route"><span><UserRoundCheck size={17}/><small>To</small><strong>{selectedRfi.to.name || "Not assigned"}</strong><em>{selectedRfi.to.company || "Design team"}</em></span><span><Mail size={17}/><small>Email</small><strong>{selectedRfi.to.email || "Required before send"}</strong></span><span><CircleHelp size={17}/><small>Answer due</small><strong>{selectedRfi.due ? displayDate(selectedRfi.due) : "Not set"}</strong></span></div>
           <div className="rfi-source-issues"><h3>Packaged source issues</h3>{selectedRfi.issueIds.map(id => <button key={id} onClick={() => { setSelectedIssueId(id); setTab("Issue review"); }}><span>{rfiIssueNames.get(id) ?? id}</span><ChevronRight size={14}/></button>)}</div>
           {selectedRfi.approvedAt && <div className="rfi-event approved"><ShieldCheck size={16}/><span><strong>Approved by the contractor</strong><small>{selectedRfi.approvedBy} · {prettyDateTime(selectedRfi.approvedAt)}</small></span></div>}
           {selectedRfi.sentAt && <div className="rfi-event"><Send size={16}/><span><strong>Recorded as sent to the architect</strong><small>{selectedRfi.sentBy} · {prettyDateTime(selectedRfi.sentAt)}</small></span></div>}

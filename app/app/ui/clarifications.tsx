@@ -5,6 +5,7 @@ import { applyClarification, clarificationLetter, draftClarifications, isOverdue
 import { cancelClarificationRequest, clarificationLink, ClarificationConflict, recordApplied, sendClarificationRequest, useClarifications } from "../../lib/clarifications-client";
 import type { LevelingBidder, LevelingScopeItem } from "../../lib/leveling-import";
 import "./clarifications.css";
+import { LinkedProjectContent } from "./project-content-links";
 
 const actor = "Marcel Khoury";
 const usd = (amount: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(amount);
@@ -89,7 +90,7 @@ export function ClarificationsPanel({ projectId, projectName, packageId, trade, 
       <h3>Requests &amp; apply preview</h3>
       {!loading && !requests.length && <p>No requests sent for this trade yet.</p>}
       {requests.map(request => <details className="clarify-card" key={request.id}><summary>{request.bidder}<span>{request.status === "cancelled" ? "Cancelled" : request.status === "applied" ? "Applied" : `${request.lines.filter(l => l.answer).length}/${request.lines.length} answered${isOverdue(request, new Date().toISOString().slice(0, 10)) ? " · Overdue" : request.status === "answered" ? " · Answered" : " · Sent"}`}</span></summary>
-        <p>To {request.recipient?.name} · {request.recipient?.email} · Reply by {request.dueAt}</p>
+        <LinkedProjectContent kind="clarification" recordId={request.id}/><p>To {request.recipient?.name} · {request.recipient?.email} · Reply by {request.dueAt}</p>
         {request.status === "cancelled" ? <p>This request was withdrawn. Its link no longer accepts answers.</p> : <ApplyClarificationPreview request={request} bidders={bidders}/>}
         <div className="clarify-actions">
           {request.status !== "cancelled" && <button className="ui-btn" disabled={busy || !!pending || loading || !!error || staleLines(request, bidders).baseBidChanged || !request.lines.some(l => l.answer)} onClick={() => void apply(request)}>{request.status === "applied" ? "Apply again" : "Apply answers"}</button>}
