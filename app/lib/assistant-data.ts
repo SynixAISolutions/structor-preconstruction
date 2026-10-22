@@ -7,15 +7,18 @@ import { activeAward, awardStage, type AwardState } from "./award";
 import { bidPackageReport, type BidPackageReport } from "./bid-package-report";
 import { levelingCandidates, budgetTotals, type BudgetState } from "./budget";
 import { budgetCommitments, withCommitments, type Commitments } from "./commitments";
-import { budgetLinesForTrade } from "./estimate";
+import { budgetLinesForTrade, estimateByTrade, placeRows } from "./estimate";
+import { costPlan, FORECAST_LABEL, type Forecasts } from "./forecasts";
 import { initialBidders, type Bidder } from "./data/commercial";
 import { sampleBudget } from "./data/budget";
+import { initialTakeoffs, type TakeoffRow } from "./data/preconstruction";
 import { sampleProcurement } from "./data/procurement";
 import { sampleSchedule } from "./data/schedule";
 import { sampleStructorCheck } from "./data/rfi";
 import { sampleAwards, sampleSubmissions } from "./data/sample-award";
 import { buildLevelingImport, type BidProvenance, type LevelingBidder, type LevelingProject, type LevelingScopeItem } from "./leveling-import";
 import { refreshPortalComparison, type SavedTradeComparison } from "./leveling-sync";
+import { portalComparisonCandidates } from "./portal-comparisons";
 import type { Procurement, TradePackage } from "./procurement";
 import { loadProjects, sampleProjectRecords, type Project } from "./projects";
 import { getActiveProjectId } from "./project-scope";
@@ -47,8 +50,10 @@ const readable = (code: string) => code.replace(/-/g, " ");
 type Context = { projectId: string; today: string; fetchImpl?: typeof fetch };
 type Data = {
   project: Project | undefined; procurement: Procurement; submissions: Submission[]; directory: Bidder[];
-  /** The budget as the pages show it: committed worked out from the awards (lib/commitments). */
-  budget: BudgetState; awards: AwardState; commitments: Commitments; ve: VeState; check: StructorCheckState; schedule: ScheduleState;
+  /** The budget as the pages show it: committed worked out from the awards (lib/commitments), and the
+   *  forecasts (lib/forecasts) once withForecasts has run; `typedBudget` is the saved budget. */
+  budget: BudgetState; typedBudget: BudgetState; awards: AwardState; commitments: Commitments; forecasts: Forecasts | null;
+  ve: VeState; check: StructorCheckState; schedule: ScheduleState;
 };
 
 /** The keys and starting values of lib/use-procurement, use-submissions, use-budget and the rest. */
@@ -62,7 +67,7 @@ function projectData(projectId: string): Data {
     procurement,
     submissions: readDraft<Submission[]>(projectId, "submissions", sampleSubmissions),
     directory: readDraft<Bidder[]>(projectId, "directory", initialBidders),
-    budget: withCommitments(typed, commitments), awards, commitments,
+    budget: withCommitments(typed, commitments), typedBudget: typed, awards, commitments, forecasts: null,
     ve: readDraft<VeState>(projectId, "value-engineering", EMPTY_VE),
     check: readDraft<StructorCheckState>(projectId, "structor-check-state", sampleStructorCheck),
     schedule: readDraft<ScheduleState>(projectId, "schedule-plan", sampleSchedule),
@@ -72,11 +77,35 @@ function projectData(projectId: string): Data {
 const companyName = (directory: Bidder[], id: string | null) => directory.find(b => b.id === id)?.company ?? id ?? "";
 const packageName = (procurement: Procurement, id: string | null) => procurement.packages.find(p => p.id === id)?.name ?? id ?? "";
 
+const takeoffEstimates = (projectId: string, procurement: Procurement) =>
+  estimateByTrade(placeRows(readDraft<TakeoffRow[]>(projectId, "takeoffs", initialTakeoffs), procurement.packages), procurement).trades;
+
+/**
+ * The cost plan (lib/forecasts) from saved data alone, for changes, which apply at once: the leveled
+ * bids are the saved trade comparisons (Bid leveling saves the open one as it changes), without an
+ * open workbook that isn't tied to a trade.
+ */
+export function savedCostPlan(projectId: string): BudgetState {
+  const d = projectData(projectId);
+  const comparisons = readDraft<Record<string, SavedTradeComparison>>(projectId, "leveling-trades", {});
+  const candidates = portalComparisonCandidates({ projectId, projectName: d.project?.name ?? "", procurement: d.procurement, submissions: d.submissions, directory: d.directory, comparisons, ve: d.ve });
+  return costPlan(d.typedBudget, { awards: d.awards, procurement: d.procurement, submissions: d.submissions, candidates, directory: d.directory, ve: d.ve, estimates: takeoffEstimates(projectId, d.procurement) }).budget;
+}
+
+/** The project data with forecasts worked out, as the Budget page shows them: they need the leveled bids, loaded here. */
+async function withForecasts(d: Data, projectId: string): Promise<Data> {
+  const packages = await levelingPackages(projectId, d);
+  const candidates = packages.filter(p => !p.unreviewed).flatMap(p => levelingCandidates({ packageId: p.packageId || null, items: p.items, bidders: p.bidders, provenance: p.provenance }));
+  const plan = costPlan(d.typedBudget, { awards: d.awards, procurement: d.procurement, submissions: d.submissions, candidates, directory: d.directory, ve: d.ve, estimates: takeoffEstimates(projectId, d.procurement) });
+  return { ...d, budget: plan.budget, commitments: plan.commitments, forecasts: plan.forecasts };
+}
+
 function budgetSummary(d: Data, costCenter?: string) {
   const t = budgetTotals(d.budget, costCenter);
   // Awarded but not executed yet: not in committed until the subcontract is fully signed.
   const pending = d.budget.lines.filter(l => !l.byOwner && (costCenter === undefined || l.costCenter === costCenter)).reduce((n, l) => n + Math.round((d.commitments.lines[l.id]?.pending ?? 0) * 100), 0) / 100;
-  return { budget: t.budget, forecast: t.forecast, committed: t.committed, committedNote: "committed = executed subcontracts (worked out from awards) plus amounts typed on lines no award covers", pendingSignature: pending, remaining: t.remaining, variance: t.variance, linesWithoutForecast: t.unforecastLines, allowancesAdded: t.allowancesAdded, allowancesPending: t.allowancesPending, totalBudget: t.totalBudget, totalForecast: t.totalForecast };
+  return { budget: t.budget, forecast: t.forecast, committed: t.committed, committedNote: "committed = executed subcontracts (worked out from awards) plus amounts typed on lines no award covers",
+    forecastNote: "a line's forecast is the override set on it, else its award, else the leveled low bid, else a fully reviewed in-house estimate; a line with none counts at its budget", pendingSignature: pending, remaining: t.remaining, variance: t.variance, linesWithoutForecast: t.unforecastLines, allowancesAdded: t.allowancesAdded, allowancesPending: t.allowancesPending, totalBudget: t.totalBudget, totalForecast: t.totalForecast };
 }
 
 const openIssue = (status: string) => !["resolved", "dismissed", "combined"].includes(status);
@@ -264,7 +293,13 @@ function budget(d: Data, costCenter?: string) {
     if (!c) return "";
     return [...c.sources.map(s => `${s.counts === "committed" ? "committed by" : "pending"} ${s.company} ${s.amount} (${s.stage})`), ...c.splitNeeded.map(t => `split needed for ${t}`)].join("; ");
   };
-  const line = (l: BudgetState["lines"][number]) => [l.description, l.costCenter, l.csiCode ?? "no code", `budget ${l.budget}`, `forecast ${l.forecast ?? "none"}`, `committed ${l.committed}`, from(l.id),
+  const forecastFrom = (id: string) => {
+    const f = d.forecasts?.[id];
+    if (!f) return "";
+    if (f.kind === "none") return f.note ? `no forecast yet: ${f.note}` : "";
+    return `forecast from ${FORECAST_LABEL[f.kind].toLowerCase()}: ${f.detail}${f.kind === "manual" && f.automatic ? ` (automatic would be ${f.automatic.value} from ${FORECAST_LABEL[f.automatic.kind].toLowerCase()})` : ""}`;
+  };
+  const line = (l: BudgetState["lines"][number]) => [l.description, l.costCenter, l.csiCode ?? "no code", `budget ${l.budget}`, `forecast ${l.forecast ?? "none"}`, forecastFrom(l.id), `committed ${l.committed}`, from(l.id),
     l.forecast !== null && l.forecast > l.budget ? `over by ${Math.round((l.forecast - l.budget) * 100) / 100}` : "", l.status, l.byOwner ? "carried by owner, not in totals" : ""].filter(Boolean).join(" · ");
   return {
     costCenters: d.budget.costCenters,
@@ -337,7 +372,7 @@ export async function runAssistantTool(call: AssistantToolCall, ctx: Partial<Con
   try {
     switch (call.name) {
       case "all_projects": return { content: toolResultText(allProjects(context.projectId)), screens: [screen!] };
-      case "project_overview": return { content: toolResultText(projectOverview(d)), screens: [screen!] };
+      case "project_overview": return { content: toolResultText(projectOverview(await withForecasts(d, context.projectId))), screens: [screen!] };
       case "trade_packages": return { content: toolResultText(tradePackages(d, a.trade)), screens: [screen!] };
       case "bid_leveling": return { content: toolResultText(await bidLeveling(d, context, a.trade)), screens: [screen!] };
       case "bid_package_summary": {
@@ -345,7 +380,7 @@ export async function runAssistantTool(call: AssistantToolCall, ctx: Partial<Con
         return "report" in r ? { content: toolResultText(reportBrief(r.report)), screens: [screen!], reports: [r.report] } : { content: toolResultText(r), screens: [] };
       }
       case "bid_submissions": return { content: toolResultText(bidSubmissions(d, a.trade)), screens: [screen!] };
-      case "budget": return { content: toolResultText(budget(d, a.costCenter)), screens: [screen!] };
+      case "budget": return { content: toolResultText(budget(await withForecasts(d, context.projectId), a.costCenter)), screens: [screen!] };
       case "value_engineering": return { content: toolResultText(valueEngineering(d)), screens: [screen!] };
       case "issues_and_rfis": return { content: toolResultText(issuesAndRfis(d, a.status)), screens: [screen!] };
       case "schedule": return { content: toolResultText(schedule(d, context.today, a.phase)), screens: [screen!] };

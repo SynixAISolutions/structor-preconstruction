@@ -1,18 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { initialBidders } from "./data/commercial";
 import { sampleFiles } from "./data/preconstruction";
-import type { BidProvenance, LevelingBidder, LevelingScopeItem } from "./leveling-import";
+import { costPlan } from "./forecasts";
+import type { BidProvenance, LevelingBidder, LevelingProject, LevelingScopeItem } from "./leveling-import";
+import type { SavedTradeComparison } from "./leveling-sync";
+import { openComparisonCandidates } from "./portal-comparisons";
+import { useActiveProject } from "./project-scope";
 import type { SetupSummary } from "./project-setup";
 import type { Project } from "./projects";
 import { scheduleRows } from "./schedule";
 import { EMPTY_TODO_HISTORY, deriveTodo, reconcileTodo, type DoneTask, type LevelingSnapshot, type TodoHistory, type TodoSummary } from "./todo";
 import { useAward } from "./use-award";
 import { useBudget } from "./use-budget";
+import { useEstimate } from "./use-estimate";
 import { useLocalDraft } from "./use-local-draft";
 import { useProjectSetup } from "./use-project-setup";
 import { useSchedule } from "./use-schedule";
 import { useSubmissions } from "./use-submissions";
+import { useValueEngineering } from "./use-value-engineering";
 import { loadWorkspace } from "./workspace-storage";
 
 const localDay = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
@@ -31,19 +38,29 @@ export function useTodoSummary(project: Project | null): TodoSummary & { setup: 
   const [documents] = useLocalDraft("library", sampleFiles);
   const [provenance] = useLocalDraft<Record<string, BidProvenance>>("leveling-submission-provenance", {});
   const [loadedPackageId] = useLocalDraft("leveling-submission-package", "");
-  const [leveling, setLeveling] = useState<{ snapshot: LevelingSnapshot | null; loaded: boolean }>({ snapshot: null, loaded: false });
+  const [leveling, setLeveling] = useState<{ snapshot: LevelingSnapshot | null; workspace: Omit<SavedTradeComparison, "provenance"> | null; loaded: boolean }>({ snapshot: null, workspace: null, loaded: false });
+  const projectId = useActiveProject();
+  const { state: ve } = useValueEngineering();
+  const [directory] = useLocalDraft("directory", initialBidders);
+  const [comparisons] = useLocalDraft<Record<string, SavedTradeComparison>>("leveling-trades", {});
+  const estimate = useEstimate();
   const [reloads, setReloads] = useState(0);
   useEffect(() => {
     let current = true;
-    setLeveling(prev => prev.loaded ? { snapshot: prev.snapshot, loaded: false } : prev);
-    void loadWorkspace<unknown, LevelingScopeItem, LevelingBidder>()
-      .then(saved => { if (current) setLeveling({ snapshot: saved ? { packageId: loadedPackageId || null, items: saved.items, bidders: saved.bidders, provenance } : null, loaded: true }); })
-      .catch(() => { if (current) setLeveling({ snapshot: null, loaded: true }); });
+    setLeveling(prev => prev.loaded ? { ...prev, loaded: false } : prev);
+    void loadWorkspace<LevelingProject, LevelingScopeItem, LevelingBidder>()
+      .then(saved => { if (current) setLeveling({ snapshot: saved ? { packageId: loadedPackageId || null, items: saved.items, bidders: saved.bidders, provenance } : null, workspace: saved, loaded: true }); })
+      .catch(() => { if (current) setLeveling({ snapshot: null, workspace: null, loaded: true }); });
     return () => { current = false; };
   }, [loadedPackageId, project?.id, provenance, reloads]);
   const reload = useCallback(async () => { setReloads(n => n + 1); await refresh(); }, [refresh]);
   const today = localDay();
-  const summary = deriveTodo({ project, documents, procurement, submissions, leveling: leveling.snapshot, budget, awards, schedule: { rows: scheduleRows(schedulePlan, today), today }, setup });
+  // The budget as the Budget page shows it: committed from the awards, forecasts worked out (lib/forecasts).
+  const plan = useMemo(() => costPlan(budget, {
+    awards, procurement, submissions, directory, ve, estimates: estimate.byTrade.trades,
+    candidates: openComparisonCandidates({ projectId, procurement, submissions, directory, workspace: leveling.workspace, packageId: loadedPackageId, provenance, comparisons, ve }),
+  }).budget, [budget, awards, procurement, submissions, directory, ve, estimate.byTrade.trades, projectId, leveling.workspace, loadedPackageId, provenance, comparisons]);
+  const summary = deriveTodo({ project, documents, procurement, submissions, leveling: leveling.snapshot, budget: plan, awards, schedule: { rows: scheduleRows(schedulePlan, today), today }, setup });
   return { ...summary, setup, ready: filesReady && leveling.loaded, reload };
 }
 

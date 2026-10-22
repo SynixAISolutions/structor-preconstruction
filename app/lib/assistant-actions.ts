@@ -4,13 +4,9 @@
 // tells any open page to reload (writeDraft). Undo puts the data back while nothing else has
 // changed it since. Every applied change is logged under the project ("assistant-log").
 
-import { budgetTotals, type BudgetState } from "./budget";
+import { budgetTotals } from "./budget";
 import { BUDGET_VERSION_STAGES, saveBudgetVersion, type BudgetVersion, type BudgetVersionStage } from "./budget-versions";
-import { budgetCommitments, withCommitments } from "./commitments";
-import { sampleBudget } from "./data/budget";
 import { sampleProcurement } from "./data/procurement";
-import { sampleAwards } from "./data/sample-award";
-import type { AwardState } from "./award";
 import { sampleSchedule } from "./data/schedule";
 import { sampleStructorCheck } from "./data/rfi";
 import { usd } from "./format";
@@ -20,7 +16,7 @@ import { addActivity, scheduleRows, setProgress, type ScheduleState } from "./sc
 import type { Screen } from "./screens";
 import { readDraft, writeDraft } from "./use-local-draft";
 import { addVeIdea, EMPTY_VE, nextVeNumber, type VeState } from "./value-engineering";
-import { matchesTrade } from "./assistant-data";
+import { matchesTrade, savedCostPlan } from "./assistant-data";
 import { assistantTool, type AssistantToolCall, type ProposalToolName } from "./assistant-tools";
 
 /** Who changes are recorded as: the signed-in name the pages use, marked as made through Ask Structor. */
@@ -122,10 +118,8 @@ const CHANGES: { [K in ProposalToolName]: Change<any> } = {
     key: "budget-versions", initial: [],
     apply: (versions: BudgetVersion[], a, ctx) => {
       const stage = STAGE_WORDS[a.stage.toLowerCase().trim()] ?? fail("Stage must be concept, schematic, dd or cd.");
-      // The budget as the Budget page shows it, committed worked out from the awards, as Save version saves it.
-      const typed = readDraft<BudgetState>(ctx.projectId, "budget-state-v2", sampleBudget);
-      const commitments = budgetCommitments(typed, readDraft<AwardState>(ctx.projectId, "awards", sampleAwards), readDraft<Procurement>(ctx.projectId, "procurement", sampleProcurement));
-      return saveBudgetVersion(versions, withCommitments(typed, commitments), { projectId: ctx.projectId, name: a.name, stage, reason: a.reason, by: ASSISTANT_ACTOR, at: ctx.at });
+      // The budget as the Budget page shows it (committed from the awards, forecasts worked out), as Save version saves it.
+      return saveBudgetVersion(versions, savedCostPlan(ctx.projectId), { projectId: ctx.projectId, name: a.name, stage, reason: a.reason, by: ASSISTANT_ACTOR, at: ctx.at });
     },
     describe: (_before: BudgetVersion[], after: BudgetVersion[]) => {
       const v = after.at(-1)!;

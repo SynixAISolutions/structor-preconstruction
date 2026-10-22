@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { ArrowRight, Check, FileText, Link2, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import {
   addAllowance, addBudgetLine, applyEstimateValue, applyLevelingValue, approveBudgetLine, budgetTotals,
@@ -10,8 +10,9 @@ import {
 } from "../../lib/budget";
 import { useValueEngineering } from "../../lib/use-value-engineering";
 import { useBudget } from "../../lib/use-budget";
-import { useCommitments } from "../../lib/use-commitments";
+import { useAward } from "../../lib/use-award";
 import type { LineCommitment } from "../../lib/commitments";
+import { costPlan as planCosts, FORECAST_LABEL, type LineForecast } from "../../lib/forecasts";
 import { estimateMoney } from "./estimate-format";
 import { useEstimate } from "../../lib/use-estimate";
 import { useSubmissions } from "../../lib/use-submissions";
@@ -46,8 +47,10 @@ function amount(value: FormDataEntryValue | null, optional = false) {
   return Number.isFinite(numeric) ? numeric : Number.NaN;
 }
 
-function LineForm({ line, commitment, costCenters, errors, onSubmit, onCancel }: { line: BudgetLine | null; commitment?: LineCommitment; costCenters: string[]; errors: BudgetErrors; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
+function LineForm({ line, commitment, forecast, costCenters, errors, onSubmit, onCancel }: { line: BudgetLine | null; commitment?: LineCommitment; forecast?: LineForecast; costCenters: string[]; errors: BudgetErrors; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
   const fromAwards = !!commitment?.sources.length;
+  const auto = forecast?.automatic;
+  const overridden = line !== null && line.forecast !== null;
   return <form onSubmit={onSubmit}>
     <div className="ui-form-grid">
       <label className="ui-field full"><span>Description</span><input name="description" required defaultValue={line?.description ?? ""}/><FieldError error={errors.description}/></label>
@@ -56,7 +59,9 @@ function LineForm({ line, commitment, costCenters, errors, onSubmit, onCancel }:
       <label className="ui-field"><span>CSI division or section</span><input name="csiCode" placeholder="03 or 03 30 00" defaultValue={line?.csiCode ?? ""}/><FieldError error={errors.csiCode}/></label>
       <label className="ui-field"><span>Owner</span><input name="owner" defaultValue={line?.owner ?? ""}/></label>
       <label className="ui-field"><span>In-house budget · USD</span><input name="budget" inputMode="decimal" required defaultValue={line?.budget ?? ""}/><FieldError error={errors.budget}/></label>
-      <label className="ui-field"><span>Forecast · USD</span><input name="forecast" inputMode="decimal" placeholder="Uses budget until entered" defaultValue={line?.forecast ?? ""}/><FieldError error={errors.forecast}/></label>
+      <label className="ui-field"><span>Forecast · USD</span><input name="forecast" inputMode="decimal" placeholder={auto ? `Automatic: ${usd(auto.value)}` : "Uses budget until entered"} defaultValue={line?.forecast ?? ""} aria-describedby="forecast-basis"/><small id="forecast-basis" className="cm-cell-note">{overridden
+        ? auto ? `Override. Clear it to use the automatic ${usd(auto.value)} (${FORECAST_LABEL[auto.kind].toLowerCase()} · ${auto.detail}).` : "Override. Clear it to count the line at its budget."
+        : auto ? `Automatic from the ${FORECAST_LABEL[auto.kind].toLowerCase()} (${auto.detail}). Type a value to override it.` : "Filled automatically from the award, leveled low bid or reviewed in-house estimate once there is one. Type a value to set it now."}</small><FieldError error={errors.forecast}/></label>
       {fromAwards
         // The awards set this line's committed cost; the typed value is kept, unused, in case they are cancelled.
         ? <label className="ui-field"><span>Committed · USD</span><input value={usd(commitment!.committed)} readOnly aria-describedby="committed-from-awards"/><input type="hidden" name="committed" value={line?.committed ?? 0}/><small id="committed-from-awards" className="cm-cell-note">Set by {commitment!.sources.map(s => `${s.company}'s award (${s.stage})`).join(" and ")}. Change or cancel the award to change it.</small></label>
@@ -80,12 +85,25 @@ function CommittedCell({ line, commitment, onOpen }: { line: BudgetLine; commitm
   </>;
 }
 
+/** Forecast: an override, else the award, leveled low or reviewed estimate, else the budget baseline. */
+function ForecastCell({ line, forecast, onAutomatic }: { line: BudgetLine; forecast?: LineForecast; onAutomatic: () => void }) {
+  if (!forecast) return <strong>{usd(line.forecast ?? line.budget)}</strong>;
+  const auto = forecast.automatic;
+  return <>
+    <strong>{usd(forecast.value ?? line.budget)}</strong>
+    {forecast.kind === "none" ? <small className="cm-cell-note">Budget baseline{forecast.note ? ` · ${forecast.note}` : ""}</small>
+      : forecast.kind === "manual" ? <><small className="cm-cell-note">Override · {forecast.detail}</small><button type="button" className="cm-text-button" onClick={onAutomatic}>{auto ? `Use ${FORECAST_LABEL[auto.kind].toLowerCase()} ${usd(auto.value)}` : "Clear override"}</button></>
+      : <><small className="cm-budget-source"><Link2 size={11}/>{FORECAST_LABEL[forecast.kind]} · {forecast.detail}</small>{forecast.note && <small className="cm-cell-note">{forecast.note}</small>}</>}
+  </>;
+}
+
 export function BudgetView({ notify, navigate, project }: ViewProps & { project: Project }) {
   const { state, run } = useBudget();
   const { state: ve } = useValueEngineering();
   const estimate = useEstimate();
   const submitted = useSubmissions();
   const [directory] = useLocalDraft("directory", initialBidders);
+  const { state: awards } = useAward();
   const [inHouseLine, setInHouseLine] = useState<BudgetLine | null>(null);
   const [split, setSplit] = useState<{pkg:TradePackage;bid:LowBid}|null>(null);
   const comparison = useLevelingComparison();
@@ -101,8 +119,11 @@ export function BudgetView({ notify, navigate, project }: ViewProps & { project:
   const [basis, setBasis] = useState<LevelingBasis | "estimate">("reviewed");
   const [estimatePackageId, setEstimatePackageId] = useState("");
   const [linkEstimate, setLinkEstimate] = useState(false);
-  // Committed cost comes from the awards (lib/commitments); every total and saved version reads this plan.
-  const { commitments, budget: costPlan } = useCommitments(state, submitted.procurement);
+  // Committed comes from the awards (lib/commitments), forecasts from the award, leveled low or reviewed
+  // estimate unless overridden (lib/forecasts); every total, export and saved version reads this plan.
+  const { commitments, forecasts, budget: costPlan } = useMemo(() => planCosts(state, { awards, procurement: submitted.procurement, submissions: submitted.submissions, candidates, directory, ve, estimates: estimate.byTrade.trades }), [state, awards, submitted.procurement, submitted.submissions, candidates, directory, ve, estimate.byTrade.trades]);
+  const forecastOf = (line: BudgetLine) => forecasts[line.id]?.value ?? null;
+  const forecastKinds = Object.values(forecasts).reduce<Record<string, number>>((n, f) => { n[f.kind] = (n[f.kind] ?? 0) + 1; return n; }, {});
   const totals = budgetTotals(costPlan);
   const centers = totalsByCostCenter(costPlan);
   const divisions = totalsByDivision(costPlan);
@@ -155,6 +176,12 @@ export function BudgetView({ notify, navigate, project }: ViewProps & { project:
     setEstimatePackageId(line.packageId ?? (matches.length === 1 ? matches[0].id : ""));
     comparison.refresh();
   }
+  function clearOverride(line: BudgetLine) {
+    const auto = forecasts[line.id]?.automatic;
+    const nextErrors = run(current => editBudgetLine(current, line.id, { forecast: null }, actor));
+    if (nextErrors) { setErrors(nextErrors); return; }
+    notify(auto ? `${line.description} now forecasts from the ${FORECAST_LABEL[auto.kind].toLowerCase()}.` : `Override cleared on ${line.description}.`);
+  }
   function applyForecast() {
     if (!levelingLine) return;
     if (basis === "estimate") {
@@ -171,29 +198,28 @@ export function BudgetView({ notify, navigate, project }: ViewProps & { project:
   }
 
   function budgetRow(line: BudgetLine) {
-    const forecast = line.forecast ?? line.budget;
     const pkg = tradeForBudgetLine(state, submitted.procurement, line);
     const low = pkg ? lowestTradeBid(submitted.procurement, submitted.submissions, pkg.id, candidates, directory, ve) : null;
     const lowValue = pkg && low ? lowestSubLineValue(state,pkg,line.id,low.value) : null;
     const margin = lowValue === null ? null : Math.round((line.budget-lowValue)*100)/100;
     const carried = state.allowances.filter(a => a.budgetLineId === line.id && a.status === "included");
     const perSquareFoot = costPerSquareFoot(line.budget, centerAreas.get(line.costCenter));
-    return <tr key={line.id}><td><div className="cm-table-primary"><strong>{line.description}</strong>{carried.map(a => <small key={a.id}><Badge tone="blue">Allowance · {a.name} · {usd(a.amount)}</Badge></small>)}<small>{line.classification === "direct" ? line.csiCode ? `CSI ${line.csiCode}` : "Direct · CSI not recorded" : "Indirect cost"}</small><EstimateBasisLabel line={line} trades={estimate.byTrade.trades}/>{line.forecastSource && <small className="cm-budget-source"><Link2 size={11}/>{basisLabels[line.forecastSource.basis]} · {line.forecastSource.bidderName}</small>}</div></td><td>{line.costCenter}<small className="cm-cell-note">{line.owner || "No owner"}</small></td><td className="cm-money"><button className="cm-text-button" aria-label={`Set in-house budget for ${line.description}`} onClick={() => setInHouseLine(line)}>{usd(line.budget)} <Pencil size={11}/></button>{line.inHouseEstimate && <small className="cm-cell-note">From takeoff estimate</small>}</td><td><LowBidCell bid={low} budget={state} pkg={pkg} lineId={line.id} onSplit={(pkg,bid) => setSplit({pkg,bid})}/></td><td>{margin===null?"—":<span className={margin>=0?"cm-positive":"cm-negative"}>{usd(margin)}</span>}</td><td className="cm-money">{usdPerSquareFoot(perSquareFoot)}</td><td><strong>{usd(forecast)}</strong>{line.forecast === null && <small className="cm-cell-note">Budget baseline</small>}</td><td className="cm-committed-cell"><CommittedCell line={line} commitment={commitments.lines[line.id]} onOpen={() => navigate("contracts")}/></td><td><Badge tone={line.status === "approved" ? "green" : "amber"}>{line.status === "approved" ? "Approved" : "Draft"}</Badge></td><td><div className="cm-budget-actions">{line.classification === "direct" && !line.byOwner && <button className="cm-text-button" onClick={() => void openLeveling(line)}>Choose forecast basis</button>}<button className="ui-icon-btn" aria-label={`Edit ${line.description}`} onClick={() => { setEdit(line); setErrors({}); }}><Pencil size={15}/></button></div></td></tr>;
+    return <tr key={line.id}><td><div className="cm-table-primary"><strong>{line.description}</strong>{carried.map(a => <small key={a.id}><Badge tone="blue">Allowance · {a.name} · {usd(a.amount)}</Badge></small>)}<small>{line.classification === "direct" ? line.csiCode ? `CSI ${line.csiCode}` : "Direct · CSI not recorded" : "Indirect cost"}</small><EstimateBasisLabel line={line} trades={estimate.byTrade.trades}/></div></td><td>{line.costCenter}<small className="cm-cell-note">{line.owner || "No owner"}</small></td><td className="cm-money"><button className="cm-text-button" aria-label={`Set in-house budget for ${line.description}`} onClick={() => setInHouseLine(line)}>{usd(line.budget)} <Pencil size={11}/></button>{line.inHouseEstimate && <small className="cm-cell-note">From takeoff estimate</small>}</td><td><LowBidCell bid={low} budget={state} pkg={pkg} lineId={line.id} onSplit={(pkg,bid) => setSplit({pkg,bid})}/></td><td>{margin===null?"—":<span className={margin>=0?"cm-positive":"cm-negative"}>{usd(margin)}</span>}</td><td className="cm-money">{usdPerSquareFoot(perSquareFoot)}</td><td className="cm-forecast-cell"><ForecastCell line={line} forecast={forecasts[line.id]} onAutomatic={() => clearOverride(line)}/></td><td className="cm-committed-cell"><CommittedCell line={line} commitment={commitments.lines[line.id]} onOpen={() => navigate("contracts")}/></td><td><Badge tone={line.status === "approved" ? "green" : "amber"}>{line.status === "approved" ? "Approved" : "Draft"}</Badge></td><td><div className="cm-budget-actions">{line.classification === "direct" && !line.byOwner && <button className="cm-text-button" onClick={() => void openLeveling(line)}>{line.forecast !== null ? "Change override" : "Override forecast"}</button>}<button className="ui-icon-btn" aria-label={`Edit ${line.description}`} onClick={() => { setEdit(line); setErrors({}); }}><Pencil size={15}/></button></div></td></tr>;
   }
 
   const totalVariance = totals.totalBudget - totals.totalForecast;
   if (showBasis) return <BasisOfEstimateView project={project} budget={state} navigate={navigate} onBack={() => { setShowBasis(false); requestAnimationFrame(() => document.getElementById("basis-of-estimate-entry")?.focus()); }}/>;
   return <div className="cm-view">
-    <PageHeader eyebrow="COST CONTROL" title="Project budget" description="Set your in-house budget beside the lowest subcontractor price, and review the margin on each line." actions={<><button id="basis-of-estimate-entry" type="button" className="ui-btn secondary" onClick={() => setShowBasis(true)}><FileText size={16}/>Basis of estimate</button><ExportButton onClick={() => exportRows("project-budget.csv", [["Cost center", "Class", "CSI", "Description", "Owner", "By owner", "In-house budget", "Lowest sub budget", "Lowest sub basis", "Cost / SF", "Forecast", "Committed", "Committed from", "Pending commitment", "Variance", "Status"], ...state.lines.map(line => [line.costCenter, line.classification, line.csiCode ?? "", line.description, line.owner, line.byOwner ? "Yes" : "No", line.budget, (()=>{const p=tradeForBudgetLine(state,submitted.procurement,line);const b=p?lowestTradeBid(submitted.procurement,submitted.submissions,p.id,candidates,directory,ve):null;return p&&b?lowestSubLineValue(state,p,line.id,b.value)??"":"";})(), (()=>{const p=tradeForBudgetLine(state,submitted.procurement,line);return p?lowestTradeBid(submitted.procurement,submitted.submissions,p.id,candidates,directory,ve)?.basis??"":"";})(), costPerSquareFoot(line.budget, centerAreas.get(line.costCenter)) ?? "", line.forecast ?? "", committedOf(line), commitments.lines[line.id]?.sources.filter(s => s.counts === "committed").map(s => `${s.company} (executed)`).join("; ") || "Typed", commitments.lines[line.id]?.pending ?? 0, line.budget - (line.forecast ?? line.budget), line.status])])}/><Button variant="primary" onClick={() => { setEdit("new"); setErrors({}); }}><Plus size={16}/>Add line</Button></>}/>
+    <PageHeader eyebrow="COST CONTROL" title="Project budget" description="Set your in-house budget beside the lowest subcontractor price, and review the margin on each line." actions={<><button id="basis-of-estimate-entry" type="button" className="ui-btn secondary" onClick={() => setShowBasis(true)}><FileText size={16}/>Basis of estimate</button><ExportButton onClick={() => exportRows("project-budget.csv", [["Cost center", "Class", "CSI", "Description", "Owner", "By owner", "In-house budget", "Lowest sub budget", "Lowest sub basis", "Cost / SF", "Forecast", "Forecast from", "Committed", "Committed from", "Pending commitment", "Variance", "Status"], ...state.lines.map(line => [line.costCenter, line.classification, line.csiCode ?? "", line.description, line.owner, line.byOwner ? "Yes" : "No", line.budget, (()=>{const p=tradeForBudgetLine(state,submitted.procurement,line);const b=p?lowestTradeBid(submitted.procurement,submitted.submissions,p.id,candidates,directory,ve):null;return p&&b?lowestSubLineValue(state,p,line.id,b.value)??"":"";})(), (()=>{const p=tradeForBudgetLine(state,submitted.procurement,line);return p?lowestTradeBid(submitted.procurement,submitted.submissions,p.id,candidates,directory,ve)?.basis??"":"";})(), costPerSquareFoot(line.budget, centerAreas.get(line.costCenter)) ?? "", forecastOf(line) ?? "", forecasts[line.id] ? `${FORECAST_LABEL[forecasts[line.id].kind]}${forecasts[line.id].kind === "none" ? "" : ` · ${forecasts[line.id].detail}`}` : "", committedOf(line), commitments.lines[line.id]?.sources.filter(s => s.counts === "committed").map(s => `${s.company} (executed)`).join("; ") || "Typed", commitments.lines[line.id]?.pending ?? 0, line.budget - (forecastOf(line) ?? line.budget), line.status])])}/><Button variant="primary" onClick={() => { setEdit("new"); setErrors({}); }}><Plus size={16}/>Add line</Button></>}/>
     <PreviewNote>{state.lines.length ? "Browser-only demo · Owner-carried costs stay visible and are excluded from contractor totals." : "Browser-only demo · This project starts with an empty budget and saves additions in this browser."}</PreviewNote>
     <p>Estimate stage: {estimateStageLabel(project.estimateStage)}</p>
     <Panel title="In-house estimate" subtitle="Live priced takeoffs · Direct costs · Apply a takeoff to a budget line when you are ready."><strong>{estimate.rows.length ? estimateMoney(estimate.byTrade.total) : "Not estimated"}</strong><p>{estimate.rows.length} items · {estimate.rows.filter(r => !r.reviewed).length} need review</p><Button onClick={() => navigate("takeoffs")}>Open trade estimates</Button></Panel>
     <Tabs tabs={["Budget lines", "Trade variance", "Budget versions", "Historical concept budget"]} value={view} onChange={setView}/>
-    {view === "Budget versions" ? <BudgetVersionsView key={project.id} budget={costPlan} project={project} notify={notify}/> : view === "Historical concept budget" ? <ConceptBudgetView key={project.id} project={project} budget={{ state, run }} notify={notify} navigate={navigate}/> : view === "Trade variance" ? <TradeVarianceReport estimate={estimate} budget={state} candidates={candidates} loading={levelingLoading} message={levelingMessage} onRefresh={comparison.refresh}/> : <>
+    {view === "Budget versions" ? <BudgetVersionsView key={project.id} budget={costPlan} project={project} notify={notify}/> : view === "Historical concept budget" ? <ConceptBudgetView key={project.id} project={project} budget={{ state, run }} notify={notify} navigate={navigate}/> : view === "Trade variance" ? <TradeVarianceReport estimate={estimate} budget={costPlan} candidates={candidates} loading={levelingLoading} message={levelingMessage} onRefresh={comparison.refresh}/> : <>
     {!state.lines.length && !state.allowances.length ? <Panel><Empty title="This project has no budget yet" description="Add the first direct or indirect cost line to start the cost plan." action={<Button variant="primary" onClick={() => setEdit("new")}><Plus size={16}/>Add budget line</Button>}/></Panel> : <>
       <Stats items={[
         { label: "Total budget", value: usd(totals.totalBudget), detail: `${usd(totals.direct)} direct · ${usd(totals.indirect)} indirect` },
-        { label: "Current forecast", value: usd(totals.totalForecast), detail: totals.unforecastLines ? `${totals.unforecastLines} line${totals.unforecastLines === 1 ? " uses" : "s use"} budget until forecasted` : "Every line has a forecast" },
+        { label: "Current forecast", value: usd(totals.totalForecast), detail: [forecastKinds.award && `${forecastKinds.award} from awards`, forecastKinds["leveled-low"] && `${forecastKinds["leveled-low"]} leveled low`, forecastKinds.estimate && `${forecastKinds.estimate} in-house estimate`, forecastKinds.manual && `${forecastKinds.manual} overridden`, totals.unforecastLines ? `${totals.unforecastLines} at budget until forecasted` : "every line forecast"].filter(Boolean).join(" · ") },
         { label: "Forecast variance", value: usd(totalVariance), detail: totalVariance >= 0 ? "Under the current cost plan" : "Over the current cost plan", tone: totalVariance >= 0 ? "green" : "red" },
         { label: "Committed", value: usd(totals.committed), detail: `${commitments.pending ? `${usd(commitments.pending)} pending signature · ` : ""}${usd(totals.remaining)} remains · from executed subcontracts` },
       ]}/>
@@ -217,10 +243,10 @@ export function BudgetView({ notify, navigate, project }: ViewProps & { project:
     {inHouseLine && <InHouseBudgetEditor line={inHouseLine} budget={{state,run}} estimate={estimate} notify={notify} onClose={()=>setInHouseLine(null)}/>}
     {split && <LowBidSplitEditor budget={{state,run}} pkg={split.pkg} bid={split.bid} notify={notify} onClose={()=>setSplit(null)}/>}
     {edit && <Modal title={edit === "new" ? "Add budget line" : `Edit ${edit.description}`} subtitle={edit === "new" ? "Add a direct construction or indirect project cost." : `${edit.costCenter} · ${edit.status}`} onClose={closeLine} wide>
-      <LineForm line={edit === "new" ? null : edit} commitment={edit === "new" ? undefined : commitments.lines[edit.id]} costCenters={costCenterNames} errors={errors} onSubmit={saveLine} onCancel={closeLine}/>
+      <LineForm line={edit === "new" ? null : edit} commitment={edit === "new" ? undefined : commitments.lines[edit.id]} forecast={edit === "new" ? undefined : forecasts[edit.id]} costCenters={costCenterNames} errors={errors} onSubmit={saveLine} onCancel={closeLine}/>
       {edit !== "new" && <div className="cm-record-actions"><Button onClick={() => changeApproval(edit)}>{edit.status === "approved" ? <><RotateCcw size={15}/>Reopen approval</> : <><Check size={15}/>Approve line</>}</Button><Button onClick={() => deleteLine(edit)}><Trash2 size={15}/>Remove line</Button></div>}
     </Modal>}
-    {levelingLine && <Modal title={`Update ${levelingLine.description} forecast`} subtitle="Choose the in-house estimate or a bidder's value for this line's forecast." onClose={() => { setLevelingLine(null); setErrors({}); }} wide>
+    {levelingLine && <Modal title={`Override ${levelingLine.description} forecast`} subtitle="Choose a bidder's value or the in-house estimate in place of the automatic forecast. Clear the override on the line to go back." onClose={() => { setLevelingLine(null); setErrors({}); }} wide>
       <label className="ui-field"><span>Forecast basis</span><select value={basis} onChange={event => { setBasis(event.target.value as typeof basis); setErrors({}); }}><option value="estimate">In-house estimate</option>{(Object.keys(basisLabels) as LevelingBasis[]).map(value => <option key={value} value={value}>{basisLabels[value]}</option>)}</select></label>
       {basis === "estimate" ? <EstimateBudgetChoice budget={state} line={levelingLine} packages={estimate.procurement.packages} trades={estimate.byTrade.trades} packageId={estimatePackageId} onPackage={id => { setEstimatePackageId(id); setLinkEstimate(false); setErrors({}); }} link={linkEstimate} onLink={setLinkEstimate}/> : levelingLoading ? <div className="cm-inline-empty" role="status">Reading the saved Bid leveling workspace…</div> : candidates.length ? <div className="cm-leveling-grid">{candidates.map(candidate => <label className={`cm-leveling-choice ${selectedCandidate?.levelingBidderId === candidate.levelingBidderId ? "selected" : ""}`} key={candidate.levelingBidderId}><input type="radio" name="candidate" value={candidate.levelingBidderId} checked={selectedCandidate?.levelingBidderId === candidate.levelingBidderId} onChange={() => setCandidateId(candidate.levelingBidderId)}/><span><strong>{candidate.bidderName}</strong><small>{candidate.submissionId ? `Portal submission · revision ${candidate.revisionNumber}` : "Workbook or demo bidder"}</small></span><Badge tone={candidate.stale || !candidate.eligible ? "amber" : "green"}>{candidate.stale ? "Older form" : candidate.eligible ? "Reviewed" : "Review open"}</Badge><div className="cm-leveling-values"><span>Base<strong>{candidate.baseBid === null ? "—" : usd(candidate.baseBid)}</strong></span><span>Provisional<strong>{candidate.provisionalTotal === null ? "—" : usd(candidate.provisionalTotal)}</strong></span><span>Reviewed<strong>{candidate.reviewedTotal === null ? "—" : usd(candidate.reviewedTotal)}</strong></span></div>{candidate.eligibilityReasons.length > 0 && <small className="cm-leveling-reasons">{candidate.eligibilityReasons.join(" · ")}</small>}</label>)}</div> : <div className="cm-inline-empty"><p>{levelingMessage}</p></div>}
       <FieldError error={errors.forecast}/><FieldError error={errors.line}/><div className="cm-form-footer"><Button onClick={() => navigate(basis === "estimate" ? "takeoffs" : "leveling")}>{basis === "estimate" ? "Open trade estimates" : "Open Bid leveling"}</Button><Button variant="primary" disabled={basis === "estimate" ? !!estimateError : levelingLoading || !candidates.length} onClick={applyForecast}>Apply selected value</Button></div>

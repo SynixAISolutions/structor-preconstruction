@@ -51,7 +51,7 @@ export const ASSISTANT_TOOLS: ToolDef[] = [
     description: "Bids subcontractors submitted through the portal: package, company, base bid, revision number and date, exclusions, alternates and clarifications.",
     label: a => a.trade ? `Reading submitted bids for ${a.trade}` : "Reading submitted bids" },
   { name: "budget", screen: "budget", args: { costCenter: "Cost center to narrow to, e.g. \"Modernization\". Leave out for the whole budget." },
-    description: "The budget: totals (budget, forecast, committed, remaining, variance where negative is over budget), lines with cost center, CSI code, budget, forecast, committed and review status, and owner allowances.",
+    description: "The budget: totals (budget, forecast, committed, remaining, variance where negative is over budget), lines with cost center, CSI code, budget, forecast (and where it comes from), committed and review status, and owner allowances.",
     label: () => "Reading the budget" },
   { name: "value_engineering", screen: "value-engineering", args: {},
     description: "Value engineering: the VE target, and each idea's number, description, trade, cost impact (negative is a saving), status, subcontractor pricing and decision.",
