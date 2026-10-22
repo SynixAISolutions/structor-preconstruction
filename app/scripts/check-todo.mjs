@@ -107,7 +107,12 @@ assert(finished.progress.done > start.progress.done && finished.progress.total =
 
 // Budget: approving and fixing forecasts clears those tasks; by-owner lines are ignored.
 const approved = { ...base.budget, lines: base.budget.lines.map(l => ({ ...l, status: "approved", forecast: Math.min(l.forecast ?? l.budget, l.budget) })), allowances: base.budget.allowances.map(a => ({ ...a, status: "included" })) };
-const bt = derive({ budget: approved });
+// This budget has none of the sample awards' lines, so each award becomes a task to place it (lib/commitments).
+const unplacedAwards = derive({ budget: approved });
+assert.deepEqual(ids(unplacedAwards).filter(x => x.startsWith("budget:")), ["budget:awards"], "Awards the budget can't place are budget work");
+assert.equal(task(unplacedAwards, "budget:awards").count, 2);
+assert.match(task(unplacedAwards, "budget:awards").detail, /District Concrete \(Concrete\): Its budget line no longer exists/);
+const bt = derive({ budget: approved, awards: noAwards });
 assert(!ids(bt).some(x => x.startsWith("budget:")), "No budget work left");
 assert.deepEqual(bt.project.filter(m => m.done).map(m => m.key), ["project-files", "budget-approved", "allowances-decided"]);
 assert.equal(task(derive({ budget: { ...approved, lines: [...approved.lines, { ...approved.lines[0], id: "own", status: "draft", byOwner: true }] } }), "budget:approve"), undefined, "A by-owner line is not the team's to approve");

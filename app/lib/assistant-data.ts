@@ -6,6 +6,7 @@
 import { activeAward, awardStage, type AwardState } from "./award";
 import { bidPackageReport, type BidPackageReport } from "./bid-package-report";
 import { levelingCandidates, budgetTotals, type BudgetState } from "./budget";
+import { budgetCommitments, withCommitments, type Commitments } from "./commitments";
 import { budgetLinesForTrade } from "./estimate";
 import { initialBidders, type Bidder } from "./data/commercial";
 import { sampleBudget } from "./data/budget";
@@ -46,27 +47,36 @@ const readable = (code: string) => code.replace(/-/g, " ");
 type Context = { projectId: string; today: string; fetchImpl?: typeof fetch };
 type Data = {
   project: Project | undefined; procurement: Procurement; submissions: Submission[]; directory: Bidder[];
-  budget: BudgetState; ve: VeState; check: StructorCheckState; schedule: ScheduleState;
+  /** The budget as the pages show it: committed worked out from the awards (lib/commitments). */
+  budget: BudgetState; awards: AwardState; commitments: Commitments; ve: VeState; check: StructorCheckState; schedule: ScheduleState;
 };
 
 /** The keys and starting values of lib/use-procurement, use-submissions, use-budget and the rest. */
-const projectData = (projectId: string): Data => ({
-  project: currentProject(projectId),
-  procurement: readDraft<Procurement>(projectId, "procurement", sampleProcurement),
-  submissions: readDraft<Submission[]>(projectId, "submissions", sampleSubmissions),
-  directory: readDraft<Bidder[]>(projectId, "directory", initialBidders),
-  budget: readDraft<BudgetState>(projectId, "budget-state-v2", sampleBudget),
-  ve: readDraft<VeState>(projectId, "value-engineering", EMPTY_VE),
-  check: readDraft<StructorCheckState>(projectId, "structor-check-state", sampleStructorCheck),
-  schedule: readDraft<ScheduleState>(projectId, "schedule-plan", sampleSchedule),
-});
+function projectData(projectId: string): Data {
+  const procurement = readDraft<Procurement>(projectId, "procurement", sampleProcurement);
+  const typed = readDraft<BudgetState>(projectId, "budget-state-v2", sampleBudget);
+  const awards = readDraft<AwardState>(projectId, "awards", sampleAwards);
+  const commitments = budgetCommitments(typed, awards, procurement);
+  return {
+    project: currentProject(projectId),
+    procurement,
+    submissions: readDraft<Submission[]>(projectId, "submissions", sampleSubmissions),
+    directory: readDraft<Bidder[]>(projectId, "directory", initialBidders),
+    budget: withCommitments(typed, commitments), awards, commitments,
+    ve: readDraft<VeState>(projectId, "value-engineering", EMPTY_VE),
+    check: readDraft<StructorCheckState>(projectId, "structor-check-state", sampleStructorCheck),
+    schedule: readDraft<ScheduleState>(projectId, "schedule-plan", sampleSchedule),
+  };
+}
 
 const companyName = (directory: Bidder[], id: string | null) => directory.find(b => b.id === id)?.company ?? id ?? "";
 const packageName = (procurement: Procurement, id: string | null) => procurement.packages.find(p => p.id === id)?.name ?? id ?? "";
 
-function budgetSummary(state: BudgetState, costCenter?: string) {
-  const t = budgetTotals(state, costCenter);
-  return { budget: t.budget, forecast: t.forecast, committed: t.committed, remaining: t.remaining, variance: t.variance, linesWithoutForecast: t.unforecastLines, allowancesAdded: t.allowancesAdded, allowancesPending: t.allowancesPending, totalBudget: t.totalBudget, totalForecast: t.totalForecast };
+function budgetSummary(d: Data, costCenter?: string) {
+  const t = budgetTotals(d.budget, costCenter);
+  // Awarded but not executed yet: not in committed until the subcontract is fully signed.
+  const pending = d.budget.lines.filter(l => !l.byOwner && (costCenter === undefined || l.costCenter === costCenter)).reduce((n, l) => n + Math.round((d.commitments.lines[l.id]?.pending ?? 0) * 100), 0) / 100;
+  return { budget: t.budget, forecast: t.forecast, committed: t.committed, committedNote: "committed = executed subcontracts (worked out from awards) plus amounts typed on lines no award covers", pendingSignature: pending, remaining: t.remaining, variance: t.variance, linesWithoutForecast: t.unforecastLines, allowancesAdded: t.allowancesAdded, allowancesPending: t.allowancesPending, totalBudget: t.totalBudget, totalForecast: t.totalForecast };
 }
 
 const openIssue = (status: string) => !["resolved", "dismissed", "combined"].includes(status);
@@ -110,7 +120,7 @@ function projectOverview(d: Data) {
       veIdeas: countBy(d.ve.ideas, i => i.status),
       scheduleActivities: d.schedule.activities.length,
     },
-    budget: budgetSummary(d.budget),
+    budget: budgetSummary(d),
   };
 }
 
@@ -205,7 +215,7 @@ export async function bidPackageSummary(projectId: string, trade: string | undef
   // The trade budget as Quantity takeoffs finds it: the linked lines, else the line with the nearest CSI code.
   const pkg = d.procurement.packages.find(x => x.id === p.packageId);
   const tb = pkg ? budgetLinesForTrade(d.budget, pkg) : null;
-  const award = p.packageId ? activeAward(readDraft<AwardState>(projectId, "awards", sampleAwards), p.packageId) : undefined;
+  const award = p.packageId ? activeAward(d.awards, p.packageId) : undefined;
   return {
     report: bidPackageReport({
       projectName: d.project?.name ?? "", trade: p.trade, code: p.code, packageId: p.packageId, asOf: today,
@@ -249,14 +259,20 @@ function budget(d: Data, costCenter?: string) {
   if (costCenter && !center) return { note: `No cost center named "${costCenter}". Cost centers: ${d.budget.costCenters.map(c => c.name).join(", ") || "none"}.` };
   const lines = d.budget.lines.filter(l => !center || l.costCenter === center).sort((a, b) => b.budget - a.budget);
   // One line of text per budget line: a large budget still fits one result.
-  const line = (l: BudgetState["lines"][number]) => [l.description, l.costCenter, l.csiCode ?? "no code", `budget ${l.budget}`, `forecast ${l.forecast ?? "none"}`, `committed ${l.committed}`,
+  const from = (id: string) => {
+    const c = d.commitments.lines[id];
+    if (!c) return "";
+    return [...c.sources.map(s => `${s.counts === "committed" ? "committed by" : "pending"} ${s.company} ${s.amount} (${s.stage})`), ...c.splitNeeded.map(t => `split needed for ${t}`)].join("; ");
+  };
+  const line = (l: BudgetState["lines"][number]) => [l.description, l.costCenter, l.csiCode ?? "no code", `budget ${l.budget}`, `forecast ${l.forecast ?? "none"}`, `committed ${l.committed}`, from(l.id),
     l.forecast !== null && l.forecast > l.budget ? `over by ${Math.round((l.forecast - l.budget) * 100) / 100}` : "", l.status, l.byOwner ? "carried by owner, not in totals" : ""].filter(Boolean).join(" · ");
   return {
     costCenters: d.budget.costCenters,
-    totals: budgetSummary(d.budget, center),
+    totals: budgetSummary(d, center),
     lines: lines.slice(0, 70).map(line),
     moreLines: Math.max(0, lines.length - 70),
     allowances: d.budget.allowances.filter(a => !center || a.costCenter === center).map(a => `${a.name} · ${a.costCenter} · ${a.amount} · ${a.status}`),
+    awardsNotInBudget: d.commitments.unplaced.map(u => `${u.company} · ${u.trade} · ${u.amount} · ${u.stage} · ${u.reason}`),
   };
 }
 
