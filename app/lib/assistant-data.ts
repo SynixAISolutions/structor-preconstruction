@@ -71,6 +71,24 @@ const openIssue = (status: string) => !["resolved", "dismissed", "combined"].inc
 
 // ── The tools ──
 
+/** Every project's record, with a few counts read from its own saved data (projects are stored per project). */
+function allProjects(openProjectId: string) {
+  const projects = loadProjects() ?? sampleProjectRecords;
+  return {
+    openProject: projects.find(p => p.id === openProjectId)?.name ?? openProjectId,
+    projects: projects.map(p => {
+      const d = projectData(p.id);
+      return {
+        name: p.name, location: p.location, type: p.type, status: p.status, estimateStage: p.estimateStage, value: p.value, squareFeet: p.squareFeet,
+        architect: p.architect, bidDue: p.due, rfiDue: p.rfi, start: p.start, finish: p.finish,
+        tradePackages: d.procurement.packages.length, submittedBids: d.submissions.filter(s => s.revisions.length).length,
+        openIssues: d.check.issues.filter(i => openIssue(i.status)).length, openRfis: d.check.rfis.filter(r => r.status !== "closed").length,
+        totalBudget: budgetTotals(d.budget).totalBudget,
+      };
+    }),
+  };
+}
+
 function projectOverview(d: Data) {
   const p = d.project;
   return {
@@ -212,7 +230,10 @@ function issuesAndRfis(d: Data, status?: string) {
   const all = status === "all";
   const numbers = new Map(d.check.issues.map(i => [i.id, i.number]));
   return {
-    issues: d.check.issues.filter(i => all || openIssue(i.status)).slice(0, 30).map(i => ({ number: i.number, title: i.title, category: i.category, severity: i.severity, trade: i.trade, source: i.source, status: i.status, raisedBy: i.raisedBy, detail: clip(i.detail, 200) })),
+    // What an RFI draft needs (rfi.ts validRfi): an addressee, and issues that are reviewed, open and in no RFI yet.
+    designTeamContact: d.check.designTeam ? [d.check.designTeam.name, d.check.designTeam.company].filter(Boolean).join(", ") : "none saved yet: add it on the Structor Check & RFIs page before any RFI can be drafted",
+    issues: d.check.issues.filter(i => all || openIssue(i.status)).slice(0, 30).map(i => ({ number: i.number, title: i.title, category: i.category, severity: i.severity, trade: i.trade, source: i.source, status: i.status, raisedBy: i.raisedBy, detail: clip(i.detail, 200),
+      canGoInAnRfi: i.status === "open" && (!["ai", "subcontractor"].includes(i.origin) || !!i.reviewedBy) ? "yes" : i.status === "pending-review" ? "no: needs contractor review first" : `no: ${i.status.replace("-", " ")}` })),
     rfis: d.check.rfis.filter(r => all || r.status !== "closed").slice(0, 25).map(r => ({ number: r.number, subject: r.subject, discipline: r.discipline, status: r.status, due: r.due, to: r.to?.name ?? "", question: clip(r.question, 300), answer: r.response ? clip(r.response.text, 300) : null, issues: r.issueIds.map(id => numbers.get(id) ?? id) })),
   };
 }
@@ -251,6 +272,7 @@ export async function runAssistantTool(call: AssistantToolCall, ctx: Partial<Con
   const screen = assistantTool(call.name).screen;
   try {
     switch (call.name) {
+      case "all_projects": return { content: toolResultText(allProjects(context.projectId)), screens: [screen!] };
       case "project_overview": return { content: toolResultText(projectOverview(d)), screens: [screen!] };
       case "trade_packages": return { content: toolResultText(tradePackages(d, a.trade)), screens: [screen!] };
       case "bid_leveling": return { content: toolResultText(await bidLeveling(d, context, a.trade)), screens: [screen!] };

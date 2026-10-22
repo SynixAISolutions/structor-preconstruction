@@ -7,7 +7,7 @@
 import type { Screen } from "./screens";
 
 export type ReadToolName =
-  | "project_overview" | "trade_packages" | "bid_leveling" | "bid_submissions" | "budget"
+  | "all_projects" | "project_overview" | "trade_packages" | "bid_leveling" | "bid_submissions" | "budget"
   | "value_engineering" | "issues_and_rfis" | "schedule" | "search_project_files" | "structor_guide";
 export type ProposalToolName =
   | "propose_ve_idea" | "propose_issue" | "propose_rfi" | "propose_schedule_activity" | "propose_activity_progress" | "propose_budget_version";
@@ -32,6 +32,9 @@ type ToolDef = {
 const TRADE = "Trade name, CSI division or section to narrow to, e.g. \"Drywall\" or \"09 29 00\". Leave out for every trade.";
 
 export const ASSISTANT_TOOLS: ToolDef[] = [
+  { name: "all_projects", screen: "projects", args: {},
+    description: "Every project in the workspace, not just the open one: name, location, type, status (Preconstruction, Design development, Bidding…), estimate stage, value, size, bid and RFI due dates, start and finish, and for each its trade packages, submitted bids, open issues and RFIs and total budget. Use it for questions across projects; the other tools read only the open project.",
+    label: () => "Reading all projects" },
   { name: "project_overview", screen: "overview", args: {},
     description: "The open project's facts (location, size, value, dates, bid and RFI deadlines, architect, team, estimate stage) with counts of its trade packages, invitations, submitted bids, open issues and RFIs, VE ideas and the budget totals. Use it first when unsure where to look.",
     label: () => "Reading the project overview" },
