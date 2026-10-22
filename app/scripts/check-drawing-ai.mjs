@@ -74,4 +74,13 @@ score = S.scoreSheet(a11, [{ kind: "wall", text: "SA9.99", at: [0.5, 0.5] }]);
 assert.deepEqual([score.walls.reads, score.walls.inSchedule, score.walls.missed], [1, 0, 4], "A code that isn't on A8.1");
 assert.deepEqual(S.onPage([0.5, 0.25, 0.2, 0.1], [{ kind: "door", text: "1", at: [0.5, 0.5] }])[0].at, [0.6, 0.3], "Tile positions placed on the page");
 
-console.log("Drawing AI checked: DeepSeek or OpenAI for drawing images only, OpenAI's request (JSON, room for reasoning, effort, retries, refusals, cut-off answers), a missing key, and the Jelleff answer key and score (29/4/13 on A1.1, 17/5/17 on A1.2).");
+// The scorer's tiles: on the page and over every traced item (an outline in feet once put them all off the page).
+for (const [t, expected] of [[a11, 28], [a12, 16]]) {
+  const tiles = S.truthTiles(t, { widthPt: 3024, heightPt: 2160 }); // Jelleff's 42 x 30 in sheets
+  assert.equal(tiles.length, expected, `${t.sheet}: the tile count a run on the real drawing set gave`);
+  assert.ok(tiles.every(([x, y, w, h]) => x >= 0 && y >= 0 && w > 0 && h > 0 && x + w <= 1 + 1e-9 && y + h <= 1 + 1e-9), `${t.sheet}: every tile is on the page`);
+  const covered = ([px, py]) => tiles.some(([x, y, w, h]) => px >= x && px <= x + w && py >= y && py <= y + h);
+  assert.ok([...t.doors.map(d => d.at), ...t.rooms.map(r => r.at), ...t.walls.flatMap(w => [w.a, w.b])].every(covered), `${t.sheet}: every door, wall tag and room is inside a tile`);
+}
+
+console.log("Drawing AI checked: DeepSeek or OpenAI for drawing images only, OpenAI's request (JSON, room for reasoning, effort, retries, refusals, cut-off answers), a missing key, and the Jelleff answer key, tiles (28 on A1.1, 16 on A1.2, all on the page) and score (29/4/13 on A1.1, 17/5/17 on A1.2).");

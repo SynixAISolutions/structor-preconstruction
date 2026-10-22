@@ -17,8 +17,7 @@ import { createRequire, register } from "node:module";
 register("./ts-resolver.mjs", import.meta.url);
 const { EXTRA_JOBS } = await import("../lib/ai-jobs-more.ts");
 const { readJson } = await import("../lib/drawing-reader.ts");
-const { tagTiles } = await import("../lib/schematic-model.ts");
-const { JELLEFF_PLAN_SHEETS, jelleffTruth, onPage, scoreSheet } = await import("../lib/drawing-score.ts");
+const { JELLEFF_PLAN_SHEETS, jelleffTruth, onPage, scoreSheet, truthTiles } = await import("../lib/drawing-score.ts");
 
 // ── Arguments and keys ──
 const args = Object.fromEntries(process.argv.slice(2).join(" ").split(/\s+--/).map(a => a.replace(/^--/, "")).filter(Boolean).map(a => { const [k, ...v] = a.split(/\s+/); return [k, v.join(" ").replace(/^"|"$/g, "")]; }));
@@ -65,10 +64,7 @@ for (const s of sheets) {
   const pageAspect = vp.width / vp.height, traceAspect = truth.widthFeet / truth.heightFeet;
   if (Math.abs(pageAspect / traceAspect - 1) > 0.01) console.warn(`! ${s.sheet} (PDF page ${s.page}) is ${pageAspect.toFixed(3)}:1 but the trace's sheet image is ${traceAspect.toFixed(3)}:1. Is this the Jelleff GMP set, with A1.1 on page 46?`);
   // The tiles cover the traced building, as the app's cover its outline.
-  const points = [...truth.doors.map(d => d.at), ...truth.rooms.map(r => r.at), ...truth.walls.flatMap(w => [w.a, w.b])];
-  const xs = points.map(p => p[0] * truth.widthFeet), ys = points.map(p => p[1] * truth.heightFeet);
-  const [x0, y0, x1, y1] = [Math.min(...xs) - 15, Math.min(...ys) - 15, Math.max(...xs) + 15, Math.max(...ys) + 15];
-  const tiles = tagTiles({ widthPt: vp.width, heightPt: vp.height }, { widthFeet: truth.widthFeet, heightFeet: truth.heightFeet }, [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]);
+  const tiles = truthTiles(truth, { widthPt: vp.width, heightPt: vp.height });
   process.stdout.write(`Rendering ${s.sheet}: ${tiles.length} tiles… `);
   const images = [];
   for (const box of tiles) images.push({ box, image: await renderRegion(page, box) });

@@ -7,6 +7,7 @@
 import { doorScheduleRows, doorTraces } from "./jelleff-doors";
 import { allRooms, elements, level2Elements, partitionSchedule, sheetTransformFor, toSheetPoint } from "./jelleff-model";
 import type { PlanTag } from "./ai-jobs-more";
+import { tagTiles } from "./schematic-model";
 import { normalTag, tagKey } from "./tag-placement";
 
 type Pt = [number, number];
@@ -39,6 +40,20 @@ export function jelleffTruth(sheet: string): SheetTruth {
       .map(e => ({ tag: normalTag(e.partitionTag!), a: fromFeet(e.points![0] as Pt), b: fromFeet(e.points![1] as Pt) })),
     rooms: allRooms.filter(r => r.level === plan.level).map(r => ({ number: r.number, name: r.name, at: fromFeet(r.center as Pt) })),
   };
+}
+
+/**
+ * The tiles the app would read for tags on this sheet: tagTiles around the traced building, 15 ft beyond
+ * its outermost door, wall tag and room. tagTiles takes the outline as fractions of the sheet, as the
+ * app's AI outline reading gives it (an outline in feet put every tile off the page, and every model
+ * scored 0).
+ */
+export function truthTiles(truth: SheetTruth, page: { widthPt: number; heightPt: number }): [number, number, number, number][] {
+  const points = [...truth.doors.map(d => d.at), ...truth.rooms.map(r => r.at), ...truth.walls.flatMap(w => [w.a, w.b])];
+  const padX = 15 / truth.widthFeet, padY = 15 / truth.heightFeet;
+  const xs = points.map(p => p[0]), ys = points.map(p => p[1]);
+  const [x0, y0, x1, y1] = [Math.min(...xs) - padX, Math.min(...ys) - padY, Math.max(...xs) + padX, Math.max(...ys) + padY];
+  return tagTiles(page, { widthFeet: truth.widthFeet, heightFeet: truth.heightFeet }, [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]);
 }
 
 const feet = (truth: SheetTruth, [ax, ay]: Pt, [bx, by]: Pt) => Math.hypot((ax - bx) * truth.widthFeet, (ay - by) * truth.heightFeet);
