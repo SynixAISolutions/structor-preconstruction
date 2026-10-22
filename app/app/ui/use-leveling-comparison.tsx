@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { levelingCandidates, type LevelingCandidate } from "../../lib/budget";
+import type { LevelingCandidate } from "../../lib/budget";
 import type { BidProvenance, LevelingBidder, LevelingScopeItem, LevelingProject } from "../../lib/leveling-import";
 import { useActiveProject } from "../../lib/project-scope";
 import { useLocalDraft } from "../../lib/use-local-draft";
@@ -9,9 +9,8 @@ import { loadWorkspace } from "../../lib/workspace-storage";
 
 import { useValueEngineering } from "../../lib/use-value-engineering";
 import { useSubmissions } from "../../lib/use-submissions";
-import { veLevelingBidders } from "../../lib/ve-bids";
 import type { SavedTradeComparison } from "../../lib/leveling-sync";
-import { portalComparisonCandidates } from "../../lib/portal-comparisons";
+import { openComparisonCandidates } from "../../lib/portal-comparisons";
 import { initialBidders } from "../../lib/data/commercial";
 
 export function useLevelingComparison() {
@@ -29,9 +28,7 @@ export function useLevelingComparison() {
     setResult({ projectId, candidates: [], loading: true, message: "" });
     void loadWorkspace<LevelingProject, LevelingScopeItem, LevelingBidder>().then(workspace => {
       if (!live) return;
-      const current = workspace && packageId && !Object.values(provenance).some(p => p.superseded) ? { [packageId]: { ...workspace, provenance } } : {};
-      const candidates = portalComparisonCandidates({ projectId, projectName: workspace?.project.name ?? "", procurement, submissions, directory, comparisons: { ...comparisons, ...current }, ve });
-      if (workspace && !packageId) candidates.push(...levelingCandidates({ packageId: null, items: workspace.items, bidders: veLevelingBidders(workspace.bidders, provenance, ve, submissions), provenance }));
+      const candidates = openComparisonCandidates({ projectId, procurement, submissions, directory, workspace, packageId, provenance, comparisons, ve });
       setResult({ projectId, candidates, loading: false, message: candidates.length ? "" : "No saved leveling bids are available. Load or import bids in Bid leveling first." });
     }).catch(error => { if (live) setResult({ projectId, candidates: [], loading: false, message: error instanceof Error ? error.message : "The saved leveling comparison could not be read." }); });
     return () => { live = false; };
