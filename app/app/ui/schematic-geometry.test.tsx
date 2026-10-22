@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as THREE from "three";
-import { alignSheetFrame, footprintValid, openOutline, printedSheetFrame, schematicDoors, schematicGeometry, schematicGlazing, schematicWalls, sheetPoint, wallTotals } from "./schematic-geometry";
+import { alignSheetFrame, footprintValid, openOutline, printedSheetFrame, schematicDoors, schematicGeometry, schematicGlazing, schematicRoomFloors, schematicWalls, sheetPoint, wallTotals } from "./schematic-geometry";
 import { moveOutlinePoint, setLevelHeight, type Point, type SchematicLevel, type SchematicModel } from "../../lib/schematic-model";
 
 const level: SchematicLevel = { id: "L1", name: "Level 01", order: 1, elevation: 0, height: 14, outline: [[10, 20], [50, 20], [50, 60], [10, 60]], rooms: [{ name: "Lobby", number: "101", at: [20, 30] }], source: { documentId: "qa", sheet: "A1.1", page: 1 }, sizing: "Printed scale, 8 ft per inch" };
@@ -73,4 +73,13 @@ test("outline edits reject crossing edges, collapsed footprints and non-finite c
   assert.equal(footprintValid([[0, 0], [10, 0], [10, 10], [5, 5], [0, 10]]), true);
   assert.equal(footprintValid([[0, 0], [1, 0], [2, 0]]), false);
   assert.equal(footprintValid([[0, 0], [Infinity, 0], [10, 10]]), false);
+});
+test("rooms become flat floors just above the slab, named rooms apart from unnamed spaces", () => {
+  assert.equal(schematicRoomFloors([]), null);
+  const group = schematicRoomFloors([{ outline: [[0, 0], [20, 0], [20, 10], [0, 10]], area: 200, name: "GYM", number: "103", at: [10, 5] }, { outline: [[20, 0], [30, 0], [30, 10], [20, 10]], area: 100, name: "", number: "", at: [25, 5] }])!;
+  const [gym, other] = group.children as THREE.Mesh[];
+  gym.geometry.computeBoundingBox();
+  assert.deepEqual([gym.geometry.boundingBox!.min.toArray(), gym.geometry.boundingBox!.max.toArray()].map(v => v.map(n => Math.round(n * 1e6) / 1e6 || 0)), [[0, 0, -10], [20, 0, 0]], "Plan y is world -z, as for the walls");
+  assert.equal(gym.position.y, .05);
+  assert.notEqual((gym.material as THREE.MeshStandardMaterial).color.getHex(), (other.material as THREE.MeshStandardMaterial).color.getHex());
 });
