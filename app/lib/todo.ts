@@ -259,7 +259,11 @@ export function deriveTodo(input: TodoInput): TodoSummary {
       if (r.status === "complete") continue;
       const who = r.owner ? ` Owner: ${r.owner}.` : "";
       const progress = `${r.progress}% complete.`;
-      if (r.late) add({ id: `schedule:late:${r.id}`, group: "schedule", title: `${r.code} ${r.name} is past its finish`, detail: `Planned finish ${r.finish}; ${progress}${who}`, status: "todo", priority: "high", screen: "schedule", packageId: r.packageId });
+      // Activities following procurement (lib/schedule-procurement) are late or unstarted because no bids are in.
+      if (r.late && r.procurement === "bids-due") add({ id: `schedule:late:${r.id}`, group: "schedule", title: `${r.code} ${r.name}: no bids in yet`, detail: `Bids were due ${r.start}. Follow up with the invited companies, or move the due date on Bid packages.${who}`, status: "todo", priority: "high", screen: "packages", packageId: r.packageId });
+      else if (r.notStartedOnTime && r.procurement === "buyout" && rows.some(x => x.procurement === "bids-due" && x.packageId === r.packageId && x.late)) continue; // one task per trade: its late bids-due
+      else if (r.notStartedOnTime && r.procurement === "buyout") add({ id: `schedule:start:${r.id}`, group: "schedule", title: `${r.code} ${r.name}: no bids in yet`, detail: `Bidding was planned from ${r.start}; progress starts with the first bid.${who}`, status: "todo", priority: "high", screen: "packages", packageId: r.packageId });
+      else if (r.late) add({ id: `schedule:late:${r.id}`, group: "schedule", title: `${r.code} ${r.name} is past its finish`, detail: `Planned finish ${r.finish}; ${progress}${who}`, status: "todo", priority: "high", screen: "schedule", packageId: r.packageId });
       else if (r.notStartedOnTime) add({ id: `schedule:start:${r.id}`, group: "schedule", title: `Start ${r.code} ${r.name}`, detail: `Planned to start ${r.start}.${who}`, status: "todo", priority: "high", screen: "schedule", packageId: r.packageId });
       else if (soon.has(r.id)) add({ id: `schedule:soon:${r.id}`, group: "schedule", title: `${r.code} ${r.name}`, detail: `${r.milestone ? `Due ${r.start}` : `${r.start} to ${r.finish}`}; ${progress}${who}`, status: "todo", priority: r.critical ? "normal" : "low", screen: "schedule", packageId: r.packageId });
     }

@@ -11,6 +11,7 @@ import { useActiveProject } from "./project-scope";
 import type { SetupSummary } from "./project-setup";
 import type { Project } from "./projects";
 import { scheduleRows } from "./schedule";
+import { procurementSchedule } from "./schedule-procurement";
 import { EMPTY_TODO_HISTORY, deriveTodo, reconcileTodo, type DoneTask, type LevelingSnapshot, type TodoHistory, type TodoSummary } from "./todo";
 import { useAward } from "./use-award";
 import { useBudget } from "./use-budget";
@@ -60,7 +61,7 @@ export function useTodoSummary(project: Project | null): TodoSummary & { setup: 
     awards, procurement, submissions, directory, ve, estimates: estimate.byTrade.trades,
     candidates: openComparisonCandidates({ projectId, procurement, submissions, directory, workspace: leveling.workspace, packageId: loadedPackageId, provenance, comparisons, ve }),
   }).budget, [budget, awards, procurement, submissions, directory, ve, estimate.byTrade.trades, projectId, leveling.workspace, loadedPackageId, provenance, comparisons]);
-  const summary = deriveTodo({ project, documents, procurement, submissions, leveling: leveling.snapshot, budget: plan, awards, schedule: { rows: scheduleRows(schedulePlan, today), today }, setup });
+  const summary = deriveTodo({ project, documents, procurement, submissions, leveling: leveling.snapshot, budget: plan, awards, schedule: { rows: scheduleRows(procurementSchedule(schedulePlan, { procurement, awards }, today).state, today), today }, setup });
   return { ...summary, setup, ready: filesReady && leveling.loaded, reload };
 }
 

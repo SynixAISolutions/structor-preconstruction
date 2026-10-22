@@ -3,7 +3,7 @@
 // rule) and given fixed ids. Illustrative dates; the Concrete subcontract milestone matches the
 // sample award (executed 2026-09-25).
 
-import { addActivity, addDependency, setProgress, EMPTY_SCHEDULE, type ActivityInput, type Dependency, type ScheduleState } from "../schedule";
+import { addActivity, addDependency, editActivity, setProgress, EMPTY_SCHEDULE, type ActivityInput, type Dependency, type ScheduleState } from "../schedule";
 import { stableIds } from "./stable-ids";
 
 const at = "2026-09-01T12:00:00.000Z";
@@ -29,6 +29,8 @@ let s: ScheduleState = rows.reduce((next, { after: _a, progress: _p, ...input })
 const idOf = (code: string) => s.activities.find(a => a.code === code)!.id;
 for (const row of rows) for (const [pred, type, lag] of row.after ?? []) s = addDependency(s, idOf(row.code), { activityId: idOf(pred), type, lag }, by, at);
 for (const row of rows) if (row.progress) s = setProgress(s, idOf(row.code), row.progress, by, at);
+// Reached when the Concrete subcontract is executed (lib/schedule-procurement); stored at 100 to match.
+s = editActivity(s, idOf("A1020"), { procurement: "buyout" }, by, at);
 
 /** Jelleff's schedule, with an empty change log (the building steps aren't history). */
 export const sampleSchedule: ScheduleState = stableIds({ ...s, log: [] }, "act");
