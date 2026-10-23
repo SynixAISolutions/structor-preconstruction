@@ -54,22 +54,6 @@ const workspaceGuides: ManualGuide[] = [
     related: ["documents", "scopes", "packages", "leveling", "budget", "turnover"],
   },
   {
-    id: "overview", group: "Preconstruction", title: "Overview",
-    purpose: "Your starting page gives an at-a-glance picture of the selected project and shortcuts to the next task. It is a dashboard, not the place where scope answers or bidder prices are entered.",
-    steps: [
-      "Read the large project card for the selected project name, location, type, and estimated value. Open project takes you to Project information.",
-      "Use Add documents to open the document library, or New project to create a local project record.",
-      "Read the metric cards: Scope requirements counts saved checklist items; Submitted bids counts companies with a submitted revision; Open document issues counts pending-review, open and in-RFI issues; Published bid forms counts packages whose current form is published.",
-      "Project health shows two rings: Project completion (workflow milestones from approved scopes to executed subcontracts) and Project information & files (how much of what a project usually needs is in place, with missing items in red and items to check in yellow). Check to-do list for missing information opens the to-do; the bars show each trade's progress and the open tasks by area.",
-      "Use the next-step cards and workflow links to jump to scopes, document checks, or bid leveling. Trade and activity links also open the relevant screen.",
-      "The bell at the top opens Reminders: the open project's most urgent actions from its preconstruction to-do (late or unstarted schedule activities, scope items to approve, bids to review), each opening the page where it is done. Quick find searches destinations. The profile initials open Settings.",
-    ],
-    terms: [{ name: "Estimated value", meaning: "An early planning amount, not a signed contract price." }, { name: "Procurement", meaning: "The process of requesting bids, reviewing them, and selecting companies to do the work." }],
-    example: "If you want to check whether the steel quotes cover the same work, follow Compare incoming proposals to Bid leveling. The dashboard’s proposal count is not a mailbox status indicator.",
-    reality: "Counts, trade-package status and activity come from the selected project's saved browser records. The project card uses its saved team and deadline. Jelleff starts with demonstration records; an empty project has zero workflow counts. The small animated building is an illustration. Use 3D model studio for the separate interactive Jelleff reconstruction.",
-    related: ["information", "model", "workflow"],
-  },
-  {
     id: "projects", group: "Workspace", title: "All projects",
     purpose: "This is the list of construction jobs in the workspace. A project is the overall building job; a bid package is only one trade’s portion of that job.",
     steps: [

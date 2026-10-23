@@ -18,7 +18,6 @@ import { useSampleRefresh } from "../lib/use-sample-refresh";
 import { CompanyForms } from "./ui/company-forms";
 import { SampleDataSettings, SampleRefreshBanner } from "./ui/sample-data-settings";
 import { ArchitectView } from "./ui/architect-view";
-import { ProjectOverview } from "./ui/project-overview";
 import { PageVoiceFeedback } from "./ui/voice-feedback";
 import { modelViewForScreen } from "../lib/model";
 import { DEFAULT_QUANTITY_FILTERS, type ModelInspection, type ModelQuantityFilters } from "./ui/model-quantity-rows";
@@ -53,7 +52,7 @@ export default function StructorApp(){
  return <div className={`product-app ${reduced?"motion-off":""}`}>
   {menuOpen&&<button className="mobile-scrim" aria-label="Close navigation" onClick={()=>setMenuOpen(false)}/>}
   <aside className={`product-sidebar ${menuOpen?"is-open":""}`}>
-   <button className="product-brand" onClick={()=>navigate(projectOpen?"overview":"projects")} aria-label={projectOpen?"Structor overview":"All projects"}><span className="product-logomark"><i/><i/><i/></span><span>structor<span className="brand-dot">.</span></span><Badge>AI</Badge></button>
+   <button className="product-brand" onClick={()=>navigate(projectOpen?"turnover":"projects")} aria-label={projectOpen?"Preconstruction to-do":"All projects"}><span className="product-logomark"><i/><i/><i/></span><span>structor<span className="brand-dot">.</span></span><Badge>AI</Badge></button>
    <div className="workspace-picker"><span className="workspace-icon">S</span><div><strong>Synix workspace</strong><small>Preconstruction team</small></div><ChevronDown size={14}/></div>
    <SidebarNavigation screen={screen} projectOpen={projectOpen} navigate={navigate} icon={NavIcon}/>
    <div className="sidebar-footer"><button onClick={()=>navigate("settings")} className={screen==="settings"?"active":""}><Settings2 size={17}/>Settings</button><button onClick={()=>setHelpOpen(true)}><CircleHelp size={17}/>Help & glossary<ArrowUpRight size={14}/></button><div className="sidebar-user"><span className="user-avatar">MK</span><div><strong>Marcel Khoury</strong><small>Project manager</small></div><span className="online-dot"/></div></div>
@@ -64,7 +63,6 @@ export default function StructorApp(){
    <div className="product-content" ref={scrollRef}>
     <div className="page-enter" key={screen}>
       {activeId===SAMPLE_PROJECT_ID&&<SampleRefreshBanner refresh={sampleRefresh}/>}
-     {screen==="overview"&&<ProjectOverview project={project} navigate={navigate} onNew={()=>setNewProject(true)} cover={<BuildingModel/>}/>}
      {screen==="setup"&&<ProjectSetupView key={project.id} project={project} navigate={navigate} notify={notify} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Reviewed project information saved.");}}/>}
      {modelView&&<ModelStudio project={project} view={modelView} projectId={project.id} projectName={project.name} navigate={navigate} notify={notify} inspection={modelView==="interior"?modelInspection:null}/>}
      {screen==="projects"&&<Projects projects={projects} onNew={()=>setNewProject(true)} onOpen={p=>{selectProject(p.id);navigate("information");}}/>}

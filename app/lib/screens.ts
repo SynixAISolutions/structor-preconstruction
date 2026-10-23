@@ -9,7 +9,7 @@
 // sees, so it sits in its own SUBCONTRACTOR VIEW group outside the contractor's sidebar.
 
 export type Screen =
-  | "overview" | "projects" | "information" | "documents" | "scopes" | "takeoffs"
+  | "projects" | "information" | "documents" | "scopes" | "takeoffs"
   | "packages" | "bidders" | "portal" | "leveling" | "budget" | "allowances"
   | "contracts" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
   | "setup" | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
@@ -46,9 +46,8 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "prequalification", label: "Subcontractor prequalification", icon: "ClipboardCheck", keywords: ["prequal", "qualified subcontractors", "questionnaire"] },
   ]},
   { label: "PRECONSTRUCTION", scope: "project", items: [
-    { id: "turnover", label: "Preconstruction to-do", icon: "ClipboardCheck", keywords: ["project turnover", "percent complete", "checklist"] },
+    { id: "turnover", label: "Preconstruction to-do", icon: "ClipboardCheck", keywords: ["project turnover", "percent complete", "checklist", "overview", "dashboard", "project health"] },
     { id: "setup", label: "Project setup", icon: "ListChecks", keywords: ["getting started", "onboarding", "missing documents", "checklist", "upload"] },
-    { id: "overview", label: "Overview", icon: "LayoutDashboard", keywords: ["dashboard"] },
     { id: "information", label: "Project information", icon: "Building2" },
     { id: "documents", label: "Project files", icon: "FileStack", keywords: ["documents", "document library", "rfp"] },
     { id: "scopes", label: "Scopes & bid forms", icon: "ListChecks" },
@@ -96,9 +95,9 @@ export const ALL_SCREENS: ScreenDef[] = [...SCREEN_GROUPS.flatMap(group => group
 
 /**
  * Screens that no longer exist, and where their old links now go. Messages: messaging lives in each Bid package (Marcel,
- * 20 Sep: remove Conversations, keep it inside Subcontractor Outreach).
+ * 20 Sep: remove Conversations, keep it inside Subcontractor Outreach). Overview: one page with the to-do (Marcel, 22 Oct).
  */
-export const RETIRED_SCREENS: Record<string, Screen> = { messages: "packages" };
+export const RETIRED_SCREENS: Record<string, Screen> = { messages: "packages", overview: "turnover" };
 
 /** A hash or link value → the screen to show: current screens as they are, retired ones redirected, anything else null. */
 export const resolveScreen = (value: string): Screen | null =>

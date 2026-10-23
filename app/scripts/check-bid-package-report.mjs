@@ -87,7 +87,7 @@ const failed = await C.runSavedTask(task, "Elevators");
 assert.deepEqual([failed.reports.length, /No trade with bids matches/.test(failed.answer)], [0, true]);
 // The AI asking twice for one trade shows one report.
 let turn = 0;
-const answer = await C.askStructor({ question: "Summarize the drywall bids", screen: "overview", history: [] }, {
+const answer = await C.askStructor({ question: "Summarize the drywall bids", screen: "turnover", history: [] }, {
   send: async () => ++turn === 1 ? { kind: "tools", calls: [{ id: "s1", name: "bid_package_summary", arguments: { trade: "Drywall" } }, { id: "s2", name: "bid_package_summary", arguments: { trade: "drywall" } }] } : { kind: "answer", answer: "Capitol is the low." },
 });
 assert.deepEqual([answer.reports.length, answer.reports[0].trade, answer.answer], [1, "Drywall", "Capitol is the low."]);

@@ -9,9 +9,9 @@ assert.deepEqual(parseFeedback(valid), { ...valid, projectId: null, projectName:
 assert.equal(feedbackRecord(parseFeedback(valid)).pageLabel, "All projects");
 assert.ok(feedbackPath(id) > feedbackPath(id.replace("1792051200000", "1792051201000")), "newest messages sort first");
 for (const change of [{ id: "../bad" }, { screen: "bad" }, { author: " " }, { note: "x".repeat(1001) }, { duration: Infinity }, { duration: 183 }, { duration: 0 }]) assert.throws(() => parseFeedback({ ...valid, ...change }));
-assert.throws(() => parseFeedback({ ...valid, screen: "overview", projectId: null }));
-assert.throws(() => parseFeedback({ ...valid, screen: "overview", projectId: "../secret" }));
-assert.equal(parseFeedback({ ...valid, screen: "overview", projectId: "jelleff", projectName: "Jelleff" }).projectId, "jelleff");
+assert.throws(() => parseFeedback({ ...valid, screen: "turnover", projectId: null }));
+assert.throws(() => parseFeedback({ ...valid, screen: "turnover", projectId: "../secret" }));
+assert.equal(parseFeedback({ ...valid, screen: "turnover", projectId: "jelleff", projectName: "Jelleff" }).projectId, "jelleff");
 assert.throws(() => feedbackPath("../secret"));
 for (const [mime, magic, offset, extension] of [["audio/webm;codecs=opus", [26,69,223,163], 0, "webm"], ["audio/mp4", [...Buffer.from("ftyp")], 4, "m4a"], ["audio/ogg", [...Buffer.from("OggS")], 0, "ogg"]]) {
   const bytes = new Uint8Array(32); bytes.set(magic, offset);
