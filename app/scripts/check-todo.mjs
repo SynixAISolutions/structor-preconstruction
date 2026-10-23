@@ -37,7 +37,7 @@ assert.deepEqual(missingProjectFacts(null), ["project"]);
 
 // Jelleff as sampled: Concrete and Drywall carried through to executed subcontracts; drafts in the other trades; budget partly approved.
 const start = derive();
-assert.equal(ids(start).filter(id => id.startsWith("scopes:approve:")).length, 7, "Every package with draft items, excluding Carpentry and the four published sample trades");
+assert.equal(ids(start).filter(id => id.startsWith("scopes:approve:")).length, 8, "Every package with draft items (Waterproofing has the air barrier), excluding Carpentry and the four published sample trades");
 for (const trade of ["concrete", "drywall"]) assert.deepEqual([start.packages.find(p => p.packageId === trade).percent, ids(start).filter(id => id.endsWith(`:${trade}`))], [100, []], `${trade}: every milestone done, nothing left to do`);
 assert(has(start, "scopes:empty:carpentry") && !ids(start).some(id => id.startsWith("scopes:publish") || id.startsWith("outreach:")));
 assert.deepEqual(task(start, "scopes:approve:demolition").count, 2);

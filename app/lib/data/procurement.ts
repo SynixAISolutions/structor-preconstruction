@@ -2,6 +2,11 @@
 // invitations and outreach. Illustrative preview content, not read from the documents.
 // Bidder ids refer to the organization-wide directory (initialBidders).
 //
+// The trade packages are Jelleff's 24 bid packages (Marcel, 22 Oct: "every scope sheet should have its
+// own trade here"), named and coded from each bid form's title, in CSI order. Masonry and Carpentry
+// predate that list and stay until Marcel says otherwise. The packages added on 22 Oct have no scope
+// items yet: their bid forms are for the AI scope writer or the estimator to fill.
+//
 // Concrete and drywall are carried all the way through the sample: their bid forms are approved
 // and published here; the bids, awards, Exhibit A and executed subcontracts are in
 // lib/data/sample-award.ts, and their submittals in lib/data/submittals.ts. Drywall (Marcel's pilot
@@ -16,13 +21,27 @@ const packages: TradePackage[] = [
   { id: "masonry", name: "Masonry", division: "04", code: "04 22 00", owner: "Naija", due: "2026-10-08" },
   { id: "steel", name: "Structural steel", division: "05", code: "05 12 00", owner: "Naija", due: "2026-10-08" },
   { id: "carpentry", name: "Carpentry", division: "06", code: "06 10 00", owner: "Vijay", due: "2026-10-09" },
-  { id: "thermal", name: "Roofing & waterproofing", division: "07", code: "07 54 23", owner: "Vijay", due: "2026-10-09" },
+  { id: "waterproofing", name: "Waterproofing, air barrier & joint sealants", division: "07", code: "07 10 00", owner: "Vijay", due: "2026-10-14" },
+  { id: "metal-panels", name: "Metal panels", division: "07", code: "07 42 00", owner: "Vijay", due: "2026-10-14" },
+  { id: "thermal", name: "Roofing", division: "07", code: "07 54 23", owner: "Vijay", due: "2026-10-09" },
   { id: "openings", name: "Doors, frames & hardware", division: "08", code: "08 11 13", owner: "Safi", due: "2026-10-12" },
+  { id: "special-doors", name: "Special doors", division: "08", code: "08 33 13", owner: "Safi", due: "2026-10-14" },
+  { id: "glazing", name: "Aluminum & glazing", division: "08", code: "08 40 00", owner: "Safi", due: "2026-10-14" },
   { id: "drywall", name: "Drywall", division: "09", code: "09 29 00", owner: "Safi", due: "2026-10-12" },
+  { id: "tile", name: "Tile", division: "09", code: "09 30 13", owner: "Safi", due: "2026-10-15" },
   { id: "flooring", name: "Flooring", division: "09", code: "09 65 19", owner: "Vijay", due: "2026-10-12" },
+  { id: "painting", name: "Painting & wall coverings", division: "09", code: "09 91 23", owner: "Safi", due: "2026-10-15" },
+  { id: "specialties", name: "Specialties", division: "10", code: "10 00 00", owner: "Naija", due: "2026-10-15" },
+  { id: "signage", name: "Signage", division: "10", code: "10 14 00", owner: "Naija", due: "2026-10-15" },
+  { id: "fire-protection", name: "Fire protection", division: "21", code: "21 13 13", owner: "Vijay", due: "2026-10-15" },
   { id: "plumbing", name: "Plumbing", division: "22", code: "22 00 00", owner: "Vijay", due: "2026-10-13" },
   { id: "mechanical", name: "Mechanical", division: "23", code: "23 73 13", owner: "Vijay", due: "2026-10-13" },
   { id: "electrical", name: "Electrical", division: "26", code: "26 51 00", owner: "Naija", due: "2026-10-13" },
+  { id: "low-voltage", name: "Low voltage", division: "27", code: "27 00 00", owner: "Naija", due: "2026-10-16" },
+  { id: "asphalt", name: "Asphalt paving", division: "32", code: "32 12 16", owner: "Safi", due: "2026-10-16" },
+  { id: "site-concrete", name: "Site concrete", division: "32", code: "32 13 13", owner: "Vijay", due: "2026-10-16" },
+  { id: "fencing", name: "Site fencing", division: "32", code: "32 31 00", owner: "Safi", due: "2026-10-16" },
+  { id: "landscaping", name: "Landscaping", division: "32", code: "32 90 00", owner: "Safi", due: "2026-10-16" },
 ];
 
 const created = "2026-09-15T14:00:00.000Z";
@@ -43,7 +62,7 @@ const scopes: ScopeItem[] = [
   item("masonry", "Install reinforced CMU partitions including grout and joint reinforcement.", "Include lintels, ties, control joints, and fire-rated construction where indicated.", "A8.1 · Partition types", "drawing", false),
   item("masonry", "Furnish and install brick anchors at masonry veneer.", "Anchors tie the veneer to the backup framing. On some jobs the framing trade installs them — move this item if so.", "A6.1 · Wall sections", "ai", false),
   item("steel", "Furnish and install miscellaneous steel supports and roof access ladder.", "Include field measurements, connections, coatings, anchors, and coordination with adjacent finishes.", "S501 · Detail 2", "drawing", false),
-  item("thermal", "Install continuous air barrier at exterior wall assemblies.", "Include transitions, penetrations, tie-ins to roofing and fenestration, and specified adhesion testing.", "07 27 00 · §2.1", "specification", false),
+  item("waterproofing", "Install continuous air barrier at exterior wall assemblies.", "Include transitions, penetrations, tie-ins to roofing and fenestration, and specified adhesion testing.", "07 27 00 · §2.1", "specification", false),
   item("openings", "Provide hollow metal doors, frames, and scheduled hardware sets.", "Coordinate fire ratings, access control, and electrified hardware requirements.", "A8.2 · Door schedule", "drawing", false),
   item("drywall", "Install gypsum board wall systems and Level 4 finish.", "Include rated assemblies, backing, corner beads, and joints.", "09 29 00 · §3.6", "specification", false),
   item("flooring", "Install luxury vinyl tile flooring and resilient base.", "Include moisture testing, substrate preparation beyond demolition scope, transitions, and attic stock.", "09 65 19 · §3.3", "specification", false),

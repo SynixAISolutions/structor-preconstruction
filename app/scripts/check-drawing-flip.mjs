@@ -84,7 +84,7 @@ fails(() => F.addRegion(base, proc, { ...input, polygon: [{ x: NaN, y: 0 }, ...i
 fails(() => F.addRegion(base, proc, { ...input, polygon: [{ x: "0.1", y: 0 }, ...input.polygon.slice(1)] }, "Naija", at), "polygon", /on the page/);
 fails(() => F.addRegion(base, proc, { ...input, polygon: F.rectangle(0.5, 0.5, 0.005, 0.005) }, "Naija", at), "polygon", /too small/);
 fails(() => F.addRegion(base, proc, { ...input, polygon: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.5 }, { x: 0.9, y: 0.9 }] }, "Naija", at), "polygon", /too small/);
-fails(() => F.addRegion(base, proc, { ...input, packageId: "glazing" }, "Naija", at), "packageId", /responsible trade/);
+fails(() => F.addRegion(base, proc, { ...input, packageId: "no-such-trade" }, "Naija", at), "packageId", /responsible trade/);
 fails(() => F.addRegion(base, proc, { ...input, scopeIds: ["scope-1"] }, "Naija", at), "scopeIds", /belongs to Demolition/);
 fails(() => F.addRegion(base, proc, { ...input, scopeIds: ["scope-99"] }, "Naija", at), "scopeIds", /no longer exists/);
 let s = freeze(F.addRegion(base, proc, { ...input, confidence: 0.4 }, "Naija", at));
@@ -104,7 +104,7 @@ assert.deepEqual([proposal.origin, proposal.status, proposal.reviewedBy, proposa
 
 // Importing: all or nothing, errors name the region.
 fails(() => F.importRegions(base, proc, [], "Structor AI", at), "region", /no regions/);
-fails(() => F.importRegions(base, proc, [aiInput, { ...aiInput, packageId: "glazing" }], "Structor AI", at), "packageId", /^Region 2: Choose the responsible trade/);
+fails(() => F.importRegions(base, proc, [aiInput, { ...aiInput, packageId: "no-such-trade" }], "Structor AI", at), "packageId", /^Region 2: Choose the responsible trade/);
 const imported = F.importRegions(base, proc, [aiInput, { ...aiInput, label: "Hose bibbs" }], "Structor AI", at);
 assert.deepEqual(numbers(imported.regions.slice(-2)), ["R-017", "R-018"]);
 
@@ -131,7 +131,7 @@ fails(() => F.approveRegion(s, r2, "Safi", at), "region", /already approved/);
 // Corrections: reassigning keeps the audit trail and drops scope items of the old trade.
 const r5 = byNumber(s, "R-005").id;
 fails(() => F.reassignRegion(s, proc, r5, "drywall", "Safi", "", at), "packageId", /already Drywall/);
-fails(() => F.reassignRegion(s, proc, r5, "glazing", "Safi", "", at), "packageId", /responsible trade/);
+fails(() => F.reassignRegion(s, proc, r5, "no-such-trade", "Safi", "", at), "packageId", /responsible trade/);
 fails(() => F.reassignRegion(s, proc, r5, "flooring", " ", "", at), "by", /who/);
 const r6 = byNumber(s, "R-006").id;
 s = freeze(F.reassignRegion(s, proc, r6, "carpentry", "Vijay", "  Wood base is carpentry.  ", "2026-10-01T16:00:00.000Z"));

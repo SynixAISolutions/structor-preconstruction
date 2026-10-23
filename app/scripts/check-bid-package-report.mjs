@@ -70,7 +70,7 @@ const jelleff = (await D.bidPackageSummary("jelleff", "drywall", "2026-10-22")).
 assert.deepEqual([jelleff.asSubmitted, jelleff.leveledLow.company, jelleff.apparentLow.company, jelleff.spreadBasis, jelleff.gaps.length], [true, "Capitol Wall Systems", "Rock Creek Interiors", "provisional", 2]);
 assert.deepEqual([jelleff.budget, jelleff.budgetBasis], [1065450.18, "budget line 09200, matched by CSI code"], "The budget line Quantity takeoffs would match");
 assert.deepEqual(jelleff.selected, { company: "Capitol Wall Systems", amount: 1012400, stage: "executed" });
-assert.deepEqual(await D.bidPackageSummary("jelleff", undefined, "2026-10-22"), { error: "Name the trade to summarize.", trades: ["Concrete", "Roofing & waterproofing", "Doors, frames & hardware", "Drywall"] });
+assert.deepEqual(await D.bidPackageSummary("jelleff", undefined, "2026-10-22"), { error: "Name the trade to summarize.", trades: ["Concrete", "Roofing", "Doors, frames & hardware", "Drywall"] });
 assert.match((await D.bidPackageSummary("jelleff", "elevators", "2026-10-22")).error, /No trade with bids matches "elevators"/);
 
 // ── As a tool and as a saved task ──
@@ -80,7 +80,7 @@ assert.deepEqual([tool.reports.length, tool.screens, brief.ranked.length, brief.
 assert.match(brief.shownToUser, /tables and its Excel download are shown/);
 assert.ok(T.SAVED_TASKS.every(t => T.ASSISTANT_TOOLS.some(x => x.name === t.tool)), "Every saved task runs a real tool");
 const task = T.SAVED_TASKS.find(t => t.id === "bid-package-summary");
-assert.deepEqual(await C.savedTaskChoices(task), ["Concrete", "Roofing & waterproofing", "Doors, frames & hardware", "Drywall"], "The trades with bids to choose from");
+assert.deepEqual(await C.savedTaskChoices(task), ["Concrete", "Roofing", "Doors, frames & hardware", "Drywall"], "The trades with bids to choose from");
 const ran = await C.runSavedTask(task, "Concrete");
 assert.deepEqual([ran.reports.length, ran.reports[0].trade, ran.answer], [1, "Concrete", ran.reports[0].summary], "A saved task runs without the AI");
 const failed = await C.runSavedTask(task, "Elevators");
