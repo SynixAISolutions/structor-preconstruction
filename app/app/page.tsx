@@ -6,6 +6,7 @@ import BidLevelingPage from "./leveling-workspace";
 import { IntelligenceView } from "./ui/intelligence";
 import { ActivityInbox } from "./ui/activity-inbox";
 import { CommercialView } from "./ui/commercial";
+import { BuyoutView } from "./ui/buyout-ui";
 import { UserManual } from "./ui/user-manual";
 import { ProjectForm, ProjectInformation } from "./ui/project-record";
 import { ProjectSetupView } from "./ui/project-setup";
@@ -70,6 +71,7 @@ export default function StructorApp(){
      {screen==="information"&&<ProjectInformation project={project} cover={<BuildingModel/>} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Project information saved locally.");}} navigate={navigate}/>}
       {['documents','scopes','drawing-flip','takeoffs','specs','checks','drawings','specifications','revisions'].includes(screen)&&<IntelligenceView key={project.id} {...props} project={project} screen={screen} quantityFilters={quantityFilters} onQuantityFilters={setQuantityFilters} onInspectModel={inspectModel}/>}
      {['packages','bidders','ratings','prequalification','portal','budget','allowances','value-engineering','contracts','schedule','turnover'].includes(screen)&&<CommercialView {...props} screen={screen} project={project}/>}
+     {screen==="buyout"&&<BuyoutView key={project.id} {...props}/>}
      {screen==="leveling"&&<><PageHeader eyebrow="BID & AWARD" title="Bid leveling" description="A complete scope. A comparable price. A confident decision." actions={<Button onClick={()=>navigate("budget")}><Wallet size={16}/>Budget summary<ArrowRight size={16}/></Button>}/><BidLevelingPage key={project.id} projectName={project.name} squareFeet={project.squareFeet}/></>}
      {screen==="settings"&&<WorkspaceSettings notify={notify} reduced={reduced} setReduced={setReduced} navigate={navigate} sampleRefresh={sampleRefresh}/>}
     </div>
