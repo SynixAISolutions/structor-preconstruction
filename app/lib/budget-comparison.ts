@@ -66,3 +66,15 @@ export function inHouseFromEstimate(budget:BudgetState,lineId:string,pkg:TradePa
  const next=editBudgetLine(budget,lineId,{budget:trade.total},by,at);
  return {...next,lines:next.lines.map(l=>l.id===lineId?{...l,inHouseEstimate:{kind:'estimate',packageId:pkg.id,value:trade.total,lines:trade.items.length,unreviewed:trade.unreviewed,appliedBy:by,appliedAt:at}}:l)};
 }
+
+/**
+ * Marcel (22 Oct, Budget summary): the in-house budget is typed in, or pulled from the lowest sub. Sets the
+ * line to the lowest sub's share (the whole bid, or the estimator's split when the trade spans lines) and
+ * remembers where it came from until someone edits the amount.
+ */
+export function inHouseFromLowestSub(budget:BudgetState,lineId:string,pkg:TradePackage,low:LowBid,by:string,at=new Date().toISOString()):BudgetState {
+ const value=lowestSubLineValue(budget,pkg,lineId,low.value);
+ if(value===null)throw new BudgetRuleError({budget:'Split the trade bid between its budget lines first, or type the amount.'});
+ const next=editBudgetLine(budget,lineId,{budget:value},by,at);
+ return {...next,lines:next.lines.map(l=>l.id===lineId?{...l,inHouseSource:{kind:'lowest-sub',packageId:pkg.id,bidder:low.name,basis:low.basis,value,appliedAt:at,appliedBy:by}}:l)};
+}

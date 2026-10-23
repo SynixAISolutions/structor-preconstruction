@@ -46,4 +46,21 @@ const reviewedRoof={packageId:'thermal',levelingBidderId:'x',bidderName:'Distric
 const leveled=SH.bidSheetSummary({...jel,candidates:[reviewedRoof]}).rows.find(r=>r.packageId==='thermal');
 assert.deepEqual([leveled.carried.value,leveled.carried.basis,leveled.bids.map(b=>[b.value,b.basis])],[540000,'reviewed',[[508750,'base'],[540000,'reviewed']]],"A reviewed total is carried over a lower unreviewed base bid, and replaces that company's base bid");
 assert.equal(SH.bidSheetSummary({...jel,squareFeet:0}).total.perSquareFoot,null);
-console.log('Budget comparison checked: current bids, review basis, independent in-house margin, takeoff source, explicit cost-center allocation, exact cents, and the bid sheet summary.');
+
+// Marcel, 22 Oct: "it's doubling". One row per trade in All cost centers, its cost centers inside.
+const direct=sampleBudget.lines.filter(l=>l.classification==='direct');
+const rowsByTrade=B.budgetRowsByTrade(direct);
+assert.deepEqual(rowsByTrade.filter(r=>r.lines.length>1).map(r=>[r.csiCode,r.lines.map(l=>l.costCenter)]),[['05000',['New construction','Sitework']],['05500',['New construction','Sitework']],['11000',['New construction','Sitework']],['23000',['New construction','Sitework']],['26000',['New construction','Sitework']]]);
+assert.deepEqual([rowsByTrade.length,direct.length],[direct.length-5,direct.length]);
+assert.deepEqual((({budget,description})=>[budget,description])(rowsByTrade.find(r=>r.csiCode==='05500')),[489600+11220,'Miscellaneous metals']);
+const indirect=sampleBudget.lines.filter(l=>l.classification==='indirect'&&!l.csiCode);
+assert.equal(B.budgetRowsByTrade(indirect).length,indirect.length,'Indirect lines without a code stay single rows, even with the same wording in two cost centers');
+assert.equal(B.budgetRowsByTrade(indirect.filter(l=>l.byOwner)).every(r=>r.budget===0),true,'Owner-carried lines are listed, never added');
+// Marcel, 22 Oct: the in-house budget is typed in or pulled from the lowest sub.
+const roofPkg=sampleProcurement.packages.find(p=>p.id==='thermal'),roofLow=C.lowestTradeBid(sampleProcurement,sampleSubmissions,'thermal',[],initialBidders);
+const pulled=C.inHouseFromLowestSub(sampleBudget,'nc-07500',roofPkg,roofLow,'Marcel','2026-10-23T12:00:00.000Z');
+const roofLine=pulled.lines.find(l=>l.id==='nc-07500');
+assert.deepEqual([roofLine.budget,roofLine.status,roofLine.inHouseSource],[508750,'draft',{kind:'lowest-sub',packageId:'thermal',bidder:'Potomac Roof Systems (sample)',basis:'base',value:508750,appliedAt:'2026-10-23T12:00:00.000Z',appliedBy:'Marcel'}]);
+assert.equal(B.editBudgetLine(pulled,'nc-07500',{budget:520000},'Marcel').lines.find(l=>l.id==='nc-07500').inHouseSource,null,'Typing the amount replaces the pulled source');
+assert.throws(()=>C.inHouseFromLowestSub(sampleBudget,'nc-05000',sampleProcurement.packages.find(p=>p.id==='steel'),{...roofLow,packageId:'steel',value:900000},'Marcel'),/Split the trade bid/);
+console.log('Budget comparison checked: current bids, review basis, independent in-house margin, takeoff source, explicit cost-center allocation, exact cents, the bid sheet summary, rows by trade and pulling the lowest sub.');
