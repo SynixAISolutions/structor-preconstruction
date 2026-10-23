@@ -35,8 +35,12 @@ export type TemplateField =
 export type TemplateBlock =
   /** Fixed text; `numbered` prefixes 1., 2., ... */
   | { kind: "text"; heading: string; lines: string[]; numbered?: boolean }
-  /** Included scope items (Y and P answers), after an optional intro and before optional fixed lines. */
-  | { kind: "scope"; heading: string; intro?: string; append?: string[] }
+  /**
+   * Included scope items (Y and P answers), after an optional intro and before optional fixed lines. With
+   * `documents`, the documents table (snapshot.documents) follows the intro, as section 3 of the contractor's
+   * Exhibit As opens; its lines are the fallback when the project has no stored files.
+   */
+  | { kind: "scope"; heading: string; intro?: string; append?: string[]; documents?: string[] }
   /** N answers plus the bidder's exclusions. */
   | { kind: "exclusions"; heading: string }
   | { kind: "not-applicable"; heading: string }
@@ -98,7 +102,12 @@ export type AwardSnapshot = {
   exclusions: string[]; alternates: Alternate[]; clarifications: string[];
   allowances: { id: string; name: string; amount: number; source: string; status: string }[];
   company: { name: string; contact: string; email: string };
+  /** The documents the trade is priced on, for Exhibit A section 3's table (exhibitADocuments); absent in older awards. */
+  documents?: ExhibitDocument[];
 };
+
+/** One row of Exhibit A's documents table, as MCN's Exhibit As list them: "Spec Section 09 29 00 · Gypsum Board · 12.20.2024". */
+export type ExhibitDocument = { section: string; description: string; date: string };
 
 export type Award = {
   contractFiles?: ContractFiles;
@@ -133,6 +142,8 @@ export type AwardContext = {
   owner?: string; projectAddress?: string; projectStart?: string; projectFinish?: string;
   /** The project's clarification requests. Written answers applied in leveling are carried into Exhibit A. */
   clarifications?: ClarificationRequest[];
+  /** The documents the awarded trade is priced on (exhibitADocuments over the project's files and the trade). */
+  documents?: ExhibitDocument[];
 };
 
 export type AwardErrors = Partial<Record<"candidate" | "basis" | "budgetLineId" | "allowanceIds" | "award" | "exhibit" | "comment" | "subcontract" | "contractorName" | "signature" | "name" | "email" | "reason", string>>;
@@ -196,13 +207,17 @@ const allowanceLine = (a: AwardSnapshot["allowances"][number]) => `${a.name}: ${
 const exclusionLines = (snapshot: AwardSnapshot) => [...snapshot.scope.filter(i => i.answer === "N").map(i => `${i.title}${i.note ? ` (${i.note})` : ""}`), ...snapshot.exclusions];
 
 /** Renders a customer layout. Sections that end up with no lines are dropped. */
+/** The documents table as lines: "Spec Section 09 29 00 — Gypsum Board · 2026-02-02", or the fallback lines without stored files. */
+const documentLines = (snapshot: AwardSnapshot, fallback: string[]): string[] =>
+  ["Documents:", ...(snapshot.documents?.length ? snapshot.documents.map(d => `${d.section} — ${d.description}${d.date ? ` · ${d.date}` : ""}`) : fallback)];
+
 function renderLayout(layout: TemplateLayout, values: Partial<Record<TemplateField, string>>, snapshot: AwardSnapshot): DocumentContent {
   const included = snapshot.scope.filter(item => item.answer === "Y" || item.answer === "P");
   const sections = layout.blocks.map((block): DocumentSection => {
     const heading = fill(block.heading, values);
     switch (block.kind) {
       case "text": return { heading, lines: block.lines.map((l, i) => `${block.numbered ? `${i + 1}. ` : ""}${fill(l, values)}`) };
-      case "scope": return { heading, lines: [...(block.intro ? [fill(block.intro, values)] : []), ...(included.length ? included.map(scopeLine) : ["No scope items were included in the bid."]), ...(block.append ?? []).map(l => fill(l, values))] };
+      case "scope": return { heading, lines: [...(block.intro ? [fill(block.intro, values)] : []), ...(block.documents ? documentLines(snapshot, block.documents.map(l => fill(l, values))) : []), ...(included.length ? included.map(scopeLine) : ["No scope items were included in the bid."]), ...(block.append ?? [])] };
       case "exclusions": return { heading, lines: exclusionLines(snapshot) };
       case "not-applicable": return { heading, lines: snapshot.scope.filter(i => i.answer === "N/A").map(i => `${i.title}: ${i.note}`) };
       case "clarifications": return { heading, lines: snapshot.clarifications };
@@ -339,6 +354,7 @@ export function createAward(
   const snapshot: AwardSnapshot = {
     projectName: ctx.projectName, packageName: pkg!.name, packageCode: pkg!.code, packageOwner: pkg!.owner, formVersion: revision.formVersion,
     owner: ctx.owner?.trim() ?? "", projectAddress: ctx.projectAddress?.trim() ?? "", projectStart: ctx.projectStart ?? "", projectFinish: ctx.projectFinish ?? "",
+    ...(ctx.documents?.length ? { documents: ctx.documents.map(d => ({ section: d.section.trim(), description: d.description.trim(), date: d.date.trim() })).filter(d => d.section && d.description).slice(0, 200) } : {}),
     scope: form.items.map(item => {
       const c = clarified.get(item.id)?.answer;
       return { ...item, answer: c ? (c.kind === "excluded" ? "N" : "Y") : answers.get(item.id)?.answer ?? null, note: c ? writtenAnswer(c) : answers.get(item.id)?.note ?? "" };

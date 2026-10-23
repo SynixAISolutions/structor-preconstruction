@@ -38,6 +38,14 @@ const trades = [{ id: "drywall", division: "09", code: "09 29 00" }, { id: "floo
 const s = (section) => ({ section, title: section, first: 1, last: 2 });
 const by = P.sectionsByTrade([s("01 10 00"), s("03 30 00"), s("03 35 43"), s("09 22 16"), s("09 51 13"), s("09 65 13"), s("09 68 13"), s("23 05 00")], trades);
 assert.deepEqual(Object.fromEntries([...by].map(([k, v]) => [k, v.map(x => x.section)])), { drywall: ["09 22 16", "09 51 13"], flooring: ["09 65 13", "09 68 13"], concrete: ["03 30 00", "03 35 43"] });
+// Jelleff's split divisions (22 Oct): signage takes only 10 14, the whole-division Specialties trade the rest of Division 10;
+// door hardware goes with doors and joint sealants with "Waterproofing AVB & joint sealants".
+const { sampleProcurement: jp } = await import("../lib/data/procurement.ts");
+const jelleff = P.sectionsByTrade(["07 13 26", "07 42 13", "07 54 23", "07 62 00", "07 92 00", "08 11 13", "08 33 13", "08 44 13", "08 71 00", "09 30 13", "09 51 13", "09 91 23", "10 11 00", "10 14 19", "10 21 13", "10 51 13", "32 12 16", "32 13 13", "32 31 13", "32 93 00"].map(s), jp.packages);
+assert.deepEqual(Object.fromEntries([...jelleff].filter(([, v]) => v.length).map(([k, v]) => [k, v.map(x => x.section)])), {
+  waterproofing: ["07 13 26", "07 92 00"], "metal-panels": ["07 42 13"], thermal: ["07 54 23", "07 62 00"], openings: ["08 11 13", "08 71 00"], "special-doors": ["08 33 13"],
+  glazing: ["08 44 13"], drywall: ["09 51 13"], tile: ["09 30 13"], painting: ["09 91 23"], specialties: ["10 11 00", "10 21 13", "10 51 13"], signage: ["10 14 19"],
+  asphalt: ["32 12 16"], "site-concrete": ["32 13 13"], fencing: ["32 31 13"], landscaping: ["32 93 00"] });
 assert.deepEqual(P.uncoveredSections([s("01 10 00"), s("23 05 00"), s("09 29 00")], trades).map(x => x.section), ["23 05 00"], "Mechanical has no trade here; Division 01 is the General section");
 
 // List of drawings and Exhibit B come from the newest stored documents.
@@ -68,6 +76,16 @@ assert.throws(() => F.withSheetNumbers(permit, [{ page: 5, sheet: "a101" }]), /P
 assert.deepEqual(F.withSheetNumbers(asi, [{ page: 3, sheet: "A-103" }]).sheets.map(s => s.sheet), ["A001", "A-101", "A-103", "a-101"], "Fixing one page ignores repeats elsewhere");
 assert.throws(() => F.withSheetNumbers(manualBig, [{ page: 1, sheet: "A-1" }]), /drawing sets/);
 const report = doc("geo", "geo", 1, { kind: "other", category: "Reports", name: "Geotech.pdf" });
+// Exhibit A section 3's documents for a trade: the drawing set (its sheets' most common date), the trade's spec sections, reports.
+const drawn = doc("set9", "set9", 1, { name: "JRC GMP Drawings.pdf", sheets: [{ page: 1, sheet: "A-101", title: "Plan", date: "12-09-2025" }, { page: 2, sheet: "A-102", title: "Plan 2", date: "12-09-2025" }, { page: 3, sheet: "G-001", title: "Cover", date: "11-01-2025" }] });
+const manualJ = doc("man9", "man9", 1, { kind: "manual", category: "Specifications", uploadedAt: "2026-01-05T00:00:00Z", sections: [{ section: "09 29 00", title: "Gypsum Board", first: 1, last: 2 }, { section: "09 51 13", title: "Acoustical Panel Ceilings", first: 3, last: 4 }, { section: "03 30 00", title: "Cast-in-Place Concrete", first: 5, last: 6 }] });
+const geoReport = doc("geo9", "geo9", 1, { kind: "other", category: "Reports", name: "Geotechnical Report.pdf", uploadedAt: "2026-01-02T00:00:00Z" });
+assert.deepEqual(P.exhibitADocuments([drawn, manualJ, geoReport], trades[0], trades), [
+  { section: "Drawings", description: "JRC GMP Drawings", date: "12-09-2025" },
+  { section: "Spec Section 09 29 00", description: "Gypsum Board", date: "2026-01-05" },
+  { section: "Spec Section 09 51 13", description: "Acoustical Panel Ceilings", date: "2026-01-05" },
+  { section: "Reports", description: "Geotechnical Report", date: "2026-01-02" },
+], "Drywall: its own sections (ceilings go with drywall), not concrete's");
 const exhibit = F.exhibitBRows([named, manualBig, report]);
 assert.deepEqual(exhibit[0], ["Part", "Number", "Title", "Date", "Document"]);
 assert.deepEqual(exhibit.slice(1).map(r => [r[0], r[1]]), [["Documents", ""], ["Drawings", "A1.1"], ["Specifications", "09 29 00"]]);
@@ -141,7 +159,7 @@ assert.throws(() => SS.screen({ activities: [] }, ssIn), /no usable schedule/);
 // Trade suggestions for a new project: from the manual (same mapping as Write scopes) and from drawings alone.
 const sec = code => ({ section: code, title: code, first: 1, last: 2 });
 const fromManual = P.suggestTrades([], { sections: ["01 10 00", "02 41 16", "03 30 00", "09 22 16", "09 30 13", "09 51 13", "09 91 23", "23 05 00", "25 00 00"].map(sec), sheets: [] });
-assert.deepEqual(fromManual.map(t => [t.id, t.sections.join()]), [["demolition", "02 41 16"], ["concrete", "03 30 00"], ["drywall", "09 22 16,09 51 13"], ["flooring", "09 30 13"], ["painting", "09 91 23"], ["mechanical", "23 05 00"]], "Ceilings go with drywall, tile with flooring; Division 01 and trades without a standard package are not suggested");
+assert.deepEqual(fromManual.map(t => [t.id, t.sections.join()]), [["demolition", "02 41 16"], ["concrete", "03 30 00"], ["drywall", "09 22 16,09 51 13"], ["tile", "09 30 13"], ["painting", "09 91 23"], ["mechanical", "23 05 00"]], "Ceilings go with drywall; tile is its own trade (Jelleff); Division 01 and trades without a standard package are not suggested");
 const drawingsOnly = [
   { sheet: "C1.0", title: "Demolition Plan", discipline: "Civil" }, { sheet: "C2.0", title: "Grading Plan", discipline: "Civil" },
   { sheet: "A1.1", title: "LEVEL 01 - FIRST FLOOR PLAN", discipline: "Architectural" }, { sheet: "A8.1", title: "PARTITION TYPES", discipline: "Architectural" },

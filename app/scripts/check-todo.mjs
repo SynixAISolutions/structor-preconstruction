@@ -31,15 +31,15 @@ assert(newProject, "The setup fixture must be a valid project");
 assert(missingProjectFacts({ ...newProject, estimateStage: null }).includes("estimate stage"));
 const empty = deriveTodo({ project: newProject, documents: [], procurement: { packages: [], scopes: [], invitations: [], outreach: [], notifications: [] }, submissions: [], leveling: null, budget: { lines: [], allowances: [] }, awards: noAwards });
 assert.deepEqual(ids(empty).sort(), ["budget:empty", "setup:facts", "setup:files", "setup:packages"]);
-assert.equal(task(empty, "setup:facts").detail, "Missing: bid due date.");
+assert.equal(task(empty, "setup:facts").detail, "Missing: bid due date, RFI deadline.", "Marcel, 22 Oct: the RFI deadline is part of the project information");
 assert.deepEqual([empty.packages.length, empty.progress], [0, { done: 1, total: 4, percent: 25 }], "Only 'allowances decided' is true on an empty project");
 assert.deepEqual(missingProjectFacts(null), ["project"]);
 
 // Jelleff as sampled: Concrete and Drywall carried through to executed subcontracts; drafts in the other trades; budget partly approved.
 const start = derive();
-assert.equal(ids(start).filter(id => id.startsWith("scopes:approve:")).length, 7, "Every package with draft items, excluding Carpentry and the four published sample trades");
+assert.equal(ids(start).filter(id => id.startsWith("scopes:approve:")).length, 8, "Every package with draft items (Waterproofing has the air barrier), excluding Carpentry and the four published sample trades");
 for (const trade of ["concrete", "drywall"]) assert.deepEqual([start.packages.find(p => p.packageId === trade).percent, ids(start).filter(id => id.endsWith(`:${trade}`))], [100, []], `${trade}: every milestone done, nothing left to do`);
-assert(has(start, "scopes:empty:carpentry") && !ids(start).some(id => id.startsWith("scopes:publish") || id.startsWith("outreach:")));
+assert(has(start, "scopes:empty:carpentry") && !ids(start).some(id => id.startsWith("scopes:publish") || (id.startsWith("outreach:") && !id.startsWith("outreach:more:"))), "Outreach work on the sample is only the kickoff's three-bid minimum");
 assert.deepEqual(task(start, "scopes:approve:demolition").count, 2);
 assert.deepEqual([task(start, "budget:approve").count, task(start, "budget:over").count, task(start, "budget:allowances").count, has(start, "budget:forecast")], [11, 2, 2, false]);
 assert.match(task(start, "budget:over").detail, /Structural steel \(Modernization\), Exterior improvements \(Site work\)/);
@@ -74,6 +74,7 @@ const imported = buildLevelingImport({ projectId: "jelleff", projectName: "Jelle
 const leveling = freeze({ packageId: "demolition", items: imported.items, bidders: imported.bidders, provenance: imported.provenance });
 t = derive({ procurement: proc, submissions: subs, leveling });
 assert.deepEqual([has(t, "leveling:load:demolition"), task(t, "leveling:exceptions:demolition").count, has(t, "award:select:demolition")], [false, 1, true]);
+assert.equal(task(t, "award:select:demolition").group, "scope-review", "Leveled bids lead to the scope review and best and final, then the award (Marcel, 22 Oct)");
 assert(milestones(t, "demolition").includes("bids-leveled") && milestones(t, "demolition").includes("bids-received"));
 assert.equal(derive({ procurement: proc, submissions: subs, leveling: { ...leveling, packageId: "concrete" } }).tasks.find(x => x.id === "leveling:load:demolition").count, 2, "Leveling loaded for another package does not count");
 
@@ -174,5 +175,31 @@ assert.deepEqual(second.completed.map(d => [d.id, d.title, d.at]), [["setup:deta
 assert.equal(second.history.done[0].id, "setup:details:rfp");
 const reopened = T.reconcileTodo(second.history, t1, at2);
 assert.equal(reopened.history.done.some(d => d.id === "setup:details:rfp"), false, "A task that comes back is open again, not done");
+
+// Marcel's steps, in his order (22 Oct: "split it up into the modules").
+assert.deepEqual(TODO_GROUPS.map(g => g.label), ["Project information & documents", "Scopes", "Invite subcontractors", "RFIs to the architect", "Bids & leveling", "Budget & allowances", "Scope reviews & best and final", "Award & contracts", "Project schedule"]);
+
+// RFIs to the architect: from Structor Check, with the project's RFI deadline.
+const { sampleStructorCheck } = await import("../lib/data/rfi.ts");
+assert(!ids(start).some(id => id.startsWith("rfis:")), "No Structor Check state, no RFI tasks");
+const rfiTask = (check) => derive({ check }).tasks.filter(x => x.group === "rfis").map(x => [x.id, x.count, x.status]);
+assert.deepEqual(rfiTask(sampleStructorCheck), [["rfis:review", 2, "todo"], ["rfis:open", 2, "todo"]], "Two issues wait for review, two reviewed ones are not in an RFI yet");
+assert.match(derive({ check: sampleStructorCheck }).tasks.find(x => x.id === "rfis:review").detail, /RFI deadline: 2026-01-20/);
+const rfi = (number, status, due = "") => ({ id: number, number, status, due });
+const withRfis = { ...sampleStructorCheck, issues: [], rfis: [rfi("RFI-001", "draft"), rfi("RFI-002", "approved"), rfi("RFI-003", "sent", "2026-01-27"), rfi("RFI-004", "answered"), rfi("RFI-005", "closed")] };
+assert.deepEqual(rfiTask(withRfis), [["rfis:send", 2, "todo"], ["rfis:answered", 1, "todo"], ["rfis:waiting", 1, "waiting"]], "Team actions first; a closed RFI is done");
+assert.equal(derive({ check: withRfis }).tasks.find(x => x.id === "rfis:send").detail, "RFI-001, RFI-002. RFI deadline: 2026-01-20.");
+assert.equal(derive({ check: withRfis }).tasks.find(x => x.id === "rfis:waiting").detail, "RFI-003 due 2026-01-27. Answers expected 2026-01-27.");
+
+// The kickoff (Marcel's write-up): at least three bids per trade, scopes due to subs, RFI answers expected.
+const jelleffKickoff = sampleProjectRecords[0].kickoff;
+assert.deepEqual([jelleffKickoff.minBidders, jelleffKickoff.scopesDue, jelleffKickoff.rfiResponses], [3, "2026-01-26", "2026-01-27"]);
+const more = start.tasks.filter(t => t.id.startsWith("outreach:more:")).map(t => [t.packageId, t.count]);
+const activeInvites = id => sampleProcurement.invitations.filter(i => i.packageId === id && i.status !== "declined").length;
+assert.deepEqual(more, sampleProcurement.packages.filter(p => p.published && activeInvites(p.id) > 0 && activeInvites(p.id) < 3 && !sampleAwards.awards.some(a => a.packageId === p.id && !a.cancelled)).map(p => [p.id, 3 - activeInvites(p.id)]), "Every published, unawarded trade with fewer than three bidders");
+assert(more.length > 0, "The Jelleff sample has trades below three bidders");
+assert.match(task(start, "scopes:approve:demolition").detail, /Scopes due to subs 2026-01-26\./);
+assert.equal(deriveTodo({ ...base, project: { ...sampleProjectRecords[0], kickoff: { ...jelleffKickoff, minBidders: 1 } } }).tasks.filter(t => t.id.startsWith("outreach:more:")).length, 0, "One bid is enough when the kickoff says so");
+assert.match(derive({ check: withRfis }).tasks.find(x => x.id === "rfis:waiting").detail, /Answers expected 2026-01-27\./);
 
 console.log(`To-do checked: empty project, ${start.tasks.length} tasks on the Jelleff sample, Demolition walked from draft to executed subcontract (${finished.packages.find(p => p.packageId === "demolition").percent}%), stale forms, budget, ordering.`);

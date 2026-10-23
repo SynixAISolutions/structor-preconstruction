@@ -1,0 +1,20 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { renderToStaticMarkup } from "react-dom/server";
+import { sampleProcurement } from "../../lib/data/procurement";
+import { sampleBudget } from "../../lib/data/budget";
+import { sampleSubmissions, sampleAwards } from "../../lib/data/sample-award";
+import { initialBidders } from "../../lib/data/commercial";
+import { buyoutRows, EMPTY_BUYOUT } from "../../lib/buyout";
+require.extensions[".css"] = () => {};
+const { BuyoutTable, BuyoutView } = require("./buyout-ui") as typeof import("./buyout-ui");
+test("buyout tracker retains every trade, company BIC, money and contract stages",()=>{
+ const rows=buyoutRows({procurement:sampleProcurement,submissions:sampleSubmissions,candidates:[],directory:initialBidders,budget:sampleBudget,awards:sampleAwards,buyout:EMPTY_BUYOUT});
+ const html=renderToStaticMarkup(<BuyoutTable rows={rows} onOpen={()=>{}}/>);
+ assert.equal((html.match(/scope="row"/g)||[]).length,26);
+ for(const text of ["BIC","Best and final","Contract sent","Executed","Buyout delta","Roofing","Closed","508,750"])assert.ok(html.includes(text),text);
+ assert.doesNotMatch(html,/NaN|undefined/);
+ const screen=renderToStaticMarkup(<BuyoutView projectName="Jelleff" notify={()=>{}} navigate={()=>{}}/>);
+ for(const text of ["Scope review &amp; buyout","My move","Their move","Contract amount","Open"])assert.ok(screen.includes(text),text);
+ assert.match(renderToStaticMarkup(<BuyoutTable rows={[]} onOpen={()=>{}}/>),/No trades match/);
+});

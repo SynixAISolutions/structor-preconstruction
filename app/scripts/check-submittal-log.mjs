@@ -83,7 +83,7 @@ assert.equal(fresh.submittals.length, 14, "Mix design · Test reports → two re
 assert.deepEqual((({ specSection, title, packageId, owner, specItemId, description, status }) => ({ specSection, title, packageId, owner, specItemId, description, status }))(fresh.submittals[0]),
   { specSection: "03 30 00", title: "Mix design", packageId: "concrete", owner: "Vijay", specItemId: "p1", description: "Cast-in-place concrete: 4,000 PSI normal-weight concrete", status: "draft" });
 assert.equal(S.requirementsFromSpecs(fresh, proc, initialSpecs, "Vijay", at).submittals.length, 14, "Importing again adds nothing");
-fails(() => S.requirementsFromSpecs(S.EMPTY_SUBMITTALS, proc, [{ ...initialSpecs[0], section: "10 14 00" }], "Vijay", at), "packageId", /10 14 00/);
+fails(() => S.requirementsFromSpecs(S.EMPTY_SUBMITTALS, proc, [{ ...initialSpecs[0], section: "11 40 00" }], "Vijay", at), "packageId", /11 40 00/);
 fails(() => S.addRequirement(base, proc, { specSection: "3300", title: "x", packageId: "concrete" }, "Vijay", at), "specSection", /like 03 30 00/);
 fails(() => S.addRequirement(base, proc, { specSection: "03 30 00", title: " ", packageId: "concrete" }, "Vijay", at), "title", /what must be submitted/);
 fails(() => S.addRequirement(base, proc, { specSection: "03 30 00", title: "x", packageId: "nope" }, "Vijay", at), "packageId", /trade package/);

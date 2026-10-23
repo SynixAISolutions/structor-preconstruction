@@ -51,3 +51,34 @@ export async function consolidateScope(trade: string, drafts: DraftInput[], sign
 
 /** Reads one sheet's title block (a JPEG crop of its right-hand strip). */
 export const readTitleBlock = (image: string, signal?: AbortSignal) => aiJob<TitleBlock>("title-block", { image }, signal);
+
+/**
+ * Marcel (22 Oct, Drawing Flip): highlight each scope item on the drawings. Reads each planned sheet once
+ * (locatePlan) with its items and returns Drawing Flip region inputs, AI and waiting for review, for
+ * importRegions. `pageIdFor` names the Drawing Flip page of a sheet (useDrawingFlip already has one for
+ * every stored sheet).
+ */
+export async function locateScopes(args: {
+  pkg: { id: string; name: string; code: string };
+  plan: { row: import("./project-files").RegisterRow; items: import("./drawing-ai").LocateItem[] }[];
+  pageIdFor: (sheet: string) => string | null;
+  signal?: AbortSignal; onProgress?: (done: number, total: number) => void;
+}): Promise<{ regions: import("./drawing-flip").RegionInput[]; dropped: import("./ai-jobs").Dropped[]; failures: { sheet: string; error: string }[] }> {
+  const { renderStoredPage, readStoredText } = await import("./project-files-client");
+  const regions: import("./drawing-flip").RegionInput[] = [], dropped: import("./ai-jobs").Dropped[] = [], failures: { sheet: string; error: string }[] = [];
+  for (const [i, { row, items }] of args.plan.entries()) {
+    try {
+      const pageId = args.pageIdFor(row.sheet);
+      if (!pageId) throw new Error(`Sheet ${row.sheet} is not a Drawing Flip page.`);
+      const [{ image }, text] = await Promise.all([renderStoredPage(row.doc, row.page, 2000), readStoredText(row.doc, { first: row.page, last: row.page }).then(p => p.find(x => x.page === row.page)?.text ?? "").catch(() => "")]);
+      const result = await aiJob<{ regions: import("./drawing-ai").LocatedRegion[]; dropped: import("./ai-jobs").Dropped[] }>("scope-locate", { pkg: args.pkg, document: row.doc.name, sheet: row.sheet, page: row.page, text: text.slice(0, 60_000), image, items }, args.signal);
+      regions.push(...result.regions.map(r => ({ pageId, label: r.label, polygon: r.polygon, packageId: args.pkg.id, scopeIds: [r.scopeId], evidence: r.evidence, confidence: r.confidence, origin: "ai" as const })));
+      dropped.push(...result.dropped);
+    } catch (error) {
+      failures.push({ sheet: row.sheet, error: error instanceof Error ? error.message : String(error) });
+      if (args.signal?.aborted) break;
+    }
+    args.onProgress?.(i + 1, args.plan.length);
+  }
+  return { regions, dropped, failures };
+}

@@ -9,11 +9,11 @@
 // sees, so it sits in its own SUBCONTRACTOR VIEW group outside the contractor's sidebar.
 
 export type Screen =
-  | "overview" | "projects" | "information" | "documents" | "scopes" | "takeoffs"
+  | "projects" | "information" | "documents" | "scopes" | "takeoffs"
   | "packages" | "bidders" | "portal" | "leveling" | "budget" | "allowances"
   | "contracts" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
   | "setup" | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
-  | "architect" | "ratings" | "prequalification" | "drawing-flip" | "model-mep" | "model-structural" | "model-exterior";
+  | "architect" | "ratings" | "prequalification" | "drawing-flip" | "buyout" | "model-mep" | "model-structural" | "model-exterior";
 
 export type ViewProps = { navigate: (screen: Screen) => void; notify: (message: string) => void; projectName: string };
 
@@ -46,9 +46,8 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "prequalification", label: "Subcontractor prequalification", icon: "ClipboardCheck", keywords: ["prequal", "qualified subcontractors", "questionnaire"] },
   ]},
   { label: "PRECONSTRUCTION", scope: "project", items: [
-    { id: "turnover", label: "Preconstruction to-do", icon: "ClipboardCheck", keywords: ["project turnover", "percent complete", "checklist"] },
+    { id: "turnover", label: "Preconstruction to-do", icon: "ClipboardCheck", keywords: ["project turnover", "percent complete", "checklist", "overview", "dashboard", "project health"] },
     { id: "setup", label: "Project setup", icon: "ListChecks", keywords: ["getting started", "onboarding", "missing documents", "checklist", "upload"] },
-    { id: "overview", label: "Overview", icon: "LayoutDashboard", keywords: ["dashboard"] },
     { id: "information", label: "Project information", icon: "Building2" },
     { id: "documents", label: "Project files", icon: "FileStack", keywords: ["documents", "document library", "rfp"] },
     { id: "scopes", label: "Scopes & bid forms", icon: "ListChecks" },
@@ -57,6 +56,8 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "revisions", label: "Revision comparison", icon: "GitCompareArrows", keywords: ["compare drawings", "overlay", "changes between revisions"] },
     { id: "packages", label: "Bid packages", icon: "Box", section: OUTREACH, keywords: ["invited bidders", "invitations", "messages", "conversations"] },
     { id: "leveling", label: "Bid leveling", icon: "Gauge", section: OUTREACH },
+    // Marcel, 22 Oct: after leveling, scope reviews, best and final, award and contract, tracked per trade.
+    { id: "buyout", label: "Scope review & buyout", icon: "UserCheck", section: OUTREACH, keywords: ["buyout log", "buyout tracker", "scope review", "best and final", "bafo", "meeting minutes", "ball in court", "award"] },
     { id: "checks", label: "Structor Check & RFIs", icon: "ShieldCheck", keywords: ["rfi", "rfi log", "issues", "issue review", "questions", "design team"] },
     { id: "takeoffs", label: "Quantity takeoffs", icon: "Ruler", section: BUDGET, keywords: ["estimate", "in-house estimate", "mcn estimate"] },
     { id: "budget", label: "Budget summary", icon: "Wallet", section: BUDGET },
@@ -96,9 +97,9 @@ export const ALL_SCREENS: ScreenDef[] = [...SCREEN_GROUPS.flatMap(group => group
 
 /**
  * Screens that no longer exist, and where their old links now go. Messages: messaging lives in each Bid package (Marcel,
- * 20 Sep: remove Conversations, keep it inside Subcontractor Outreach).
+ * 20 Sep: remove Conversations, keep it inside Subcontractor Outreach). Overview: one page with the to-do (Marcel, 22 Oct).
  */
-export const RETIRED_SCREENS: Record<string, Screen> = { messages: "packages" };
+export const RETIRED_SCREENS: Record<string, Screen> = { messages: "packages", overview: "turnover" };
 
 /** A hash or link value → the screen to show: current screens as they are, retired ones redirected, anything else null. */
 export const resolveScreen = (value: string): Screen | null =>

@@ -29,7 +29,11 @@ for (const i of sample.invitations) {
   assert.equal(initialBidders.find(b => b.id === i.bidderId).trade, pkg(sample, i.packageId).name, `${i.id}: sample invitee trade must match its package`);
 }
 for (const e of sample.outreach) assert(sample.invitations.some(i => i.packageId === e.packageId && i.bidderId === e.bidderId), `${e.id}: outreach needs an invitation`);
-assert.equal(sample.packages.filter(p => p.division === "09").length, 2, "Division 09 is split into sub-trades");
+assert.equal(sample.packages.filter(p => p.division === "09").length, 4, "Division 09 is split into Jelleff's four sub-trades");
+// Marcel, 22 Oct: every Jelleff scope sheet is its own trade. 24 bid packages plus Masonry and Carpentry, in CSI order.
+assert.equal(sample.packages.length, 26);
+assert.deepEqual(sample.packages.map(p => p.code), sample.packages.map(p => p.code).sort(), "Trades in CSI order");
+assert(sample.packages.every(p => p.code.startsWith(p.division) && p.owner && p.due), "Every trade has its division, an owner and a due date");
 assert.deepEqual(startingDraft("p2", "procurement", sampleProcurement), { packages: [], scopes: [], invitations: [], outreach: [], notifications: [] }, "A new project starts with no procurement data");
 
 // Marcel's brick-anchor case: masonry's estimator moves the item to carpentry; carpentry's owner is tagged.

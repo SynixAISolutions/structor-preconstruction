@@ -37,21 +37,34 @@ export function contractScopeDraft(award: Award, lines: string[]): { content: Do
   const section = block ? generateSampleExhibit(award.snapshot, award, { ...revision.template, layout: { title: revision.content.title, blocks: [block] } }).sections[0] : null;
   const index = section ? revision.content.sections.findIndex(s => s.heading === section.heading) : revision.template.layout ? -1 : 2;
   if (index < 0 || !revision.content.sections[index]) throw new Error("The scope section could not be matched in this revision. Review the mapped form in Settings.");
-  const before = block?.kind === "scope" && block.intro ? section!.lines.slice(0, 1) : [];
+  const prefix = block?.kind === "scope" ? (block.intro ? 1 : 0) + (block.documents ? 1 + (award.snapshot.documents?.length || block.documents.length) : 0) : 0;
+  const before = section?.lines.slice(0, prefix) ?? [];
   const after = block?.kind === "scope" && block.append?.length ? section!.lines.slice(-block.append.length) : [];
   return { index, content: { ...revision.content, sections: revision.content.sections.map((s, i) => i === index ? { ...s, lines: [...before, ...lines, ...after] } : { ...s, lines: [...s.lines] }) } };
 }
+export function groupedContractScope(lines: ContractScopeOutput["lines"]): { lines: string[]; headings: number[] } {
+  const groups = new Map<string, string[]>();
+  for (const line of lines) { const name = line.group || "General"; groups.set(name, [...(groups.get(name) || []), line.text]); }
+  const names = [...groups.keys()];
+  const order = names.includes("General") ? ["General", ...names.filter(n => n !== "General")] : names;
+  const output: string[] = [], headings: number[] = [];
+  for (const name of order) { headings.push(output.length); output.push(name, ...groups.get(name)!); }
+  return { lines: output, headings };
+}
 export function ContractScopeDraft({ award, save }: { award: Award; save: (content: DocumentContent, note: string) => void }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
-  const [draft, setDraft] = useState<{ content: DocumentContent; index: number } | null>(null);
+  const [draft, setDraft] = useState<{ content: DocumentContent; index: number; headings: number[] } | null>(null);
   return <><Button disabled={busy} onClick={async () => {
     setBusy(true); setError("");
     try {
       const response = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job: "contract-scope", input: { trade: award.snapshot.packageName, scope: award.snapshot.scope } }) });
       const result = await response.json() as ContractScopeOutput & { error?: string };
       if (!response.ok) throw new Error(result.error || "AI drafting failed.");
-      setDraft(contractScopeDraft(award, result.lines.map(l => l.text)));
+      const grouped = groupedContractScope(result.lines);
+      const next = contractScopeDraft(award, grouped.lines);
+      const offset = next.content.sections[next.index].lines.indexOf(grouped.lines[0]);
+      setDraft({ ...next, headings: grouped.headings.map(i => i + offset) });
     } catch (e) { setError(e instanceof Error ? e.message : "Drafting failed."); }
     finally { setBusy(false); }
-  }}>{busy ? "Drafting scope wording…" : "AI draft · Scope of Work"}</Button>{error && <p role="alert">{error}</p>}{draft && <Modal title="Review Exhibit A · Scope of Work" subtitle="Review the contractual wording against the retained bid scope. Saving creates a new revision in this award's template." onClose={() => setDraft(null)} wide><p>Current revision {latestExhibit(award).number} remains unchanged until you save.</p>{draft.content.sections[draft.index].lines.map((line, index) => <label className="ui-field" key={index}><span>Scope paragraph {index + 1}</span><textarea rows={5} value={line} onChange={e => setDraft(d => d ? { ...d, content: { ...d.content, sections: d.content.sections.map((s, i) => i === d.index ? { ...s, lines: s.lines.map((l, j) => j === index ? e.target.value : l) } : s) } } : d)}/></label>)}<Button variant="primary" onClick={() => { save(draft.content, "Reviewed AI scope wording in the saved company form; other sections retained."); setDraft(null); }}>Save reviewed draft revision</Button></Modal>}</>;
+  }}>{busy ? "Drafting scope wording…" : "AI draft · Scope of Work"}</Button>{error && <p role="alert">{error}</p>}{draft && <Modal title="Review Exhibit A · Scope of Work" subtitle="Review the contractual wording against the retained bid scope. Saving creates a new revision in this award's template." onClose={() => setDraft(null)} wide><p>Current revision {latestExhibit(award).number} remains unchanged until you save.</p>{draft.content.sections[draft.index].lines.map((line, index) => draft.headings.includes(index) ? <h3 key={index}>{line}</h3> : <label className="ui-field" key={index}><span>Scope paragraph {index + 1}</span><textarea rows={5} value={line} onChange={e => setDraft(d => d ? { ...d, content: { ...d.content, sections: d.content.sections.map((s, i) => i === d.index ? { ...s, lines: s.lines.map((l, j) => j === index ? e.target.value : l) } : s) } } : d)}/></label>)}<Button variant="primary" onClick={() => { save(draft.content, "Reviewed AI scope wording in the saved company form; other sections retained."); setDraft(null); }}>Save reviewed draft revision</Button></Modal>}</>;
 }

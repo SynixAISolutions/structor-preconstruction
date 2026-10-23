@@ -16,6 +16,9 @@
 //   except Public art, which has its own $100,000 line and is linked to it. Items without an amount
 //   (AV and IT equipment "incl above", DAS telephone "Excluded", Telephones "Included") are omitted.
 // - Owners come from the matching trade package in the sample procurement record.
+// - packageId ties a line to its trade where the CSI-code suggestion would land on the wrong one (several
+//   Division 07, 08 and 10 trades would land on one line; Low voltage bids as Division 27 against 28000).
+//   ⚠ 32000 Site improvements is one line for the four site trades, so it stays unlinked.
 
 import type { BudgetAllowance, BudgetClass, BudgetLine, BudgetState } from "../budget";
 
@@ -45,28 +48,28 @@ export const sampleBudget: BudgetState = {
     line("sw-05500", "Sitework", "direct", "05500", "Miscellaneous metals", "Naija", 11220.00),
     line("nc-06000", "New construction", "direct", "06000", "Rough carpentry", "Vijay", 189210.00),
     line("nc-06400", "New construction", "direct", "06400", "Architectural millwork", "Vijay", 173279.64),
-    line("nc-07500", "New construction", "direct", "07500", "Roofing & waterproofing", "Vijay", 1961479.38),
-    line("nc-07900", "New construction", "direct", "07900", "Joint sealants", "Vijay", 65076.00),
-    line("nc-08100", "New construction", "direct", "08100", "Doors, frames & hardware", "Safi", 239021.70),
-    line("nc-08800", "New construction", "direct", "08800", "Aluminum & glass", "Safi", 749516.40),
+    { ...line("nc-07500", "New construction", "direct", "07500", "Roofing & waterproofing", "Vijay", 1961479.38), packageId: "thermal" },
+    { ...line("nc-07900", "New construction", "direct", "07900", "Joint sealants", "Vijay", 65076.00), packageId: "waterproofing" },
+    { ...line("nc-08100", "New construction", "direct", "08100", "Doors, frames & hardware", "Safi", 239021.70), packageId: "openings" },
+    { ...line("nc-08800", "New construction", "direct", "08800", "Aluminum & glass", "Safi", 749516.40), packageId: "glazing" },
     line("nc-09200", "New construction", "direct", "09200", "Gypsum wallboard systems", "Safi", 1065450.18),
     line("nc-09300", "New construction", "direct", "09300", "Ceramic tile", "Safi", 107100.00),
     line("nc-09500", "New construction", "direct", "09500", "Acoustical ceilings", "Safi", 76067.52),
     line("nc-09600", "New construction", "direct", "09600", "Flooring", "Safi", 680734.74),
     line("nc-09900", "New construction", "direct", "09900", "Painting", "Safi", 197052.78),
-    line("nc-10000", "New construction", "direct", "10000", "Specialties", "", 254229.90),
+    { ...line("nc-10000", "New construction", "direct", "10000", "Specialties", "Naija", 254229.90), packageId: "specialties" },
     line("nc-11000", "New construction", "direct", "11000", "Equipment", "", 437059.80),
     line("sw-11000", "Sitework", "direct", "11000", "Equipment", "", 453149.28),
     line("nc-12000", "New construction", "direct", "12000", "Furnishings", "", 292369.74),
     line("ren-13000", "Renovation (pool)", "direct", "13000", "Special construction", "", 393851.58),
     line("nc-14000", "New construction", "direct", "14000", "Elevators", "", 183600.00),
-    line("nc-21000", "New construction", "direct", "21000", "Fire protection", "", 230112.00),
+    line("nc-21000", "New construction", "direct", "21000", "Fire protection", "Vijay", 230112.00),
     line("nc-22000", "New construction", "direct", "22000", "Plumbing", "Vijay", 1140105.00),
     line("nc-23000", "New construction", "direct", "23000", "HVAC", "Vijay", 2470695.00),
     line("sw-23000", "Sitework", "direct", "23000", "HVAC", "Vijay", 1208980.50),
     line("nc-26000", "New construction", "direct", "26000", "Electrical", "Naija", 2801518.74),
     line("sw-26000", "Sitework", "direct", "26000", "Electrical", "Naija", 413100.00),
-    line("nc-28000", "New construction", "direct", "28000", "Low voltage", "", 420051.30),
+    { ...line("nc-28000", "New construction", "direct", "28000", "Low voltage", "Naija", 420051.30), packageId: "low-voltage" },
     line("sw-31000", "Sitework", "direct", "31000", "Earthwork", "", 1005720.00),
     line("sw-32000", "Sitework", "direct", "32000", "Site improvements", "", 2168044.68),
     line("sw-33000", "Sitework", "direct", "33000", "Site utilities", "", 1419136.20),

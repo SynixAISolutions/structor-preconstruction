@@ -2,17 +2,22 @@
 // the scopes for every trade from those files"). Pure: sections from the stored manual, trades from
 // procurement. Division 00/01 is left to the General section, which applies to every trade.
 
-import type { StoredSection } from "./project-files";
+import { drawingRegister, latestDocuments, type StoredDocument, type StoredSection } from "./project-files";
 import { STANDARD_TRADES, type TradePackage } from "./procurement";
 
 const digits = (code: string) => code.replace(/\D/g, "").padEnd(6, "0").slice(0, 6);
-// Work a drywall contractor carries with its own group (Marcel's "Drywall & ceilings" bid form lists
-// 09 51 13 ceilings, 09 72 00 wall coverings and 09 84 33 sound-absorbing panels beside 09 2x);
-// tile (09 3x) goes with flooring.
-// ponytail: one affinity table for Division 09; add entries when another division splits across trades.
-const AFFINITY: Record<string, string> = { "093": "096", "095": "092", "097": "092", "098": "092" };
+// Work a contractor carries with another group's trade, from Marcel's Jelleff bid forms: "Drywall &
+// ceilings" lists 09 51 13 ceilings, 09 72 00 wall coverings and 09 84 33 sound-absorbing panels beside
+// 09 2x; tile (09 3x) goes with flooring when there is no tile trade; door hardware (08 7x) with doors;
+// joint sealants (07 9x) with "Waterproofing AVB & joint sealants" (07 1x).
+// ponytail: a hand table by CSI group; add entries when another division splits across trades.
+const AFFINITY: Record<string, string> = { "093": "096", "095": "092", "097": "092", "098": "092", "087": "081", "079": "071" };
 
-/** Each section goes to the trade of its CSI division; when several trades share a division, the same CSI group first, then the closest code. */
+/**
+ * Each section goes to the trade of its CSI division. When several trades share a division: the trade
+ * with the same level-2 code (10 14 signage), then a whole-division trade (10 00 00 specialties), then
+ * the same CSI group (09 2x drywall), then the group's usual partner (AFFINITY), then the closest code.
+ */
 export function sectionsByTrade(sections: StoredSection[], packages: Pick<TradePackage, "id" | "division" | "code">[]): Map<string, StoredSection[]> {
   const out = new Map<string, StoredSection[]>(packages.map(p => [p.id, []]));
   for (const section of sections) {
@@ -21,9 +26,11 @@ export function sectionsByTrade(sections: StoredSection[], packages: Pick<TradeP
     const candidates = packages.filter(p => digits(p.code).slice(0, 2) === code.slice(0, 2));
     if (!candidates.length) continue;
     const group = code.slice(0, 3);
+    const level2 = candidates.filter(p => digits(p.code).slice(0, 4) === code.slice(0, 4));
+    const whole = candidates.filter(p => digits(p.code).endsWith("0000"));
     const inGroup = candidates.filter(p => digits(p.code).slice(0, 3) === group);
     const byAffinity = candidates.filter(p => digits(p.code).slice(0, 3) === AFFINITY[group]);
-    const pool = inGroup.length ? inGroup : byAffinity.length ? byAffinity : candidates;
+    const pool = level2.length ? level2 : whole.length ? whole : inGroup.length ? inGroup : byAffinity.length ? byAffinity : candidates;
     const best = [...pool].sort((a, b) => Math.abs(Number(digits(a.code)) - Number(code)) - Math.abs(Number(digits(b.code)) - Number(code)))[0];
     out.get(best.id)!.push(section);
   }
@@ -42,7 +49,7 @@ const SHEET_RULES: { code: RegExp; titles: RegExp[]; disciplines?: string[] }[] 
   { code: /^06/, titles: [/CASEWORK|MILLWORK/, /INTERIOR DETAILS/] },
   { code: /^07/, titles: [/ROOF PLAN/, /WALL SECTIONS|EXTERIOR SECTION|MOCK-UP/] },
   { code: /^08/, titles: [/DOOR/, /WINDOW|STOREFRONT|GLAZING|CURTAIN WALL/] },
-  { code: /^09 [2-5]/, titles: [/PARTITION/, /REFLECTED CEILING|CEILING DETAILS/, /^LEVEL \d+ - \w+ FLOOR PLAN/] },
+  { code: /^09 [245]/, titles: [/PARTITION/, /REFLECTED CEILING|CEILING DETAILS/, /^LEVEL \d+ - \w+ FLOOR PLAN/] },
   { code: /^09 [36]/, titles: [/FINISH/] },
   { code: /^09 9/, titles: [/FINISH/, /INTERIOR ELEVATIONS/] },
   { code: /^10/, titles: [/SIGNAGE|TOILET ACCESSOR|SPECIALT/] },
@@ -98,4 +105,30 @@ export function suggestTrades(packages: Pick<TradePackage, "id" | "name">[], inp
 export function uncoveredSections(sections: StoredSection[], packages: Pick<TradePackage, "id" | "division" | "code">[]): StoredSection[] {
   const covered = new Set([...sectionsByTrade(sections, packages).values()].flat());
   return sections.filter(s => !covered.has(s) && !/^0[01]/.test(digits(s.section)));
+}
+
+/**
+ * Exhibit A's documents table for a trade (Marcel, 22 Oct: refine Exhibit A from his projects; theirs list
+ * "Drawings · 50% Construction Drawings · 12.20.2024", then "Spec Section 09 29 00 · Gypsum Board · 12.20.2024"
+ * for each of the trade's sections, then the reports). The drawing set's date is the date most of its current
+ * sheets carry, else its upload date; a section carries its manual's date; reports their upload date.
+ */
+export function exhibitADocuments(docs: StoredDocument[], pkg: Pick<TradePackage, "id" | "division" | "code">, packages: Pick<TradePackage, "id" | "division" | "code">[]): { section: string; description: string; date: string }[] {
+  const uploaded = (d: StoredDocument) => d.uploadedAt.slice(0, 10);
+  const rows: { section: string; description: string; date: string }[] = [];
+  const register = drawingRegister(docs);
+  if (register.length) {
+    const counts = new Map<string, number>();
+    for (const r of register) if (r.date) counts.set(r.date, (counts.get(r.date) ?? 0) + 1);
+    const common = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const sets = [...new Set(register.map(r => r.doc.name.replace(/\.pdf$/i, "")))];
+    rows.push({ section: "Drawings", description: sets.join(", "), date: common ?? uploaded(register[0].doc) });
+  }
+  for (const manual of latestDocuments(docs).filter(d => d.kind === "manual")) {
+    const mine = sectionsByTrade(manual.sections, packages).get(pkg.id) ?? [];
+    for (const s of mine) rows.push({ section: `Spec Section ${s.section}`, description: s.title, date: uploaded(manual) });
+  }
+  for (const report of latestDocuments(docs).filter(d => d.kind === "other" && /report|survey|assessment|geotech/i.test(`${d.category} ${d.name}`)))
+    rows.push({ section: report.category || "Report", description: report.name.replace(/\.pdf$/i, ""), date: uploaded(report) });
+  return rows;
 }

@@ -84,7 +84,7 @@ fails(() => F.addRegion(base, proc, { ...input, polygon: [{ x: NaN, y: 0 }, ...i
 fails(() => F.addRegion(base, proc, { ...input, polygon: [{ x: "0.1", y: 0 }, ...input.polygon.slice(1)] }, "Naija", at), "polygon", /on the page/);
 fails(() => F.addRegion(base, proc, { ...input, polygon: F.rectangle(0.5, 0.5, 0.005, 0.005) }, "Naija", at), "polygon", /too small/);
 fails(() => F.addRegion(base, proc, { ...input, polygon: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.5 }, { x: 0.9, y: 0.9 }] }, "Naija", at), "polygon", /too small/);
-fails(() => F.addRegion(base, proc, { ...input, packageId: "glazing" }, "Naija", at), "packageId", /responsible trade/);
+fails(() => F.addRegion(base, proc, { ...input, packageId: "no-such-trade" }, "Naija", at), "packageId", /responsible trade/);
 fails(() => F.addRegion(base, proc, { ...input, scopeIds: ["scope-1"] }, "Naija", at), "scopeIds", /belongs to Demolition/);
 fails(() => F.addRegion(base, proc, { ...input, scopeIds: ["scope-99"] }, "Naija", at), "scopeIds", /no longer exists/);
 let s = freeze(F.addRegion(base, proc, { ...input, confidence: 0.4 }, "Naija", at));
@@ -104,7 +104,7 @@ assert.deepEqual([proposal.origin, proposal.status, proposal.reviewedBy, proposa
 
 // Importing: all or nothing, errors name the region.
 fails(() => F.importRegions(base, proc, [], "Structor AI", at), "region", /no regions/);
-fails(() => F.importRegions(base, proc, [aiInput, { ...aiInput, packageId: "glazing" }], "Structor AI", at), "packageId", /^Region 2: Choose the responsible trade/);
+fails(() => F.importRegions(base, proc, [aiInput, { ...aiInput, packageId: "no-such-trade" }], "Structor AI", at), "packageId", /^Region 2: Choose the responsible trade/);
 const imported = F.importRegions(base, proc, [aiInput, { ...aiInput, label: "Hose bibbs" }], "Structor AI", at);
 assert.deepEqual(numbers(imported.regions.slice(-2)), ["R-017", "R-018"]);
 
@@ -131,7 +131,7 @@ fails(() => F.approveRegion(s, r2, "Safi", at), "region", /already approved/);
 // Corrections: reassigning keeps the audit trail and drops scope items of the old trade.
 const r5 = byNumber(s, "R-005").id;
 fails(() => F.reassignRegion(s, proc, r5, "drywall", "Safi", "", at), "packageId", /already Drywall/);
-fails(() => F.reassignRegion(s, proc, r5, "glazing", "Safi", "", at), "packageId", /responsible trade/);
+fails(() => F.reassignRegion(s, proc, r5, "no-such-trade", "Safi", "", at), "packageId", /responsible trade/);
 fails(() => F.reassignRegion(s, proc, r5, "flooring", " ", "", at), "by", /who/);
 const r6 = byNumber(s, "R-006").id;
 s = freeze(F.reassignRegion(s, proc, r6, "carpentry", "Vijay", "  Wood base is carpentry.  ", "2026-10-01T16:00:00.000Z"));
@@ -150,4 +150,21 @@ assert.deepEqual([byNumber(noted, "R-005").notes, byNumber(noted, "R-005").histo
 assert.equal(F.editRegionNotes(noted, r5, "Check wall type 2 height.", "Safi", at), noted, "Unchanged notes add nothing");
 assert.equal(byNumber(F.editRegionNotes(noted, r5, "", "Safi", at), "R-005").history.at(-1).text, "", "Clearing notes is recorded too");
 
+// Marcel, 22 Oct: every stored sheet is a page. New sheets come in at their current version; a page without
+// regions follows its sheet to the current version; a page with regions stays on the version they were drawn on.
+const reg = (sheet, docId, page, revisions = 1, title = sheet) => ({ sheet, title, discipline: "Architectural", date: "", doc: { id: docId, name: `${docId}.pdf` }, page, revisions });
+const jrc = base.pages.find(p => p.sheet === "A1.1");
+const stored = [reg("A1.1", "asi01", 1, 2), reg("A3.1", "asi01", 2, 2, "Reflected ceiling plan"), reg("A-201", "asi01", 3), reg("CIV0102", jrc.documentId, base.pages.find(p => p.sheet === "CIV0102").pageNumber)];
+const a31 = base.pages.find(p => p.sheet === "A3.1");
+const bare = { ...base, regions: base.regions.filter(r => r.pageId !== a31.id) };
+assert(bare.regions.some(r => r.pageId === jrc.id), "Fixture: A1.1 keeps its regions, A3.1 has none");
+const all = F.withStoredPages(bare, stored);
+const pageOf = (s, sheet) => s.pages.find(p => p.sheet === sheet);
+assert.deepEqual([all.pages.length, pageOf(all, "A-201").id, pageOf(all, "A-201").revision, pageOf(all, "A-201").documentId, pageOf(all, "A-201").source], [bare.pages.length + 1, "sheet-a201", "V1", "asi01", "uploaded"], "A stored sheet missing from Drawing Flip becomes a page");
+assert.deepEqual([pageOf(all, "A3.1").documentId, pageOf(all, "A3.1").pageNumber, pageOf(all, "A3.1").revision, pageOf(all, "A3.1").id], ["asi01", 2, "V2", a31.id], "A page without regions moves to the current version, keeping its id");
+assert.deepEqual(pageOf(all, "A1.1"), jrc, "A page with regions stays on the version they were drawn on");
+assert.equal(F.withStoredPages(all, stored), all, "Nothing to add: the same state");
+assert.equal(F.withStoredPages(base, []), base, "No stored drawings: the sample pages as they are");
+const onNew = F.addRegion(all, proc, { pageId: "sheet-a201", label: "New partitions", polygon: F.rectangle(0.2, 0.2, 0.2, 0.2), packageId: "drywall" }, "Safi", at);
+assert.equal(onNew.regions.at(-1).pageId, "sheet-a201", "Regions go on any stored sheet");
 console.log(`Drawing Flip checked: ${base.pages.length} pages, ${base.regions.length} regions; geometry, filters, scope highlight, missing scope, legend, pages, add/import, links, review, corrections, notes.`);

@@ -30,6 +30,8 @@ import {
   Badge, Button, Empty, Modal, PageHeader, Panel, PreviewNote, Stats, Tabs,
   downloadText, usd, type ViewProps,
 } from "./shared";
+import { exhibitADocuments } from "../../lib/project-scopes";
+import { useProjectDocuments } from "../../lib/project-files-client";
 import { OtherExhibits, ContractScopeDraft, AssetLink } from "./contract-files";
 import { useValueEngineering } from "../../lib/use-value-engineering";
 import { veLevelingBidders } from "../../lib/ve-bids";
@@ -111,6 +113,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
   const [workspaceMessage, setWorkspaceMessage] = useState("");
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
   const [packageId, setPackageId] = useState("");
+  const { documents: projectDocuments } = useProjectDocuments();
   const [candidateId, setCandidateId] = useState("");
   const [basis, setBasis] = useState<LevelingBasis>("reviewed");
   const [budgetLineId, setBudgetLineId] = useState("");
@@ -135,6 +138,8 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
   const [cancelReason, setCancelReason] = useState("");
 
   useEffect(() => {
+    const target = sessionStorage.getItem("contracts-package");
+    if (target && procurement.packages.some(p => p.id === target)) { setPackageId(target); sessionStorage.removeItem("contracts-package"); return; }
     if (procurement.packages.some(pkg => pkg.id === packageId)) return;
     const first = loadedPackageId || state.awards.find(award => !award.cancelled)?.packageId || procurement.packages.find(pkg => pkg.published)?.id || procurement.packages[0]?.id || "";
     setPackageId(first);
@@ -180,6 +185,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
     if (!selectedCandidateId) { setErrors({ candidate: "Choose an eligible submitted bid." }); return; }
     const context: AwardContext = {
       projectId, projectName, procurement, submissions, candidates, budget, directory, clarifications,
+      documents: pkg ? exhibitADocuments(projectDocuments, pkg, procurement.packages) : [],
       projectAddress: project.location, projectStart: project.start, projectFinish: project.finish,
     };
     if (perform(current => createAward(current, context, { levelingBidderId: selectedCandidateId, basis, budgetLineId: budgetLineId || null, allowanceIds }, actor, undefined, undefined, templateFor(company, "exhibit-a", DEFAULT_EXHIBIT_TEMPLATE)), `${selectedCandidate?.bidderName ?? "Bidder"} selected for ${pkg?.name ?? "the package"}.`)) {

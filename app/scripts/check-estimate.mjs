@@ -88,6 +88,14 @@ assert.deepEqual(lands(budget, "steel"), ["suggested", ["05000"], ["nc-05000", "
 assert.deepEqual(lands(budget, "carpentry"), ["suggested", ["06000"], ["nc-06000"]], "06 10 00 → 06000 rough carpentry, not 06400 millwork");
 assert.deepEqual(lands(budget, "thermal")[1], ["07500"]);
 assert.deepEqual([lands(budget, "openings")[1], lands(budget, "demolition")[1], lands(budget, "mechanical")[2]], [["08100"], ["02000"], ["nc-23000", "sw-23000"]]);
+// The 22 Oct trades: Divisions 07, 08 and 10 share lines, so the sample links them; trades without a line of their own get none.
+assert.deepEqual(["waterproofing", "metal-panels", "special-doors", "glazing", "tile", "painting", "specialties", "signage", "fire-protection", "low-voltage", "asphalt"].map(id => lands(budget, id)), [
+  ["linked", ["07900"], ["nc-07900"]], ["none", [], []], ["none", [], []], ["linked", ["08800"], ["nc-08800"]], ["suggested", ["09300"], ["nc-09300"]],
+  ["suggested", ["09900"], ["nc-09900"]], ["linked", ["10000"], ["nc-10000"]], ["none", [], []], ["suggested", ["21000"], ["nc-21000"]],
+  ["linked", ["28000"], ["nc-28000"]], ["suggested", ["32000"], ["sw-32000"]]]);
+// One trade per budget line, so the Budget page can show its lowest sub; 32000 Site improvements is the four site trades' shared line.
+const claims = Object.groupBy(proc.packages.flatMap(p => E.budgetLinesForTrade(budget, p).lines.map(l => ({ line: l.id, pkg: p.id }))), x => x.line);
+assert.deepEqual(Object.entries(claims).filter(([, c]) => c.length > 1).map(([line, c]) => [line, c.map(x => x.pkg)]), [["sw-32000", ["asphalt", "site-concrete", "fencing", "landscaping"]]]);
 const tie = { ...budget, lines: [...budget.lines, { ...budget.lines.find(l => l.id === "nc-05500"), id: "x-05400", csiCode: "05400" }, { ...budget.lines.find(l => l.id === "nc-05500"), id: "x-05600", csiCode: "05600" }] };
 assert.deepEqual(E.budgetLinesForTrade(tie, { ...pkg("steel"), code: "05 50 00" }).basis, "suggested", "An exact code wins");
 assert.deepEqual(E.budgetLinesForTrade({ ...tie, lines: tie.lines.filter(l => l.csiCode !== "05500") }, { ...pkg("steel"), code: "05 50 00" }), { lines: [], basis: "ambiguous", codes: ["05400", "05600"] });

@@ -153,7 +153,10 @@ export const unreadFor = (state: Procurement, person: string): ProcurementNotifi
 // A new project starts with no packages (15 Oct: "I created a new project and put in the drawings,
 // will it write the scopes for me?"). They come from the project manual's divisions, or by hand.
 
-/** The usual subcontract trades: the Jelleff trades plus the common other divisions. Which sections and sheets each covers is lib/project-scopes. */
+/**
+ * The usual subcontract trades: Jelleff's 24 bid packages (MCN's way of buying out, 22 Oct) plus the common
+ * other divisions. Which sections and sheets each covers is lib/project-scopes.
+ */
 export const STANDARD_TRADES: { id: string; name: string; code: string }[] = [
   { id: "demolition", name: "Demolition", code: "02 41 19" },
   { id: "abatement", name: "Hazardous materials abatement", code: "02 82 00" },
@@ -161,12 +164,18 @@ export const STANDARD_TRADES: { id: string; name: string; code: string }[] = [
   { id: "masonry", name: "Masonry", code: "04 22 00" },
   { id: "steel", name: "Structural steel", code: "05 12 00" },
   { id: "carpentry", name: "Carpentry", code: "06 10 00" },
-  { id: "thermal", name: "Thermal & moisture", code: "07 54 23" },
+  { id: "waterproofing", name: "Waterproofing, air barrier & joint sealants", code: "07 10 00" },
+  { id: "metal-panels", name: "Metal panels", code: "07 42 00" },
+  { id: "thermal", name: "Roofing", code: "07 54 23" },
   { id: "openings", name: "Doors, frames & hardware", code: "08 11 13" },
+  { id: "special-doors", name: "Special doors", code: "08 33 13" },
+  { id: "glazing", name: "Aluminum & glazing", code: "08 40 00" },
   { id: "drywall", name: "Drywall", code: "09 29 00" },
+  { id: "tile", name: "Tile", code: "09 30 13" },
   { id: "flooring", name: "Flooring", code: "09 65 19" },
-  { id: "painting", name: "Painting & coatings", code: "09 91 23" },
+  { id: "painting", name: "Painting & wall coverings", code: "09 91 23" },
   { id: "specialties", name: "Specialties", code: "10 00 00" },
+  { id: "signage", name: "Signage", code: "10 14 00" },
   { id: "equipment", name: "Equipment", code: "11 00 00" },
   { id: "furnishings", name: "Furnishings", code: "12 00 00" },
   { id: "special-construction", name: "Special construction", code: "13 00 00" },
@@ -175,9 +184,13 @@ export const STANDARD_TRADES: { id: string; name: string; code: string }[] = [
   { id: "plumbing", name: "Plumbing", code: "22 00 00" },
   { id: "mechanical", name: "Mechanical", code: "23 00 00" },
   { id: "electrical", name: "Electrical", code: "26 00 00" },
-  { id: "communications", name: "Communications", code: "27 00 00" },
+  { id: "low-voltage", name: "Low voltage", code: "27 00 00" },
   { id: "security", name: "Electronic safety & security", code: "28 00 00" },
   { id: "earthwork", name: "Earthwork", code: "31 00 00" },
+  { id: "asphalt", name: "Asphalt paving", code: "32 12 16" },
+  { id: "site-concrete", name: "Site concrete", code: "32 13 13" },
+  { id: "fencing", name: "Site fencing", code: "32 31 00" },
+  { id: "landscaping", name: "Landscaping", code: "32 90 00" },
   { id: "site-improvements", name: "Exterior improvements", code: "32 00 00" },
   { id: "utilities", name: "Site utilities", code: "33 00 00" },
 ];

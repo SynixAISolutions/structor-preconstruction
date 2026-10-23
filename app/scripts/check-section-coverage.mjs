@@ -40,7 +40,7 @@ const row = by(m.rows);
 assert.deepEqual(m.rows.map(r => [r.section, r.status]), [["07 84 00", "unassigned"], ["10 28 00", "unassigned"], ["06 10 53", "multiple"], ["03 30 00", "expected"], ["08 71 00", "draft"], ["09 29 00", "approved"]]);
 assert.deepEqual(m.counts, { unassigned: 2, multiple: 1, expected: 1, draft: 1, approved: 1, split: 0, "not-applicable": 0 });
 assert.match(row["10 28 00"].note, /^No bid form cites it and no trade covers its division\. Check whether it applies, then assign it \(usually Specialties\), split it or mark it not applicable\.$/, "A question for the estimator, not a confirmed omission");
-assert.equal(row["07 84 00"].suggest?.name, "Thermal & moisture");
+assert.equal(row["07 84 00"].suggest?.name, "Roofing", "Firestopping is in six Jelleff bid forms; the closest Division 07 trade is only a suggestion");
 assert.equal(row["06 10 53"].note, "Cited by Drywall and Carpentry: two subs may price it. Keep it in one trade, or record how the work is split.", "Section codes are read with or without spaces");
 assert.equal(row["03 30 00"].note, "Its division is Concrete's, but no bid-form line cites it yet.", "A drawing-only line doesn't cite the section; the division is a suggestion");
 assert.equal(row["08 71 00"].note, "In a draft Doors line, not approved yet.", "Covered by a draft is not covered by an approved line");
