@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } fr
 import { createPortal } from "react-dom";
 import { ArrowLeft, ChevronLeft, ChevronRight, Link2, MessageSquare, Move, Plus, RefreshCw, SquareDashed, Trash2, ZoomIn, ZoomOut } from "lucide-react";
 import { docMarkups, fileMeta, TAG_COLORS, type Markup, type ContentOp } from "../../lib/project-content";
-import { useProjectContent } from "../../lib/project-content-client";
+import { exportMarkups, useProjectContent } from "../../lib/project-content-client";
 import { revisionLabel, revisionsOf, type StoredDocument } from "../../lib/project-files";
 import { StoredPage, sheetLabel } from "./project-file-viewer";
 import { CONTENT_ACTOR, ContentLinks, useContentRecords, type SaveContent } from "./project-content-links";
@@ -45,6 +45,8 @@ export function ContentViewer({ initial, documents, onClose, backLabel = "Back t
   const [tab, setTab] = useState("Markups");
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [pageReady, setPageReady] = useState("");
+  const [exportProgress, setExportProgress] = useState<{ done: number; total: number } | null>(null);
+  const exporting = useRef(false);
   const [draft, setDraft] = useState<{ id?: string; rect: Rect } | null>(null);
   const draftRef = useRef(draft); draftRef.current = draft;
   const gesture = useRef<Gesture | null>(null), lock = useRef(false);
@@ -91,6 +93,18 @@ export function ContentViewer({ initial, documents, onClose, backLabel = "Back t
     finally { lock.current = false; setBusy(false); }
   };
 
+  async function exportPdf() {
+    if (!doc || !all.length || exporting.current) return;
+    exporting.current = true; setError(""); setNotice("");
+    setExportProgress({ done: 0, total: new Set(all.map(m => m.page)).size });
+    try {
+      await exportMarkups(doc, all, (done, total) => setExportProgress({ done, total }));
+      setNotice("Markup PDF downloaded");
+    } catch (e) {
+      setError(`Could not export markups: ${e instanceof Error ? e.message : "Please try again."}`);
+    } finally { exporting.current = false; setExportProgress(null); }
+  }
+
   async function add(rect: Rect) {
     if (!doc) return;
     const before = new Set(content.markups.map(m => m.id));
@@ -126,10 +140,11 @@ export function ContentViewer({ initial, documents, onClose, backLabel = "Back t
 
   const body = <section className="cm-viewer" ref={dialog} role="dialog" aria-modal="true" aria-label="Content viewer">
     <header className="cm-viewer-header"><Button onClick={onClose}><ArrowLeft size={16}/>{backLabel}</Button><div className="cm-viewer-title"><span>CONTENT VIEWER</span><h1>{doc?.name ?? "File unavailable"}</h1></div>
-      {doc && <label className="cm-revision">Revision<select aria-label="Switch revision" value={docId} disabled={busy} onChange={e => { setDocId(e.target.value); setPage(1); setSelectedId(""); setDraft(null); }}>{revisionsOf(documents, doc.series).map(r => <option key={r.id} value={r.id}>{revisionLabel(r)}</option>)}</select></label>}
+      {doc && <label className="cm-revision">Revision<select aria-label="Switch revision" value={docId} disabled={busy || !!exportProgress} onChange={e => { setDocId(e.target.value); setPage(1); setSelectedId(""); setDraft(null); }}>{revisionsOf(documents, doc.series).map(r => <option key={r.id} value={r.id}>{revisionLabel(r)}</option>)}</select></label>}
       <Button disabled={busy} onClick={async () => { try { await refresh(); setNotice("Content refreshed"); } catch (e) { setError(e instanceof Error ? e.message : "Could not refresh."); } }}><RefreshCw size={15}/>Refresh</Button>
+      <Button disabled={busy || !ready || !doc || !all.length || !!exportProgress} onClick={() => void exportPdf()}>Export markups PDF</Button>
     </header>
-    <div className="cm-viewer-status"><span>Markups stay with the revision on which they were drawn.</span><span role="status" aria-live="polite">{busy ? "Saving…" : notice}</span></div>
+    <div className="cm-viewer-status"><span>Markups stay with the revision on which they were drawn.</span><span role="status" aria-live="polite">{exportProgress ? `Exporting marked-up pages: ${exportProgress.done} of ${exportProgress.total}${exportProgress.done === exportProgress.total ? " · Preparing PDF…" : ""}` : busy ? "Saving…" : notice}</span></div>
     {error && <p role="alert" className="cm-error">{error}</p>}
     {!doc ? <p className="cm-error">This file was removed. Return to Project files.</p> : <>
       <div className="cm-viewer-tools">
