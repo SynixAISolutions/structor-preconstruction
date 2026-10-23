@@ -40,12 +40,16 @@ const curves = [...oval(pt([20, 5]), pt([22, 5]), 0.63 * PPF), quarter(pt([40, 4
 const ovals = T.tagOvals(curves, PPF);
 assert.equal(ovals.length, 1, "A callout box's rounded corner and a lone quarter are not ovals");
 assert.deepEqual([...ovals[0].a, ...ovals[0].b, ovals[0].r].map(v => Math.round(v * 100) / 100), [20, 5, 22, 5, 0.63]);
+// Two tags side by side: an end pairs with the end that bulges away from it, never the neighbour's facing end
+// (paired in drawing order, Jelleff's office 104 tag lost its oval to the next tag's end).
+const [aL1, aL2, aR1, aR2] = oval(pt([20, 30]), pt([23.5, 30]), 0.63 * PPF), [bL1, bL2, bR1, bR2] = oval(pt([24.5, 30]), pt([28, 30]), 0.63 * PPF);
+assert.deepEqual(T.tagOvals([aR1, aR2, bL1, bL2, aL1, aL2, bR1, bR2], PPF).map(o => [o.a[0], o.b[0]].map(v => Math.round(v * 10) / 10).sort((x, y) => x - y)).sort((x, y) => x[0] - y[0]), [[20, 23.5], [24.5, 28]]);
 
 // The leader: a line leaving the oval's edge outward, followed through joined pieces to its tip.
 const o = ovals[0];
 const lines = [[[22.63, 5], [24, 5]], [[24, 5], [24, 1.2]], [[20, 4.37], [22, 4.37]], [[21, 4.9], [21.3, 5.1]]];
-assert.deepEqual(T.leaderTip(o, lines), [24, 1.2], "Two-piece leader; the oval's own side and the text inside are not leaders");
-assert.equal(T.leaderTip(o, lines.slice(2)), null, "No leader");
+assert.deepEqual(T.leaderTips(o, lines), [[24, 1.2]], "Two-piece leader; the oval's own side and the text inside are not leaders");
+assert.deepEqual(T.leaderTips(o, lines.slice(2)), [], "No leader");
 
 // Placing wall tags: the wall at the leader's tip beats the nearest wall; an oval against a wall labels it;
 // with no oval, the nearest wall within 5 ft. Types spread along the run across a door gap, never to a
@@ -64,6 +68,9 @@ assert.deepEqual(placed.wallTypes, [null, "SA3.10", "SA3.10", null, "SA2.10"]);
 assert.deepEqual(placed.doorNumbers, ["117B", null], "Closest tag first, one number per door; the far door gets none");
 const against = T.placeTags([{ text: "SA6.20", kind: "wall", at: [21, 5] }], [{ a: [23.2, 0], b: [23.2, 10], thickness: 0.4 }, { a: [10, 15], b: [30, 15], thickness: 0.4 }], [], { ovals, lines: [] });
 assert.deepEqual(against.wallTypes, ["SA6.20", null], "No leader: the wall the oval sits against");
+const twoLeaders = T.placeTags([{ text: "SA6.20", kind: "wall", at: [21, 5] }], [{ a: [10, 1], b: [30, 1], thickness: 0.4 }, { a: [10, 9], b: [30, 9], thickness: 0.4 }, { a: [10, 15], b: [30, 15], thickness: 0.4 }], [],
+  { ovals, lines: [[[22.63, 5], [24, 5]], [[24, 5], [24, 1.2]], [[21, 5.63], [21, 8.8]]] });
+assert.deepEqual(twoLeaders.wallTypes, ["SA6.20", "SA6.20", null], "Every leader types the wall it ends at (Jelleff's office 105 tag points west and south)");
 
 // Totals by type, untagged last; the estimator types the untagged walls, tagged ones keep theirs.
 const typed = walls.map((w, i) => ({ ...w, type: placed.wallTypes[i] }));
@@ -122,4 +129,4 @@ assert.deepEqual(["PARTITION TYPES", "Partition Schedule", "WALL TYPES", "LEVEL 
 const page = { widthPt: 1200, heightPt: 900 }, many = n => Array.from({ length: n }, (_, i) => ({ a: [120 + i, 60], b: [120 + i, 100], width: 0.24, color: "" }));
 assert.deepEqual(S.contentTiles([...many(60), { a: [1100, 800], b: [1110, 800], width: 1, color: "" }], page).length, 1, "Only parts of the sheet with drawing are read");
 
-console.log("Tag placement checked: tag text normalized, AI tags screened (dimensions refused), duplicates merged, tag ovals from curves, leaders followed, leader tip over nearest wall, ovals against walls, runs across door gaps, door numbers one per door, totals by type, untagged walls typed and cleared, tiles and tile positions.");
+console.log("Tag placement checked: tag text normalized, AI tags screened (dimensions refused), duplicates merged, tag ovals from curves (ends bulging apart), every leader followed, leader tip over nearest wall, ovals against walls, runs across door gaps, door numbers one per door, totals by type, untagged walls typed and cleared, tiles and tile positions.");
