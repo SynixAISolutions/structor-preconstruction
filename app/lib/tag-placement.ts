@@ -22,25 +22,30 @@ function circle(p: Point, q: Point, r: Point): { c: Point; r: number } | null {
 /**
  * Tag ovals drawn as curves: each end is a semicircle (two or more curves sharing a center) 3-11 pt in
  * radius on paper (a tag's size on paper, whatever the scale), and an oval is two ends of one radius
- * facing each other 0.3-6 ft apart. Rounded corners of callout boxes have one curve per center and never
- * pair. Feet, as the plan.
+ * 0.3-6 ft apart that bulge away from each other, closest pairs first. Rounded corners of callout boxes
+ * have one curve per center and never pair; nor do two tags' facing ends (paired in drawing order, Jelleff's
+ * office 104 tag lost its oval to its neighbour's end). Feet, as the plan.
  */
 export function tagOvals(curves: Curve[], pointsPerFoot: number): Oval[] {
-  const ends: { c: Point; r: number; n: number }[] = [];
+  const ends: { c: Point; r: number; n: number; out: Point }[] = [];
   for (const cv of curves) {
-    const f = circle(cv.from, bezier(cv, 0.5), cv.to);
+    const m = bezier(cv, 0.5), f = circle(cv.from, m, cv.to);
     if (!f || f.r < 3 || f.r > 11) continue;
     const c: Point = [f.c[0] / pointsPerFoot, f.c[1] / pointsPerFoot], r = f.r / pointsPerFoot;
+    const out: Point = [(m[0] - f.c[0]) / f.r, (m[1] - f.c[1]) / f.r]; // the way this piece of arc bulges
     const e = ends.find(e => dist(e.c, c) < 0.05 && Math.abs(e.r - r) < 0.05);
-    if (e) e.n++; else ends.push({ c, r, n: 1 });
+    if (e) { e.n++; e.out = [e.out[0] + out[0], e.out[1] + out[1]]; } else ends.push({ c, r, n: 1, out });
   }
-  const halves = ends.filter(e => e.n >= 2), used = new Set<number>(), ovals: Oval[] = [];
-  halves.forEach((e, i) => {
-    if (used.has(i)) return;
-    let best = -1, bd = 6;
-    halves.forEach((f, j) => { const d = dist(e.c, f.c); if (j !== i && !used.has(j) && Math.abs(f.r - e.r) < 0.05 && d > 0.3 && d < bd) { bd = d; best = j; } });
-    if (best >= 0) { used.add(i); used.add(best); ovals.push({ a: e.c, b: halves[best].c, r: e.r }); }
-  });
+  const halves = ends.filter(e => e.n >= 2 && Math.hypot(...e.out) > 0.5); // a full circle bulges nowhere
+  const away = (e: typeof halves[number], f: typeof halves[number]) => {
+    const L = dist(e.c, f.c);
+    return -(e.out[0] * (f.c[0] - e.c[0]) + e.out[1] * (f.c[1] - e.c[1])) / (L * Math.hypot(...e.out)) > 0.7;
+  };
+  const pairs = halves.flatMap((e, i) => halves.map((f, j) => ({ i, j, d: dist(e.c, f.c) })))
+    .filter(({ i, j, d }) => j > i && d > 0.3 && d < 6 && Math.abs(halves[i].r - halves[j].r) < 0.05 && away(halves[i], halves[j]) && away(halves[j], halves[i]))
+    .sort((p, q) => p.d - q.d);
+  const used = new Set<number>(), ovals: Oval[] = [];
+  for (const { i, j } of pairs) if (!used.has(i) && !used.has(j)) { used.add(i); used.add(j); ovals.push({ a: halves[i].c, b: halves[j].c, r: halves[i].r }); }
   return ovals;
 }
 
@@ -57,26 +62,27 @@ const ovalTips = (o: Oval): [Point, Point] => {
 };
 
 /**
- * Where a tag's leader ends: a line leaving the oval's edge outward, followed through joined pieces (up
- * to 4, 20 ft in all). Null when the tag has no leader (it sits against its wall). Feet.
+ * Where a tag's leaders end: each line leaving the oval's edge outward, followed through joined pieces (up
+ * to 4, 20 ft in all). A tag can point at several walls (Jelleff's office 105 tag has one leader to the
+ * west wall and one to the south). Empty when the tag has no leader (it sits against its wall). Feet.
  */
-export function leaderTip(o: Oval, segments: [Point, Point][]): Point | null {
+export function leaderTips(o: Oval, segments: [Point, Point][]): Point[] {
   const onEdge = (p: Point) => Math.abs(toCore(o, p) - o.r) < 0.12;
-  let tip: Point | null = null, from: [Point, Point] | null = null;
+  const tips: Point[] = [];
   for (const [a, b] of segments) {
     const [p, q] = onEdge(a) && toCore(o, b) > o.r + 0.3 ? [a, b] : onEdge(b) && toCore(o, a) > o.r + 0.3 ? [b, a] : [null, null];
-    if (p && q && (!tip || dist(p, q) > dist(from![0], from![1]))) { tip = q; from = [p, q]; }
+    if (!p || !q) continue;
+    let end: Point = q, back: Point = p, length = dist(p, q);
+    for (let hop = 0; hop < 3 && length < 20; hop++) {
+      const at = end, before = back;
+      const next = segments.find(([a, b]) => (dist(a, at) < 0.05 && dist(b, before) > 0.05) || (dist(b, at) < 0.05 && dist(a, before) > 0.05));
+      if (!next) break;
+      const far: Point = dist(next[0], at) < 0.05 ? next[1] : next[0];
+      back = at; length += dist(at, far); end = far;
+    }
+    tips.push(end);
   }
-  if (!tip || !from) return null;
-  let end: Point = tip, back: Point = from[0], length = dist(back, end);
-  for (let hop = 0; hop < 3 && length < 20; hop++) {
-    const at = end, before = back;
-    const next = segments.find(([a, b]) => (dist(a, at) < 0.05 && dist(b, before) > 0.05) || (dist(b, at) < 0.05 && dist(a, before) > 0.05));
-    if (!next) break;
-    const far: Point = dist(next[0], at) < 0.05 ? next[1] : next[0];
-    back = at; length += dist(at, far); end = far;
-  }
-  return end;
+  return tips;
 }
 type WallLike = { a: Point; b: Point; thickness: number };
 type DoorLike = { a: Point; b: Point };
@@ -148,16 +154,17 @@ export function placeTags(tags: PlacedTag[], walls: WallLike[], doors: DoorLike[
   for (const t of tags.filter(t => t.kind === "wall")) {
     // The tag's own oval near where the AI read it, if the plan draws tags as ovals.
     const oval = drawn.ovals.filter(o => !usedOvals.has(o)).map(o => ({ o, d: dist([(o.a[0] + o.b[0]) / 2, (o.a[1] + o.b[1]) / 2], t.at) })).filter(x => x.d < 3).sort((p, q) => p.d - q.d)[0]?.o;
-    let best = -1;
+    let hits: number[] = [];
     if (oval) {
       usedOvals.add(oval);
-      const tip = leaderTip(oval, drawn.lines);
-      best = tip
-        ? nearestWall(w => toSegment(tip, w.a, w.b) - w.thickness / 2, 1.5) // the wall its leader points at
-        : nearestWall(w => Math.min(...ovalTips(oval).map(tip => toSegment(tip, w.a, w.b))) - w.thickness / 2, 1.5); // the wall at the end of the oval
+      const tips = leaderTips(oval, drawn.lines);
+      hits = (tips.length
+        ? tips.map(tip => nearestWall(w => toSegment(tip, w.a, w.b) - w.thickness / 2, 1.5)) // the walls its leaders point at
+        : [nearestWall(w => Math.min(...ovalTips(oval).map(tip => toSegment(tip, w.a, w.b))) - w.thickness / 2, 1.5)]) // the wall at the end of the oval
+        .filter(i => i >= 0);
     }
-    if (best < 0) best = nearestWall(w => toSegment(t.at, w.a, w.b) - w.thickness / 2, 5);
-    if (best >= 0) { wallTypes[best] = normalTag(t.text); direct.add(best); }
+    if (!hits.length) hits = [nearestWall(w => toSegment(t.at, w.a, w.b) - w.thickness / 2, 5)].filter(i => i >= 0);
+    for (const i of hits) { wallTypes[i] = normalTag(t.text); direct.add(i); }
   }
   const dir = (w: WallLike) => { const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) || 1; return [(w.b[0] - w.a[0]) / L, (w.b[1] - w.a[1]) / L]; };
   const inLine = (w: WallLike, v: WallLike) => {
