@@ -101,6 +101,7 @@ export const pageGuides = [
       "Select a region to see its trade, the scope items it shows, Structor's evidence and confidence, notes, and history.",
       "Regions accepted under AI findings in Scopes & bid forms arrive here already approved, carrying their cited page and words as evidence and linked to their accepted scope items.",
       "Review Structor's regions: approve the trade call, or reassign the region to the right trade. Reassigning unlinks scope items of the old trade, and every correction stays in the history.",
+      "When a region's outline is off, select it and choose Redraw outline, then trace the work on the sheet. The region keeps its number, trade, scope items and review state; the old outline stays in its history.",
       "Link the scope items each region shows, or unlink them. From Scopes & bid forms, open a scope item on the drawings to see where it is.",
       "Check the scope items not located on any drawing: they may be missing or belong to another trade.",
     ],

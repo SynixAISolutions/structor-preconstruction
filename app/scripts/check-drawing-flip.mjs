@@ -144,6 +144,25 @@ assert.deepEqual(byNumber(keepsAll, "R-005").scopeIds, ["scope-3"], "All-trades 
 assert.deepEqual(byNumber(keepsAll, "R-005").history.at(-1).unlinked, ["scope-12"]);
 assert.deepEqual(F.unlocatedScopes(s, proc).map(x => x.id), ["scope-6", "scope-8", "scope-10", "scope-13", "scope-22", "scope-23", "scope-24"], "Moved scope and illustrative leveling items stay unlocated");
 
+// Redraw: a new outline keeps the region's number, trade, scope links and review state; the old one stays in its history.
+const r1 = s.regions.find(r => r.status === "pending-review" && r.scopeIds.length);
+assert(r1, "Fixture: a pending region with scope links");
+const tight = [{ x: 0.21, y: 0.2 }, { x: 0.33333, y: 0.2 }, { x: 0.3, y: 0.31 }];
+const redrawn = freeze(F.redrawRegion(s, r1.id, tight, "Safi", "  Tighter around the curb. ", at));
+const after = redrawn.regions.find(r => r.id === r1.id);
+assert.deepEqual(after.polygon, [{ x: 0.21, y: 0.2 }, { x: 0.3333, y: 0.2 }, { x: 0.3, y: 0.31 }], "Rounded to 4 decimals");
+assert.deepEqual([after.number, after.packageId, after.scopeIds, after.status, after.reviewedBy, after.confidence], [r1.number, r1.packageId, r1.scopeIds, r1.status, r1.reviewedBy, r1.confidence], "Only the outline changes");
+assert.deepEqual(after.history.slice(0, -1), r1.history, "Earlier history kept");
+assert.deepEqual(after.history.at(-1), { kind: "redrawn", at, by: "Safi", from: r1.polygon, reason: "Tighter around the curb." });
+assert.equal(redrawn.regions.filter(r => r.id !== r1.id).every((r, i) => r === s.regions.filter(x => x.id !== r1.id)[i]), true, "Other regions untouched");
+assert.equal(F.redrawRegion(redrawn, r1.id, after.polygon, "Safi", "", at), redrawn, "Same outline adds nothing");
+assert.equal(F.filterRegions(redrawn, proc, { corrected: true }).some(r => r.id === r1.id), F.filterRegions(s, proc, { corrected: true }).some(r => r.id === r1.id), "A redraw is not a trade correction");
+fails(() => F.redrawRegion(s, r1.id, tight, " ", "", at), "by", /who/);
+fails(() => F.redrawRegion(s, r1.id, tight.slice(0, 2), "Safi", "", at), "polygon", /three points/);
+fails(() => F.redrawRegion(s, r1.id, [{ x: 0.1, y: 0.1 }, { x: 1.2, y: 0.1 }, { x: 0.1, y: 0.5 }], "Safi", "", at), "polygon", /on the page/);
+fails(() => F.redrawRegion(s, r1.id, F.rectangle(0.5, 0.5, 0.001, 0.001), "Safi", "", at), "polygon", /too small/);
+fails(() => F.redrawRegion(s, "gone", tight, "Safi", "", at), "region", /no longer exists/);
+
 // Notes.
 const noted = F.editRegionNotes(s, r5, "  Check wall type 2 height. ", "Safi", at);
 assert.deepEqual([byNumber(noted, "R-005").notes, byNumber(noted, "R-005").history.at(-1)], ["Check wall type 2 height.", { kind: "notes", at, by: "Safi", text: "Check wall type 2 height." }]);
@@ -167,4 +186,4 @@ assert.equal(F.withStoredPages(all, stored), all, "Nothing to add: the same stat
 assert.equal(F.withStoredPages(base, []), base, "No stored drawings: the sample pages as they are");
 const onNew = F.addRegion(all, proc, { pageId: "sheet-a201", label: "New partitions", polygon: F.rectangle(0.2, 0.2, 0.2, 0.2), packageId: "drywall" }, "Safi", at);
 assert.equal(onNew.regions.at(-1).pageId, "sheet-a201", "Regions go on any stored sheet");
-console.log(`Drawing Flip checked: ${base.pages.length} pages, ${base.regions.length} regions; geometry, filters, scope highlight, missing scope, legend, pages, add/import, links, review, corrections, notes.`);
+console.log(`Drawing Flip checked: ${base.pages.length} pages, ${base.regions.length} regions; geometry, filters, scope highlight, missing scope, legend, pages, add/import, links, review, corrections, redraw, notes.`);

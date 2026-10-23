@@ -67,6 +67,7 @@ const eventLabel = (kind: FlipRegion["history"][number]["kind"]) => ({
   linked: "Scope item linked",
   unlinked: "Scope item unlinked",
   notes: "Review notes updated",
+  redrawn: "Outline redrawn",
 })[kind];
 
 type Filters = { query: string; packageId: string; status: "" | RegionStatus; origin: "" | RegionOrigin; corrected: boolean };
