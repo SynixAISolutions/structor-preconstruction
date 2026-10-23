@@ -24,7 +24,7 @@ for (const packageId of ["concrete", "drywall", "openings", "thermal"]) {
   snapshots[packageId] = comparison;
 }
 assert.ok(sampleSubmissions.flatMap(s => latestRevision(s).responses).some(r => r.answer === "N/A"));
-assert.match(SAMPLE_VERSION, /2026-10-16/);
+assert(SAMPLE_VERSION >= "2026-10-16", "Returning browsers are offered the sample with these bids");
 const snapshot = structuredClone(snapshots.concrete);
 const bidder = snapshot.bidders.find(b => Object.values(b.responses).some(r => r.status === "N"));
 const item = snapshot.items.find(i => bidder.responses[i.id].status === "N");

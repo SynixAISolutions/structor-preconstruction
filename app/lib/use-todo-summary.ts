@@ -19,6 +19,7 @@ import { useEstimate } from "./use-estimate";
 import { useLocalDraft } from "./use-local-draft";
 import { useProjectSetup } from "./use-project-setup";
 import { useSchedule } from "./use-schedule";
+import { useStructorCheck } from "./use-structor-check";
 import { useSubmissions } from "./use-submissions";
 import { useValueEngineering } from "./use-value-engineering";
 import { loadWorkspace } from "./workspace-storage";
@@ -35,6 +36,7 @@ export function useTodoSummary(project: Project | null): TodoSummary & { setup: 
   const { state: budget } = useBudget();
   const { state: awards } = useAward();
   const { state: schedulePlan } = useSchedule();
+  const { state: check } = useStructorCheck();
   const { summary: setup, ready: filesReady, refresh } = useProjectSetup(project);
   const [documents] = useLocalDraft("library", sampleFiles);
   const [provenance] = useLocalDraft<Record<string, BidProvenance>>("leveling-submission-provenance", {});
@@ -61,7 +63,7 @@ export function useTodoSummary(project: Project | null): TodoSummary & { setup: 
     awards, procurement, submissions, directory, ve, estimates: estimate.byTrade.trades,
     candidates: openComparisonCandidates({ projectId, procurement, submissions, directory, workspace: leveling.workspace, packageId: loadedPackageId, provenance, comparisons, ve }),
   }).budget, [budget, awards, procurement, submissions, directory, ve, estimate.byTrade.trades, projectId, leveling.workspace, loadedPackageId, provenance, comparisons]);
-  const summary = deriveTodo({ project, documents, procurement, submissions, leveling: leveling.snapshot, budget: plan, awards, schedule: { rows: scheduleRows(procurementSchedule(schedulePlan, { procurement, awards }, today).state, today), today }, setup });
+  const summary = deriveTodo({ project, documents, procurement, submissions, leveling: leveling.snapshot, budget: plan, awards, schedule: { rows: scheduleRows(procurementSchedule(schedulePlan, { procurement, awards }, today).state, today), today }, setup, check });
   return { ...summary, setup, ready: filesReady && leveling.loaded, reload };
 }
 

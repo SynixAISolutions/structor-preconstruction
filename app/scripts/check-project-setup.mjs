@@ -9,7 +9,7 @@ const { compareRfpFacts } = await import("../lib/rfp.ts");
 const freeze = (v) => { if (v && typeof v === "object") { Object.values(v).forEach(freeze); Object.freeze(v); } return v; };
 const at = "2026-10-18T10:00:00.000Z";
 const blank = normalizeProject({ id: "riverside", name: "Riverside Library" });
-const complete = normalizeProject({ ...blank, location: "Arlington, VA", type: "Civic", squareFeet: 40000, workType: "new", taxStatus: "non-taxable", estimateStage: "dd", due: "2026-12-01" });
+const complete = normalizeProject({ ...blank, location: "Arlington, VA", type: "Civic", squareFeet: 40000, workType: "new", taxStatus: "non-taxable", estimateStage: "dd", due: "2026-12-01", rfi: "2026-11-15" });
 const doc = (o) => ({ id: o.id, projectId: "riverside", name: o.name, category: o.category, kind: o.kind ?? "other", series: o.id, revision: 1, size: 1000, pageCount: o.pages ?? 4, uploadedAt: at, sourcePath: "", sourceUrl: "", textChunk: 100, textChunks: o.chunks ?? 1, sheets: o.sheets ?? [], sections: o.sections ?? [] });
 const sheet = (page, s, title) => ({ page, sheet: s, title, date: "" });
 const drawings = doc({ id: "d1", name: "Riverside drawings.pdf", category: "Drawings", kind: "drawings", sheets: [sheet(1, "C1.0", "Demolition Plan"), sheet(2, "A8.1", "PARTITION TYPES"), sheet(3, "M1.1", "LEVEL 1 DUCTWORK"), sheet(4, "E1.1", "LEVEL 1 LIGHTING")] });
@@ -98,7 +98,7 @@ const cmp = compareRfpFacts(complete, [
   { field: "rfi", value: "2026-12-20", page: 3, quote: "q" }, { field: "architect", value: "Studio K", page: 1, quote: "q" },
   { field: "workType", value: "both", page: 2, quote: "q" }, { field: "renovationSquareFeet", value: 12000, page: 2, quote: "q" },
 ]);
-assert.deepEqual(cmp.rows.map(r => [r.field, r.conflict, r.same]), [["due", true, false], ["location", false, true], ["rfi", false, false], ["architect", false, false], ["workType", true, false], ["renovationSquareFeet", false, false]]);
+assert.deepEqual(cmp.rows.map(r => [r.field, r.conflict, r.same]), [["due", true, false], ["location", false, true], ["rfi", true, false], ["architect", false, false], ["workType", true, false], ["renovationSquareFeet", false, false]]);
 assert.deepEqual(cmp.issues, ["The last day for questions falls after the bid due date.", "Renovation and addition work needs both areas; one is missing."]);
 assert.match(compareRfpFacts(complete, [{ field: "squareFeet", value: 450, page: 1, quote: "q" }]).issues[0], /check the units/);
 

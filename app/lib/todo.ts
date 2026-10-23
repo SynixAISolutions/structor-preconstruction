@@ -8,6 +8,9 @@
 //
 // Progress: each trade package has 8 milestones (scope approved → subcontract executed); the
 // project adds setup and budget milestones. Percent complete = milestones done / milestones.
+//
+// Marcel (22 Oct): "split it up into the modules", step by step as in his precon write-up. The groups
+// are those steps, in his order (TODO_GROUPS); every task sits in one.
 
 import { awardStage, activeAward, unresolvedComments, type AwardState } from "./award";
 import type { BudgetState } from "./budget";
@@ -16,12 +19,13 @@ import { bidderTotals } from "./leveling.mjs";
 import type { BidProvenance, LevelingBidder, LevelingScopeItem } from "./leveling-import";
 import { bidForm, packageStatus, type Procurement } from "./procurement";
 import type { Project } from "./projects";
+import type { StructorCheckState } from "./rfi";
 import type { Screen } from "./screens";
 import type { SetupSummary } from "./project-setup";
 import { lookahead, type ScheduleRow } from "./schedule";
 import { isStale, type Submission } from "./submissions";
 
-export type TodoGroup = "setup" | "scopes" | "outreach" | "leveling" | "budget" | "award" | "schedule";
+export type TodoGroup = "setup" | "scopes" | "outreach" | "rfis" | "leveling" | "budget" | "scope-review" | "award" | "schedule";
 /** todo: the team must act · waiting: someone else must act (a subcontractor, usually). */
 export type TodoStatus = "todo" | "waiting";
 export type TodoPriority = "high" | "normal" | "low";
@@ -78,14 +82,19 @@ export type TodoInput = {
   schedule?: { rows: ScheduleRow[]; today: string };
   /** The project setup guide (lib/project-setup): its missing and to-check items become tasks, replacing the basic setup tasks. */
   setup?: SetupSummary | null;
+  /** Structor Check issues and RFIs: what still has to reach the architect, and the answers awaited. */
+  check?: StructorCheckState;
 };
 
+/** Marcel's steps, in order (22 Oct). The scope review step has no screen of its own yet: choosing the subcontractor is on Contracts. */
 export const TODO_GROUPS: { group: TodoGroup; label: string; screen: Screen }[] = [
-  { group: "setup", label: "Project setup", screen: "setup" },
-  { group: "scopes", label: "Scopes & bid forms", screen: "scopes" },
-  { group: "outreach", label: "Subcontractor outreach", screen: "packages" },
-  { group: "leveling", label: "Bid leveling", screen: "leveling" },
+  { group: "setup", label: "Project information & documents", screen: "setup" },
+  { group: "scopes", label: "Scopes", screen: "scopes" },
+  { group: "outreach", label: "Invite subcontractors", screen: "packages" },
+  { group: "rfis", label: "RFIs to the architect", screen: "checks" },
+  { group: "leveling", label: "Bids & leveling", screen: "leveling" },
   { group: "budget", label: "Budget & allowances", screen: "budget" },
+  { group: "scope-review", label: "Scope reviews & best and final", screen: "contracts" },
   { group: "award", label: "Award & contracts", screen: "contracts" },
   { group: "schedule", label: "Project schedule", screen: "schedule" },
 ];
@@ -115,6 +124,7 @@ export function missingProjectFacts(project: Project | null): string[] {
   if (!project.taxStatus) missing.push("tax status");
   if (!project.estimateStage) missing.push("estimate stage");
   if (!project.due) missing.push("bid due date");
+  if (!project.rfi) missing.push("RFI deadline");
   return missing;
 }
 
@@ -184,7 +194,7 @@ export function deriveTodo(input: TodoInput): TodoSummary {
       if (notLoaded.length) add({ ...p, id: `leveling:load:${pkg.id}`, group: "leveling", title: `Load ${plural(notLoaded.length, "submitted bid")} into leveling for ${pkg.name}`, detail: "Submitted in the portal, not yet in the comparison.", status: "todo", priority: "high", screen: "leveling", refs: { submissionIds: notLoaded.map(s => s.id) }, count: notLoaded.length });
       const open = leveled.reduce((n, l) => n + l.totals.exceptions, 0);
       if (open) add({ ...p, id: `leveling:exceptions:${pkg.id}`, group: "leveling", title: `Resolve ${plural(open, "leveling exception")} for ${pkg.name}`, detail: "Exclusions, partial answers and unanswered rows keep bids out of the ranking.", status: "todo", priority: "high", screen: "leveling", count: open });
-      if (anyEligible) add({ ...p, id: `award:select:${pkg.id}`, group: "award", title: `Choose the ${pkg.name} subcontractor`, detail: "At least one bid is fully leveled and can be awarded.", status: "todo", priority: "high", screen: "contracts" });
+      if (anyEligible) add({ ...p, id: `award:select:${pkg.id}`, group: "scope-review", title: `Hold the ${pkg.name} scope review and choose the subcontractor`, detail: "At least one bid is fully leveled. Go through the scope and drawings with the low bidder, take their best and final offer, then award.", status: "todo", priority: "high", screen: "contracts" });
     }
 
     if (award && stage) {
@@ -234,6 +244,22 @@ export function deriveTodo(input: TodoInput): TodoSummary {
   const unplaced = budgetCommitments(budget, awards, procurement).unplaced;
   if (unplaced.length) add({ id: "budget:awards", group: "budget", title: `Put ${plural(unplaced.length, "award")} in the budget`, detail: unplaced.slice(0, 2).map(u => `${u.company} (${u.trade}): ${u.reason}`).join(" ") + (unplaced.length > 2 ? " …" : ""), status: "todo", priority: "normal", screen: "budget", packageId: null, count: unplaced.length });
   if (reviewAllowances.length) add({ id: "budget:allowances", group: "budget", title: `Decide ${plural(reviewAllowances.length, "allowance")}`, detail: "Include or exclude each one, and link it to the budget line that carries it.", status: "todo", priority: "normal", screen: "allowances", packageId: null, refs: { allowanceIds: reviewAllowances.map(a => a.id) }, count: reviewAllowances.length });
+
+  // ── RFIs ── (22 Oct, step 4: "RFIs due date to the architect")
+  if (input.check) {
+    const { issues, rfis } = input.check;
+    const deadline = input.project?.rfi ? ` RFI deadline: ${input.project.rfi}.` : "";
+    const toReview = issues.filter(i => i.status === "pending-review");
+    const open = issues.filter(i => i.status === "open");
+    const unsent = rfis.filter(r => r.status === "draft" || r.status === "approved");
+    const sent = rfis.filter(r => r.status === "sent");
+    const answered = rfis.filter(r => r.status === "answered");
+    if (toReview.length) add({ id: "rfis:review", group: "rfis", title: `Review ${plural(toReview.length, "issue")} Structor Check found`, detail: `Keep, combine or dismiss each before it goes to the architect.${deadline}`, status: "todo", priority: "normal", screen: "checks", packageId: null, count: toReview.length });
+    if (open.length) add({ id: "rfis:open", group: "rfis", title: `Send or resolve ${plural(open.length, "open issue")}`, detail: `Put them in an RFI to the design team, or resolve them.${deadline}`, status: "todo", priority: "normal", screen: "checks", packageId: null, count: open.length });
+    if (unsent.length) add({ id: "rfis:send", group: "rfis", title: `Send ${plural(unsent.length, "RFI")} to the design team`, detail: `${unsent.map(r => r.number).join(", ")}.${deadline}`, status: "todo", priority: "high", screen: "checks", packageId: null, count: unsent.length });
+    if (sent.length) add({ id: "rfis:waiting", group: "rfis", title: `Waiting on ${plural(sent.length, "RFI answer")} from the design team`, detail: sent.map(r => r.due ? `${r.number} due ${r.due}` : r.number).join(", ") + ".", status: "waiting", priority: "low", screen: "checks", packageId: null, count: sent.length });
+    if (answered.length) add({ id: "rfis:answered", group: "rfis", title: `Share or close ${plural(answered.length, "answered RFI")}`, detail: "Share each answer with the bidders it affects, then close it.", status: "todo", priority: "normal", screen: "checks", packageId: null, count: answered.length });
+  }
 
   // ── Project setup ── (18 Oct: missing files in red, information to check in yellow; done work drops off)
   for (const step of input.setup?.steps ?? []) {
