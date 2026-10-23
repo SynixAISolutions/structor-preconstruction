@@ -112,6 +112,8 @@ for (const bad of ["", "9 65 19", "15 10 00", "Division 09"]) assert.equal(csiDi
 assert.equal(Object.keys(CSI_DIVISIONS).length, 35, "MasterFormat has 35 divisions in use");
 
 // The kickoff (Marcel's write-up): extra dates and rules; old records and forms without the fields keep working.
+assert.deepEqual(normalizeProject({ id: "jelleff", name: "Jelleff Recreation Center" }).kickoff, sampleProjectRecords[0].kickoff, "A Jelleff record saved before kickoffs gets Marcel's kickoff");
+assert.equal(normalizeProject({ id: "jelleff", name: "J", kickoff: { minBidders: 2 } }).kickoff.minBidders, 2, "A saved kickoff is kept");
 assert.deepEqual(normalizeProject({ id: "old", name: "Old" }).kickoff, { scopesDue: "", rfiResponses: "", drawingFlip: "", demolitionStart: "", jobWalk: "", minBidders: 3, wageScale: null }, "Records from before kickoffs get the empty one");
 assert.deepEqual(normalizeProject({ id: "k", name: "K", kickoff: { scopesDue: "Jan 26", minBidders: 40, wageScale: "yes", jobWalk: " On request " } }).kickoff, { scopesDue: "", rfiResponses: "", drawingFlip: "", demolitionStart: "", jobWalk: "On request", minBidders: 3, wageScale: null }, "Bad stored values are not trusted");
 const jel = sampleProjectRecords[0];

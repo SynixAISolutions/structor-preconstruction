@@ -138,7 +138,8 @@ export function normalizeProject(raw: Record<string, unknown>): Project {
     estimateStage: ESTIMATE_STAGES.some(stage => stage.value === raw.estimateStage) ? raw.estimateStage as EstimateStage : null,
     certifications: Array.isArray(raw.certifications) ? raw.certifications.filter((c): c is string => typeof c === "string" && !!c.trim()) : [],
     team: Array.isArray(raw.team) ? raw.team.filter((m): m is TeamMember => !!m && typeof m.name === "string" && typeof m.role === "string") : [],
-    kickoff: normalizeKickoff(raw.kickoff),
+    // A Jelleff record saved before kickoffs existed gets the sample's (Marcel's kickoff email); the sample refresh never touches project records.
+    kickoff: raw.kickoff === undefined && raw.id === "jelleff" ? sampleProjectRecords[0].kickoff : normalizeKickoff(raw.kickoff),
     rfpFileName: text(raw.rfpFileName), createdAt: text(raw.createdAt),
   };
 }
