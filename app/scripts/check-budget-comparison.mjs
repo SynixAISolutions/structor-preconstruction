@@ -29,4 +29,21 @@ assert.throws(()=>C.setLowestSubSplit(budget,pkg,{[line.id]:200000,[second.id]:2
 budget=C.setLowestSubSplit(budget,pkg,{[line.id]:200000,[second.id]:216000},416000);
 assert.equal(C.lowestSubLineValue(budget,pkg,line.id,416000),200000);
 for(const value of [416000,400000,123.01,0])assert.equal(Math.round((C.lowestSubLineValue(budget,pkg,line.id,value)+C.lowestSubLineValue(budget,pkg,second.id,value))*100),Math.round(value*100),'allocation reconciles to the changed low bid to the cent');
-console.log('Budget comparison checked: current bids, review basis, independent in-house margin, takeoff source, explicit cost-center allocation and exact cents.');
+
+// Bid sheet summary (Marcel, 22 Oct): every trade, its in-house budget, the number carried, delta, cost/SF and every bid.
+const SH=await import('../lib/bid-sheet-summary.ts');
+const {sampleProcurement}=await import('../lib/data/procurement.ts');const {sampleSubmissions}=await import('../lib/data/sample-award.ts');
+const {initialBidders}=await import('../lib/data/commercial.ts');const {sampleBudget}=await import('../lib/data/budget.ts');
+const jel={procurement:sampleProcurement,submissions:sampleSubmissions,candidates:[],directory:initialBidders,budget:sampleBudget,squareFeet:26500};
+const sheet=SH.bidSheetSummary(jel),row=id=>sheet.rows.find(r=>r.packageId===id);
+assert.deepEqual(sheet.rows.map(r=>r.packageId),sampleProcurement.packages.map(p=>p.id),'Every trade, in CSI order, bids or not');
+assert.deepEqual([row('thermal').budget,row('thermal').carried.value,row('thermal').carried.name,row('thermal').delta,row('thermal').perSquareFoot,row('thermal').bids.map(b=>b.value)],[1961479.38,508750,'Potomac Roof Systems (sample)',-1452729.38,19.2,[508750,532000]]);
+for(const id of ['concrete','openings','thermal','drywall'])assert.equal(row(id).carried.value,C.lowestTradeBid(sampleProcurement,sampleSubmissions,id,[],initialBidders).value,`${id}: the sheet carries the Budget page's lowest sub`);
+assert.deepEqual([row('steel').budget,row('steel').carried],[1407600+322830,null],'A trade on two cost centers carries both lines; no bids yet');
+assert.deepEqual(['asphalt','site-concrete','fencing','landscaping'].map(id=>row(id).budget),[null,null,null,null],"The shared Site improvements line is no single trade's budget");
+assert.deepEqual([sheet.withoutBids,sheet.total.carried,sheet.total.perSquareFoot],[22,1685000+508750+398500+968750,134.38]);
+const reviewedRoof={packageId:'thermal',levelingBidderId:'x',bidderName:'District Roofing (sample)',bidderId:'demo-r1',submissionId:sampleSubmissions.find(s=>s.bidderId==='demo-r1').id,revisionNumber:1,formVersion:1,stale:false,eligible:true,eligibilityReasons:[],baseBid:532000,provisionalTotal:540000,reviewedTotal:540000};
+const leveled=SH.bidSheetSummary({...jel,candidates:[reviewedRoof]}).rows.find(r=>r.packageId==='thermal');
+assert.deepEqual([leveled.carried.value,leveled.carried.basis,leveled.bids.map(b=>[b.value,b.basis])],[540000,'reviewed',[[508750,'base'],[540000,'reviewed']]],"A reviewed total is carried over a lower unreviewed base bid, and replaces that company's base bid");
+assert.equal(SH.bidSheetSummary({...jel,squareFeet:0}).total.perSquareFoot,null);
+console.log('Budget comparison checked: current bids, review basis, independent in-house margin, takeoff source, explicit cost-center allocation, exact cents, and the bid sheet summary.');

@@ -9,16 +9,27 @@ export type LowBid = { packageId: string; bidderId: string | null; submissionId:
 const cents=(value:number)=>Math.round(value*100);
 const validMoney=(value:unknown):value is number=>typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=1e12&&Math.abs(value*100-Math.round(value*100))<1e-6;
 
-/** Compare reviewed totals together; otherwise show the lowest current submitted base, clearly unreviewed. */
-export function lowestTradeBid(procurement:Procurement,submissions:Submission[],packageId:string,candidates:LevelingCandidate[],directory:{id:string;company:string}[],ve:VeState=EMPTY_VE):LowBid|null {
+/**
+ * Every current bid on a trade, lowest first: a reviewed leveling total where one matches the company's
+ * latest submission (or was leveled outside the portal), otherwise its submitted base bid with accepted VE.
+ */
+export function tradeBids(procurement:Procurement,submissions:Submission[],packageId:string,candidates:LevelingCandidate[],directory:{id:string;company:string}[],ve:VeState=EMPTY_VE):LowBid[] {
  const pkg=procurement.packages.find(p=>p.id===packageId);
- if(!pkg?.published)return null;
+ if(!pkg?.published)return [];
  const current=submissions.filter(s=>s.packageId===packageId&&s.status!=='draft'&&latestRevision(s)?.formVersion===pkg.published!.version&&procurement.invitations.some(i=>i.id===s.invitationId&&i.packageId===packageId&&i.bidderId===s.bidderId&&i.status!=='declined'));
- const reviewed=candidates.filter(c=>c.packageId===packageId&&!c.stale&&c.eligible&&validMoney(c.reviewedTotal)&&(!c.submissionId||current.some(s=>s.id===c.submissionId&&latestRevision(s)?.number===c.revisionNumber))).sort((a,b)=>a.reviewedTotal!-b.reviewedTotal!)[0];
- if(reviewed)return {packageId,bidderId:reviewed.bidderId,submissionId:reviewed.submissionId,name:reviewed.bidderName,value:reviewed.reviewedTotal!,basis:'reviewed'};
+ const reviewed:LowBid[]=candidates.filter(c=>c.packageId===packageId&&!c.stale&&c.eligible&&validMoney(c.reviewedTotal)&&(!c.submissionId||current.some(s=>s.id===c.submissionId&&latestRevision(s)?.number===c.revisionNumber)))
+  .map(c=>({packageId,bidderId:c.bidderId,submissionId:c.submissionId,name:c.bidderName,value:c.reviewedTotal!,basis:'reviewed'}));
  const adjusted=(s:Submission)=>{const r=latestRevision(s)!;return Math.round((r.baseBid!+acceptedBidVe(ve,{submissionId:s.id,bidderId:s.bidderId,packageId:s.packageId,revisionNumber:r.number,formVersion:r.formVersion}))*100)/100;};
- const lowest=current.filter(s=>validMoney(latestRevision(s)?.baseBid)&&validMoney(adjusted(s))).sort((a,b)=>adjusted(a)-adjusted(b))[0];
- return lowest?{packageId,bidderId:lowest.bidderId,submissionId:lowest.id,name:directory.find(d=>d.id===lowest.bidderId)?.company||lowest.bidderId,value:adjusted(lowest),basis:'base'}:null;
+ const base:LowBid[]=current.filter(s=>!reviewed.some(r=>r.submissionId===s.id)&&validMoney(latestRevision(s)?.baseBid)&&validMoney(adjusted(s)))
+  .map(s=>({packageId,bidderId:s.bidderId,submissionId:s.id,name:directory.find(d=>d.id===s.bidderId)?.company||s.bidderId,value:adjusted(s),basis:'base'}));
+ return [...reviewed,...base].sort((a,b)=>a.value-b.value);
+}
+
+/** Compare reviewed totals together; otherwise the lowest current submitted base, clearly unreviewed. `bids` lowest first (tradeBids). */
+export const lowestBid=(bids:LowBid[]):LowBid|null=>bids.find(b=>b.basis==='reviewed')??bids[0]??null;
+
+export function lowestTradeBid(procurement:Procurement,submissions:Submission[],packageId:string,candidates:LevelingCandidate[],directory:{id:string;company:string}[],ve:VeState=EMPTY_VE):LowBid|null {
+ return lowestBid(tradeBids(procurement,submissions,packageId,candidates,directory,ve));
 }
 
 export function tradeForBudgetLine(budget:BudgetState,procurement:Procurement,line:BudgetLine):TradePackage|null {
