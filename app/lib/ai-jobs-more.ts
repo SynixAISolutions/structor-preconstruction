@@ -12,6 +12,7 @@ import { screenConceptSuggestion, type ComparableFacts, type ConceptSuggestion, 
 import type { ReferencedDoc } from "./setup-checks";
 import { cleanOutline, polygonArea } from "./schematic-model";
 import { glossary, guideText, manualGuides } from "./user-manual";
+import { scopeLocate } from "./drawing-ai";
 
 type Job<I, O> = { parse: (raw: unknown) => I; messages: (input: I) => ChatMessage[]; screen: (output: unknown, input: I) => O; model: "deepseek-flash" | "deepseek-v4-pro"; maxTokens: number };
 const job = <I, O>(j: Job<I, O>) => j;
@@ -601,4 +602,4 @@ const referencedDocuments = job({
   },
 });
 
-export const EXTRA_JOBS: Record<string, Job<any, any>> = { "title-block": titleBlock, "scope-consolidate": consolidate, "revision-diff": revisionDiff, "submittal-requirements": submittalRequirements, assistant, "schedule-suggest": scheduleSuggest, "rfp-facts": rfpFacts, "estimate-draft": estimateDraft, "template-from-form": templateFromForm, "concept-comparables": conceptComparables, "plan-outline": planOutline, "plan-tags": planTags, "partition-types": partitionTypes, "drawing-scale": drawingScale, "level-heights": levelHeightsJob, "referenced-documents": referencedDocuments };
+export const EXTRA_JOBS: Record<string, Job<any, any>> = { "title-block": titleBlock, "scope-consolidate": consolidate, "revision-diff": revisionDiff, "submittal-requirements": submittalRequirements, assistant, "schedule-suggest": scheduleSuggest, "rfp-facts": rfpFacts, "estimate-draft": estimateDraft, "template-from-form": templateFromForm, "concept-comparables": conceptComparables, "plan-outline": planOutline, "plan-tags": planTags, "partition-types": partitionTypes, "drawing-scale": drawingScale, "level-heights": levelHeightsJob, "referenced-documents": referencedDocuments, "scope-locate": scopeLocate };

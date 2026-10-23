@@ -111,6 +111,18 @@ assert.equal(csiDivision("096519"), "09");
 for (const bad of ["", "9 65 19", "15 10 00", "Division 09"]) assert.equal(csiDivision(bad), undefined, `${bad}: must not parse as a section`);
 assert.equal(Object.keys(CSI_DIVISIONS).length, 35, "MasterFormat has 35 divisions in use");
 
+// The kickoff (Marcel's write-up): extra dates and rules; old records and forms without the fields keep working.
+assert.deepEqual(normalizeProject({ id: "old", name: "Old" }).kickoff, { scopesDue: "", rfiResponses: "", drawingFlip: "", demolitionStart: "", jobWalk: "", minBidders: 3, wageScale: null }, "Records from before kickoffs get the empty one");
+assert.deepEqual(normalizeProject({ id: "k", name: "K", kickoff: { scopesDue: "Jan 26", minBidders: 40, wageScale: "yes", jobWalk: " On request " } }).kickoff, { scopesDue: "", rfiResponses: "", drawingFlip: "", demolitionStart: "", jobWalk: "On request", minBidders: 3, wageScale: null }, "Bad stored values are not trusted");
+const jel = sampleProjectRecords[0];
+const keptKickoff = parseProjectForm(form({ ...valid }), jel).project.kickoff;
+assert.deepEqual(keptKickoff, jel.kickoff, "A form without kickoff inputs keeps the saved kickoff");
+const withKickoff = parseProjectForm(form({ ...valid, due: "2026-02-02", scopesDue: "2026-01-26", rfiResponses: "2026-01-27", drawingFlip: "", minBidders: "4", wageScale: "no", jobWalk: "Thursday 10am" }), jel).project.kickoff;
+assert.deepEqual([withKickoff.scopesDue, withKickoff.drawingFlip, withKickoff.minBidders, withKickoff.wageScale, withKickoff.jobWalk], ["2026-01-26", "", 4, false, "Thursday 10am"], "Inputs that are present set the kickoff, even to empty");
+assert.equal(parseProjectForm(form({ ...valid, due: "2026-02-02", scopesDue: "2026-02-05" })).errors.scopesDue, "Scopes go to subcontractors before the bid due date.");
+assert.equal(parseProjectForm(form({ ...valid, rfiResponses: "next week" })).errors.rfiResponses, "Use a valid date.");
+assert.match(parseProjectForm(form({ ...valid, minBidders: "0" })).errors.minBidders, /from 1 to 10/);
+
 console.log(`Records checked: ${sampleProjectRecords.length} sample projects, form validation, area split, legacy upgrade, blank dates, project scope; ${initialDrawings.length} drawings, ${initialSpecSections.length} spec sections.`);
 
 assert.equal(legacy.estimateStage, null, "Old records keep their unknown estimate stage; status is not the stage");

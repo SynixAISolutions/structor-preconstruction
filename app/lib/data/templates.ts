@@ -60,14 +60,16 @@ const EXHIBIT_SHELL: DocumentTemplate = {
         "Exhibit F: Billing Package (Wage Scale)", "Exhibit G: Quality Control Plan", "Exhibit H: Project Closeout Requirements", "Exhibit I: Compliance Requirements (LEED)",
         "Exhibit TBD: Prime Contract with Owner", "Exhibit TBD2: BIM Plan",
       ] },
-      { kind: "text", heading: "Specific notes for scope of work — governing sections", lines: [
-        "Division 00 — Procurement and Contracting Requirements (as applies to this Bid Package)",
-        "Division 01 — General Requirements (as applies to this Bid Package)",
-        "{tradeCode} — {trade}",
-      ] },
       { kind: "scope", heading: "Scope of work",
         intro: "The scope of work of this Subcontract includes, but is not necessarily limited to, providing all labor, materials, equipment, and supervision required to complete the above-referenced scope of work in strict accordance with the Contract Documents and as more specifically defined and as reasonably inferred for a complete and operable scope in the sections listed above and as clarified below:",
-        append: ["Provide an ADD ALTERNATE Payment and Performance Bond."] },
+        append: ["Provide an ADD ALTERNATE Payment and Performance Bond."],
+        // MCN's Exhibit As open section 3 with the documents the trade is priced on, with dates (the drawing set,
+        // the trade's spec sections, reports), from the project's files; these lines when it has none.
+        documents: [
+          "Division 00 — Procurement and Contracting Requirements (as applies to this Bid Package)",
+          "Division 01 — General Requirements (as applies to this Bid Package)",
+          "{tradeCode} — {trade}",
+        ] },
       { kind: "exclusions", heading: "Scope exclusions" },
       { kind: "not-applicable", heading: "Not applicable" },
       { kind: "clarifications", heading: "Clarifications" },
@@ -106,8 +108,8 @@ export const MCN_EXHIBIT_TEMPLATE: DocumentTemplate = {
   ...EXHIBIT_SHELL, version: "25_0314-section-3",
   layout: { ...EXHIBIT_SHELL.layout!, blocks: [
     shellBlocks[0],
-    { kind: "text", heading: "General requirements", lines: shellBlocks.slice(1, 6).flatMap(b => b.kind === "text" ? [b.heading, ...b.lines.map((line, i) => `${b.numbered ? `${i + 1}. ` : ""}${line}`)] : []) },
-    shellBlocks[6], ...shellBlocks.slice(7),
+    { kind: "text", heading: "General requirements", lines: shellBlocks.slice(1, 5).flatMap(b => b.kind === "text" ? [b.heading, ...b.lines.map((line, i) => `${b.numbered ? `${i + 1}. ` : ""}${line}`)] : []) },
+    ...shellBlocks.slice(5),
   ] },
 };
 

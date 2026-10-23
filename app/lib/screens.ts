@@ -13,7 +13,7 @@ export type Screen =
   | "packages" | "bidders" | "portal" | "leveling" | "budget" | "allowances"
   | "contracts" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
   | "setup" | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
-  | "architect" | "ratings" | "prequalification" | "drawing-flip" | "model-mep" | "model-structural" | "model-exterior";
+  | "architect" | "ratings" | "prequalification" | "drawing-flip" | "buyout" | "model-mep" | "model-structural" | "model-exterior";
 
 export type ViewProps = { navigate: (screen: Screen) => void; notify: (message: string) => void; projectName: string };
 
@@ -56,6 +56,8 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "revisions", label: "Revision comparison", icon: "GitCompareArrows", keywords: ["compare drawings", "overlay", "changes between revisions"] },
     { id: "packages", label: "Bid packages", icon: "Box", section: OUTREACH, keywords: ["invited bidders", "invitations", "messages", "conversations"] },
     { id: "leveling", label: "Bid leveling", icon: "Gauge", section: OUTREACH },
+    // Marcel, 22 Oct: after leveling, scope reviews, best and final, award and contract, tracked per trade.
+    { id: "buyout", label: "Scope review & buyout", icon: "UserCheck", section: OUTREACH, keywords: ["buyout log", "buyout tracker", "scope review", "best and final", "bafo", "meeting minutes", "ball in court", "award"] },
     { id: "checks", label: "Structor Check & RFIs", icon: "ShieldCheck", keywords: ["rfi", "rfi log", "issues", "issue review", "questions", "design team"] },
     { id: "takeoffs", label: "Quantity takeoffs", icon: "Ruler", section: BUDGET, keywords: ["estimate", "in-house estimate", "mcn estimate"] },
     { id: "budget", label: "Budget summary", icon: "Wallet", section: BUDGET },

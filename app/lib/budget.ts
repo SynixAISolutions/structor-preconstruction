@@ -54,10 +54,15 @@ export type BudgetLine = {
   /** Set when the forecast is the contractor's own estimate for the trade (applyEstimateValue); cleared like forecastSource. */
   estimateSource?: EstimateSource | null;
   inHouseEstimate?: EstimateSource | null;
+  /** Set when the in-house budget was pulled from the lowest sub (inHouseFromLowestSub); cleared when the amount is edited. */
+  inHouseSource?: InHouseSource | null;
   /** The trade package this line budgets, once linked or confirmed (estimate.ts budgetLinesForTrade). */
   packageId?: string | null;
   updatedAt: string;
 };
+
+/** Marcel (22 Oct): the in-house budget is typed in, or pulled from the lowest subcontractor. */
+export type InHouseSource = { kind: "lowest-sub"; packageId: string; bidder: string; basis: "reviewed" | "base"; value: number; appliedAt: string; appliedBy: string };
 
 /** The forecast came from the in-house estimate for a trade rather than a bid (Marcel, 7 Oct: "override to Contractor budget"). */
 export type EstimateSource = { kind: "estimate"; packageId: string; value: number; lines: number; unreviewed: number; appliedAt: string; appliedBy: string };
@@ -212,7 +217,7 @@ export function editBudgetLine(state: BudgetState, id: string, patch: Partial<Bu
     ...next,
     ...(approvedFieldsChanged ? { status: "draft" as const, approval: null } : {}),
     ...(forecastEdited ? { forecastSource: null, estimateSource: null } : {}),
-    ...(next.budget !== line.budget ? { inHouseEstimate: null } : {}),
+    ...(next.budget !== line.budget ? { inHouseEstimate: null, inHouseSource: null } : {}),
     source: line.source.kind === "sample" ? line.source : { kind: "manual", by, at },
   };
   return checked({ ...state, lines: state.lines.map(l => l.id === id ? updated : l) });
@@ -433,4 +438,29 @@ export function applyEstimateValue(state: BudgetState, lineId: string, pkg: Trad
   if (error) fail({ forecast: error });
   const estimateSource: EstimateSource = { kind: "estimate", packageId: pkg.id, value: estimate.total, lines: estimate.items.length, unreviewed: estimate.unreviewed, appliedAt: at, appliedBy: by };
   return { ...state, lines: state.lines.map(l => l.id === lineId ? { ...l, forecast: estimate.total, forecastSource: null, estimateSource, packageId: pkg.id, updatedAt: at } : l) };
+}
+
+/**
+ * Marcel (22 Oct, Budget summary): "it's doubling". The DD budget carries a trade once per cost center
+ * (Misc metals in New construction and in Sitework), so All cost centers shows one row per CSI code with
+ * its cost-center lines inside. Lines without a code stay rows of their own. Owner-carried lines are listed
+ * but not added.
+ */
+export type TradeRow = { key: string; csiCode: string | null; classification: BudgetClass; description: string; budget: number; forecast: number | null; committed: number; lines: BudgetLine[] };
+
+export function budgetRowsByTrade(lines: BudgetLine[]): TradeRow[] {
+  const rows = new Map<string, TradeRow>();
+  const cents = (v: number) => Math.round(v * 100) / 100;
+  for (const line of lines) {
+    const key = line.csiCode ? `${line.classification}:${line.csiCode}` : line.id;
+    const row = rows.get(key) ?? { key, csiCode: line.csiCode, classification: line.classification, description: line.description, budget: 0, forecast: null, committed: 0, lines: [] };
+    row.lines.push(line);
+    if (!line.byOwner) {
+      row.budget = cents(row.budget + line.budget);
+      row.committed = cents(row.committed + line.committed);
+      if (line.forecast !== null) row.forecast = cents((row.forecast ?? 0) + line.forecast);
+    }
+    rows.set(key, row);
+  }
+  return [...rows.values()];
 }

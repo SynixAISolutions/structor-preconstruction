@@ -183,9 +183,12 @@ assert.equal(mdoc.sections[2].heading, "Scope of work", "Scope is numbered Secti
 assert.deepEqual([notes.length, notes[0].startsWith("1. It is the intent of this bid package"), notes.at(-1).startsWith("32. All work hours")], [32, true, true], "the contractor's 32 general notes, numbered");
 const mscope = section(mdoc, "Scope of work");
 assert(mscope[0].startsWith("The scope of work of this Subcontract includes") && mscope.at(-1) === "Provide an ADD ALTERNATE Payment and Performance Bond.");
-assert.equal(mscope.length, 1 + (form.length - 1) + 1, "Intro, the included items (not the N item), the bond alternate");
+assert.equal(mscope.length, 1 + 4 + (form.length - 1) + 1, "Intro, the documents (header and 3 fallback lines), the included items (not the N item), the bond alternate");
+// With the project's files, section 3 lists them (Marcel's projects: drawings, the trade's spec sections, reports, with dates).
+const withDocs = A.createAward(empty, { ...mcnCtx, documents: [{ section: "Drawings", description: "JRC GMP-Permit Drawings", date: "12-09-2025" }, { section: "Spec Section 02 41 19", description: "Selective Demolition", date: "2025-12-09" }, { section: " ", description: "dropped", date: "" }] }, { levelingBidderId: green.levelingBidderId, basis: "base" }, "Safi", at).awards[0];
+assert.deepEqual(section(A.latestExhibit(withDocs).content, "Scope of work").slice(1, 4), ["Documents:", "Drawings — JRC GMP-Permit Drawings · 12-09-2025", "Spec Section 02 41 19 — Selective Demolition · 2025-12-09"], "Rows without a section are dropped");
 assert.deepEqual(section(mdoc, "Scope exclusions"), [form[1].title, "Hazardous materials abatement"]);
-assert(general.includes("02 41 19 — Demolition"), "Governing sections remain in the shell");
+assert.deepEqual(section(mdoc, "Scope of work").slice(1, 5), ["Documents:", "Division 00 — Procurement and Contracting Requirements (as applies to this Bid Package)", "Division 01 — General Requirements (as applies to this Bid Package)", "02 41 19 — Demolition"], "Section 3 opens with the documents; without stored files, the governing sections");
 assert(section(mdoc, "Phasing & schedule highlights").includes("Project Commencement – 2026-06-01"));
 assert(section(mdoc, "Phasing & schedule highlights").includes("Project Substantial Completion – [finish]"), "A missing value stays visible as [finish]");
 assert(mdoc.sections.some(x => x.heading === "Economic inclusion requirements") && mdoc.sections.at(-1).heading === "- End of Exhibit A -");

@@ -150,4 +150,21 @@ assert.deepEqual([byNumber(noted, "R-005").notes, byNumber(noted, "R-005").histo
 assert.equal(F.editRegionNotes(noted, r5, "Check wall type 2 height.", "Safi", at), noted, "Unchanged notes add nothing");
 assert.equal(byNumber(F.editRegionNotes(noted, r5, "", "Safi", at), "R-005").history.at(-1).text, "", "Clearing notes is recorded too");
 
+// Marcel, 22 Oct: every stored sheet is a page. New sheets come in at their current version; a page without
+// regions follows its sheet to the current version; a page with regions stays on the version they were drawn on.
+const reg = (sheet, docId, page, revisions = 1, title = sheet) => ({ sheet, title, discipline: "Architectural", date: "", doc: { id: docId, name: `${docId}.pdf` }, page, revisions });
+const jrc = base.pages.find(p => p.sheet === "A1.1");
+const stored = [reg("A1.1", "asi01", 1, 2), reg("A3.1", "asi01", 2, 2, "Reflected ceiling plan"), reg("A-201", "asi01", 3), reg("CIV0102", jrc.documentId, base.pages.find(p => p.sheet === "CIV0102").pageNumber)];
+const a31 = base.pages.find(p => p.sheet === "A3.1");
+const bare = { ...base, regions: base.regions.filter(r => r.pageId !== a31.id) };
+assert(bare.regions.some(r => r.pageId === jrc.id), "Fixture: A1.1 keeps its regions, A3.1 has none");
+const all = F.withStoredPages(bare, stored);
+const pageOf = (s, sheet) => s.pages.find(p => p.sheet === sheet);
+assert.deepEqual([all.pages.length, pageOf(all, "A-201").id, pageOf(all, "A-201").revision, pageOf(all, "A-201").documentId, pageOf(all, "A-201").source], [bare.pages.length + 1, "sheet-a201", "V1", "asi01", "uploaded"], "A stored sheet missing from Drawing Flip becomes a page");
+assert.deepEqual([pageOf(all, "A3.1").documentId, pageOf(all, "A3.1").pageNumber, pageOf(all, "A3.1").revision, pageOf(all, "A3.1").id], ["asi01", 2, "V2", a31.id], "A page without regions moves to the current version, keeping its id");
+assert.deepEqual(pageOf(all, "A1.1"), jrc, "A page with regions stays on the version they were drawn on");
+assert.equal(F.withStoredPages(all, stored), all, "Nothing to add: the same state");
+assert.equal(F.withStoredPages(base, []), base, "No stored drawings: the sample pages as they are");
+const onNew = F.addRegion(all, proc, { pageId: "sheet-a201", label: "New partitions", polygon: F.rectangle(0.2, 0.2, 0.2, 0.2), packageId: "drywall" }, "Safi", at);
+assert.equal(onNew.regions.at(-1).pageId, "sheet-a201", "Regions go on any stored sheet");
 console.log(`Drawing Flip checked: ${base.pages.length} pages, ${base.regions.length} regions; geometry, filters, scope highlight, missing scope, legend, pages, add/import, links, review, corrections, notes.`);

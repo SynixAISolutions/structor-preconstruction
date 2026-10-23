@@ -46,7 +46,7 @@ const guideIds = new Set(ids);
 const unique = (values, message) => assert.equal(new Set(values).size, values.length, message);
 const nonempty = (value, message) => assert(typeof value === "string" && value.trim(), message);
 
-assert.equal(screens.length, 30, "Expected coverage of all 30 current app screens (Overview joined the to-do, 22 Oct)");
+assert.equal(screens.length, 31, "Expected coverage of all 31 current app screens (Overview joined the to-do; Scope review & buyout added, 22 Oct)");
 unique(screens, "Screen ids must be unique");
 unique(ids, "Manual article ids must be unique");
 unique(manualGroups, "Manual group names must be unique");
@@ -84,7 +84,7 @@ const precon = SCREEN_GROUPS.find(group => group.label === "PRECONSTRUCTION").it
 assert.equal(precon[0].id, "turnover", "Preconstruction to-do opens the Preconstruction group");
 assert.deepEqual(precon.slice(-4).map(item => item.id), ["model", "model-mep", "model-structural", "model-exterior"], "The 3D model studio closes the Preconstruction group");
 const sectionIds = section => precon.filter(item => item.section === section).map(item => item.id);
-assert.deepEqual(sectionIds("Subcontractor outreach"), ["packages", "leveling"]);
+assert.deepEqual(sectionIds("Subcontractor outreach"), ["packages", "leveling", "buyout"]);
 assert.deepEqual(sectionIds("Preconstruction budget"), ["takeoffs", "budget", "allowances", "value-engineering"]);
 assert.deepEqual(sectionIds("Compliance and contracts"), ["contracts", "drawings", "specifications"]);
 assert(!SCREEN_GROUPS.some(group => group.items.some(item => item.id === "portal")), "The Subcontractor portal is not in the contractor's sidebar");

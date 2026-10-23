@@ -53,6 +53,16 @@ assert.deepEqual(["CIV0102", "CP0.1", "A10.4", "AQ2.1", "AD1.1", "FP0.1", "P2.1"
 const named = doc("set3", "set1", 3, { sheets: [{ page: 1, sheet: "A1.1", title: "Plan", date: "12-09-2025" }, { page: 2, sheet: "", title: "", date: "" }] });
 assert.deepEqual(F.drawingRegister([v1, v2, named]).map(r => [r.sheet, r.page, r.revisions, r.doc.id]), [["A1.1", 1, 3, "set3"]], "Only the newest issue, only named sheets");
 const report = doc("geo", "geo", 1, { kind: "other", category: "Reports", name: "Geotech.pdf" });
+// Exhibit A section 3's documents for a trade: the drawing set (its sheets' most common date), the trade's spec sections, reports.
+const drawn = doc("set9", "set9", 1, { name: "JRC GMP Drawings.pdf", sheets: [{ page: 1, sheet: "A-101", title: "Plan", date: "12-09-2025" }, { page: 2, sheet: "A-102", title: "Plan 2", date: "12-09-2025" }, { page: 3, sheet: "G-001", title: "Cover", date: "11-01-2025" }] });
+const manualJ = doc("man9", "man9", 1, { kind: "manual", category: "Specifications", uploadedAt: "2026-01-05T00:00:00Z", sections: [{ section: "09 29 00", title: "Gypsum Board", first: 1, last: 2 }, { section: "09 51 13", title: "Acoustical Panel Ceilings", first: 3, last: 4 }, { section: "03 30 00", title: "Cast-in-Place Concrete", first: 5, last: 6 }] });
+const geoReport = doc("geo9", "geo9", 1, { kind: "other", category: "Reports", name: "Geotechnical Report.pdf", uploadedAt: "2026-01-02T00:00:00Z" });
+assert.deepEqual(P.exhibitADocuments([drawn, manualJ, geoReport], trades[0], trades), [
+  { section: "Drawings", description: "JRC GMP Drawings", date: "12-09-2025" },
+  { section: "Spec Section 09 29 00", description: "Gypsum Board", date: "2026-01-05" },
+  { section: "Spec Section 09 51 13", description: "Acoustical Panel Ceilings", date: "2026-01-05" },
+  { section: "Reports", description: "Geotechnical Report", date: "2026-01-02" },
+], "Drywall: its own sections (ceilings go with drywall), not concrete's");
 const exhibit = F.exhibitBRows([named, manualBig, report]);
 assert.deepEqual(exhibit[0], ["Part", "Number", "Title", "Date", "Document"]);
 assert.deepEqual(exhibit.slice(1).map(r => [r[0], r[1]]), [["Documents", ""], ["Drawings", "A1.1"], ["Specifications", "09 29 00"]]);
