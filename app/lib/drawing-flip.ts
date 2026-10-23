@@ -55,7 +55,9 @@ export type RegionEvent =
   /** A correction. `unlinked`: scope items of the old trade that the region no longer shows. */
   | { kind: "reassigned"; at: string; by: string; from: string; to: string; reason: string; unlinked: string[] }
   | { kind: "linked" | "unlinked"; at: string; by: string; scopeId: string }
-  | { kind: "notes"; at: string; by: string; text: string };
+  | { kind: "notes"; at: string; by: string; text: string }
+  /** The outline was redrawn; `from` is the polygon it replaced. */
+  | { kind: "redrawn"; at: string; by: string; from: Point[]; reason: string };
 
 export type FlipRegion = {
   id: string;
@@ -352,6 +354,21 @@ export function reassignRegion(state: DrawingFlipState, procurement: Procurement
     status: "approved", reviewedBy: by.trim(), reviewedAt: at,
     history: [...region.history, { kind: "reassigned", at, by, from: region.packageId, to: packageId, reason: reason.trim(), unlinked }],
   });
+}
+
+/**
+ * Replaces the region's outline (e.g. a coarse "Find on drawings" mark redrawn tight). The region keeps
+ * its number, trade, scope links and review state: a new outline doesn't approve Structor's trade call.
+ * The old polygon is kept in its history.
+ */
+export function redrawRegion(state: DrawingFlipState, regionId: string, polygon: Point[], by: string, reason = "", at = now()): DrawingFlipState {
+  needBy(by);
+  const region = findRegion(state, regionId);
+  const errors: DrawingFlipErrors = {};
+  const points = cleanPolygon(polygon, errors);
+  check(errors);
+  if (JSON.stringify(points) === JSON.stringify(region.polygon)) return state;
+  return putRegion(state, { ...region, polygon: points, history: [...region.history, { kind: "redrawn", at, by, from: region.polygon, reason: reason?.trim() ?? "" }] });
 }
 
 /** Replaces the region's notes; each change is kept in its history. */
