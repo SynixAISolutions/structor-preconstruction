@@ -1,0 +1,21 @@
+.todo-steps { padding: 0 18px 18px; }
+.todo-step { border: 1px solid var(--line); border-radius: 9px; margin-top: 10px; background: white; }
+.todo-step > summary { display: flex; align-items: center; gap: 14px; padding: 15px; cursor: pointer; list-style: none; }
+.todo-step > summary::after { content: "+"; color: var(--muted); font-size: 20px; }
+.todo-step[open] > summary::after { content: "−"; }
+.todo-step-number { display: grid; place-items: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: 50%; background: #fdf0e9; color: #99451f; font-weight: 650; }
+.todo-step-title { flex: 1; min-width: 0; }
+.todo-step-title strong { display: block; font-size: 13px; }
+.todo-step-title small { display: block; font-size: 11px; color: var(--muted); margin-top: 5px; }
+.todo-step-body { border-top: 1px solid var(--line-soft); padding: 0 12px 12px; }
+.todo-step-body > p { padding: 8px; color: var(--muted); font-size: 12px; }
+.todo-view-switch { display: flex; gap: 4px; }
+.todo-view-switch button { padding: 7px 10px; border: 1px solid var(--line); background: white; border-radius: 6px; font-size: 11px; }
+.todo-view-switch [aria-pressed="true"] { background: #fdf0e9; color: #99451f; }
+.todo-pulse { margin-top: 18px; }
+.todo-pulse > summary { padding: 15px; border: 1px solid var(--line); border-radius: 8px; background: white; cursor: pointer; font-size: 13px; font-weight: 600; }
+.todo-pulse .health-details-grid { margin-top: 12px; }
+.todo-readiness { display: flex; align-items: center; gap: 15px; padding: 15px; }
+.todo-readiness .health-ring { width: 95px; flex-shrink: 0; }
+.todo-step summary:focus-visible, .todo-pulse summary:focus-visible { outline: 2px solid #b75526; outline-offset: 3px; }
+@media(max-width: 600px) { .todo-steps { padding: 0 8px 10px; } .todo-step > summary { gap: 9px; padding: 12px 9px; } .todo-step-title strong { font-size: 12px; } .todo-step > summary .ui-badge { font-size: 10px; } .todo-step-body { padding: 0 7px 10px; } }

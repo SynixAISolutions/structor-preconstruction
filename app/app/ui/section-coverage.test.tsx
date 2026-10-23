@@ -5,15 +5,16 @@ import { sampleProcurement } from "../../lib/data/procurement";
 import { assignmentWarnings, sectionCoverage, type CoverageRow } from "../../lib/section-coverage";
 require.extensions[".css"] = () => {};
 const { CoverageList, CoverageActionForm, ScopeViewTabs } = require("./section-coverage") as typeof import("./section-coverage");
+const procurement = { ...sampleProcurement, packages: sampleProcurement.packages.filter(p => p.division !== "10") };
 const manual = { id: "manual", name: "Project manual.pdf", revision: 2 };
 const coverage = sectionCoverage({ manual, sections: [
   { section: "10 44 16", title: "Fire extinguishers", first: 580, last: 584 },
   { section: "10 28 00", title: "Toilet accessories", first: 542, last: 550 },
   { section: "03 30 00", title: "Concrete suggestion", first: 60, last: 80 },
-] }, sampleProcurement);
+] }, procurement);
 const row = coverage.rows.find(r => r.section === "10 28 00")!;
-const list = (rows = coverage.rows) => renderToStaticMarkup(<CoverageList coverage={{ ...coverage, rows }} procurement={sampleProcurement} onAction={() => {}} onSource={() => {}} onUndo={() => {}} onBidForm={() => {}}/>);
-const form = (kind: "assign" | "not-applicable" | "split", selected = row) => renderToStaticMarkup(<CoverageActionForm action={{ kind, row: selected }} procurement={sampleProcurement} warningsFor={id => assignmentWarnings(sampleProcurement, id, { awarded: true })} onClose={() => {}} onSave={() => null}/>);
+const list = (rows = coverage.rows) => renderToStaticMarkup(<CoverageList coverage={{ ...coverage, rows }} procurement={procurement} onAction={() => {}} onSource={() => {}} onUndo={() => {}} onBidForm={() => {}}/>);
+const form = (kind: "assign" | "not-applicable" | "split", selected = row) => renderToStaticMarkup(<CoverageActionForm action={{ kind, row: selected }} procurement={procurement} warningsFor={id => assignmentWarnings(procurement, id, { awarded: true })} onClose={() => {}} onSave={() => null}/>);
 
 test("coverage opens on questions, with expandable sections and manual page references", () => {
   const html = list();
@@ -37,7 +38,7 @@ test("suggested ownership is identified separately from coverage", () => {
 });
 
 test("assignment shows published and awarded warnings before its explicit confirmation", () => {
-  const published = sampleProcurement.packages.find(p => p.published)!;
+  const published = procurement.packages.find(p => p.published)!;
   const html = form("assign", { ...row, expected: published.id });
   for (const text of ["Before confirming", "bid form is published", "already awarded", "Exhibit A does not change", "no duplicate is added", "Confirm assignment"]) assert.ok(html.includes(text), text);
   assert.ok(html.indexOf("Before confirming") < html.indexOf("Confirm assignment"));

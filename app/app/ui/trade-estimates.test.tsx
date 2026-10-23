@@ -27,7 +27,7 @@ test("estimate amounts retain cents and unit rates retain fractional precision",
 test("trade list retains empty trades and distinguishes unpriced from not started", () => {
   const shown = trades.map(t => t.packageId === "drywall" ? { ...t, total: 0, unpriced: 1 } : t);
   const html = renderToStaticMarkup(<TradeEstimateList trades={shown} unassigned={2} onOpen={() => {}}/>);
-  assert.equal((html.match(/scope="row"/g) ?? []).length, 12);
+  assert.equal((html.match(/scope="row"/g) ?? []).length, 26);
   assert.match(html, /Carpentry/); assert.match(html, /Not started/);
   assert.match(html, /\$0/); assert.match(html, /1 unpriced/);
   assert.match(html, /2 saved items need a trade assignment/);

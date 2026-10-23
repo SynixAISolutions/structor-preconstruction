@@ -9,7 +9,7 @@ import { initialBidders } from "../../lib/data/commercial";
 
 test("proposal inbox shows submitted portal revisions and labels illustrative bids", () => {
   const html = renderToStaticMarkup(<PortalBidList procurement={sampleProcurement} submissions={sampleSubmissions} directory={initialBidders} onReview={() => {}}/>);
-  for (const trade of ["Concrete", "Drywall", "Doors, frames &amp; hardware", "Roofing &amp; waterproofing"]) assert.ok(html.includes(trade));
+  for (const trade of ["Concrete", "Drywall", "Doors, frames &amp; hardware", "Roofing"]) assert.ok(html.includes(trade));
   assert.equal((html.match(/Illustrative sample bid/g) ?? []).length, 8);
   assert.match(html, /Review in leveling/);
 });

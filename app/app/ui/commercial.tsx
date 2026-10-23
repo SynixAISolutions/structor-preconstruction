@@ -11,9 +11,7 @@ import type { Project } from "../../lib/projects";
 import { ProcurementPackagesView } from "./procurement";
 import { SubmissionPortalView } from "./submission-ui";
 import { ScheduleView } from "./schedule-ui";
-import { useTodo } from "../../lib/use-todo-summary";
-import { ProgressRing } from "./project-health";
-import { DoneTaskCard, TodoTaskCard } from "./todo-cards";
+import { TurnoverView } from "./todo-ui";
 import { AllowancesView, BudgetView } from "./budget-ui";
 import { AwardView } from "./award-ui";
 import { ValueEngineeringView } from "./value-engineering-ui";
@@ -41,49 +39,6 @@ function RatingsView({ navigate }: ViewProps) {
 
 function PrequalificationView({ navigate }: ViewProps) {
   return <div className="cm-view"><PageHeader eyebrow="PARTNER NETWORK" title={screenLabel("prequalification")} description="Track which invited subcontractors are cleared to bid and what remains outstanding." actions={<Button onClick={() => navigate("packages")}>Open bid packages<ArrowRight size={15}/></Button>}/><PreviewNote>Placeholder · The questionnaire and required-document list have not been supplied yet.</PreviewNote><Panel title="Planned qualification workflow" subtitle="One status from invitation through approval."><div className="cm-placeholder-grid">{[["1","Questionnaire","Company details and project-specific questions"],["2","Documents","Licences, insurance, safety and financial files"],["3","Review","Outstanding items and reviewer decisions"],["4","Bid eligibility","Clear status beside every invited company"]].map(([step,title,detail]) => <article key={step}><span><UserCheck size={18}/></span><strong>{step}. {title}</strong><p>{detail}</p></article>)}</div></Panel><Panel><Empty title="Prequalification setup is waiting" description="Once the real questionnaire is provided, this screen will track submissions, missing documents, reviewer notes, and approval status." action={<Button onClick={() => navigate("bidders")}>Open subcontractor directory</Button>}/></Panel></div>;
-}
-
-function TurnoverView({ notify, navigate, projectName, project }: ViewProps & { project: Project }) {
-  const [filter, setFilter] = useState("My actions");
-  const [scanError, setScanError] = useState("");
-  const { summary, history, scanning, lastScan, scanForCompletion } = useTodo(project);
-  useEffect(() => {
-    if (!lastScan) return;
-    notify(lastScan.completed.length ? `${lastScan.completed.length} task${lastScan.completed.length === 1 ? "" : "s"} done since the last check: ${lastScan.completed.slice(0, 3).map(d => d.title).join("; ")}${lastScan.completed.length > 3 ? "…" : ""}` : `Checked: ${lastScan.open} open task${lastScan.open === 1 ? "" : "s"}, nothing new done.`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastScan]);
-  const teamActions = summary.tasks.filter(task => task.status === "todo").length;
-  const waiting = summary.tasks.filter(task => task.status === "waiting").length;
-  const visible = summary.tasks.filter(task => filter === "All work" || (filter === "My actions" ? task.status === "todo" : task.status === "waiting"));
-  const groupLabel = (group: string) => summary.groups.find(item => item.group === group)?.label ?? group;
-  const missing = summary.tasks.filter(task => task.flag?.tone === "red").length;
-  const review = summary.tasks.filter(task => task.flag?.tone === "yellow").length;
-  async function scan() {
-    setScanError("");
-    try { await scanForCompletion(); }
-    catch (error) { setScanError(error instanceof Error ? error.message : "The scan could not finish. Try again."); }
-  }
-
-  function exportTodo() {
-    const tasks = summary.tasks.length ? summary.tasks.map(task => `[${task.status === "todo" ? "ACTION" : "WAITING"}] ${task.title}\n${task.detail}\nOpen: ${screenLabel(task.screen)}`).join("\n\n") : "No open tasks.";
-    const packages = summary.packages.map(pkg => `${pkg.code} ${pkg.name}: ${pkg.done}/${pkg.total} milestones (${pkg.percent}%)`).join("\n");
-    downloadText("preconstruction-to-do.txt", `PRECONSTRUCTION TO-DO\n${projectName}\n\n${summary.progress.done}/${summary.progress.total} workflow milestones complete (${summary.progress.percent}%)\n${teamActions} team actions · ${waiting} waiting\n\nOPEN WORK\n${tasks}\n\nPACKAGE PROGRESS\n${packages || "No trade packages."}\n\nCalculated from the current project state.`);
-    notify("Preconstruction to-do list downloaded.");
-  }
-
-  return <div className="cm-view todo-workspace">
-    <PageHeader eyebrow="YOUR NEXT ACTIONS" title={screenLabel("turnover")} description="A clear path through the work. Complete an action on its page and it moves to Done." actions={<><Button disabled={scanning || !summary.ready} onClick={() => void scan()}><RefreshCw size={16} className={scanning ? "todo-scanning" : ""}/>{scanning ? "Scanning…" : "Scan for task completion"}</Button><Button onClick={exportTodo}><Download size={16}/>Export to-do list</Button></>}/>
-    <section className="todo-progress-banner health-workflow-card" aria-label="Preconstruction progress"><ProgressRing percent={summary.progress.percent} label="Workflow progress" detail={`${summary.progress.done} of ${summary.progress.total} milestones`} pending={!summary.ready}/><div><span className="health-eyebrow">ONE STEP CLOSER</span><h2>{summary.progress.done} of {summary.progress.total} milestones complete</h2><p>Every reviewed scope, leveled bid and signed subcontract moves the project forward.</p><button onClick={() => navigate("setup")}>Continue project setup<ArrowRight size={14}/></button></div><div className="todo-progress-count"><strong>{teamActions}</strong><span>actions for your team</span></div></section>
-    <div className="todo-status-summary"><div className="missing"><span>Missing files &amp; details</span><strong>{missing}</strong></div><div className="review"><span>Information to check</span><strong>{review}</strong></div><div className="waiting"><span>Waiting on others</span><strong>{waiting}</strong></div><div className="done"><span>Completed tasks</span><strong>{history.done.length}</strong></div></div>
-    {scanError ? <p className="todo-scan-result error" role="alert">{scanError}</p> : lastScan && <p className="todo-scan-result" role="status"><CheckCircle2 size={16}/><span>Last checked {new Date(lastScan.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · {lastScan.completed.length} newly completed · {lastScan.open} open tasks</span></p>}
-    <Panel title={filter === "Done" ? "Completed work" : "Your work list"} subtitle={filter === "Done" ? "A record of tasks completed on their source pages." : "Missing files and details are marked red. Information to check is marked yellow."} action={<Badge>{filter === "Done" ? history.done.length : visible.length} shown</Badge>}>
-      <div className="ui-toolbar"><Tabs tabs={["My actions", "Waiting", "All work", "Done"]} value={filter} onChange={setFilter}/><div className="cm-todo-groups">{summary.groups.filter(group => group.todo || group.waiting).map(group => <span key={group.group}>{group.label}<b>{group.todo + group.waiting}</b></span>)}</div></div>
-      {filter === "Done" ? (history.done.length ? <ul className="todo-work-list">{history.done.map(task => <DoneTaskCard key={`${task.id}-${task.at}`} task={task} group={groupLabel(task.group)}/>)}</ul> : <Empty title="Nothing done yet" description="Finished tasks move here automatically. Scan for task completion checks the project again."/>) : visible.length ? <ul className="todo-work-list">{visible.map(task => <TodoTaskCard key={task.id} task={task} group={groupLabel(task.group)} navigate={navigate}/>)}</ul> : <Empty title={filter === "Waiting" ? "Nothing is waiting" : "Preconstruction is caught up"} description={filter === "Waiting" ? "No outside response is holding the workflow." : "The current project state has no open team actions."}/>}
-    </Panel>
-    {summary.packages.length > 0 && <Panel title="Package readiness" subtitle="Eight milestones per trade package, from approved scope to executed subcontract.">
-      <div className="cm-package-progress-list">{summary.packages.map(pkg => <button key={pkg.packageId} onClick={() => navigate("packages")}><span><strong>{pkg.code} · {pkg.name}</strong><small>{pkg.owner || "Owner not assigned"}</small></span><div><span>{pkg.done}/{pkg.total}</span><i><b style={{width:`${pkg.percent}%`}}/></i></div><Badge tone={pkg.percent === 100 ? "green" : "neutral"}>{pkg.percent}%</Badge><ArrowRight size={15}/></button>)}</div>
-    </Panel>}
-  </div>;
 }
 
 export function CommercialView(props: ViewProps & { screen: Screen; project: Project }) {
