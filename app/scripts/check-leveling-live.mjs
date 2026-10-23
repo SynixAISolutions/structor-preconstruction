@@ -38,6 +38,17 @@ assert.throws(() => screenGapCosts({ suggestions: [ai.suggestions[0], ai.suggest
 assert.throws(() => parseGapCost({ ...input, references: [{ ...input.references[0], rate: -1 }] }), /quantity and rate/);
 assert.throws(() => parseGapCost({ ...input, gaps: [{ ...input.gaps[0], status: "Y" }] }), /excluded or partial/);
 assert.deepEqual(screenGapCosts({ suggestions: [] }, input), [], "No matching cost basis means no invented plug");
+assert.equal(suggested.priced, true);
+// Marcel, 22 Oct: a "no" is plugged from the trade's quantity takeoff; the estimator types the unit price.
+const { takeoffReferences } = await import("../lib/bid-gap-cost.ts");
+const { initialTakeoffs } = await import("../lib/data/preconstruction.ts");
+const takeoffs = [...initialTakeoffs, { id: "t-unpriced", packageId: "concrete", division: "03", item: "Slab flatness grinding", unit: "SF", quantity: 3000, rate: 0, source: "", reviewed: false }, { id: "t-zero", packageId: "concrete", division: "03", item: "Placeholder", unit: "SF", quantity: 0, rate: 5, source: "S101", reviewed: true }];
+const refs = takeoffReferences(takeoffs, "concrete");
+assert.deepEqual(refs.map(r => r.id), [...initialTakeoffs.filter(r => r.packageId === "concrete").map(r => r.id), "t-unpriced"], "The trade's takeoff lines with a quantity, priced or not");
+assert.deepEqual(refs.at(-1), { id: "t-unpriced", item: "Slab flatness grinding", quantity: 3000, rate: 0, unit: "SF", source: "Quantity takeoff (not reviewed)" });
+assert.match(refs.find(r => r.id === "q4").source, /^Quantity takeoff \(not reviewed\) · S101$/);
+const quantityOnly = parseGapCost({ gaps: input.gaps, references: [refs.at(-1)] });
+assert.deepEqual((({ priced, amount, quantity, unit }) => ({ priced, amount, quantity, unit }))(screenGapCosts({ suggestions: [{ gapId: item.id, referenceId: "t-unpriced", explanation: "Takeoff quantity for the excluded grinding." }] }, quantityOnly)[0]), { priced: false, amount: 0, quantity: 3000, unit: "SF" }, "Quantity offered, no invented rate");
 bidder.responses[item.id] = approveGapCost(bidder.responses[item.id], basis, true, true);
 snapshot.items.find(i => i.id === item.id).estimatorNote = "Estimator note retained across refresh";
 assert.equal(bidder.responses[item.id].resolved, true);
