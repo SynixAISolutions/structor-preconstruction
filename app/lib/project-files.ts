@@ -67,14 +67,13 @@ export function latestDocuments(docs: StoredDocument[]): StoredDocument[] {
 /** Every revision of a document, oldest first. */
 export const revisionsOf = (docs: StoredDocument[], series: string) => docs.filter(doc => doc.series === series).sort((a, b) => a.revision - b.revision);
 
-/** Where a sheet number lives in the newest drawings: document and PDF page. */
+/** Where a sheet number's current version lives (drawingLog): document and PDF page. */
 export function findSheet(docs: StoredDocument[], sheet: string): { doc: StoredDocument; sheet: StoredSheet } | null {
   const key = sheetKey(sheet);
-  for (const doc of latestDocuments(docs).filter(d => d.kind === "drawings")) {
-    const found = doc.sheets.find(s => sheetKey(s.sheet) === key);
-    if (found) return { doc, sheet: found };
-  }
-  return null;
+  const found = key ? drawingLog(docs).sheets.find(s => s.key === key) : undefined;
+  if (!found) return null;
+  const { doc, page, sheet: number, title, date } = found.current;
+  return { doc, sheet: { page, sheet: number, title, date } };
 }
 
 /** The newest project manual (the largest, when a project has several specification PDFs). */
@@ -128,13 +127,92 @@ const DISCIPLINES: [RegExp, string][] = [
 ];
 export const disciplineOf = (sheet: string) => DISCIPLINES.find(([re]) => re.test(sheet.toUpperCase()))?.[1] ?? "Other";
 
+/** `revisions`: how many versions of this sheet were uploaded; the row is the current one (V`revisions`). */
 export type RegisterRow = { sheet: string; title: string; discipline: string; date: string; doc: StoredDocument; page: number; revisions: number };
 
-/** Every named sheet of the newest drawing sets, in set order, with how many issues of its set exist. */
+/** Every named sheet at its current version (drawingLog), in the order sheets first appeared. */
 export function drawingRegister(docs: StoredDocument[]): RegisterRow[] {
-  return latestDocuments(docs).filter(d => d.kind === "drawings").flatMap(doc => doc.sheets.filter(s => s.sheet).map(s => ({
-    sheet: s.sheet, title: s.title, discipline: disciplineOf(s.sheet), date: s.date, doc, page: s.page, revisions: revisionsOf(docs, doc.series).length,
-  })));
+  return drawingLog(docs).sheets.map(s => ({ sheet: s.sheet, title: s.title, discipline: s.discipline, date: s.date, doc: s.current.doc, page: s.current.page, revisions: s.versions.length }));
+}
+
+// ── Drawing log ─────────────────────────────────────────────────────────────
+// Marcel (22 Oct, and his Procore video of 23 Oct): every drawings upload is a set, and a set may hold
+// one sheet or all of them. A sheet number's newest upload is its current version; sheets a set leaves
+// out stay as they were, and every earlier version is kept (V1, V2, V3 …).
+// ponytail: upload order decides "newest", so uploading an older issue after a newer one makes it current.
+
+/** One uploaded version of a sheet: the page it is on and what its title block says. */
+export type SheetVersion = StoredSheet & { version: number; doc: StoredDocument };
+export type LogSheet = { key: string; sheet: string; title: string; discipline: string; date: string; current: SheetVersion; versions: SheetVersion[] };
+/**
+ * What one upload did: sheet numbers it added, sheet numbers it revised, pages with no sheet number
+ * (to name before they count), sheet numbers it holds twice (only the first page counts), and how many of
+ * its sheets are still current.
+ */
+export type LogSet = { doc: StoredDocument; added: string[]; revised: string[]; unnamed: number[]; repeated: string[]; current: number };
+export type DrawingLog = { sheets: LogSheet[]; sets: LogSet[] };
+
+const uploadOrder = (a: StoredDocument, b: StoredDocument) => a.uploadedAt.localeCompare(b.uploadedAt) || (a.series === b.series ? a.revision - b.revision : 0);
+
+export function drawingLog(docs: StoredDocument[]): DrawingLog {
+  const byKey = new Map<string, LogSheet>();
+  const sets: LogSet[] = [];
+  for (const doc of docs.filter(d => d.kind === "drawings").sort(uploadOrder)) {
+    const set: LogSet = { doc, added: [], revised: [], unnamed: [], repeated: [], current: 0 };
+    const seen = new Set<string>();
+    for (const s of [...doc.sheets].sort((a, b) => a.page - b.page)) {
+      const key = sheetKey(s.sheet);
+      if (!key) { set.unnamed.push(s.page); continue; }
+      if (seen.has(key)) { set.repeated.push(s.sheet); continue; }
+      seen.add(key);
+      const prior = byKey.get(key);
+      const version: SheetVersion = { ...s, version: (prior?.versions.length ?? 0) + 1, doc };
+      if (prior) {
+        prior.versions.push(version);
+        Object.assign(prior, { current: version, sheet: s.sheet, title: s.title || prior.title, date: s.date, discipline: disciplineOf(s.sheet) });
+        set.revised.push(s.sheet);
+      } else {
+        byKey.set(key, { key, sheet: s.sheet, title: s.title, discipline: disciplineOf(s.sheet), date: s.date, current: version, versions: [version] });
+        set.added.push(s.sheet);
+      }
+    }
+    sets.push(set);
+  }
+  const sheets = [...byKey.values()];
+  for (const set of sets) set.current = sheets.filter(s => s.current.doc === set.doc).length;
+  return { sheets, sets };
+}
+
+/** The sheet on a document's page, which version that page is, and whether it is the current one. */
+export function sheetAt(log: DrawingLog, docId: string, page: number): { sheet: LogSheet; version: SheetVersion; current: boolean } | null {
+  for (const sheet of log.sheets) {
+    const version = sheet.versions.find(v => v.doc.id === docId && v.page === page);
+    if (version) return { sheet, version, current: version === sheet.current };
+  }
+  return null;
+}
+
+/**
+ * The document with corrected sheet numbers (and titles): naming the pages an upload could not read, or
+ * making a page the next version of a sheet. Save it with updateProjectDocument.
+ */
+export function withSheetNumbers(doc: StoredDocument, changes: { page: number; sheet: string; title?: string }[]): StoredDocument {
+  if (doc.kind !== "drawings") throw new Error("Only drawing sets have sheet numbers.");
+  const sheets = [...doc.sheets];
+  for (const change of changes) {
+    const sheet = change.sheet.trim(), title = change.title?.trim();
+    if (!Number.isInteger(change.page) || change.page < 1 || change.page > doc.pageCount) throw new Error(`${doc.name} has no page ${change.page}.`);
+    if (!sheetKey(sheet) || sheet.length > 40) throw new Error("Enter a sheet number such as A-101 (up to 40 characters).");
+    if (title !== undefined && title.length > 200) throw new Error("Keep the sheet title under 200 characters.");
+    const at = sheets.findIndex(s => s.page === change.page);
+    const next = { page: change.page, sheet, title: title ?? (at >= 0 ? sheets[at].title : ""), date: at >= 0 ? sheets[at].date : "" };
+    if (at >= 0) sheets[at] = next; else sheets.push(next);
+  }
+  for (const change of changes) {
+    const other = sheets.find(s => s.page !== change.page && sheetKey(s.sheet) === sheetKey(change.sheet));
+    if (other) throw new Error(`Page ${other.page} of ${doc.name} is already sheet ${other.sheet}.`);
+  }
+  return { ...doc, sheets: sheets.sort((a, b) => a.page - b.page) };
 }
 
 /**
