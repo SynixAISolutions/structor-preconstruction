@@ -39,7 +39,7 @@ assert.deepEqual(missingProjectFacts(null), ["project"]);
 const start = derive();
 assert.equal(ids(start).filter(id => id.startsWith("scopes:approve:")).length, 8, "Every package with draft items (Waterproofing has the air barrier), excluding Carpentry and the four published sample trades");
 for (const trade of ["concrete", "drywall"]) assert.deepEqual([start.packages.find(p => p.packageId === trade).percent, ids(start).filter(id => id.endsWith(`:${trade}`))], [100, []], `${trade}: every milestone done, nothing left to do`);
-assert(has(start, "scopes:empty:carpentry") && !ids(start).some(id => id.startsWith("scopes:publish") || id.startsWith("outreach:")));
+assert(has(start, "scopes:empty:carpentry") && !ids(start).some(id => id.startsWith("scopes:publish") || (id.startsWith("outreach:") && !id.startsWith("outreach:more:"))), "Outreach work on the sample is only the kickoff's three-bid minimum");
 assert.deepEqual(task(start, "scopes:approve:demolition").count, 2);
 assert.deepEqual([task(start, "budget:approve").count, task(start, "budget:over").count, task(start, "budget:allowances").count, has(start, "budget:forecast")], [11, 2, 2, false]);
 assert.match(task(start, "budget:over").detail, /Structural steel \(Modernization\), Exterior improvements \(Site work\)/);
@@ -189,6 +189,17 @@ const rfi = (number, status, due = "") => ({ id: number, number, status, due });
 const withRfis = { ...sampleStructorCheck, issues: [], rfis: [rfi("RFI-001", "draft"), rfi("RFI-002", "approved"), rfi("RFI-003", "sent", "2026-01-27"), rfi("RFI-004", "answered"), rfi("RFI-005", "closed")] };
 assert.deepEqual(rfiTask(withRfis), [["rfis:send", 2, "todo"], ["rfis:answered", 1, "todo"], ["rfis:waiting", 1, "waiting"]], "Team actions first; a closed RFI is done");
 assert.equal(derive({ check: withRfis }).tasks.find(x => x.id === "rfis:send").detail, "RFI-001, RFI-002. RFI deadline: 2026-01-20.");
-assert.equal(derive({ check: withRfis }).tasks.find(x => x.id === "rfis:waiting").detail, "RFI-003 due 2026-01-27.");
+assert.equal(derive({ check: withRfis }).tasks.find(x => x.id === "rfis:waiting").detail, "RFI-003 due 2026-01-27. Answers expected 2026-01-27.");
+
+// The kickoff (Marcel's write-up): at least three bids per trade, scopes due to subs, RFI answers expected.
+const jelleffKickoff = sampleProjectRecords[0].kickoff;
+assert.deepEqual([jelleffKickoff.minBidders, jelleffKickoff.scopesDue, jelleffKickoff.rfiResponses], [3, "2026-01-26", "2026-01-27"]);
+const more = start.tasks.filter(t => t.id.startsWith("outreach:more:")).map(t => [t.packageId, t.count]);
+const activeInvites = id => sampleProcurement.invitations.filter(i => i.packageId === id && i.status !== "declined").length;
+assert.deepEqual(more, sampleProcurement.packages.filter(p => p.published && activeInvites(p.id) > 0 && activeInvites(p.id) < 3 && !sampleAwards.awards.some(a => a.packageId === p.id && !a.cancelled)).map(p => [p.id, 3 - activeInvites(p.id)]), "Every published, unawarded trade with fewer than three bidders");
+assert(more.length > 0, "The Jelleff sample has trades below three bidders");
+assert.match(task(start, "scopes:approve:demolition").detail, /Scopes due to subs 2026-01-26\./);
+assert.equal(deriveTodo({ ...base, project: { ...sampleProjectRecords[0], kickoff: { ...jelleffKickoff, minBidders: 1 } } }).tasks.filter(t => t.id.startsWith("outreach:more:")).length, 0, "One bid is enough when the kickoff says so");
+assert.match(derive({ check: withRfis }).tasks.find(x => x.id === "rfis:waiting").detail, /Answers expected 2026-01-27\./);
 
 console.log(`To-do checked: empty project, ${start.tasks.length} tasks on the Jelleff sample, Demolition walked from draft to executed subcontract (${finished.packages.find(p => p.packageId === "demolition").percent}%), stale forms, budget, ordering.`);

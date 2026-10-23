@@ -162,7 +162,9 @@ export function deriveTodo(input: TodoInput): TodoSummary {
   if (!input.setup && !input.documents.length) add({ id: "setup:files", group: "setup", title: "Upload the project files", detail: "Add the drawings, specifications and RFP.", status: "todo", priority: "high", screen: "documents", packageId: null, count: 0 });
   if (!input.setup && !procurement.packages.length) add({ id: "setup:packages", group: "setup", title: "Set up trade packages", detail: "No trade packages exist yet, so there is nothing to scope or bid.", status: "todo", priority: "high", screen: "scopes", packageId: null, count: 0 });
 
-  // ── Per package ──
+  // ── Per package ── (the kickoff sets when scopes go out and how many bids each trade needs)
+  const kickoff = input.project?.kickoff;
+  const scopesDue = kickoff?.scopesDue ? ` Scopes due to subs ${kickoff.scopesDue}.` : "";
   const packages: PackageProgress[] = procurement.packages.map(pkg => {
     const form = bidForm(procurement, pkg.id);
     const status = packageStatus(procurement, pkg.id);
@@ -176,13 +178,15 @@ export function deriveTodo(input: TodoInput): TodoSummary {
     const anyEligible = leveled.some(l => l.totals.eligible);
     const p = { packageId: pkg.id } as const;
 
-    if (form.length && drafts.length) add({ ...p, id: `scopes:approve:${pkg.id}`, group: "scopes", title: `Approve ${plural(drafts.length, "scope item")} in ${pkg.name}`, detail: `${form.length - drafts.length} of ${form.length} approved. Owner: ${pkg.owner || "unassigned"}.`, status: "todo", priority: "normal", screen: "scopes", count: drafts.length });
-    if (!form.length) add({ ...p, id: `scopes:empty:${pkg.id}`, group: "scopes", title: `Write the ${pkg.name} scope`, detail: "The bid form has no items yet.", status: "todo", priority: "normal", screen: "scopes", count: 0 });
+    if (form.length && drafts.length) add({ ...p, id: `scopes:approve:${pkg.id}`, group: "scopes", title: `Approve ${plural(drafts.length, "scope item")} in ${pkg.name}`, detail: `${form.length - drafts.length} of ${form.length} approved. Owner: ${pkg.owner || "unassigned"}.${scopesDue}`, status: "todo", priority: "normal", screen: "scopes", count: drafts.length });
+    if (!form.length) add({ ...p, id: `scopes:empty:${pkg.id}`, group: "scopes", title: `Write the ${pkg.name} scope`, detail: `The bid form has no items yet.${scopesDue}`, status: "todo", priority: "normal", screen: "scopes", count: 0 });
     if (status === "ready") add({ ...p, id: `scopes:publish:${pkg.id}`, group: "scopes", title: `Publish the ${pkg.name} bid form`, detail: "Every item is approved; invited bidders can price it once it is published.", status: "todo", priority: "high", screen: "scopes" });
     if (status === "revised" && !drafts.length) add({ ...p, id: `scopes:republish:${pkg.id}`, group: "scopes", title: `Publish the revised ${pkg.name} bid form`, detail: `Bidders still have version ${pkg.published!.version}.`, status: "todo", priority: "high", screen: "scopes" });
 
     if (pkg.published) {
       if (!invitations.length) add({ ...p, id: `outreach:invite:${pkg.id}`, group: "outreach", title: `Invite bidders to ${pkg.name}`, detail: "The bid form is published but nobody is invited.", status: "todo", priority: "high", screen: "packages", count: 0 });
+      const minBidders = kickoff?.minBidders ?? 0;
+      if (invitations.length && invitations.length < minBidders && !award) add({ ...p, id: `outreach:more:${pkg.id}`, group: "outreach", title: `Invite ${plural(minBidders - invitations.length, "more company", "more companies")} to ${pkg.name}`, detail: `The kickoff asks for at least ${minBidders} bids per trade; ${invitations.length} invited.`, status: "todo", priority: "high", screen: "packages", count: minBidders - invitations.length });
       const pending = invitations.filter(i => !submitted.some(s => s.invitationId === i.id) && i.status !== "submitted");
       const quiet = pending.filter(i => !procurement.outreach.some(o => o.packageId === pkg.id && o.bidderId === i.bidderId));
       if (quiet.length) add({ ...p, id: `outreach:follow-up:${pkg.id}`, group: "outreach", title: `Follow up with ${plural(quiet.length, "invited company", "invited companies")} for ${pkg.name}`, detail: "No call, note or message is logged for them yet.", status: "todo", priority: "normal", screen: "packages", refs: { invitationIds: quiet.map(i => i.id) }, count: quiet.length });
@@ -264,7 +268,7 @@ export function deriveTodo(input: TodoInput): TodoSummary {
     if (toReview.length) add({ id: "rfis:review", group: "rfis", title: `Review ${plural(toReview.length, "issue")} Structor Check found`, detail: `Keep, combine or dismiss each before it goes to the architect.${deadline}`, status: "todo", priority: "normal", screen: "checks", packageId: null, count: toReview.length });
     if (open.length) add({ id: "rfis:open", group: "rfis", title: `Send or resolve ${plural(open.length, "open issue")}`, detail: `Put them in an RFI to the design team, or resolve them.${deadline}`, status: "todo", priority: "normal", screen: "checks", packageId: null, count: open.length });
     if (unsent.length) add({ id: "rfis:send", group: "rfis", title: `Send ${plural(unsent.length, "RFI")} to the design team`, detail: `${unsent.map(r => r.number).join(", ")}.${deadline}`, status: "todo", priority: "high", screen: "checks", packageId: null, count: unsent.length });
-    if (sent.length) add({ id: "rfis:waiting", group: "rfis", title: `Waiting on ${plural(sent.length, "RFI answer")} from the design team`, detail: sent.map(r => r.due ? `${r.number} due ${r.due}` : r.number).join(", ") + ".", status: "waiting", priority: "low", screen: "checks", packageId: null, count: sent.length });
+    if (sent.length) add({ id: "rfis:waiting", group: "rfis", title: `Waiting on ${plural(sent.length, "RFI answer")} from the design team`, detail: sent.map(r => r.due ? `${r.number} due ${r.due}` : r.number).join(", ") + "." + (input.project?.kickoff.rfiResponses ? ` Answers expected ${input.project.kickoff.rfiResponses}.` : ""), status: "waiting", priority: "low", screen: "checks", packageId: null, count: sent.length });
     if (answered.length) add({ id: "rfis:answered", group: "rfis", title: `Share or close ${plural(answered.length, "answered RFI")}`, detail: "Share each answer with the bidders it affects, then close it.", status: "todo", priority: "normal", screen: "checks", packageId: null, count: answered.length });
   }
 

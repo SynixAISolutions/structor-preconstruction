@@ -88,6 +88,7 @@ const workspaceGuides: ManualGuide[] = [
     id: "information", group: "Preconstruction", title: "Project information",
     purpose: "The project’s cover sheet: what is being built, where it is, the design contact, key dates, and internal planning value. Use it to get oriented before reviewing any trade.",
     steps: [
+      "Kickoff holds the bid captain's dates and rules from the kickoff email: scopes due to subs, RFI responses expected, the drawing flip day, demolition start, the job walk, the minimum bids per trade (three unless you change it) and wage scale. The Preconstruction to-do uses them: a trade with fewer invited companies than the minimum gets a task, and scope and RFI tasks show the dates.",
       "Choose the estimate stage when creating or editing a project: Concept, Schematic design, or Design development. This records drawing/estimate maturity separately from the project status. Old records stay Not recorded until updated.",
       "Read the project brief, architect, project size, and dates. Bid deadline is when prices are due; Pre-bid RFI deadline is when clarification questions should be submitted.",
       "Choose Edit information. Update the name, location, architect, size, dates, internal project value, and brief; choose Save project.",
