@@ -448,9 +448,10 @@ export const pageGuides = [
     id: "turnover",
     group: "Preconstruction",
     title: "Preconstruction to-do",
-    purpose: "See what is left to do before the project leaves preconstruction. Every task is worked out from the project itself: scope reviews, published bid forms, invitations, RFIs, submitted bids, leveling, the budget, allowances, awards, Exhibit A, and the subcontract.",
+    purpose: "Your project's starting page: what is left to do before the project leaves preconstruction, step by step. Every task is worked out from the project itself: scope reviews, published bid forms, invitations, RFIs, submitted bids, leveling, the budget, allowances, awards, Exhibit A, and the subcontract.",
     steps: [
-      "Tasks are grouped by step, in the order the work happens: Project information & documents, Scopes, Invite subcontractors, RFIs to the architect, Bids & leveling, Budget & allowances, Scope reviews & best and final, Award & contracts, and Project schedule.",
+      "Your preconstruction steps lists nine numbered steps in the order the work happens: Project information & documents, Scopes, Invite subcontractors, RFIs to the architect, Bids & leveling, Budget & allowances, Scope reviews & best and final, Award & contracts, and Project schedule. Each shows its team actions and waiting tasks; open a step to see them. The Structor logo brings you back here.",
+      "By step keeps the tasks under their steps; By task lists every task in one list, most urgent first.",
       "Project setup warnings are tasks too: a red Missing file or Missing label means a file or detail the project usually needs isn't there; a yellow Check information label means something was uploaded or read but needs a person to check it (an unreviewed RFP, unread title blocks, a not-applicable decision to reconsider).",
       "Finished tasks drop off the list and move to the Done tab with the time they were done. Choose Scan for task completion to reread the project files and bid leveling and check every task again.",
       "The project schedule feeds this list too: activities past their finish, activities that should have started, and unfinished activities in the next three weeks appear under Project schedule.",
@@ -458,7 +459,7 @@ export const pageGuides = [
       "Work down the task list. Tasks you need to act on come first, most urgent at the top; tasks waiting on someone else, such as a subcontractor's bid or signature, come after.",
       "Choose a task to open the screen where the work is done: Scopes & bid forms, Bid packages, Structor Check & RFIs, Bid leveling, Budget summary, Allowances, or Contracts & exhibits.",
       "Do the work there. The task disappears by itself when the underlying work is finished, for example when every scope item in a trade is approved or Exhibit A is agreed.",
-      "Use the per-trade progress to see which packages are furthest behind.",
+      "Open Project pulse & recent activity for each trade's progress, to see which packages are furthest behind, and the latest scope, bid and issue events.",
       "RFIs to the architect lists the Structor Check issues still to review or send, the RFIs not yet sent, the answers you are waiting for, and answered RFIs to share and close. The project's RFI deadline is shown on each.",
     ],
     terms: [
@@ -468,7 +469,7 @@ export const pageGuides = [
     ],
     example: "After an estimator approves the last Demolition scope item, the task Approve scope items in Demolition is replaced by Publish the Demolition bid form.",
     reality: "Tasks come from this browser’s demo data for the open project. Leveling tasks use the comparison currently loaded in Bid leveling. Nothing is sent to anyone, and the list does not track work done outside Structor.",
-    related: ["scopes", "leveling", "contracts"],
+    related: ["scopes", "checks", "leveling", "contracts"],
   },
   {
     id: "setup",
