@@ -44,6 +44,29 @@ assert.deepEqual(P.uncoveredSections([s("01 10 00"), s("23 05 00"), s("09 29 00"
 assert.deepEqual(["CIV0102", "CP0.1", "A10.4", "AQ2.1", "AD1.1", "FP0.1", "P2.1", "TE0.1", "G0.1", "K-101"].map(F.disciplineOf), ["Civil", "Code", "Architectural", "Aquatics", "Architectural demolition", "Fire protection", "Plumbing", "Technology", "General", "Food service"]);
 const named = doc("set3", "set1", 3, { sheets: [{ page: 1, sheet: "A1.1", title: "Plan", date: "12-09-2025" }, { page: 2, sheet: "", title: "", date: "" }] });
 assert.deepEqual(F.drawingRegister([v1, v2, named]).map(r => [r.sheet, r.page, r.revisions, r.doc.id]), [["A1.1", 1, 3, "set3"]], "Only the newest issue, only named sheets");
+
+// Drawing log (Marcel, 22-23 Oct): each upload is a set; a sheet number's newest upload is current and
+// sheets a set leaves out stay current, whether the set came as a new file or as a revision of one.
+const sh = (page, sheet, title = sheet) => ({ page, sheet, title, date: "" });
+const permit = doc("permit", "permit", 1, { name: "Permit set.pdf", pageCount: 5, uploadedAt: "2026-02-23T00:00:00Z", sheets: [sh(1, "A-000"), sh(2, "A-001"), sh(3, "A-101"), sh(4, "M-101"), sh(5, "")] });
+const asi = doc("asi01", "asi01", 1, { name: "ASI 01.pdf", pageCount: 4, uploadedAt: "2026-06-14T00:00:00Z", sheets: [sh(1, "A001", "Partition types"), sh(2, "A-101"), sh(3, "A-102"), sh(4, "a-101")] });
+const mech = doc("permit-r2", "permit", 2, { name: "Permit set mech.pdf", pageCount: 1, uploadedAt: "2026-07-10T00:00:00Z", sheets: [sh(1, "M-101")] });
+const dlog = F.drawingLog([mech, asi, permit, manualBig]);
+assert.deepEqual(dlog.sheets.map(s => [s.sheet, s.current.version, s.current.doc.id, s.versions.length]), [["A-000", 1, "permit", 1], ["A001", 2, "asi01", 2], ["A-101", 2, "asi01", 2], ["M-101", 2, "permit-r2", 2], ["A-102", 1, "asi01", 1]], "Upload order, not array order; a partial revision of the permit set keeps its other sheets current");
+assert.equal(dlog.sheets.find(s => s.key === F.sheetKey("A-001")).title, "Partition types");
+assert.deepEqual(dlog.sets.map(s => [s.doc.id, s.added, s.revised, s.unnamed, s.repeated, s.current]), [["permit", ["A-000", "A-001", "A-101", "M-101"], [], [5], [], 1], ["asi01", ["A-102"], ["A001", "A-101"], [], ["a-101"], 3], ["permit-r2", [], ["M-101"], [], [], 1]]);
+assert.deepEqual(F.drawingRegister([permit, asi, mech]).map(r => [r.sheet, r.doc.id, r.page, r.revisions]), [["A-000", "permit", 1, 1], ["A001", "asi01", 1, 2], ["A-101", "asi01", 2, 2], ["M-101", "permit-r2", 1, 2], ["A-102", "asi01", 3, 1]], "List of drawings: every current sheet, none lost to a partial set");
+assert.deepEqual([F.findSheet([permit, asi, mech], "a-000")?.doc.id, F.findSheet([permit, asi, mech], "A-001")?.sheet.page], ["permit", 1]);
+assert.deepEqual((({ current, version }) => [current, version.version])(F.sheetAt(dlog, "permit", 2)), [false, 1], "An older page says it is superseded");
+assert.deepEqual((({ current, sheet }) => [current, sheet.sheet])(F.sheetAt(dlog, "asi01", 1)), [true, "A001"]);
+assert.equal(F.sheetAt(dlog, "permit", 5), null, "An unnamed page is in no sheet");
+const named5 = F.withSheetNumbers(permit, [{ page: 5, sheet: "E-101", title: "Lighting" }]);
+assert.deepEqual(F.drawingLog([named5, asi, mech]).sets[0].added, ["A-000", "A-001", "A-101", "M-101", "E-101"], "Naming an unread page adds its sheet");
+assert.throws(() => F.withSheetNumbers(permit, [{ page: 9, sheet: "E-1" }]), /no page 9/);
+assert.throws(() => F.withSheetNumbers(permit, [{ page: 5, sheet: " " }]), /sheet number/);
+assert.throws(() => F.withSheetNumbers(permit, [{ page: 5, sheet: "a101" }]), /Page 3 .* already sheet A-101/);
+assert.deepEqual(F.withSheetNumbers(asi, [{ page: 3, sheet: "A-103" }]).sheets.map(s => s.sheet), ["A001", "A-101", "A-103", "a-101"], "Fixing one page ignores repeats elsewhere");
+assert.throws(() => F.withSheetNumbers(manualBig, [{ page: 1, sheet: "A-1" }]), /drawing sets/);
 const report = doc("geo", "geo", 1, { kind: "other", category: "Reports", name: "Geotech.pdf" });
 const exhibit = F.exhibitBRows([named, manualBig, report]);
 assert.deepEqual(exhibit[0], ["Part", "Number", "Title", "Date", "Document"]);
@@ -159,4 +182,4 @@ assert.equal(updated.due, "2026-03-01");
 assert.equal(updated.squareFeet, 26500, "Renovation + addition make the total, as in the project form");
 assert.equal(updated.id, sampleProjectRecords[0].id);
 
-console.log("Project files checked: sheet keys, revisions, sheet/manual/section lookup, stored-file validation, index upsert, sections by trade.");
+console.log("Project files checked: sheet keys, revisions, drawing log (sets, sheet versions, partial sets, naming pages), sheet/manual/section lookup, stored-file validation, index upsert, sections by trade.");
