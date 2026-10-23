@@ -1,22 +1,23 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CloudUpload, File, FileText, LayoutGrid, Link2, List, MoreHorizontal, Pencil, Plus, Tag, Trash2, X } from "lucide-react";
+import { CloudUpload, File, FileText, GitBranchPlus, LayoutGrid, Link2, List, MoreHorizontal, Pencil, Plus, Tag, Trash2, X } from "lucide-react";
 import { Button, Empty, Modal, PageHeader, Panel, SearchBox, type ViewProps } from "./shared";
 import { useActiveProject } from "../../lib/project-scope";
 import { displayDate } from "../../lib/format";
-import { DOCUMENT_CATEGORIES, revisionLabel, revisionsOf, type StoredDocument } from "../../lib/project-files";
-import { removeProjectDocument, uploadProjectPdf, useProjectDocuments, type UploadProgress } from "../../lib/project-files-client";
+import { DOCUMENT_CATEGORIES, drawingLog, revisionLabel, revisionsOf, withSheetNumbers, type LogSheet, type StoredDocument } from "../../lib/project-files";
+import { removeProjectDocument, updateProjectDocument, uploadProjectPdf, useProjectDocuments, type UploadProgress } from "../../lib/project-files-client";
 import { contentRows, fileMeta, LINK_KINDS, sourceCounts, TAG_COLORS, type ContentOp, type ContentSource, type ContentTag, type TagColor } from "../../lib/project-content";
 import { useProjectContent } from "../../lib/project-content-client";
 import { ContentViewer, type ContentLocation } from "./content-viewer";
 import { CONTENT_ACTOR, ContentLinks, useContentRecords, type SaveContent } from "./project-content-links";
+import { DrawingLogView, UploadCheck, VersionPills } from "./drawing-log";
 import "./project-files.css";
 import "./project-content.css";
 
 const megabytes = (bytes: number) => bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.ceil(bytes / 1024)} KB`;
 const progressText = (p: UploadProgress) => p.stage === "uploading" ? `Uploading ${Math.round((p.done / Math.max(1, p.total)) * 100)}%` : p.stage === "reading" ? `Reading page ${p.done} of ${p.total}` : p.stage === "title-blocks" ? `Reading title blocks ${p.done} of ${p.total}` : `Saving page text ${p.done + 1} of ${p.total}`;
-type Pending = { file: File; category: string; progress?: UploadProgress; error?: string; done?: boolean };
+type Pending = { file: File; category: string; progress?: UploadProgress; error?: string; done?: boolean; storedDoc?: StoredDocument };
 
 export function ProjectFilesScreen({ projectName, notify }: ViewProps) {
   const projectId = useActiveProject();
@@ -26,7 +27,11 @@ export function ProjectFilesScreen({ projectName, notify }: ViewProps) {
   const [category, setCategory] = useState("");
   const [source, setSource] = useState<ContentSource>("all"), [tag, setTag] = useState("");
   const [query, setQuery] = useState(""), [grid, setGrid] = useState(false);
-  const [upload, setUpload] = useState<{ revisionOf?: StoredDocument } | null>(null);
+  const [upload, setUpload] = useState<{ revisionOf?: StoredDocument; sheet?: LogSheet } | null>(null);
+  const [view, setView] = useState("Files"), [dragRow, setDragRow] = useState("");
+  const [checkIds, setCheckIds] = useState<string[]>([]);
+  const uploadLock = useRef(false);
+  const log = drawingLog(documents);
   const [pending, setPending] = useState<Pending[]>([]);
   const [uploadCategory, setUploadCategory] = useState("Drawings");
   const [busy, setBusy] = useState(false), [saving, setSaving] = useState(false), [error, setError] = useState("");
@@ -55,31 +60,50 @@ export function ProjectFilesScreen({ projectName, notify }: ViewProps) {
 
   function choose(files: File[]) {
     if (busy) return;
-    if (upload?.revisionOf && files.length > 1) { notify("Choose one PDF for a new revision."); return; }
-    setPending(files.map(file => ({ file, category: upload?.revisionOf?.category ?? uploadCategory })));
+    if ((upload?.revisionOf || upload?.sheet) && files.length > 1) { notify("Choose one PDF for a new revision."); return; }
+    setPending(files.map(file => ({ file, category: upload?.sheet ? "Drawings" : upload?.revisionOf?.category ?? uploadCategory })));
   }
 
   async function startUpload() {
-    setBusy(true);
+    if (uploadLock.current) return;
+    uploadLock.current = true; setBusy(true);
     let stored = 0;
+    const checked: string[] = [];
+    const remaining: Pending[] = [];
     for (const [i, item] of pending.entries()) {
       if (item.done) continue;
       const isPdf = /\.pdf$/i.test(item.file.name);
       if (!isPdf) {
         setPending(prev => prev.map((p, n) => n === i ? { ...p, error: "Choose a PDF document." } : p));
+        remaining.push(item);
         continue;
       }
+      setPending(prev => prev.map((p, n) => n === i ? { ...p, error: undefined } : p));
+      let doc = item.storedDoc;
       try {
-        await uploadProjectPdf({ projectId, file: item.file, category: item.category, revisionOf: upload?.revisionOf, onProgress: progress => setPending(prev => prev.map((p, n) => n === i ? { ...p, progress } : p)) });
+        if (upload?.sheet && !doc) {
+          const { PDFDocument } = await import("pdf-lib");
+          const pdf = await PDFDocument.load(await item.file.arrayBuffer());
+          if (pdf.getPageCount() !== 1) throw new Error("Choose a one-page PDF for a sheet revision. Upload a drawing set with Upload files.");
+        }
+        doc ??= await uploadProjectPdf({ projectId, file: item.file, category: item.category, revisionOf: upload?.revisionOf, onProgress: progress => setPending(prev => prev.map((p, n) => n === i ? { ...p, progress } : p)) });
+        if (doc.kind === "drawings") {
+          if (upload?.sheet) doc = withSheetNumbers(doc, [{ page: 1, sheet: upload.sheet.sheet, title: upload.sheet.title }]);
+          await updateProjectDocument(doc);
+          checked.push(doc.id);
+        }
         stored++;
         setPending(prev => prev.map((p, n) => n === i ? { ...p, done: true } : p));
       } catch (error) {
-        setPending(prev => prev.map((p, n) => n === i ? { ...p, error: error instanceof Error ? error.message : "The upload failed." } : p));
+        if (doc?.kind === "drawings") checked.push(doc.id);
+        remaining.push({ ...item, storedDoc: doc });
+        setPending(prev => prev.map((p, n) => n === i ? { ...p, storedDoc: doc, error: `${doc ? "File stored. Retry to save sheet details: " : ""}${error instanceof Error ? error.message : "The upload failed."}` } : p));
       }
     }
-    setBusy(false);
+    uploadLock.current = false; setBusy(false);
+    if (checked.length) setCheckIds(ids => [...new Set([...ids, ...checked])]);
     if (stored) notify(upload?.revisionOf ? `Revision ${revisionLabel({ revision: upload.revisionOf.revision + 1 })} of ${upload.revisionOf.name} stored.` : `${stored} document${stored === 1 ? "" : "s"} stored in ${projectName}'s files.`);
-    setPending(prev => { const left = prev.filter(p => !p.done); if (!left.length) setUpload(null); return left; });
+    if (!remaining.length) { setPending([]); setUpload(null); }
   }
 
   async function remove(doc: StoredDocument) {
@@ -88,15 +112,24 @@ export function ProjectFilesScreen({ projectName, notify }: ViewProps) {
     catch (error) { notify(error instanceof Error ? error.message : "The document could not be removed."); }
   }
 
-  const startNewUpload = () => { setPending([]); setUpload({}); };
+  const startNewUpload = () => { setPending([]); setUploadCategory(view === "Sheets" ? "Drawings" : uploadCategory); setUpload({}); };
   const resetFilters = () => { setSource("all"); setTag(""); setCategory(""); setQuery(""); };
   const beginRevision = (doc: StoredDocument) => { setPending([]); setUpload({ revisionOf: revisionsOf(documents, doc.series).at(-1) }); };
+
+  function dropRevision(doc: StoredDocument, files: File[]) {
+    setDragRow("");
+    if (busy) return;
+    if (files.length !== 1 || !/\.pdf$/i.test(files[0].name)) { notify("Drop one PDF to add a revision."); return; }
+    beginRevision(doc);
+    setPending([{ file: files[0], category: doc.category }]);
+  }
 
   return <div className="intel-view cm-library">
     <PageHeader eyebrow={`${projectName} / Project intelligence`} title="Project files" description="Find the latest files, mark up a page, and connect the evidence to the work it supports." actions={<Button variant="primary" onClick={startNewUpload}><Plus size={16}/>Upload files</Button>}/>
     <div role="status" aria-live="polite" className="cm-save-status">{saving ? "Saving changes..." : !ready || !contentReady ? "Loading project content..." : `${counts.all} files / ${content.markups.length} markups`}</div>
     {error && <p className="cm-error" role="alert">{error}</p>}
-    <div className="cm-library-layout">
+    <div className="dl-view-switch" role="group" aria-label="Project files view">{["Files", "Sheets"].map(name => <button key={name} aria-pressed={view === name} onClick={() => setView(name)}>{name === "Files" ? <FileText size={17}/> : <LayoutGrid size={17}/>} {name}<span>{name === "Files" ? counts.all : log.sheets.length}</span></button>)}</div>
+    {view === "Sheets" ? <DrawingLogView log={log} ready={ready} onOpen={setPreview} onRevision={sheet => { setPending([]); setUpload({ sheet }); }} onUpload={startNewUpload} onReview={id => setCheckIds([id])}/> : <div className="cm-library-layout">
       <aside className="ui-panel cm-library-sidebar" aria-label="File filters"><h2>Sources</h2>
         {([{ kind: "all", label: "All files" }, { kind: "unlinked", label: "Not linked" }, ...LINK_KINDS] as { kind: ContentSource; label: string }[]).map(item => <button className={`cm-source ${source === item.kind ? "active" : ""}`} aria-pressed={source === item.kind} key={item.kind} onClick={() => setSource(item.kind)}>{item.kind === "all" ? <FileText size={16}/> : <Link2 size={16}/>}<span>{item.label}</span><small>{counts[item.kind]}</small></button>)}
         <div className="cm-tag-heading"><h2>Tags</h2><button className="ui-icon-btn" aria-label="Add tag" disabled={!contentReady || saving} onClick={() => setTagEditor("new")}><Plus size={16}/></button></div>
@@ -106,21 +139,21 @@ export function ProjectFilesScreen({ projectName, notify }: ViewProps) {
       </aside>
       <Panel className="cm-library-main"><div className="ui-toolbar cm-library-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search files, tags or descriptions"/><label className="cm-category">Category<select aria-label="Filter category" value={category} onChange={e => setCategory(e.target.value)}><option value="">All categories</option>{DOCUMENT_CATEGORIES.map(c => <option key={c}>{c}</option>)}</select></label><span className="cm-display-toggle"><button className="ui-icon-btn" aria-label="List view" aria-pressed={!grid} onClick={() => setGrid(false)}><List size={18}/></button><button className="ui-icon-btn" aria-label="Grid view" aria-pressed={grid} onClick={() => setGrid(true)}><LayoutGrid size={18}/></button></span></div>
         {filters && <div className="cm-filter-summary"><span>{rows.length} matching files{tag && ` · ${content.tags.find(t => t.id === tag)?.name || "Tag"}`}</span><button className="cm-text-button" onClick={resetFilters}>Clear filters</button></div>}
-        {rows.length > 0 && <div className={grid ? "cm-file-grid" : "ui-table-wrap"}><table className={`ui-table cm-files-table ${grid ? "grid" : ""}`}><thead><tr><th>Name / revision</th><th>Category</th><th>Tags</th><th>Links</th><th>Markups</th><th>Uploaded</th><th>Size</th><th><span className="cm-sr-only">Actions</span></th></tr></thead><tbody>{rows.map(row => <tr key={row.doc.series}>
-          <td><button className="cm-file-name" onClick={() => setPreview({ docId: row.doc.id, page: 1 })}><span className="cm-file-symbol"><FileText size={22}/></span><span><strong>{row.doc.name}</strong><small>{revisionLabel(row.doc)} · {row.revisions} revision{row.revisions === 1 ? "" : "s"} · {row.doc.pageCount} pages</small>{row.description && <small className="cm-file-description">{row.description}</small>}</span></button></td>
+        {rows.length > 0 && <div className={grid ? "cm-file-grid" : "ui-table-wrap"}><table className={`ui-table cm-files-table ${grid ? "grid" : ""}`}><thead><tr><th>Name / revision</th><th>Category</th><th>Tags</th><th>Links</th><th>Markups</th><th>Uploaded</th><th>Size</th><th><span className="cm-sr-only">Actions</span></th></tr></thead><tbody>{rows.map(row => <tr key={row.doc.series} className={dragRow === row.doc.series ? "dl-drop-active" : ""} onDragOver={e => { if (busy || !e.dataTransfer.types.includes("Files")) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragRow(row.doc.series); }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragRow(""); }} onDrop={e => { e.preventDefault(); dropRevision(row.doc, Array.from(e.dataTransfer.files)); }}>
+          <td><button className="cm-file-name" onClick={() => setPreview({ docId: row.doc.id, page: 1 })}><span className="cm-file-symbol"><FileText size={22}/></span><span><strong>{row.doc.name}</strong><small>{revisionLabel(row.doc)} · {row.revisions} revision{row.revisions === 1 ? "" : "s"} · {row.doc.pageCount} pages</small>{row.description && <small className="cm-file-description">{row.description}</small>}</span></button><div className="dl-file-history"><VersionPills label={`Versions of ${row.doc.name}`} versions={revisionsOf(documents, row.doc.series).map(r => ({ id: r.id, version: r.revision, uploadedAt: r.uploadedAt, name: r.name }))} current={row.doc.id} onOpen={id => setPreview({ docId: id, page: 1 })}/><Button disabled={busy} onClick={() => beginRevision(row.doc)}><GitBranchPlus size={14}/>Add revision</Button></div>{dragRow === row.doc.series && <div className="dl-drop-message" role="status">Drop to add V{row.doc.revision + 1} of {row.doc.name}</div>}</td>
           <td data-label="Category">{row.doc.category}</td><td data-label="Tags"><div className="cm-chips">{row.tags.length ? row.tags.map(t => <span key={t.id} className={`cm-chip cm-color-${t.color}`}>{t.name}</span>) : <span className="cm-muted">--</span>}</div></td>
           <td data-label="Links"><button className="cm-count-link" aria-label={`${row.links.length} linked records for ${row.doc.name}`} onClick={() => setLinks(row.doc)}><Link2 size={13}/>{row.links.length}</button></td>
           <td data-label="Markups"><button className="cm-count-link" aria-label={`${row.markups} markups for ${row.doc.name}`} onClick={() => setPreview({ docId: row.doc.id, page: 1 })}>{row.markups}</button></td>
           <td data-label="Uploaded">{displayDate(row.doc.uploadedAt.slice(0, 10))}</td><td data-label="Size">{megabytes(row.doc.size)}</td>
-          <td><details className="cm-row-menu"><summary aria-label={`Actions for ${row.doc.name}`}><MoreHorizontal size={18}/></summary><div><button onClick={() => setPreview({ docId: row.doc.id, page: 1 })}>Open viewer</button><button onClick={() => { setEdit(row.doc); setConfirmRemove(""); }}>Edit file details</button><button onClick={() => setLinks(row.doc)}>Manage links</button><button onClick={() => beginRevision(row.doc)}>Upload revision</button><button onClick={() => setConfirmRemove(row.doc.id)}>Delete {revisionLabel(row.doc)}</button></div></details>
+          <td><div className="dl-file-actions"><details className="cm-row-menu"><summary aria-label={`Actions for ${row.doc.name}`}><MoreHorizontal size={18}/></summary><div><button onClick={() => setPreview({ docId: row.doc.id, page: 1 })}>Open viewer</button><button onClick={() => { setEdit(row.doc); setConfirmRemove(""); }}>Edit file details</button><button onClick={() => setLinks(row.doc)}>Manage links</button><button onClick={() => beginRevision(row.doc)}>Upload revision</button><button onClick={() => setConfirmRemove(row.doc.id)}>Delete {revisionLabel(row.doc)}</button></div></details></div>
             {confirmRemove === row.doc.id && <div className="cm-confirm"><p>Delete {row.doc.name} {revisionLabel(row.doc)}?</p><Button variant="danger" onClick={() => void remove(row.doc)}>Delete file</Button><Button onClick={() => setConfirmRemove("")}>Keep file</Button></div>}
           </td></tr>)}</tbody></table></div>}
         {ready && contentReady && !rows.length && <Empty title={counts.all ? "No matching files" : "No project files yet"} description={counts.all ? "Try another source, category, tag or search." : "Upload a PDF drawing set, specification or report to start the project library."} action={<Button onClick={counts.all ? resetFilters : startNewUpload}>{counts.all ? "Clear filters" : "Upload files"}</Button>}/>}
       </Panel>
-    </div>
-    {upload && <Modal title={upload.revisionOf ? `Upload revision ${revisionLabel({ revision: upload.revisionOf.revision + 1 })}` : "Add project documents"} subtitle={upload.revisionOf ? `New issue of ${upload.revisionOf.name}. ${revisionLabel(upload.revisionOf)} stays for comparison.` : "Upload PDF documents. Drawings and specifications are also available to the project's AI tools."} onClose={() => { if (!busy) setUpload(null); }}>
-      <div className="intel-upload-zone" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); choose(Array.from(e.dataTransfer.files)); }}><CloudUpload size={34}/><h3>Drop your files here</h3><p>{upload.revisionOf ? "One PDF: the new issue" : "Drawing sets, project manual, reports, RFP, contracts"}</p><Button disabled={busy} onClick={() => picker.current?.click()}>Browse files</Button><input ref={picker} type="file" multiple={!upload.revisionOf} accept=".pdf,application/pdf" hidden onChange={e => choose(Array.from(e.target.files || []))}/></div>
-      {!upload.revisionOf && <label className="ui-field">Save to category<select disabled={busy} value={uploadCategory} onChange={e => { setUploadCategory(e.target.value); setPending(prev => prev.map(p => p.progress ? p : { ...p, category: e.target.value })); }}>{DOCUMENT_CATEGORIES.map(c => <option key={c}>{c}</option>)}</select></label>}
+    </div>}
+    {upload && <Modal title={upload.sheet ? `Add revision · ${upload.sheet.sheet}` : upload.revisionOf ? `Add revision ${revisionLabel({ revision: upload.revisionOf.revision + 1 })}` : "Add project documents"} subtitle={upload.sheet ? `One PDF page becomes V${upload.sheet.versions.length + 1} of ${upload.sheet.sheet}. Its sheet number will be matched to this drawing.` : upload.revisionOf ? `New issue of ${upload.revisionOf.name}. ${revisionLabel(upload.revisionOf)} stays for comparison.` : "Upload PDF documents. Drawings and specifications are also available to the project's AI tools."} onClose={() => { if (!busy) setUpload(null); }}>
+      <div className="intel-upload-zone" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); choose(Array.from(e.dataTransfer.files)); }}><CloudUpload size={34}/><h3>Drop your files here</h3><p>{upload.sheet ? "One PDF page: the next version of this sheet" : upload.revisionOf ? "One PDF: the new issue" : "Drawing sets, project manual, reports, RFP, contracts"}</p><Button disabled={busy} onClick={() => picker.current?.click()}>Browse files</Button><input ref={picker} type="file" multiple={!upload.revisionOf && !upload.sheet} accept=".pdf,application/pdf" hidden disabled={busy} aria-label="Choose PDF files" onChange={e => choose(Array.from(e.target.files || []))}/></div>
+      {!upload.revisionOf && !upload.sheet && <label className="ui-field">Save to category<select disabled={busy} value={uploadCategory} onChange={e => { setUploadCategory(e.target.value); setPending(prev => prev.map(p => p.progress ? p : { ...p, category: e.target.value })); }}>{DOCUMENT_CATEGORIES.map(c => <option key={c}>{c}</option>)}</select></label>}
       {pending.length > 0 && <div className="pf-upload-list">{pending.map((p, i) => <div key={`${p.file.name}-${i}`} className="pf-upload-row">
         <span><File size={15}/> {p.file.name} <small>{megabytes(p.file.size)} · {p.category}</small></span>
         {busy || p.done ? <small>{p.done ? "Stored" : p.progress ? progressText(p.progress) : "Waiting…"}</small> : <button className="ui-icon-btn" aria-label={`Remove ${p.file.name}`} onClick={() => setPending(prev => prev.filter((_, n) => n !== i))}><X size={14}/></button>}
@@ -132,6 +165,7 @@ export function ProjectFilesScreen({ projectName, notify }: ViewProps) {
     </Modal>}
 
 
+    {!!checkIds.length && !upload && <Modal title="Upload check" subtitle="Review the sheet numbers and what this upload changed. Your upload is already saved." wide onClose={() => setCheckIds([])}><UploadCheck documents={documents} ids={checkIds} onDone={() => setCheckIds([])}/></Modal>}
     {tagEditor && <TagEditor key={typeof tagEditor === "string" ? tagEditor : tagEditor.id} tag={tagEditor} save={save} disabled={saving} onClose={() => setTagEditor(null)} onDelete={() => { if (typeof tagEditor !== "string" && tag === tagEditor.id) setTag(""); setTagEditor(null); }}/>}
     {edit && <Modal title="File details" subtitle={`${edit.name} / Details carry across revisions`} onClose={() => setEdit(null)}><form className="cm-form" onSubmit={async e => { e.preventDefault(); const data = new FormData(e.currentTarget); if (await save([{ op: "file-edit", series: edit.series, description: String(data.get("description")), tags: data.getAll("tag").map(String) }])) setEdit(null); }}><label>Description<textarea name="description" rows={4} maxLength={1000} defaultValue={fileMeta(content, edit.series).description}/></label><fieldset><legend>Tags</legend>{content.tags.length ? content.tags.map(t => <label className="cm-check" key={t.id}><input type="checkbox" name="tag" value={t.id} defaultChecked={fileMeta(content, edit.series).tags.includes(t.id)}/><span className={`cm-chip cm-color-${t.color}`}>{t.name}</span></label>) : <p className="cm-muted">No tags yet. Add tags from the library's side list.</p>}</fieldset><Button variant="primary" type="submit" disabled={saving}>Save file details</Button></form>
       <h3>Revision history</h3><div className="cm-revision-history">{revisionsOf(documents, edit.series).map(r => <div key={r.id}><button className="cm-text-button" onClick={() => { setPreview({ docId: r.id, page: 1 }); setEdit(null); }}>{revisionLabel(r)} / {displayDate(r.uploadedAt.slice(0, 10))}</button>{confirmRemove === r.id ? <><Button variant="danger" onClick={() => void remove(r)}>Delete revision</Button><Button onClick={() => setConfirmRemove("")}>Keep revision</Button></> : <button className="ui-icon-btn" aria-label={`Delete revision ${revisionLabel(r)}`} onClick={() => setConfirmRemove(r.id)}><Trash2 size={14}/></button>}</div>)}</div>

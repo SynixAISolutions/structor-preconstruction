@@ -4,7 +4,7 @@ import { useState } from "react";
 import { BookOpenText, GitCompareArrows, Layers } from "lucide-react";
 import { Badge, Button, Empty, ExportButton, Modal, PageHeader, Panel, SearchBox, Stats, exportRows, type ViewProps } from "./shared";
 import { StoredDocumentViewer } from "./project-file-viewer";
-import { drawingRegister, exhibitBRows, findManual, revisionLabel, type StoredDocument } from "../../lib/project-files";
+import { drawingLog, drawingRegister, exhibitBRows, findManual, revisionLabel, type StoredDocument } from "../../lib/project-files";
 import { screenLabel } from "../../lib/screens";
 import { CSI_DIVISIONS, csiDivision } from "../../lib/csi";
 
@@ -22,12 +22,12 @@ export function StoredDrawingRegister({ projectName, navigate, documents }: View
   const dates = [...new Set(rows.map(r => r.date).filter(Boolean))];
   return <div className="intel-view">
     <PageHeader eyebrow={`${projectName} / Document control`} title={screenLabel("drawings")} description="Every sheet in the stored drawing sets, read from its title block: number, title and issue date. This is Exhibit B's drawing list." actions={<><ExportButton onClick={() => exportRows("exhibit-b-list-of-documents.csv", exhibitBRows(documents))}/><Button onClick={() => navigate("documents")}><Layers size={16}/>Project files</Button></>}/>
-    <Stats items={[{ label: "Drawing sheets", value: rows.length, detail: "Named from their title blocks" }, { label: "Disciplines", value: disciplines.length, detail: disciplines.slice(0, 3).join(", ") + (disciplines.length > 3 ? "…" : "") }, { label: "Issue dates", value: dates.length, detail: dates.slice(0, 2).join(", ") || "Not read" }, { label: "Drawing sets", value: new Set(rows.map(r => r.doc.series)).size, detail: "Newest revision of each" }]}/>
+    <Stats items={[{ label: "Drawing sheets", value: rows.length, detail: "Named from their title blocks" }, { label: "Disciplines", value: disciplines.length, detail: disciplines.slice(0, 3).join(", ") + (disciplines.length > 3 ? "…" : "") }, { label: "Issue dates", value: dates.length, detail: dates.slice(0, 2).join(", ") || "Not read" }, { label: "Drawing sets", value: drawingLog(documents).sets.length, detail: "Every drawings upload" }]}/>
     <Panel>
       <div className="ui-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search sheet number or title…"/><select className="intel-select" aria-label="Drawing discipline" value={discipline} onChange={e => setDiscipline(e.target.value)}><option>All disciplines</option>{disciplines.map(d => <option key={d}>{d}</option>)}</select><Button onClick={() => navigate("revisions")}><GitCompareArrows size={16}/>Compare revisions</Button></div>
-      <div className="ui-table-wrap"><table className="ui-table"><thead><tr><th>Drawing</th><th>Discipline</th><th>Issue date</th><th>Set revision</th><th>Document · page</th></tr></thead><tbody>{visible.map(r => <tr key={`${r.doc.id}-${r.page}`}>
+      <div className="ui-table-wrap"><table className="ui-table"><thead><tr><th>Drawing</th><th>Discipline</th><th>Issue date</th><th>Sheet version</th><th>Document · page</th></tr></thead><tbody>{visible.map(r => <tr key={`${r.doc.id}-${r.page}`}>
         <td><button className="intel-drawing-link" onClick={() => setOpen({ doc: r.doc, page: r.page })}><span className="intel-file-icon drawing"><Layers size={18}/></span><span><strong>{r.sheet}</strong><small>{r.title || "Title not read"}</small></span></button></td>
-        <td>{r.discipline}</td><td>{r.date || "—"}</td><td><Badge>{revisionLabel(r.doc)}{r.revisions > 1 ? ` of ${r.revisions}` : ""}</Badge></td><td className="intel-muted">{r.doc.name} · p. {r.page}</td>
+        <td>{r.discipline}</td><td>{r.date || "—"}</td><td><Badge>{`V${r.revisions}`}</Badge></td><td className="intel-muted">{r.doc.name} · p. {r.page}</td>
       </tr>)}</tbody></table></div>
       {!visible.length && <Empty title="No sheets match" description="Change the discipline filter or search another sheet."/>}
       <div className="intel-panel-foot"><span>{visible.length} of {rows.length} sheets</span><span>Export gives the full Exhibit B list: documents, drawings with dates, specification sections</span></div>
