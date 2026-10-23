@@ -68,7 +68,7 @@ const fakeFetch = replies => async (url, init) => {
   return typeof next === "number" ? new Response("busy", { status: next }) : Response.json({ choices: [{ message: next, finish_reason: "stop" }] });
 };
 sent.length = 0;
-let reply = await A.assistantStep({ question: "Low bidder?", screen: "overview" }, "k", undefined, fakeFetch([{ content: null, tool_calls: [{ id: "x1", type: "function", function: { name: "bid_leveling", arguments: "{\"trade\":\"Drywall\"}" } }, { id: "x2", type: "function", function: { name: "format_disk", arguments: "{}" } }] }]));
+let reply = await A.assistantStep({ question: "Low bidder?", screen: "turnover" }, "k", undefined, fakeFetch([{ content: null, tool_calls: [{ id: "x1", type: "function", function: { name: "bid_leveling", arguments: "{\"trade\":\"Drywall\"}" } }, { id: "x2", type: "function", function: { name: "format_disk", arguments: "{}" } }] }]));
 assert.deepEqual(reply, { model: "deepseek-flash", kind: "tools", calls: [{ id: "x1", name: "bid_leveling", arguments: { trade: "Drywall" } }] }, "Known tools are passed on, others dropped");
 assert.equal(sent[0].tool_choice, "auto");
 assert.equal(sent[0].thinking.type, "disabled");
@@ -104,7 +104,7 @@ assert.deepEqual(S.searchTerms("Where is the SA3.21 wall, sheet A-101?"), ["sa3.
 const run = (name, args = {}, ctx = {}) => R.runAssistantTool({ id: "r", name, arguments: args }, { projectId: "jelleff", today: "2026-10-22", ...ctx }).then(r => ({ ...r, data: JSON.parse(r.content) }));
 let r = await run("project_overview");
 assert.equal(r.data.project.name, "Jelleff Recreation Center");
-assert.deepEqual(r.screens, ["overview"]);
+assert.deepEqual(r.screens, ["turnover"]);
 assert.ok(r.data.counts.tradePackages > 0 && typeof r.data.budget.totalBudget === "number");
 r = await run("trade_packages", { trade: "drywall" });
 assert.deepEqual(r.data.packages.map(p => p.id), ["drywall"], "Packages narrow by trade name");
@@ -153,7 +153,7 @@ assert.ok(r.data.guides.length && r.screens.every(s => manualGuides.some(g => g.
 // ── Browser loop ──
 const progress = [];
 const calls = [];
-const answer = await C.askStructor({ question: "Who is low on drywall?", screen: "overview", history: [] }, {
+const answer = await C.askStructor({ question: "Who is low on drywall?", screen: "turnover", history: [] }, {
   onProgress: label => progress.push(label),
   send: async body => { calls.push(structuredClone(body)); return calls.length === 1 ? { kind: "tools", calls: [{ id: "a1", name: "bid_leveling", arguments: { trade: "Drywall" } }, { id: "a2", name: "project_overview", arguments: {} }] } : { kind: "answer", answer: "Acme, provisional." }; },
   run: async call => ({ content: `{"ran":"${call.name}"}`, screens: [T.assistantTool(call.name).screen] }),

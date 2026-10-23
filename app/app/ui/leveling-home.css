@@ -1,0 +1,31 @@
+.leveling-home { min-width: 0; }
+.leveling-home > .ui-tabs { margin-bottom: 18px; }
+.leveling-home-intro { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.leveling-home-intro p { margin: 0; color: var(--muted); font-size: 13px; }
+.leveling-trade-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 15px; }
+.leveling-trade-tile { display: flex; flex-direction: column; min-width: 0; text-align: left; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: white; color: var(--ink); transition: border-color .15s, box-shadow .15s; }
+.leveling-trade-tile:hover { border-color: #d18057; box-shadow: 0 5px 18px #2436430c; }
+.leveling-trade-tile:focus-visible { outline: 2px solid #b75526; outline-offset: 3px; }
+.leveling-trade-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--muted); }
+.leveling-trade-tile h2 { font-size: 17px; margin: 20px 0 6px; }
+.leveling-trade-tile p { color: var(--muted); font-size: 11px; margin: 0 0 20px; }
+.leveling-trade-counts { display: flex; gap: 20px; margin-top: auto; font-size: 11px; color: var(--muted); }
+.leveling-trade-counts b { color: var(--ink); }
+.leveling-trade-tile footer { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--line-soft); padding-top: 14px; margin-top: 14px; font-size: 12px; font-weight: 600; }
+.bid-sheet-table { min-width: 1050px; }
+.bid-sheet-table caption { text-align: left; padding: 12px 18px; color: var(--muted); font-size: 11px; line-height: 1.7; }
+.bid-sheet-table td { vertical-align: top; font-variant-numeric: tabular-nums; }
+.bid-sheet-table th, .bid-sheet-table td { white-space: nowrap; }
+.bid-sheet-table tbody th { min-width: 180px; white-space: normal; }
+.bid-sheet-table .table-nav { font-size: 12px; color: var(--ink); white-space: normal; text-align: left; }
+.bid-sheet-table td:nth-child(5), .bid-sheet-table td:nth-child(n+8) { min-width: 180px; white-space: normal; }
+.bid-sheet-table td strong, .bid-sheet-table td > span, .bid-sheet-table td small { display: block; }
+.bid-sheet-table td small { color: var(--muted); font-size: 10px; margin-top: 4px; }
+.bid-sheet-table td > span { font-size: 11px; margin-top: 4px; }
+.bid-sheet-table tfoot { font-weight: 650; background: #f6f7f4; }
+.bid-sheet-table tfoot td { border-top: 1px solid var(--line); }
+.leveling-sheet-nav { display: flex; align-items: center; flex-wrap: wrap; gap: 20px; margin-bottom: 16px; }
+.gap-cell-trigger { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #e6c3b4; border-radius: 5px; padding: 5px 9px; background: #fff0e9; color: #9b421f; cursor: pointer; font-weight: 650; }
+.gap-cell-trigger small { font-weight: 400; }
+@media(max-width: 1100px) { .leveling-trade-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media(max-width: 600px) { .leveling-trade-grid { grid-template-columns: 1fr; gap: 10px; } .leveling-trade-tile { padding: 16px; } .leveling-trade-tile h2 { margin-top: 14px; } .leveling-home-intro { align-items: start; } }

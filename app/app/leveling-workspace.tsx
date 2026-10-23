@@ -38,6 +38,12 @@ import { useLocalDraft } from "../lib/use-local-draft";
 import { useSubmissions } from "../lib/use-submissions";
 import { clearWorkspace, loadWorkspace, saveWorkspace } from "../lib/workspace-storage";
 import "./ui/leveling-extras.css";
+import { bidSheetSummary } from "../lib/bid-sheet-summary";
+import { openComparisonCandidates } from "../lib/portal-comparisons";
+import { useBudget } from "../lib/use-budget";
+import { useAward } from "../lib/use-award";
+import { activeAward } from "../lib/award";
+import { LevelingHome, LevelingViews } from "./ui/leveling-home";
 import { BidGapCostDialog } from "./ui/bid-gap-cost";
 import { approveGapCost, type CostBasis } from "../lib/bid-gap-cost";
 import { refreshPortalComparison, type SavedTradeComparison } from "../lib/leveling-sync";
@@ -241,13 +247,12 @@ function bytesToArrayBuffer(bytes: Uint8Array) {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
-export default function BidLevelingPage({ projectName }: { projectName: string }) {
+export default function BidLevelingPage({ projectName, squareFeet }: { projectName: string; squareFeet: number }) {
   const { projectId, procurement, submissions } = useSubmissions();
   const [directory] = useLocalDraft("directory", initialBidders);
   const [submissionProvenance, setSubmissionProvenance] = useLocalDraft<Record<string, BidProvenance>>("leveling-submission-provenance", {});
   const [loadedPackageId, setLoadedPackageId] = useLocalDraft("leveling-submission-package", "");
   const [tradeComparisons, setTradeComparisons] = useLocalDraft<Record<string, SavedTradeComparison>>("leveling-trades", {});
-  const [autoLoadPortal, setAutoLoadPortal] = useState(false);
   const [historicalRevisions, setHistoricalRevisions] = useState<Record<string, number>>();
   const [inboxOpen, setInboxOpen] = useState(false);
   const [project, setProject] = useState<Project>(demoProject);
@@ -264,6 +269,9 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
   const [glossaryOpen, setGlossaryOpen] = useState(false);
   const [walkthroughOpen, setWalkthroughOpen] = useState(false);
   const [costSuggestionsOpen, setCostSuggestionsOpen] = useState(false);
+  const [gapCell, setGapCell] = useState<{ bidderId: string; itemId: string } | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false), [homeTab, setHomeTab] = useState("Trade packages");
+  const sheetHeading = useRef<HTMLButtonElement>(null);
   const [clarificationsOpen, setClarificationsOpen] = useState(false);
   const [editingBidderId, setEditingBidderId] = useState<string | "new" | null>(null);
   const [reviewBidderId, setReviewBidderId] = useState<string | null>(null);
@@ -299,7 +307,6 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
       } else {
         setProject({ name: projectName, trade: "Choose a trade", budget: 0, isDemo: false });
         setItems([]); setBidders([]); setSelectedId("");
-        setAutoLoadPortal(true);
         setMessage("Choose a trade to compare submitted portal bids, or import an Excel workbook.");
         setSaveState("Not saved yet");
       }
@@ -315,7 +322,7 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
   }, []);
 
   useEffect(() => {
-    if (!storageReady || !storageEnabled) return;
+    if (!sheetOpen || !storageReady || !storageEnabled) return;
     const sequence = ++saveSequenceRef.current;
     setSaveState("Saving…");
     void saveWorkspace({ project, items, bidders }).then(({ savedAt }) => {
@@ -326,7 +333,7 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
       setSaveState("Save failed");
       setMessage(error instanceof Error ? error.message : "The workspace could not be saved. Download a JSON backup before leaving.");
     });
-  }, [bidders, items, project, storageEnabled, storageReady]);
+  }, [bidders, items, project, storageEnabled, storageReady, sheetOpen]);
 
   useEffect(() => {
     const gmailResult = new URLSearchParams(window.location.search).get("gmail");
@@ -368,15 +375,24 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
   }, [storageReady, loadedPackageId]);
 
   useEffect(() => {
-    if (!storageReady) return;
-    const packageId = loadedPackageId || (autoLoadPortal ? sourcePackageId : "");
-    if (packageId) loadSubmittedBids(historicalRevisions, packageId);
-  }, [storageReady, procurement, submissions, loadedPackageId, autoLoadPortal, sourcePackageId, historicalRevisions]);
+    if (storageReady && loadedPackageId) loadSubmittedBids(historicalRevisions, loadedPackageId);
+  }, [storageReady, procurement, submissions, loadedPackageId, historicalRevisions]);
 
   useEffect(() => {
     if (!storageReady || !loadedPackageId || !Object.keys(submissionProvenance).length || historicalRevisions) return;
     setTradeComparisons(current => ({ ...current, [loadedPackageId]: { project, items, bidders, provenance: submissionProvenance } }));
   }, [storageReady, loadedPackageId, project, items, bidders, submissionProvenance, historicalRevisions]);
+
+  const { state: budget } = useBudget();
+  const { state: awards } = useAward();
+  const summary = bidSheetSummary({ procurement, submissions, directory, budget, squareFeet, ve,
+    candidates: openComparisonCandidates({ projectId, procurement, submissions, directory, workspace: storageReady ? { project, items, bidders } : null, packageId: loadedPackageId, provenance: submissionProvenance, comparisons: tradeComparisons, ve }),
+  });
+  function openTrade(id: string) {
+    setHistoricalRevisions(undefined); setSourcePackageId(id); loadSubmittedBids(undefined, id);
+    setSheetOpen(true); setHomeTab("Trade packages");
+    requestAnimationFrame(() => sheetHeading.current?.focus());
+  }
 
   function loadSubmittedBids(revisions?: Record<string, number>, packageId = sourcePackageId) {
     if (!storageReady) return;
@@ -404,7 +420,6 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
     setSelectedId(result.items[0]?.id ?? "");
     setSubmissionProvenance(result.provenance);
     setLoadedPackageId(packageId);
-    setAutoLoadPortal(false);
     setStorageEnabled(true);
     setStorageReady(true);
     setSaveState("Saving…");
@@ -644,8 +659,9 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
     setSelectedId(item.id);
   }
 
-  return (
-    <main className={`app-shell ${clarificationsOpen ? "clarifications-active" : ""}`}>
+  if (!sheetOpen) return <LevelingHome summary={summary} awarded={procurement.packages.filter(p => activeAward(awards, p.id)).map(p => p.id)} ready={storageReady} tab={homeTab} onTab={setHomeTab} onOpen={openTrade}/>;
+  return (<><div className="leveling-sheet-nav"><button ref={sheetHeading} className="ui-btn secondary" onClick={() => { setSheetOpen(false); requestAnimationFrame(() => document.getElementById("leveling-tab-0")?.focus()); }}>Back to trades</button><LevelingViews value="Trade packages" onChange={tab => { setHomeTab(tab); setSheetOpen(false); requestAnimationFrame(() => document.getElementById(`leveling-tab-${tab === "Trade packages" ? 0 : 1}`)?.focus()); }}/></div>
+    <div className="legacy-leveling" id="leveling-view" role="tabpanel" aria-labelledby="leveling-tab-0"><main className={`app-shell ${clarificationsOpen ? "clarifications-active" : ""}`}>
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark"><i /><i /><i /></span><span>Structor</span></div>
         <nav aria-label="Primary navigation">
@@ -684,7 +700,7 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
           <button className="button primary" onClick={addScopeItem}><Plus />Add scope item</button>
           <button className="button secondary" disabled={bidders.length >= BIDDER_SLOT_COUNT} onClick={() => setEditingBidderId("new")}><UserPlus />Add bidder</button>
           <button className="button secondary" onClick={() => setInboxOpen(true)}><Mail />Proposal inbox</button>
-          <button className="button secondary" onClick={() => setCostSuggestionsOpen(true)}><Calculator />Cost suggestions</button>
+          <button className="button secondary" onClick={() => { setGapCell(null); setCostSuggestionsOpen(true); }}><Calculator />Cost suggestions</button>
           <button className="button secondary" aria-expanded={clarificationsOpen} aria-controls="trade-clarifications" disabled={!storageReady || !storageEnabled || !loadedPackageId || !!historicalRevisions} onClick={() => setClarificationsOpen(value => !value)}><Mail />Prepare clarifications</button>
           <button className="button secondary" onClick={() => setGlossaryOpen(true)}><BookOpen />Glossary</button>
           <button className="button secondary" onClick={() => setWalkthroughOpen(true)}><CircleHelp />How it works</button>
@@ -712,7 +728,7 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
               </thead>
               <tbody>
                 {sections.map((section) => (
-                  <SectionRows key={section} section={section} items={visibleItems.filter((item) => item.section === section)} bidders={bidders} selectedId={selected?.id} onSelect={setSelectedId} onResponse={updateResponse} />
+                  <SectionRows key={section} section={section} items={visibleItems.filter((item) => item.section === section)} bidders={bidders} selectedId={selected?.id} onSelect={setSelectedId} onResponse={updateResponse} onGap={(bidderId, itemId) => { setSelectedId(itemId); setGapCell({ bidderId, itemId }); setCostSuggestionsOpen(true); }} />
                 ))}
               </tbody>
               <tfoot>
@@ -765,18 +781,19 @@ export default function BidLevelingPage({ projectName }: { projectName: string }
       {glossaryOpen && <GlossaryDialog onClose={() => setGlossaryOpen(false)} />}
       {walkthroughOpen && <HowItWorksDialog onClose={() => setWalkthroughOpen(false)} />}
       {inboxOpen && <PortalBidInbox procurement={procurement} submissions={submissions.filter(s => s.projectId === projectId)} directory={directory} onClose={() => setInboxOpen(false)} onEmail={() => { setInboxOpen(false); void openMailbox(); }} onReview={(id, bidderId) => { setHistoricalRevisions(undefined); setSourcePackageId(id); loadSubmittedBids(undefined, id); setInboxOpen(false); setReviewBidderId(bidderId); }}/>}
-      {costSuggestionsOpen && <BidGapCostDialog key={JSON.stringify(submissionProvenance)} items={items} bidders={bidders.filter(b => b.sourceEligibility !== "INCOMPLETE")} initialItemId={selectedId} packageId={loadedPackageId} onClose={() => setCostSuggestionsOpen(false)} onApply={applyGapAdjustment}/>}
-    </main>
+      {costSuggestionsOpen && <BidGapCostDialog key={JSON.stringify(submissionProvenance)} items={items} bidders={bidders.filter(b => b.sourceEligibility !== "INCOMPLETE")} initialItemId={gapCell?.itemId ?? selectedId} initialBidderId={gapCell?.bidderId} autoSuggest={!!gapCell} packageId={loadedPackageId} onClose={() => setCostSuggestionsOpen(false)} onApply={applyGapAdjustment}/>}
+    </main></div></>
   );
 }
 
-function SectionRows({ section, items, bidders, selectedId, onSelect, onResponse }: {
+function SectionRows({ section, items, bidders, selectedId, onSelect, onResponse, onGap }: {
   section: string;
   items: ScopeItem[];
   bidders: Bidder[];
   selectedId?: string;
   onSelect: (id: string) => void;
   onResponse: (bidderId: string, itemId: string, patch: Partial<Response>) => void;
+  onGap: (bidderId: string, itemId: string) => void;
 }) {
   return <>
     <tr className="section-row"><th colSpan={3 + bidders.length * 3}>{section}</th></tr>
@@ -788,7 +805,7 @@ function SectionRows({ section, items, bidders, selectedId, onSelect, onResponse
         const answer = bidder.responses[item.id] ?? response("");
         const needsResolution = answer.status === "N" || answer.status === "P" || answer.status === "N/A";
         return [
-          <td key={`${bidder.id}-status`} className={responseNeedsReview(item, answer) ? "review-cell open" : "review-cell"}><select aria-label={`${bidder.name} status for ${item.description}`} value={answer.status} className={`status status-${answer.status.replace("/", "") || "empty"}`} onClick={(event) => event.stopPropagation()} onChange={(event) => onResponse(bidder.id, item.id, { status: event.target.value as ScopeStatus })}><option value="">—</option><option value="Y">Y</option><option value="N">N</option><option value="P">P</option><option value="N/A">N/A</option></select>{needsResolution && <label className="mini-review" onClick={(event) => event.stopPropagation()}><input type="checkbox" checked={answer.resolved === true} onChange={(event) => onResponse(bidder.id, item.id, { resolved: event.target.checked })} />Resolved</label>}</td>,
+          <td key={`${bidder.id}-status`} className={responseNeedsReview(item, answer) ? "review-cell open" : "review-cell"}>{item.includeInTotal !== false && ["N", "P"].includes(answer.status) && <button className="gap-cell-trigger" aria-label={`Plug ${answer.status} scope for ${bidder.name}: ${item.description}`} onClick={event => { event.stopPropagation(); onGap(bidder.id, item.id); }}>{answer.status} <small>Plug</small></button>}<select aria-label={`${bidder.name} status for ${item.description}`} value={answer.status} className={`status status-${answer.status.replace("/", "") || "empty"}`} onClick={(event) => event.stopPropagation()} onChange={(event) => onResponse(bidder.id, item.id, { status: event.target.value as ScopeStatus })}><option value="">—</option><option value="Y">Y</option><option value="N">N</option><option value="P">P</option><option value="N/A">N/A</option></select>{needsResolution && <label className="mini-review" onClick={(event) => event.stopPropagation()}><input type="checkbox" checked={answer.resolved === true} onChange={(event) => onResponse(bidder.id, item.id, { resolved: event.target.checked })} />Resolved</label>}</td>,
           <td key={`${bidder.id}-note`}><input aria-label={`${bidder.name} note for ${item.description}`} value={answer.note} placeholder="—" onClick={(event) => event.stopPropagation()} onChange={(event) => onResponse(bidder.id, item.id, { note: event.target.value })} /></td>,
           <td key={`${bidder.id}-adjustment`} className="review-cell"><input aria-label={`${bidder.name} adjustment for ${item.description}`} className="money-input" type="number" step="0.01" value={answer.adjustment || ""} placeholder="$0" onClick={(event) => event.stopPropagation()} onChange={(event) => onResponse(bidder.id, item.id, { adjustment: event.target.value === "" ? 0 : Number(event.target.value) })} />{answer.adjustment !== 0 && <label className="mini-review" onClick={(event) => event.stopPropagation()}><input type="checkbox" checked={answer.adjustmentApproved === true} onChange={(event) => onResponse(bidder.id, item.id, { adjustmentApproved: event.target.checked })} />Approved</label>}</td>,
         ];

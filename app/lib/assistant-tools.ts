@@ -35,7 +35,7 @@ export const ASSISTANT_TOOLS: ToolDef[] = [
   { name: "all_projects", screen: "projects", args: {},
     description: "Every project in the workspace, not just the open one: name, location, type, status (Preconstruction, Design development, Bidding…), estimate stage, value, size, bid and RFI due dates, start and finish, and for each its trade packages, submitted bids, open issues and RFIs and total budget. Use it for questions across projects; the other tools read only the open project.",
     label: () => "Reading all projects" },
-  { name: "project_overview", screen: "overview", args: {},
+  { name: "project_overview", screen: "turnover", args: {},
     description: "The open project's facts (location, size, value, dates, bid and RFI deadlines, architect, team, estimate stage) with counts of its trade packages, invitations, submitted bids, open issues and RFIs, VE ideas and the budget totals. Use it first when unsure where to look.",
     label: () => "Reading the project overview" },
   { name: "trade_packages", screen: "packages", args: { trade: TRADE },

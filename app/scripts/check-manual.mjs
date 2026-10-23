@@ -46,7 +46,7 @@ const guideIds = new Set(ids);
 const unique = (values, message) => assert.equal(new Set(values).size, values.length, message);
 const nonempty = (value, message) => assert(typeof value === "string" && value.trim(), message);
 
-assert.equal(screens.length, 32, "Expected coverage of all 32 current app screens (Scope review & buyout, 22 Oct)");
+assert.equal(screens.length, 31, "Expected coverage of all 31 current app screens (Overview joined the to-do; Scope review & buyout added, 22 Oct)");
 unique(screens, "Screen ids must be unique");
 unique(ids, "Manual article ids must be unique");
 unique(manualGroups, "Manual group names must be unique");
