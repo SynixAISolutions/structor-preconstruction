@@ -15,6 +15,9 @@ let incomplete=C.setContractFiles({awards:[award],notifications:[]},'test',{...f
 const input=J.parseContractScope({trade:'Trade',scope:[{id:'yes',title:'Framing',detail:'16 inches on center',source:'A1',answer:'Y',note:''},{id:'partial',title:'Finish',detail:'',source:'A2',answer:'P',note:'Level 4 only'},{id:'no',title:'Painting',detail:'',source:'A3',answer:'N',note:''}]});
 const screened=J.screenContractScope({lines:[{id:'yes',text:'The Subcontractor shall install framing.'},{id:'partial',text:'The Subcontractor shall provide finish.'}]},input);
 assert.match(screened.lines[1].text,/PARTIAL — only as offered: Level 4 only/);assert.match(screened.lines[0].text,/16 inches/);
+assert.deepEqual(screened.lines.map(l=>l.group),['General','General'],'Lines without a system heading sit under General');
+assert.deepEqual(J.screenContractScope({lines:[{id:'yes',group:' Cold-Formed Metal Framing ',text:'Furnish and install framing.'},{id:'partial',group:'x'.repeat(81),text:'Include finish as offered.'}]},input).lines.map(l=>l.group),['Cold-Formed Metal Framing','General'],'A system heading groups section 3 the way the contractor writes it; an unusable one falls back');
+assert.match(J.contractMessages(input)[0].content,/Furnish and install/);
 assert.throws(()=>J.screenContractScope({lines:[{id:'yes',text:'Incomplete scope'}]},input),/every included/);
 assert.throws(()=>J.screenContractScope({lines:[{id:'yes',text:'Duplicate scope'},{id:'yes',text:'Duplicate scope'}]},input));
 const content=A.generateSampleExhibit(award.snapshot,award,A.DEFAULT_EXHIBIT_TEMPLATE);assert.equal(content.sections[2].heading,'Scope of work');assert(content.sections.some(s=>s.heading==='Scope exclusions')||!award.snapshot.exclusions.length);
