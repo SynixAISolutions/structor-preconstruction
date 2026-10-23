@@ -106,6 +106,7 @@ assert.deepEqual([located.sheet, located.regions.map(r => [r.scopeId, r.confiden
   ["a-1.1", [["scope-12", 0.8, "a-1.1: Partition tags P3 at locker rooms"]], ["Only one area per item and sheet.", "Not one of the scope items sent.", "No usable area on the sheet."]], "Only the items sent, one area each, inside the sheet, with evidence");
 assert.deepEqual(D.screenLocate({ found: [{ id: "scope-17", polygon: box, evidence: "x" }] }, lj).dropped.map(d => d.reason), ["No evidence on the sheet was given."]);
 assert.equal(D.screenLocate({ sheet: "Z9.9", found: [] }, lj).sheet, "A1.1", "A different sheet number read from the image does not rename the page");
+assert.deepEqual(D.screenLocate({ found: [{ id: "scope-12", polygon: box, evidence: "General notes", confidence: 0.25 }] }, lj).dropped.map(d => d.reason), ["Too unsure to mark; check the sheet yourself."], "A guess is not a highlight (Jelleff A1.1: a 0.25 mark sat on the mechanical yard)");
 // Which sheets to read: a cited sheet first, otherwise the trade's likely sheets.
 const row = (sheet, title) => ({ sheet, title, discipline: "", date: "", doc: { id: "d", name: "d.pdf" }, page: 1, revisions: 1 });
 const sheetRegister = [row("CIV0102", "DEMOLITION PLAN"), row("A1.1", "LEVEL 01 - FIRST FLOOR PLAN"), row("A8.1", "PARTITION TYPES"), row("M101", "HVAC PLAN")];

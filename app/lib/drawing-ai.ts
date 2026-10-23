@@ -74,6 +74,9 @@ export type LocateJob = DrawingJob & { items: LocateItem[] };
 export type LocatedRegion = { scopeId: string; label: string; polygon: Point[]; evidence: string; confidence: number };
 
 const MAX_LOCATE_ITEMS = 40;
+/** Below this the AI is guessing: on Jelleff A1.1 a 0.25 mark sat on the mechanical yard. Marcel's complaint was highlights in the wrong place. */
+export const MIN_LOCATE_CONFIDENCE = 0.35;
+// ponytail: one full-sheet image per call; read ~400 pt tiles (as plan-tags does) if marks stay too coarse.
 
 export function parseLocateJob(raw: unknown): LocateJob {
   const job = parseDrawingJob(raw);
@@ -121,6 +124,7 @@ export function screenLocate(output: unknown, job: LocateJob): { sheet: string; 
     const evidence = typeof o.evidence === "string" ? o.evidence.trim().slice(0, 300) : "";
     if (evidence.length < 4) { dropped.push({ what: item.title, reason: "No evidence on the sheet was given." }); continue; }
     const confidence = typeof o.confidence === "number" && o.confidence >= 0 && o.confidence <= 1 ? o.confidence : 0.5;
+    if (confidence < MIN_LOCATE_CONFIDENCE) { dropped.push({ what: item.title, reason: "Too unsure to mark; check the sheet yourself." }); continue; }
     regions.push({ scopeId: item.id, label: item.title.slice(0, 200), polygon: polygon.map(({ x, y }) => ({ x, y })), evidence: `${sheet}: ${evidence}`, confidence });
   }
   return { sheet, regions, dropped };
