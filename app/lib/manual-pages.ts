@@ -88,7 +88,8 @@ export const pageGuides = [
     title: "Drawing Flip",
     purpose: "Review the drawings trade by trade: every region is coloured by the trade responsible for it and tied to the scope items it shows, so missing scope and overlaps between trades stand out.",
     steps: [
-      "Sheets are the real drawing set stored in Project files, read by sheet number; the highlights sit on the actual drawings.",
+      "Every sheet of the drawings stored in Project files is here, at its current version, read by sheet number; the highlights sit on the actual drawings. Open a sheet full page to read it like the PDF.",
+      "To highlight a trade's scope, choose Find on drawings. Structor reads the sheet each scope item cites, or the sheets most likely to show the trade, and marks where each item's work is, with the words or tag on the sheet that show it. Each mark is linked to its scope item and waits for your review: approve it, redraw it, or reassign it.",
       "Flip through the drawing pages. Each region is coloured by the trade responsible for it; the legend lists the trades on the page.",
       "Filter by page, trade, bid package, or review state, or search by region number, label, or evidence.",
       "Select a region to see its trade, the scope items it shows, Structor's evidence and confidence, notes, and history.",

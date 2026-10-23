@@ -22,6 +22,7 @@
 // extracted from real drawings: pages and regions are entered or imported as data.
 
 import type { Procurement, ScopeItem, TradePackage } from "./procurement";
+import { sheetKey, type RegisterRow } from "./project-files";
 
 export type Point = { x: number; y: number };
 
@@ -222,6 +223,31 @@ export function addPage(state: DrawingFlipState, input: PageInput): DrawingFlipS
     aspect: input.aspect ?? 1.5, image: input.image ?? null, ...(input.source ? { source: input.source } : {}),
   };
   return { ...state, pages: [...state.pages, page] };
+}
+
+/**
+ * Marcel (22 Oct, Drawing Flip): "it only shows nine drawings, it should show all the drawings of the
+ * project". Adds a page for every stored sheet the state doesn't have yet, at the sheet's current version
+ * (drawingRegister), and moves a page without regions to its sheet's current version. A page with regions
+ * stays on the version they were drawn on. Returns the same state when nothing changes. Ids are stable, so
+ * a page shown before any edit is the page that gets saved.
+ * ponytail: regions don't follow a sheet to its next version; carry them forward when markups do.
+ */
+export function withStoredPages(state: DrawingFlipState, register: RegisterRow[]): DrawingFlipState {
+  let pages = state.pages, changed = false;
+  for (const row of register) {
+    const key = sheetKey(row.sheet);
+    const at = pages.findIndex(p => sheetKey(p.sheet) === key);
+    const current = { title: row.title, discipline: row.discipline, revision: `V${row.revisions}`, documentId: row.doc.id, documentName: row.doc.name, pageNumber: row.page, source: "uploaded" as const };
+    if (at < 0) {
+      pages = [...pages, { id: `sheet-${key.toLowerCase()}`, sheet: row.sheet, aspect: 1.5, image: null, ...current }];
+      changed = true;
+    } else if ((pages[at].documentId !== row.doc.id || pages[at].pageNumber !== row.page) && !state.regions.some(r => r.pageId === pages[at].id)) {
+      pages = pages.map((p, i) => i === at ? { ...p, ...current, title: row.title || p.title } : p);
+      changed = true;
+    }
+  }
+  return changed ? { ...state, pages } : state;
 }
 
 // ── Regions ─────────────────────────────────────────────────────────────────
