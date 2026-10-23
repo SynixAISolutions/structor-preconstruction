@@ -10,6 +10,7 @@ import { useProjectSetup } from "../../lib/use-project-setup";
 import { ProjectForm } from "./project-record";
 import { RfpReview } from "./rfp-review";
 import { SetupFileDrop } from "./setup-file-drop";
+import { UploadCheck } from "./drawing-log";
 import { Badge, Button, Modal, PageHeader, type Screen } from "./shared";
 import "./project-setup.css";
 
@@ -24,14 +25,14 @@ export function SetupCheckStatus({ checking, error, onRetry }: { checking: boole
   return checking ? <p role="status" className="setup-honesty-note">Checking documents… Reading the drawing index, manual contents and referenced reports.</p> : null;
 }
 
-function SetupUpload({ projectId, category, documents, notify }: { projectId: string; category: string; documents: StoredDocument[]; notify: (text: string) => void }) {
+function SetupUpload({ projectId, category, documents, notify, onDrawingsUploaded }: { projectId: string; category: string; documents: StoredDocument[]; notify: (text: string) => void; onDrawingsUploaded: (id: string) => void }) {
   const input = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<UploadProgress | null>(null), [error, setError] = useState("");
   async function upload(file: File) {
     setError("");
     if (documents.some(d => d.name.toLowerCase() === file.name.toLowerCase())) { setError("This filename is already stored. Open Project files to upload it as a revision."); return; }
     setProgress({ stage: "uploading", done: 0, total: 1 });
-    try { await uploadProjectPdf({ projectId, file, category, onProgress: setProgress }); notify(`${file.name} is stored in Project files.`); }
+    try { const doc = await uploadProjectPdf({ projectId, file, category, onProgress: setProgress }); if (doc.kind === "drawings") onDrawingsUploaded(doc.id); notify(`${file.name} is stored in Project files.`); }
     catch (error) { setError(error instanceof Error ? error.message : "The file could not be stored. Try again."); }
     finally { setProgress(null); if (input.current) input.current.value = ""; }
   }
@@ -40,6 +41,7 @@ function SetupUpload({ projectId, category, documents, notify }: { projectId: st
 
 export function ProjectSetupView({ project, onSave, navigate, notify }: { project: Project; onSave: (project: Project) => void; navigate: (screen: Screen) => void; notify: (text: string) => void }) {
   const setup = useProjectSetup(project);
+  const [checkIds, setCheckIds] = useState<string[]>([]);
   const { documents } = useProjectDocuments();
   const [selected, setSelected] = useState<SetupStepId | null>(null), [editing, setEditing] = useState(false);
   const [formBusy, setFormBusy] = useState(false);
@@ -55,10 +57,11 @@ export function ProjectSetupView({ project, onSave, navigate, notify }: { projec
   }
   function itemView(item: SetupItem) {
     return <article className="setup-item" key={item.id}><div className="setup-item-heading"><strong>{item.label}</strong><SetupStatusBadge status={item.status} reconsider={item.reconsider}/></div><small className="setup-level">{item.level === "required" ? "Needed for this step" : "Recommended"}</small>{item.note && <p>{item.note}</p>}{item.why && <p className="setup-why"><CircleHelp size={13}/>{item.why}</p>}{item.decision && <p className="setup-saved-decision">{item.decision.reason}{item.decision.responsible ? ` · Waiting on ${item.decision.responsible}` : ""}{item.decision.followUp ? ` · Follow up ${item.decision.followUp}` : ""} · {item.decision.by}{item.reconsider ? ". Work type or design stage changed; review this decision." : ""}</p>}
-      <div className="setup-item-actions">{item.category && <SetupUpload key={`${project.id}:${step.id}:${item.id}`} projectId={project.id} category={item.category} documents={documents} notify={notify}/>}<div>{decisionActions(`${step.id}:${item.id}`, item.label, item.status, item.level, item.decision)}</div></div>
+      <div className="setup-item-actions">{item.category && <SetupUpload key={`${project.id}:${step.id}:${item.id}`} projectId={project.id} category={item.category} documents={documents} notify={notify} onDrawingsUploaded={id => setCheckIds([id])}/>}<div>{decisionActions(`${step.id}:${item.id}`, item.label, item.status, item.level, item.decision)}</div></div>
     </article>;
   }
   return <div className="setup-view"><PageHeader eyebrow="FROM FIRST FILE TO FIRST SCOPE" title="Project setup" description="Start with your documents. Review the details, confirm the trades and let the AI draft scopes." actions={<Button onClick={() => navigate("turnover")}><ListChecks size={15}/>Preconstruction to-do</Button>}/>
+    {!!checkIds.length && <Modal title="Upload check" subtitle="Your drawings are saved. Review the sheet numbers before continuing." wide onClose={() => setCheckIds([])}><UploadCheck documents={documents} ids={checkIds} onDone={() => setCheckIds([])}/></Modal>}
     <SetupFileDrop key={project.id} projectId={project.id} documents={documents} notify={notify}/>
     <div className="setup-route-note"><FolderOpen size={19}/><p><strong>Your route to scopes.</strong> Drawings or a project manual are enough to start. The recommended steps can be completed as the project develops.</p><span>{summary.progress.done} / {summary.progress.total} steps ready</span></div>
     <div className="setup-layout"><aside className="setup-step-rail" aria-label="Project setup steps">{summary.steps.map((s, i) => <button key={s.id} aria-current={s.id === step.id ? "step" : undefined} onClick={() => setSelected(s.id)}><span className={`setup-step-number ${s.status}`}>{s.status === "ready" || s.status === "not-applicable" ? <Check size={15}/> : String(i + 1).padStart(2, "0")}</span><span><strong>{s.title}</strong><small>{s.route ? "Path to scopes" : "Recommended"}</small><SetupStatusBadge status={s.status} reconsider={s.reconsider}/></span><ArrowRight size={14}/></button>)}</aside>

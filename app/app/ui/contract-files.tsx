@@ -17,7 +17,7 @@ export function AssetUpload({ label, accept = "application/pdf", onSave }: { lab
 export function OtherExhibits({ award, save }: { award: Award; save: (files: ContractFiles) => void }) {
   const [company] = useLocalDraft<CompanyForm>("company-form", { name: "General contractor" });
   const { documents, ready } = useProjectDocuments();
-  const drawings = drawingRegister(documents).map(r => ({ id:r.sheet, title:r.title, date:r.date, revision:`V${r.doc.revision}` }));
+  const drawings = drawingRegister(documents).map(r => ({ id:r.sheet, title:r.title, date:r.date, revision:`V${r.revisions}` }));
   const specs = latestDocuments(documents).filter(d=>d.kind==="manual").flatMap(d=>d.sections.map(s=>({id:s.section,title:`${s.title} · ${d.name}, pages ${s.first}–${s.last}; registered ${d.uploadedAt.slice(0,10)}`,date:"",revision:`V${d.revision}`})));
   const reports = latestDocuments(documents).filter(d=>d.kind==="other").map(d=>({name:`${d.name} · registered ${d.uploadedAt.slice(0,10)}`,date:"",revision:`V${d.revision}`}));
   const [defaults, setDefaults] = useState<{ form?: DocumentAsset; shell?: DocumentAsset }>({});

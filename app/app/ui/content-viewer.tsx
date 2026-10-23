@@ -4,14 +4,15 @@ import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } fr
 import { createPortal } from "react-dom";
 import { ArrowLeft, ChevronLeft, ChevronRight, Link2, MessageSquare, Move, Plus, RefreshCw, SquareDashed, Trash2, ZoomIn, ZoomOut } from "lucide-react";
 import { docMarkups, fileMeta, TAG_COLORS, type Markup, type ContentOp } from "../../lib/project-content";
-import { useProjectContent } from "../../lib/project-content-client";
-import { revisionLabel, revisionsOf, type StoredDocument } from "../../lib/project-files";
+import { exportMarkups, useProjectContent } from "../../lib/project-content-client";
+import { drawingLog, sheetAt, revisionLabel, revisionsOf, type SheetVersion, type StoredDocument } from "../../lib/project-files";
 import { StoredPage, sheetLabel } from "./project-file-viewer";
 import { CONTENT_ACTOR, ContentLinks, useContentRecords, type SaveContent } from "./project-content-links";
 import { Button, SearchBox } from "./shared";
+import { SheetComparison, SheetVersions, setName } from "./drawing-log";
 import "./project-content.css";
 
-export type ContentLocation = { docId: string; page: number; markupId?: string };
+export type ContentLocation = { docId: string; page: number; markupId?: string; compare?: boolean };
 type Rect = Markup["rect"];
 type Gesture = { mode: "draw" | "move" | "nw" | "ne" | "sw" | "se"; start: [number, number]; rect: Rect; id?: string };
 const clamp = (n: number, low: number, high: number) => Math.min(high, Math.max(low, n));
@@ -42,14 +43,19 @@ export function ContentViewer({ initial, documents, onClose, backLabel = "Back t
   const [docId, setDocId] = useState(initial.docId), [page, setPage] = useState(initial.page);
   const [selectedId, setSelectedId] = useState(initial.markupId ?? "");
   const [query, setQuery] = useState(""), [zoom, setZoom] = useState(1), [tool, setTool] = useState(false);
+  const [compare, setCompare] = useState(initial.compare ?? false);
   const [tab, setTab] = useState("Markups");
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [pageReady, setPageReady] = useState("");
+  const [exportProgress, setExportProgress] = useState<{ done: number; total: number } | null>(null);
+  const exporting = useRef(false);
   const [draft, setDraft] = useState<{ id?: string; rect: Rect } | null>(null);
   const draftRef = useRef(draft); draftRef.current = draft;
   const gesture = useRef<Gesture | null>(null), lock = useRef(false);
   const frame = useRef<HTMLDivElement>(null), dialog = useRef<HTMLElement>(null), close = useRef(onClose); close.current = onClose;
   const doc = documents.find(d => d.id === docId);
+  const sheetVersion = sheetAt(drawingLog(documents), docId, page);
+  const openVersion = (v: SheetVersion) => { setDocId(v.doc.id); setPage(v.page); setSelectedId(""); setDraft(null); setTool(false); };
   const all = docMarkups(content, docId), visible = docMarkups(content, docId, query);
   const selected = all.find(m => m.id === selectedId);
   const pageMarkups = all.filter(m => m.page === page);
@@ -91,6 +97,18 @@ export function ContentViewer({ initial, documents, onClose, backLabel = "Back t
     finally { lock.current = false; setBusy(false); }
   };
 
+  async function exportPdf() {
+    if (!doc || !all.length || exporting.current) return;
+    exporting.current = true; setError(""); setNotice("");
+    setExportProgress({ done: 0, total: new Set(all.map(m => m.page)).size });
+    try {
+      await exportMarkups(doc, all, (done, total) => setExportProgress({ done, total }));
+      setNotice("Markup PDF downloaded");
+    } catch (e) {
+      setError(`Could not export markups: ${e instanceof Error ? e.message : "Please try again."}`);
+    } finally { exporting.current = false; setExportProgress(null); }
+  }
+
   async function add(rect: Rect) {
     if (!doc) return;
     const before = new Set(content.markups.map(m => m.id));
@@ -126,13 +144,16 @@ export function ContentViewer({ initial, documents, onClose, backLabel = "Back t
 
   const body = <section className="cm-viewer" ref={dialog} role="dialog" aria-modal="true" aria-label="Content viewer">
     <header className="cm-viewer-header"><Button onClick={onClose}><ArrowLeft size={16}/>{backLabel}</Button><div className="cm-viewer-title"><span>CONTENT VIEWER</span><h1>{doc?.name ?? "File unavailable"}</h1></div>
-      {doc && <label className="cm-revision">Revision<select aria-label="Switch revision" value={docId} disabled={busy} onChange={e => { setDocId(e.target.value); setPage(1); setSelectedId(""); setDraft(null); }}>{revisionsOf(documents, doc.series).map(r => <option key={r.id} value={r.id}>{revisionLabel(r)}</option>)}</select></label>}
+      {doc && <label className="cm-revision">File revision<select aria-label="Switch revision" value={docId} disabled={busy || !!exportProgress} onChange={e => { setDocId(e.target.value); setPage(1); setCompare(false); setSelectedId(""); setDraft(null); }}>{revisionsOf(documents, doc.series).map(r => <option key={r.id} value={r.id}>{revisionLabel(r)}</option>)}</select></label>}
       <Button disabled={busy} onClick={async () => { try { await refresh(); setNotice("Content refreshed"); } catch (e) { setError(e instanceof Error ? e.message : "Could not refresh."); } }}><RefreshCw size={15}/>Refresh</Button>
+      <Button disabled={busy || !ready || !doc || !all.length || !!exportProgress} onClick={() => void exportPdf()}>Export markups PDF</Button>
     </header>
-    <div className="cm-viewer-status"><span>Markups stay with the revision on which they were drawn.</span><span role="status" aria-live="polite">{busy ? "Saving…" : notice}</span></div>
+    <div className="cm-viewer-status"><span>Markups stay with the revision on which they were drawn.</span><span role="status" aria-live="polite">{exportProgress ? `Exporting marked-up pages: ${exportProgress.done} of ${exportProgress.total}${exportProgress.done === exportProgress.total ? " · Preparing PDF…" : ""}` : busy ? "Saving…" : notice}</span></div>
     {error && <p role="alert" className="cm-error">{error}</p>}
     {!doc ? <p className="cm-error">This file was removed. Return to Project files.</p> : <>
-      <div className="cm-viewer-tools">
+      {sheetVersion && <div className="dl-viewer-history"><strong>{sheetVersion.sheet.sheet} · V{sheetVersion.version.version}</strong><SheetVersions sheet={sheetVersion.sheet} selected={docId} disabled={busy} onOpen={openVersion}/><Button disabled={busy || sheetVersion.sheet.versions.length < 2} onClick={() => { setCompare(c => !c); setPageReady(""); setDraft(null); setTool(false); }}>{compare ? "Back to markups" : "Compare versions"}</Button></div>}
+      {sheetVersion && !sheetVersion.current && <div className="dl-superseded" role="status"><span>Superseded by V{sheetVersion.sheet.current.version} · {setName(sheetVersion.sheet.current.doc)}</span><Button disabled={busy} onClick={() => openVersion(sheetVersion.sheet.current)}>Go to current</Button></div>}
+      {compare && sheetVersion ? <SheetComparison key={sheetVersion.sheet.key} sheet={sheetVersion.sheet}/> : <><div className="cm-viewer-tools">
         <div className="cm-actions"><button className="ui-icon-btn" aria-label="Previous page" disabled={page <= 1 || busy} onClick={() => { setPage(p => p - 1); setDraft(null); }}><ChevronLeft size={17}/></button><label>Page <input aria-label="Page number" type="number" min={1} max={doc.pageCount} value={page} disabled={busy} onChange={e => { setPage(clamp(Number(e.target.value) || 1, 1, doc.pageCount)); setDraft(null); }}/></label><span>of {doc.pageCount}</span><button className="ui-icon-btn" aria-label="Next page" disabled={page >= doc.pageCount || busy} onClick={() => { setPage(p => p + 1); setDraft(null); }}><ChevronRight size={17}/></button></div>
         {doc.sheets.some(s => s.sheet) && <select aria-label="Go to sheet" value={doc.sheets.some(s => s.page === page && s.sheet) ? page : ""} onChange={e => setPage(Number(e.target.value))}><option value="" disabled>Go to sheet</option>{doc.sheets.filter(s => s.sheet).map(s => <option key={s.page} value={s.page}>{s.sheet} · {s.title}</option>)}</select>}
         <div className="cm-actions"><button className="ui-icon-btn" aria-label="Zoom out" disabled={zoom <= .5} onClick={() => setZoom(z => Math.max(.5, z - .25))}><ZoomOut size={17}/></button><span>{Math.round(zoom * 100)}%</span><button className="ui-icon-btn" aria-label="Zoom in" disabled={zoom >= 4} onClick={() => setZoom(z => Math.min(4, z + .25))}><ZoomIn size={17}/></button><Button onClick={() => setZoom(1)}>Fit</Button></div>
@@ -159,7 +180,7 @@ export function ContentViewer({ initial, documents, onClose, backLabel = "Back t
             {all.map(m => <details key={m.id} open={m.id === selectedId} className="cm-attachment-target"><summary>Markup {all.indexOf(m) + 1} · {m.title}<small>Page {m.page} · {m.links.length} links</small></summary><Button onClick={() => select(m)}>Show markup</Button><ContentLinks links={m.links} target={{ markupId: m.id }} save={save} records={records} disabled={busy}/></details>)}
           </div>
         </aside>
-      </div>
+      </div></>}
     </>}
   </section>;
   return typeof document === "undefined" ? null : createPortal(body, document.body);
