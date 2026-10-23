@@ -19,6 +19,7 @@ import { bidderTotals } from "./leveling.mjs";
 import type { BidProvenance, LevelingBidder, LevelingScopeItem } from "./leveling-import";
 import { bidForm, packageStatus, type Procurement } from "./procurement";
 import type { Project } from "./projects";
+import type { BuyoutState } from "./buyout";
 import type { StructorCheckState } from "./rfi";
 import type { Screen } from "./screens";
 import type { SetupSummary } from "./project-setup";
@@ -84,9 +85,11 @@ export type TodoInput = {
   setup?: SetupSummary | null;
   /** Structor Check issues and RFIs: what still has to reach the architect, and the answers awaited. */
   check?: StructorCheckState;
+  /** Scope reviews and best and final offers (lib/buyout). */
+  buyout?: BuyoutState;
 };
 
-/** Marcel's steps, in order (22 Oct). The scope review step has no screen of its own yet: choosing the subcontractor is on Contracts. */
+/** Marcel's steps, in order (22 Oct). */
 export const TODO_GROUPS: { group: TodoGroup; label: string; screen: Screen }[] = [
   { group: "setup", label: "Project information & documents", screen: "setup" },
   { group: "scopes", label: "Scopes", screen: "scopes" },
@@ -94,7 +97,7 @@ export const TODO_GROUPS: { group: TodoGroup; label: string; screen: Screen }[] 
   { group: "rfis", label: "RFIs to the architect", screen: "checks" },
   { group: "leveling", label: "Bids & leveling", screen: "leveling" },
   { group: "budget", label: "Budget & allowances", screen: "budget" },
-  { group: "scope-review", label: "Scope reviews & best and final", screen: "contracts" },
+  { group: "scope-review", label: "Scope reviews & best and final", screen: "buyout" },
   { group: "award", label: "Award & contracts", screen: "contracts" },
   { group: "schedule", label: "Project schedule", screen: "schedule" },
 ];
@@ -194,7 +197,11 @@ export function deriveTodo(input: TodoInput): TodoSummary {
       if (notLoaded.length) add({ ...p, id: `leveling:load:${pkg.id}`, group: "leveling", title: `Load ${plural(notLoaded.length, "submitted bid")} into leveling for ${pkg.name}`, detail: "Submitted in the portal, not yet in the comparison.", status: "todo", priority: "high", screen: "leveling", refs: { submissionIds: notLoaded.map(s => s.id) }, count: notLoaded.length });
       const open = leveled.reduce((n, l) => n + l.totals.exceptions, 0);
       if (open) add({ ...p, id: `leveling:exceptions:${pkg.id}`, group: "leveling", title: `Resolve ${plural(open, "leveling exception")} for ${pkg.name}`, detail: "Exclusions, partial answers and unanswered rows keep bids out of the ranking.", status: "todo", priority: "high", screen: "leveling", count: open });
-      if (anyEligible) add({ ...p, id: `award:select:${pkg.id}`, group: "scope-review", title: `Hold the ${pkg.name} scope review and choose the subcontractor`, detail: "At least one bid is fully leveled. Go through the scope and drawings with the low bidder, take their best and final offer, then award.", status: "todo", priority: "high", screen: "contracts" });
+      const review = input.buyout?.entries.find(e => e.packageId === pkg.id)?.scopeReview;
+      const bafos = input.buyout?.entries.find(e => e.packageId === pkg.id)?.bafos ?? [];
+      if (review && !review.held) add({ ...p, id: `buyout:review:${pkg.id}`, group: "scope-review", title: `Hold the ${pkg.name} scope review`, detail: `Scheduled for ${review.date}${review.attendees ? ` with ${review.attendees}` : ""}. Take the minutes in Scope review & buyout.`, status: "todo", priority: "normal", screen: "buyout" });
+      else if (review && !bafos.length) add({ ...p, id: `buyout:bafo:${pkg.id}`, group: "scope-review", title: `Waiting for best and final offers on ${pkg.name}`, detail: `Scope review held ${review.held!.at.slice(0, 10)}.`, status: "waiting", priority: "low", screen: "buyout" });
+      if (anyEligible || bafos.length) add({ ...p, id: `award:select:${pkg.id}`, group: "scope-review", title: bafos.length ? `Choose the ${pkg.name} subcontractor` : `Hold the ${pkg.name} scope review and choose the subcontractor`, detail: bafos.length ? `Best and final: ${[...bafos].sort((a, b) => a.amount - b.amount).map(b => `${b.company} $${b.amount.toLocaleString("en-US")}`).join(", ")}.` : "At least one bid is fully leveled. Go through the scope and drawings with the low bidder, take their best and final offer, then award.", status: "todo", priority: "high", screen: bafos.length ? "contracts" : "buyout" });
     }
 
     if (award && stage) {

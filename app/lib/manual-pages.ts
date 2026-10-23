@@ -1,6 +1,30 @@
 export const pageGuides = [
   { id: "architect", group: "Architect view", title: "Architect submittals", purpose: "Review only the submittal revisions sent to the design team.", steps: ["Choose Preview as architect or Architect view in Project information.", "Choose the receiving architect, then Open submittal.", "Record an action and comments. The contractor receives the response before returning it to the subcontractor."], terms: [{name:"Sent revision",meaning:"A revision approved by the contractor and explicitly sent to this architect."}], example:"Approve a sent mix-design submittal as noted; the contractor then returns your response.", reality:"This is a workflow preview in the shared browser workspace, not a separate authenticated architect account. Contractor drafts are filtered from this view.", related:["specs","portal"] },
   {
+    id: "buyout",
+    group: "Preconstruction",
+    title: "Scope review & buyout",
+    purpose: "Track every trade from leveled bids to an executed subcontract on one page: the scope review with the low bidders, its minutes, their best and final offers, the award, Exhibit A and the subcontract, and whose move it is.",
+    steps: [
+      "Each trade has a row in CSI order with its status (Awaiting bids, Ready for scope review, Scope review scheduled, Negotiating, Awarded, Contract out, Executed), Ball in court (us or the subcontractor), the low bid, the best and final, the award, and the buyout delta against the trade's budget.",
+      "Open a trade and choose Edit plan to record the recommended subcontractor, the other target companies, the anticipated and drop-dead award dates, and notes.",
+      "Choose Schedule scope review and pick the date and who attends. The meeting itself happens on Teams; this page keeps its record.",
+      "During or after the meeting, choose Add minute to note what you went through on the drawings and the scope. Each minute keeps who wrote it and when.",
+      "Choose Mark review held. The ball moves to the subcontractors for their best and final offers; choose Record best and final for each one you receive. A newer offer from the same company replaces its earlier one.",
+      "Choose Choose subcontractor to award the trade in Contracts & exhibits. From then on the row follows Exhibit A and the subcontract by itself: shared, comments, signatures and execution, with the ball in court changing as each side acts.",
+      "The Preconstruction to-do shows this step too: scope reviews to hold, best and finals you are waiting for, and trades ready to award.",
+    ],
+    terms: [
+      { name: "Scope review", meaning: "A meeting with a bidder, usually the low one, to walk through the drawings and the scope before the award, so nothing is missing from their price." },
+      { name: "Best and final", meaning: "The bidder's last price after the scope review, sometimes written BAFO. The trade is awarded on it." },
+      { name: "Ball in court", meaning: "Whose move it is next: ours (schedule, review, award, countersign) or the subcontractor's (best and final, Exhibit A comments, signature)." },
+      { name: "Buyout delta", meaning: "The trade's in-house budget minus the award, or before the award the best and final or the low bid. Positive means under budget." },
+    ],
+    example: "Roofing has two bids. Schedule the scope review with Potomac Roof Systems for Monday, add a minute that flashings at the curtain wall are included, mark it held, record their best and final of $501,000, then choose the subcontractor. The row moves to Awarded, then to Contract out with the ball in their court until they sign.",
+    reality: "Scope reviews, minutes and best and finals are saved in this browser for the open project. Nothing is sent: schedule the Teams meeting and ask for the best and final yourself. Awards, Exhibit A and subcontracts come from Contracts & exhibits.",
+    related: ["leveling", "contracts", "turnover"],
+  },
+  {
     id: "documents",
     group: "Preconstruction",
     title: "Project files · document library",
