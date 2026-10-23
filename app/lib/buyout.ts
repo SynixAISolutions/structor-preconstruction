@@ -1,9 +1,11 @@
 // Scope review & buyout (Marcel, 22 Oct, Bid packages): "after we finish bid leveling … we set up scope
 // review meetings … I need to take meeting minutes … they send me their best and final offer … we choose …
 // I send out the Exhibit A and the subcontract … we need something that shows contract sent out, ball in
-// court … to track every single trade, buying it out." Columns follow MCN's Owner Buyout Log template
-// (Trade, Rec sub for award, Target subs, Anticipated / Drop-dead / Actual award date, Buyout delta,
-// Scope review week, Status, Notes).
+// court … to track every single trade, buying it out." Columns follow the tracker he pointed to, MCN's
+// "Whittier Subcontractor_Buyout_Tracker" (Trade, Subcontractor, Contract amount, Precon recommendation,
+// Contract sent, Contract executed, BIC, Notes, GMP contract amount, Purchasing contingency, Welcome email
+// sent; totals of contract amount and executed contracts), and the Owner Buyout Log (target subs,
+// anticipated and drop-dead award dates).
 //
 // Stored per project under "buyout": the plan, the scope review, its minutes and the best and final
 // offers. Everything after the award (Exhibit A, subcontract, signatures) is read from lib/award, never
@@ -24,6 +26,8 @@ export type BuyoutEntry = {
   recommended: string; targets: string[];
   anticipatedAward: string; dropDeadAward: string;
   notes: string;
+  /** The welcome email to the awarded subcontractor has gone out (Whittier tracker column). */
+  welcomeSent: boolean;
   scopeReview: ScopeReview | null;
   bafos: Bafo[];
   updatedAt: string; updatedBy: string;
@@ -44,10 +48,13 @@ export type BuyoutRow = {
   status: BuyoutStatus; ballInCourt: BallInCourt;
   /** What the ball-in-court is waiting for, in words. */
   next: string;
+  /** BIC as the tracker writes it: the company that has to act, "Our team", or "Closed" once executed. */
+  bic: string | null;
+  contractSent: boolean; executed: boolean;
   bids: number; low: { name: string; value: number } | null;
   bestAndFinal: Bafo | null;
   award: { company: string; amount: number; at: string } | null;
-  /** The trade's in-house budget (its own budget lines) minus the award, else the best and final, else the low bid. Positive = under budget. */
+  /** The trade's in-house budget (its own budget lines; the GMP amount) minus the award, else the best and final, else the low bid: the purchasing contingency. Positive = under budget. */
   budget: number | null; delta: number | null;
   entry: BuyoutEntry | null;
 };
@@ -61,7 +68,7 @@ const newId = () => Math.random().toString(36).slice(2, 10);
 const cents = (v: number) => Math.round(v * 100) / 100;
 
 const blank = (packageId: string, by: string, at: string): BuyoutEntry =>
-  ({ packageId, recommended: "", targets: [], anticipatedAward: "", dropDeadAward: "", notes: "", scopeReview: null, bafos: [], updatedAt: at, updatedBy: by });
+  ({ packageId, recommended: "", targets: [], anticipatedAward: "", dropDeadAward: "", notes: "", welcomeSent: false, scopeReview: null, bafos: [], updatedAt: at, updatedBy: by });
 
 function change(state: BuyoutState, procurement: Procurement, packageId: string, by: string, at: string, apply: (entry: BuyoutEntry) => BuyoutEntry): BuyoutState {
   if (!procurement.packages.some(p => p.id === packageId)) fail("Choose a trade package.");
@@ -71,7 +78,7 @@ function change(state: BuyoutState, procurement: Procurement, packageId: string,
 }
 
 /** The buyout plan for a trade: recommended sub, other targets, award dates and notes. */
-export function setBuyoutPlan(state: BuyoutState, procurement: Procurement, packageId: string, plan: Partial<Pick<BuyoutEntry, "recommended" | "targets" | "anticipatedAward" | "dropDeadAward" | "notes">>, by: string, at = new Date().toISOString()): BuyoutState {
+export function setBuyoutPlan(state: BuyoutState, procurement: Procurement, packageId: string, plan: Partial<Pick<BuyoutEntry, "recommended" | "targets" | "anticipatedAward" | "dropDeadAward" | "notes" | "welcomeSent">>, by: string, at = new Date().toISOString()): BuyoutState {
   if (plan.anticipatedAward !== undefined && !isDate(plan.anticipatedAward)) fail("Use a date for the anticipated award.");
   if (plan.dropDeadAward !== undefined && !isDate(plan.dropDeadAward)) fail("Use a date for the drop-dead award.");
   if (plan.notes !== undefined && plan.notes.length > 4000) fail("Keep the notes under 4,000 characters.");
@@ -153,10 +160,20 @@ export function buyoutRows(input: BuyoutInput): BuyoutRow[] {
     const own = lines.length ? cents(lines.reduce((s, l) => s + l.budget, 0)) : null;
     const awarded = award && stage !== "cancelled" ? { company: award.snapshot.company.name, amount: award.amount, at: award.createdAt } : null;
     const basis = awarded?.amount ?? bestAndFinal?.amount ?? bids[0]?.value ?? null;
+    const executed = stage === "executed";
+    const contractSent = executed || stage === "signature-pending" || stage === "subcontractor-signed" || stage === "countersigned";
+    const bic = executed ? "Closed" : ballInCourt === "contractor" ? "Our team"
+      : ballInCourt === "subcontractor" ? awarded?.company ?? (entry?.recommended || bestAndFinal?.company || bids[0]?.name || "Bidders") : null;
     return {
-      packageId: pkg.id, trade: pkg.name, code: pkg.code, owner: pkg.owner, status, ballInCourt, next,
+      packageId: pkg.id, trade: pkg.name, code: pkg.code, owner: pkg.owner, status, ballInCourt, next, bic, contractSent, executed,
       bids: bids.length, low: bids[0] ? { name: bids[0].name, value: bids[0].value } : null, bestAndFinal, award: awarded,
       budget: own, delta: own !== null && basis !== null ? cents(own - basis) : null, entry,
     };
   });
+}
+
+/** The tracker's summary: total awarded contract amount, executed contracts, and trades still to buy out. */
+export function buyoutSummary(rows: BuyoutRow[]): { contracts: number; awarded: number; executed: number; open: number } {
+  const awarded = rows.filter(r => r.award);
+  return { contracts: cents(awarded.reduce((s, r) => s + r.award!.amount, 0)), awarded: awarded.length, executed: rows.filter(r => r.executed).length, open: rows.length - awarded.length };
 }
