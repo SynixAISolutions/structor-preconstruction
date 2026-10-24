@@ -34,6 +34,7 @@ import {
   flipSummary,
   linkScope,
   rectangle,
+  redrawRegion,
   regionsForScope,
   reassignRegion,
   tradeLegend,
@@ -42,6 +43,7 @@ import {
   type DrawingFlipErrors,
   type DrawingPage,
   type FlipRegion,
+  type Point,
   type RegionOrigin,
   type RegionStatus,
 } from "../../lib/drawing-flip";
@@ -67,6 +69,7 @@ const eventLabel = (kind: FlipRegion["history"][number]["kind"]) => ({
   linked: "Scope item linked",
   unlinked: "Scope item unlinked",
   notes: "Review notes updated",
+  redrawn: "Outline redrawn",
 })[kind];
 
 type Filters = { query: string; packageId: string; status: "" | RegionStatus; origin: "" | RegionOrigin; corrected: boolean };
@@ -91,7 +94,39 @@ function DrawingBackdrop({ page, height }: { page: DrawingPage; height: number }
 
 export type CanvasRegion = Pick<FlipRegion, "id" | "number" | "label" | "polygon" | "packageId" | "status">;
 
-export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, expandable = true, fullPage = false, onFullPage, regionDetail }: {
+export function pointerToPage(clientX: number, clientY: number, bounds: Pick<DOMRect, "left" | "top" | "width" | "height">): Point | null {
+  if (bounds.width <= 0 || bounds.height <= 0) return null;
+  const x = (clientX - bounds.left) / bounds.width, y = (clientY - bounds.top) / bounds.height;
+  return x >= 0 && x <= 1 && y >= 0 && y <= 1 ? { x, y } : null;
+}
+
+export function RedrawOutlineButton({ onClick }: { onClick: () => void }) {
+  return <Button onClick={onClick}><PencilRuler size={15}/>Redraw outline</Button>;
+}
+
+export function RegionHistory({ region, packages, comparison, onCompare }: {
+  region: FlipRegion; packages: { id: string; name: string }[];
+  comparison?: FlipRegion["history"][number] | null;
+  onCompare: (event: Extract<FlipRegion["history"][number], { kind: "redrawn" }>) => void;
+}) {
+  return <div className="flip-history"><h3>Region history</h3>{[...region.history].reverse().map((event, index) => <div key={`${event.at}-${index}`}><i/><span>
+    {event.kind === "redrawn" ? <button className="flip-history-compare" aria-pressed={comparison === event} onClick={() => onCompare(event)}><strong>{eventLabel(event.kind)}</strong><small>{event.by} · {activityDate(event.at)}</small>{event.reason && <em>{event.reason}</em>}<small>Compare previous outline</small></button> : <><strong>{eventLabel(event.kind)}</strong><small>{event.by} · {activityDate(event.at)}</small>{event.kind === "reassigned" && <em>{packages.find(pkg => pkg.id === event.from)?.name} → {packages.find(pkg => pkg.id === event.to)?.name}{event.reason ? ` · ${event.reason}` : ""}</em>}</>}
+  </span></div>)}</div>;
+}
+
+type Trace = { regionId: string; points: Point[]; reason: string; errors: DrawingFlipErrors };
+type TraceActions = { onPoint: (point: Point) => void; onUndo: () => void; onFinish: () => void; onCancel: () => void; onReason: (reason: string) => void };
+
+export function TraceControls({ trace, number, onUndo, onFinish, onCancel, onReason }: { trace: Trace; number: string } & Omit<TraceActions, "onPoint">) {
+  return <section className="flip-trace-controls" aria-label="Redraw outline controls">
+    <p role="status">Tracing {number}: click to add points, Enter to finish, Esc to cancel. Arrow keys pan; Backspace removes the last point.</p>
+    <div className="flip-trace-actions"><strong aria-live="polite">{trace.points.length} points</strong><Button disabled={!trace.points.length} onClick={onUndo}>Undo point</Button><Button onClick={onCancel}>Cancel</Button><Button variant="primary" disabled={trace.points.length < 3} onClick={onFinish}>Finish</Button><label className="ui-field">Reason (optional)<input value={trace.reason} onChange={e => onReason(e.target.value)} placeholder="Tighter around the curb"/></label></div>
+    <p className="flip-outline-key">Dashed: current outline · Solid: new outline. Trade and review state stay the same.</p>
+    {Object.entries(trace.errors).map(([field, message]) => <p key={field} role="alert" className="flip-error">{message}</p>)}
+  </section>;
+}
+
+export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, expandable = true, fullPage = false, onFullPage, regionDetail, trace, traceActions, comparison, onClearComparison }: {
   page: DrawingPage;
   regions: CanvasRegion[];
   selectedId: string;
@@ -99,12 +134,17 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
   onSelect: (id: string) => void;
   expandable?: boolean;
   fullPage?: boolean; onFullPage?: (open: boolean) => void; regionDetail?: ReactNode;
+  trace?: Trace | null; traceActions?: TraceActions;
+  comparison?: { regionId: string; from: Point[] } | null; onClearComparison?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [zoom, setZoom] = useState(100);
   const pan = useRef<{x:number;y:number;left:number;top:number}|null>(null);
+  const panElement = useRef<HTMLDivElement>(null);
+  const [hoverPoint, setHoverPoint] = useState<Point | null>(null);
   const isExpanded = fullPage || expanded;
   function expand(open:boolean){if(onFullPage)onFullPage(open);else setExpanded(open);}
+  useEffect(() => { pan.current = null; setHoverPoint(null); panElement.current?.focus({ preventScroll: true }); }, [trace?.regionId]);
 
   const file = useSourceFile(page.documentName);
   const [rendered, setRendered] = useState<{ file: File; page: number; image: string } | null>(null);
@@ -137,29 +177,52 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
   const sourceNeeded = runtime && !image ? <div className="flip-source-needed"><p>{sourceError || (file ? "Rendering original drawing page…" : `Choose ${page.documentName} to view the original sheet and its highlights.`)}</p><label className="ui-field">Original drawing PDF<input type="file" accept=".pdf,application/pdf" onChange={event => { const chosen = event.target.files?.[0]; if (!chosen) return; if (chosen.name !== page.documentName) { setSourceError(`Choose the cited file: ${page.documentName}.`); return; } rememberPdf(chosen); }}/></label></div> : stored && !image ? <div className="flip-source-needed"><p role="status">{sourceError || `Loading ${page.sheet} from ${stored.doc.name}…`}</p></div> : null;
   const displayPage = image ? { ...page, image } : page;
   const height = 1000 / (storedReady?.aspect ?? page.aspect);
-  const drawing = sourceNeeded || <svg viewBox={`0 0 1000 ${height}`} role="img" aria-label={`${page.sheet} with ${regions.length} trade regions`}>
+  const svgPoints = (points: Point[]) => points.map(point => `${point.x * 1000},${point.y * height}`).join(" ");
+  const drawing = (interactive = false) => sourceNeeded || <svg viewBox={`0 0 1000 ${height}`} role="img" aria-label={`${page.sheet} with ${regions.length} trade regions`}
+    className={interactive && trace ? "flip-tracing" : undefined}
+    onClick={interactive && trace ? event => { const point = pointerToPage(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect()); if (point) { traceActions?.onPoint(point); panElement.current?.focus({ preventScroll: true }); } } : undefined}
+    onPointerMove={interactive && trace ? event => setHoverPoint(pointerToPage(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect())) : undefined}
+    onPointerLeave={() => setHoverPoint(null)}>
     <DrawingBackdrop page={displayPage} height={height}/>
     <g className="flip-region-layer">{regions.map(region => {
       const points = region.polygon.map(point => `${point.x * 1000},${point.y * height}`).join(" ");
       const centerX = region.polygon.reduce((sum, point) => sum + point.x, 0) / region.polygon.length * 1000;
       const centerY = region.polygon.reduce((sum, point) => sum + point.y, 0) / region.polygon.length * height;
       const color = colors.get(region.packageId) ?? "#697b8c";
-      return <g key={region.id} role="button" tabIndex={0} aria-label={`${region.number}: ${region.label}`} className={`${selectedId === region.id ? "selected" : ""} ${region.status === "pending-review" ? "pending" : ""}`} onClick={() => onSelect(region.id)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(region.id); } }}>
+      return <g key={region.id} role={interactive && trace ? undefined : "button"} tabIndex={interactive && trace ? undefined : 0} aria-label={`${region.number}: ${region.label}`} className={`${selectedId === region.id ? "selected" : ""} ${region.status === "pending-review" ? "pending" : ""} ${trace?.regionId === region.id ? "trace-original" : ""}`} onClick={() => { if (!(interactive && trace)) onSelect(region.id); }} onKeyDown={event => { if (!(interactive && trace) && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onSelect(region.id); } }}>
         <polygon points={points} fill={`${color}30`} stroke={color}/>
         <circle cx={centerX} cy={centerY} r="16" fill={color}/>
         <text x={centerX} y={centerY + 4}>{region.number.replace("R-", "")}</text>
       </g>;
     })}</g>
+    {!trace && comparison && <polygon className="flip-previous-outline" points={svgPoints(comparison.from)} aria-label="Previous outline"/>}
+    {interactive && trace && <g className="flip-trace-overlay" aria-label="New outline">
+      {trace.points.length >= 3 && <polygon points={svgPoints(trace.points)}/>}
+      <polyline points={svgPoints([...trace.points, ...(hoverPoint ? [hoverPoint] : [])])}/>
+      {trace.points.map((point, i) => <circle key={i} cx={point.x * 1000} cy={point.y * height} r="4"/>)}
+    </g>}
   </svg>;
   return <>
     <div className="flip-canvas-wrap">
-      <div className="flip-sheet">{drawing}</div>
+      <div className="flip-sheet">{drawing()}</div>
       {expandable && <button className="flip-expand" onClick={() => expand(true)} aria-label="Expand drawing"><Maximize2 size={16}/></button>}
       {!image && <span className="flip-image-state"><PencilRuler size={13}/>Diagram preview</span>}
     </div>
-    {isExpanded && <Modal title={`${page.sheet} · ${page.title}`} subtitle="Zoom, then drag the sheet or use arrow keys to pan. Select a region to see its scope items. Esc closes." fullScreen onClose={() => expand(false)}>
+    {isExpanded && <Modal title={`${page.sheet} · ${page.title}`} subtitle={trace ? "Redraw outline · Trace the work on the sheet." : "Zoom, then drag the sheet or use arrow keys to pan. Select a region to see its scope items. Esc closes."} fullScreen onClose={() => { if (trace) traceActions?.onCancel(); else expand(false); }}>
+      <div className="flip-full-content" onKeyDownCapture={event => {
+        if (!trace) return;
+        if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); traceActions?.onCancel(); return; }
+        if ((event.target as Element).closest('input, textarea, select, button, [contenteditable="true"]')) return;
+        if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); if (trace.points.length >= 3) traceActions?.onFinish(); }
+        if (event.key === "Backspace") { event.preventDefault(); traceActions?.onUndo(); }
+        const delta = { ArrowLeft: [-60, 0], ArrowRight: [60, 0], ArrowUp: [0, -60], ArrowDown: [0, 60] }[event.key];
+        if (delta) { event.preventDefault(); panElement.current?.scrollBy(delta[0], delta[1]); }
+      }}>
       <div className="flip-full-toolbar"><Button onClick={()=>setZoom(v=>Math.max(50,v-25))}>Zoom out</Button><label>Zoom <input aria-label="Sheet zoom" type="range" min="50" max="400" step="25" value={zoom} onChange={e=>setZoom(Number(e.target.value))}/></label><output>{zoom}%</output><Button onClick={()=>setZoom(v=>Math.min(400,v+25))}>Zoom in</Button><Button onClick={()=>setZoom(100)}>Fit page</Button></div>
-      <div className="flip-full-layout"><div className="flip-pan" tabIndex={0} role="region" aria-label="Drawing sheet; arrow keys pan" onPointerDown={e=>{if((e.target as Element).closest('[role="button"]')||e.button!==0)return;pan.current={x:e.clientX,y:e.clientY,left:e.currentTarget.scrollLeft,top:e.currentTarget.scrollTop};e.currentTarget.setPointerCapture(e.pointerId);}} onPointerMove={e=>{if(!pan.current)return;e.currentTarget.scrollLeft=pan.current.left+pan.current.x-e.clientX;e.currentTarget.scrollTop=pan.current.top+pan.current.y-e.clientY;}} onPointerUp={()=>{pan.current=null;}} onPointerCancel={()=>{pan.current=null;}}><div className="flip-zoom-sheet" style={{width:`${zoom}%`}}>{drawing}</div></div>{regionDetail&&<aside className="flip-full-detail">{regionDetail}</aside>}</div>
+      {trace && traceActions && <TraceControls trace={trace} number={regions.find(r => r.id === trace.regionId)?.number ?? "region"} {...traceActions}/>}
+      {!trace && comparison && <div className="flip-comparison-note" role="status">Dashed: previous outline · Colored: current outline <Button onClick={onClearComparison}>Hide previous outline</Button></div>}
+      <div className="flip-full-layout"><div ref={panElement} className={`flip-pan ${trace ? "is-tracing" : ""}`} tabIndex={0} role="region" aria-label="Drawing sheet; arrow keys pan" onPointerDown={e=>{if(trace||(e.target as Element).closest('[role="button"]')||e.button!==0)return;pan.current={x:e.clientX,y:e.clientY,left:e.currentTarget.scrollLeft,top:e.currentTarget.scrollTop};e.currentTarget.setPointerCapture(e.pointerId);}} onPointerMove={e=>{if(!pan.current)return;e.currentTarget.scrollLeft=pan.current.left+pan.current.x-e.clientX;e.currentTarget.scrollTop=pan.current.top+pan.current.y-e.clientY;}} onPointerUp={()=>{pan.current=null;}} onPointerCancel={()=>{pan.current=null;}}><div className="flip-zoom-sheet" style={{width:`${zoom}%`}}>{drawing(true)}</div></div>{!trace && regionDetail&&<aside className="flip-full-detail">{regionDetail}</aside>}</div>
+      </div>
     </Modal>}
   </>;
 }
@@ -193,6 +256,8 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
   const { state: procurement } = useProcurement();
   const { documents } = useProjectDocuments();
   const [fullPage,setFullPage] = useState(false);
+  const [trace, setTrace] = useState<Trace | null>(null);
+  const [comparison, setComparison] = useState<{ regionId: string; event: Extract<FlipRegion["history"][number], { kind: "redrawn" }> } | null>(null);
   const [sheetQuery,setSheetQuery] = useState("");
   const [locateTrade,setLocateTrade] = useState("");
   const [locating,setLocating] = useState(false);
@@ -235,6 +300,24 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
   const selectedPackage = selected ? procurement.packages.find(pkg => pkg.id === selected.packageId) : undefined;
   const linkedScopes = selected ? procurement.scopes.filter(scope => selected.scopeIds.includes(scope.id)) : [];
   const availableScopes = selected ? procurement.scopes.filter(scope => !selected.scopeIds.includes(scope.id) && (scope.packageId === selected.packageId || scope.allTrades)) : [];
+  const comparedEvent = comparison?.regionId === selected?.id ? comparison?.event : null;
+  function startRedraw() {
+    if (!selected) return;
+    setComparison(null); setTrace({ regionId: selected.id, points: [], reason: "", errors: {} }); setFullPage(true);
+  }
+  const traceActions: TraceActions = {
+    onPoint: point => setTrace(current => current && ({ ...current, points: [...current.points, point], errors: {} })),
+    onUndo: () => setTrace(current => current && ({ ...current, points: current.points.slice(0, -1), errors: {} })),
+    onReason: reason => setTrace(current => current && ({ ...current, reason })),
+    onCancel: () => { setTrace(null); notify("Redraw cancelled. Outline unchanged."); },
+    onFinish: () => {
+      if (!trace || trace.points.length < 3) return;
+      const issue = run(current => redrawRegion(current, trace.regionId, trace.points, CURRENT_USER, trace.reason));
+      if (issue) { setTrace({ ...trace, errors: issue }); return; }
+      setTrace(null); setComparison(null); notify("Outline saved. Trade and review state retained.");
+    },
+  };
+  const history = selected && <RegionHistory region={selected} packages={procurement.packages} comparison={comparedEvent} onCompare={event => { setComparison({ regionId: selected.id, event }); setFullPage(true); }}/>;
 
   useEffect(() => {
     const scopeId = sessionStorage.getItem("drawing-flip-scope");
@@ -268,7 +351,7 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
 
   const pickerPages=state.pages.filter(p=>`${p.sheet} ${p.title}`.toLowerCase().includes(sheetQuery.toLowerCase()));
   const disciplines=[...new Set(pickerPages.map(p=>p.discipline||"Other"))];
-  const fullDetail=selected?<><h3>{selected.number} · {selected.label}</h3><p>{selectedPackage?.name}</p><p>Confidence: {selected.confidence===null?"Estimator reviewed":`${Math.round(selected.confidence*100)}% · Verify on sheet`}</p><p>{selected.evidence}</p><h4>Linked scope items</h4>{linkedScopes.length?linkedScopes.map(s=><article key={s.id}><strong>{s.title}</strong><p>{s.detail}</p><small>{s.source}</small></article>):<p>No scope items linked.</p>}{selected.status==="pending-review"&&<Button onClick={()=>act(s=>approveRegion(s,selected.id,CURRENT_USER),"Region approved.")}>Approve trade assignment</Button>}<Button onClick={()=>{setFullPage(false);setMode("regions");}}>Review assignment & notes</Button></>:<p>Select a region to see its scope items.</p>;
+  const fullDetail=selected?<><h3>{selected.number} · {selected.label}</h3><p>{selectedPackage?.name}</p><p>Confidence: {selected.confidence===null?"Estimator reviewed":`${Math.round(selected.confidence*100)}% · Verify on sheet`}</p><p>{selected.evidence}</p><RedrawOutlineButton onClick={startRedraw}/><h4>Linked scope items</h4>{linkedScopes.length?linkedScopes.map(s=><article key={s.id}><strong>{s.title}</strong><p>{s.detail}</p><small>{s.source}</small></article>):<p>No scope items linked.</p>}{selected.status==="pending-review"&&<Button onClick={()=>act(s=>approveRegion(s,selected.id,CURRENT_USER),"Region approved.")}>Approve trade assignment</Button>}<Button onClick={()=>{setFullPage(false);setMode("regions");}}>Review assignment & notes</Button>{history}</>:<p>Select a region to see its scope items.</p>;
   return <div className="flip-view">
     <PageHeader eyebrow={`${projectName} / Scope coordination`} title="Drawing Flip" description="Review every trade region on the drawings, correct Structor's assignments, and confirm where each scope item lives." actions={<><Button onClick={() => navigate("scopes")}><ListFilter size={16}/>Scopes & bid forms</Button><Button onClick={() => setPageEditor(true)}><FilePlus2 size={16}/>Add page</Button><Button variant="primary" onClick={() => setRegionEditor(true)}><Plus size={16}/>Mark region</Button></>}/>
     <Stats items={[{ label: "Drawing pages", value: state.pages.length, detail: `${summary.regions} mapped regions` }, { label: "Approved regions", value: summary.approved, detail: `${summary.corrected} trade correction${summary.corrected === 1 ? "" : "s"} retained`, tone: "green" }, { label: "Awaiting review", value: summary.pendingReview, detail: "Contractor decision required", tone: summary.pendingReview ? "orange" : "green" }, { label: "Unlocated scope", value: missing.length, detail: "Items without a drawing region", tone: missing.length ? "orange" : "green" }]}/>
@@ -293,7 +376,7 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
         </div>
         <div className="flip-legend" aria-label="Trade color legend">{legend.map(item => <button key={item.packageId} className={filters.packageId === item.packageId ? "active" : ""} onClick={() => setFilters({ ...filters, packageId: filters.packageId === item.packageId ? "" : item.packageId })}><i style={{ background: colors.get(item.packageId) }}/><span>{item.name}</span><small>{item.regions}</small></button>)}</div>
         <Button onClick={()=>setFullPage(true)}><Maximize2 size={15}/>Open full page</Button>
-        <div className="flip-drawing"><DrawingCanvas page={page} regions={visible} selectedId={selected?.id ?? ""} colors={colors} onSelect={id=>{setRegionId(id);setMode("regions");}} fullPage={fullPage} onFullPage={setFullPage} regionDetail={fullDetail}/>{!visible.length && <div className="flip-empty-note" role="status">{pageSummary.regions ? <>No highlights match these filters. <button onClick={() => setFilters({ query: "", packageId: "", status: "", origin: "", corrected: false })}>Clear filters</button></> : <>No highlights yet. Review AI scope proposals or use Mark region to add one.</>}</div>}</div>
+        <div className="flip-drawing"><DrawingCanvas page={page} regions={visible} selectedId={selected?.id ?? ""} colors={colors} onSelect={id=>{setRegionId(id);setMode("regions");}} fullPage={fullPage} onFullPage={setFullPage} regionDetail={fullDetail} trace={trace} traceActions={traceActions} comparison={comparedEvent && selected ? { regionId: selected.id, from: comparedEvent.from } : null} onClearComparison={() => setComparison(null)}/>{!visible.length && <div className="flip-empty-note" role="status">{pageSummary.regions ? <>No highlights match these filters. <button onClick={() => setFilters({ query: "", packageId: "", status: "", origin: "", corrected: false })}>Clear filters</button></> : <>No highlights yet. Review AI scope proposals or use Mark region to add one.</>}</div>}</div>
         <div className="flip-region-strip">{visible.map(region => <button key={region.id} className={selected?.id === region.id ? "selected" : ""} onClick={() => setRegionId(region.id)}><i style={{ background: colors.get(region.packageId) }}/><span><strong>{region.number} · {region.label}</strong><small>{procurement.packages.find(pkg => pkg.id === region.packageId)?.name} · {region.status === "pending-review" ? "Awaiting contractor" : "Approved"}</small></span><ChevronRight size={15}/></button>)}</div>
       </section>
 
@@ -304,9 +387,9 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
           <div className={`flip-review-state ${selected.status}`}><ShieldCheck size={18}/><div><strong>{selected.status === "pending-review" ? "Contractor review required" : "Trade assignment approved"}</strong><small>{selected.reviewedBy ? `${selected.reviewedBy} · ${activityDate(selected.reviewedAt)}` : "Review or correct this assignment before it is relied on."}</small></div></div>
           <dl><div><dt>Responsible trade</dt><dd><i style={{ background: colors.get(selected.packageId) }}/>{selectedPackage?.code} · {selectedPackage?.name}</dd></div><div><dt>Drawing evidence</dt><dd>{selected.evidence || "Estimator marked region"}</dd></div><div><dt>Confidence</dt><dd>{selected.confidence === null ? "Estimator reviewed" : `${Math.round(selected.confidence * 100)}% · AI proposal; verify on sheet`}</dd></div><div><dt>Review notes</dt><dd>{selected.notes || "No notes recorded"}</dd></div></dl>
           {selected.status === "pending-review" && <Button variant="primary" onClick={() => act(current => approveRegion(current, selected.id, CURRENT_USER), `${selected.number} approved.`)}><Check size={15}/>Approve trade assignment</Button>}
-          <div className="flip-detail-actions"><Button onClick={() => { setReassignTo(""); setReassignReason(""); setReassignOpen(true); }}><RotateCcw size={15}/>Correct trade</Button><Button onClick={() => { setNotes(selected.notes); setNotesOpen(true); }}><PencilRuler size={15}/>Notes</Button></div>
+          <RedrawOutlineButton onClick={startRedraw}/><div className="flip-detail-actions"><Button onClick={() => { setReassignTo(""); setReassignReason(""); setReassignOpen(true); }}><RotateCcw size={15}/>Correct trade</Button><Button onClick={() => { setNotes(selected.notes); setNotesOpen(true); }}><PencilRuler size={15}/>Notes</Button></div>
           <div className="flip-scope-links"><header><div><Link2 size={15}/><strong>Linked scope items</strong></div><Badge>{linkedScopes.length}</Badge></header>{linkedScopes.map(scope => <article key={scope.id}><div><strong>{scope.title}</strong><small>{scope.source || "No source reference"}</small></div><button aria-label={`Unlink ${scope.title}`} onClick={() => act(current => unlinkScope(current, selected.id, scope.id, CURRENT_USER), "Scope item unlinked.")}><Unlink size={14}/></button></article>)}{!linkedScopes.length && <p>This region is not linked to a bid-form item yet.</p>}{availableScopes.length > 0 && <div className="flip-link-picker"><select aria-label="Scope item to link" value={linkId} onChange={event => setLinkId(event.target.value)}><option value="">Choose scope item…</option>{availableScopes.map(scope => <option value={scope.id} key={scope.id}>{scope.title}</option>)}</select><button disabled={!linkId} aria-label="Link scope item" onClick={() => { if (linkId && act(current => linkScope(current, procurement, selected.id, linkId, CURRENT_USER), "Scope item linked to the drawing.")) setLinkId(""); }}><Link2 size={15}/></button></div>}</div>
-          <div className="flip-history"><h3>Region history</h3>{[...selected.history].reverse().map((event, index) => <div key={`${event.at}-${index}`}><i/><span><strong>{eventLabel(event.kind)}</strong><small>{event.by} · {activityDate(event.at)}</small>{event.kind === "reassigned" && <em>{procurement.packages.find(pkg => pkg.id === event.from)?.name} → {procurement.packages.find(pkg => pkg.id === event.to)?.name}{event.reason ? ` · ${event.reason}` : ""}</em>}</span></div>)}</div>
+          {history}
         </Panel>}
         {mode === "regions" && !selected && <Panel><Empty title="Select a region" description="Choose a numbered drawing overlay to inspect its trade, evidence, and scope links."/></Panel>}
         {mode === "corrections" && <Panel title="Correction log" subtitle="Every trade reassignment stays visible."><div className="flip-log">{correctionLog.map(item => <button key={`${item.regionId}-${item.at}`} onClick={() => { const correctedRegion = state.regions.find(region => region.id === item.regionId); if (correctedRegion) { setPageId(correctedRegion.pageId); setRegionId(correctedRegion.id); setMode("regions"); } }}><RotateCcw size={15}/><span><strong>{item.number}</strong><small>{procurement.packages.find(pkg => pkg.id === item.from)?.name} → {procurement.packages.find(pkg => pkg.id === item.to)?.name}</small><p>{item.reason || "No reason recorded"}</p><em>{item.by} · {activityDate(item.at)}</em></span></button>)}{!correctionLog.length && <Empty title="No corrections yet" description="Trade changes will be retained here."/>}</div></Panel>}
