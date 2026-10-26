@@ -32,14 +32,16 @@ const localDay = () => { const d = new Date(); return `${d.getFullYear()}-${Stri
  * guide's warnings: the to-do page and the reminders in the top bar. `ready` once the stored files
  * and the leveling workspace have loaded; `reload` rereads both.
  */
-export function useTodoSummary(project: Project | null): TodoSummary & { setup: SetupSummary | null; ready: boolean; reload: () => Promise<void> } {
+export function useTodoSummary(project: Project | null): TodoSummary & { setup: SetupSummary | null; setupGuide: ReturnType<typeof useProjectSetup>; ready: boolean; reload: () => Promise<void> } {
   const { procurement, submissions } = useSubmissions();
   const { state: budget } = useBudget();
   const { state: awards } = useAward();
   const { state: schedulePlan } = useSchedule();
   const { state: check } = useStructorCheck();
   const { state: buyout } = useBuyout();
-  const { summary: setup, ready: filesReady, refresh } = useProjectSetup(project);
+  // The to-do's setup step acts through this same copy, so a decision shows in the steps at once.
+  const setupGuide = useProjectSetup(project);
+  const { summary: setup, ready: filesReady, refresh } = setupGuide;
   const [documents] = useLocalDraft("library", sampleFiles);
   const [provenance] = useLocalDraft<Record<string, BidProvenance>>("leveling-submission-provenance", {});
   const [loadedPackageId] = useLocalDraft("leveling-submission-package", "");
@@ -66,7 +68,7 @@ export function useTodoSummary(project: Project | null): TodoSummary & { setup: 
     candidates: openComparisonCandidates({ projectId, procurement, submissions, directory, workspace: leveling.workspace, packageId: loadedPackageId, provenance, comparisons, ve }),
   }).budget, [budget, awards, procurement, submissions, directory, ve, estimate.byTrade.trades, projectId, leveling.workspace, loadedPackageId, provenance, comparisons]);
   const summary = deriveTodo({ project, documents, procurement, submissions, leveling: leveling.snapshot, budget: plan, awards, schedule: { rows: scheduleRows(procurementSchedule(schedulePlan, { procurement, awards }, today).state, today), today }, setup, check, buyout });
-  return { ...summary, setup, ready: filesReady && leveling.loaded, reload };
+  return { ...summary, setup, setupGuide, ready: filesReady && leveling.loaded, reload };
 }
 
 /**

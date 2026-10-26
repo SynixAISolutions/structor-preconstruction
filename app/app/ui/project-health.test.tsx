@@ -23,7 +23,7 @@ test("an empty project has honest zero progress and a path to its first trade", 
 });
 
 test("readiness exposes its denominator, warning counts and not-applicable basis", () => {
-  const summary = { ...empty, setup: { ...empty.setup!, completeness: { done: 2, total: 7, percent: 29, missing: 3, review: 1, waiting: 1 } }, groups: [{ group: "setup" as const, label: "Project setup", screen: "setup" as const, todo: 3, waiting: 1 }] };
+  const summary = { ...empty, setup: { ...empty.setup!, completeness: { done: 2, total: 7, percent: 29, missing: 3, review: 1, waiting: 1 } }, groups: [{ group: "setup" as const, label: "Project setup", screen: "documents" as const, todo: 3, waiting: 1 }] };
   const html = renderToStaticMarkup(<ProjectHealthCharts summary={summary} navigate={navigate}/>);
   assert.match(html, /2 of 7 items ready or marked not applicable/);
   assert.match(html, /Missing file or detail<\/span><b>3/);
@@ -40,7 +40,7 @@ test("loading rings do not present preliminary percentages as checked facts", ()
 });
 
 test("task flags are readable without color and completed work is not a manual checkbox", () => {
-  const task = { id: "setup:survey", group: "setup" as const, title: "Survey not uploaded", detail: "Needed for sitework", status: "todo" as const, priority: "high" as const, screen: "setup" as const, packageId: null, refs: {}, count: 1, flag: { tone: "red" as const, label: "Missing file" } };
+  const task = { id: "setup:survey", group: "setup" as const, title: "Survey not uploaded", detail: "Needed for sitework", status: "todo" as const, priority: "high" as const, screen: "documents" as const, packageId: null, refs: {}, count: 1, flag: { tone: "red" as const, label: "Missing file" } };
   const missing = renderToStaticMarkup(<TodoTaskCard task={task} group="Project setup" navigate={navigate}/>);
   assert.match(missing, /Missing file/);
   assert.match(missing, /Open Project setup for Survey not uploaded/);

@@ -91,7 +91,7 @@ export type TodoInput = {
 
 /** Marcel's steps, in order (22 Oct). */
 export const TODO_GROUPS: { group: TodoGroup; label: string; screen: Screen }[] = [
-  { group: "setup", label: "Project information & documents", screen: "setup" },
+  { group: "setup", label: "Project information & documents", screen: "documents" },
   { group: "scopes", label: "Scopes", screen: "scopes" },
   { group: "outreach", label: "Invite subcontractors", screen: "packages" },
   { group: "rfis", label: "RFIs to the architect", screen: "checks" },
@@ -126,6 +126,7 @@ export function missingProjectFacts(project: Project | null): string[] {
   if (!project.workType) missing.push("work type");
   if (!project.taxStatus) missing.push("tax status");
   if (!project.estimateStage) missing.push("estimate stage");
+  if (!project.deliveryMethod) missing.push("delivery method");
   if (!project.due) missing.push("bid due date");
   if (!project.rfi) missing.push("RFI deadline");
   return missing;

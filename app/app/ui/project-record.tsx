@@ -3,7 +3,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { ArrowRight, ArrowUpRight, Box, FileStack, FileText, HardHat, MapPin, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import {
-  CERTIFICATION_PROGRAMS, ESTIMATE_STAGES, estimateStageLabel, PROJECT_FORM_FIELDS, PROJECT_TYPES, TAX_STATUSES, WORK_TYPES,
+  CERTIFICATION_PROGRAMS, DELIVERY_METHODS, ESTIMATE_STAGES, deliveryMethodLabel, estimateStageLabel, PROJECT_FORM_FIELDS, PROJECT_TYPES, TAX_STATUSES, WORK_TYPES,
   parseProjectForm, squareFeetLabel, type Project, type ProjectFormErrors, type WorkType,
 } from "../../lib/projects";
 import { displayDate } from "../../lib/format";
@@ -59,6 +59,7 @@ export function ProjectForm({ project, onSave, onCancel, onBusyChange }: { proje
         <label className="ui-field">Location<input name={f.location} defaultValue={project?.location} aria-invalid={!!errors.location} placeholder="City, state"/><FieldError errors={errors} field="location"/></label>
         <label className="ui-field">Project type<select name={f.type} defaultValue={project?.type ?? ""} aria-invalid={!!errors.type}><option value="">Select a project type</option>{PROJECT_TYPES.map(type => <option key={type}>{type}</option>)}</select><FieldError errors={errors} field="type"/></label>
         <label className="ui-field">Estimate stage<select name={f.estimateStage} defaultValue={project?.estimateStage ?? ""} aria-invalid={!!errors.estimateStage}><option value="">Select estimate stage</option>{ESTIMATE_STAGES.map(stage => <option key={stage.value} value={stage.value}>{stage.label}</option>)}</select><FieldError errors={errors} field="estimateStage"/></label>
+        <label className="ui-field">Delivery method<select name={f.deliveryMethod} defaultValue={project?.deliveryMethod ?? ""} aria-invalid={!!errors.deliveryMethod}><option value="">{project?.deliveryMethod === null ? "Not recorded — select a value" : "Select delivery method"}</option>{DELIVERY_METHODS.map(method => <option key={method.value} value={method.value}>{method.label}</option>)}</select><FieldError errors={errors} field="deliveryMethod"/></label>
         <label className="ui-field">Architect<input name={f.architect} defaultValue={project?.architect} placeholder="Architect or design team"/></label>
         <label className="ui-field">Internal project value<input name={f.value} type="number" min="0" step="1" defaultValue={project?.value || ""} aria-invalid={!!errors.value} placeholder="USD"/><FieldError errors={errors} field="value"/></label>
         <label className="ui-field full">Project brief<textarea name={f.description} rows={3} defaultValue={project?.description} placeholder="What are we building?"/></label>
@@ -110,7 +111,7 @@ export function ProjectForm({ project, onSave, onCancel, onBusyChange }: { proje
 
     <section className="project-form-section">
       <h3>RFP document</h3>
-      <label className="ui-field full">RFP file<input name={f.rfp} type="file" accept="application/pdf,.pdf" disabled={saving}/><small>{project?.rfpFileName ? "Current file: " + project.rfpFileName : "Optional PDF. Stored privately in Project files; review AI-extracted details in Project setup."}</small><FieldError errors={errors} field="rfp"/></label>
+      <label className="ui-field full">RFP file<input name={f.rfp} type="file" accept="application/pdf,.pdf" disabled={saving}/><small>{project?.rfpFileName ? "Current file: " + project.rfpFileName : "Optional PDF. Stored privately in Project files; review AI-extracted details in the Preconstruction to-do."}</small><FieldError errors={errors} field="rfp"/></label>
     </section>
     {uploadStatus && <p role="status">Storing the RFP · {uploadStatus}</p>}
     <div className="ui-form-actions"><Button disabled={saving} onClick={onCancel}>Cancel</Button><Button disabled={saving} type="submit" variant="primary">{saving ? "Saving…" : project ? "Save project" : "Create project"}<ArrowRight size={16}/></Button></div>
@@ -124,7 +125,7 @@ export function ProjectInformation({ project, onSave, navigate, cover }: { proje
   const workType = WORK_TYPES.find(option => option.value === project.workType)?.label ?? "Not recorded";
   const taxStatus = TAX_STATUSES.find(option => option.value === project.taxStatus)?.label ?? "Not recorded";
   const details = [
-    ["Project type", project.type || "Not recorded"], ["Estimate stage", estimateStageLabel(project.estimateStage)], ["Work type", workType], ["Total area", squareFeetLabel(project.squareFeet)],
+    ["Project type", project.type || "Not recorded"], ["Delivery method", deliveryMethodLabel(project.deliveryMethod)], ["Estimate stage", estimateStageLabel(project.estimateStage)], ["Work type", workType], ["Total area", squareFeetLabel(project.squareFeet)],
     ...(project.workType === "both" ? [["Renovation area", squareFeetLabel(project.renovationSquareFeet)], ["Addition area", squareFeetLabel(project.additionSquareFeet)]] : []),
     ["Architect", project.architect || "Not recorded"], ["Tax status", taxStatus], ["Bid deadline", displayDate(project.due)], ["Pre-bid RFI deadline", displayDate(project.rfi)],
     ["Construction start", displayDate(project.start)], ["Expected completion", displayDate(project.finish)], ["Certifications", project.certifications.join(", ") || "Not recorded"], ["RFP document", project.rfpFileName || "Not recorded"],

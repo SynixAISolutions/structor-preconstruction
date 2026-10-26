@@ -46,6 +46,20 @@ assert.equal(st(run({ project: complete, documents: [drawings, rfp] }), "details
 const reviewed = S.markReviewed(S.EMPTY_SETUP, "r1", "Marcel", at);
 assert.equal(st(run({ project: complete, documents: [drawings, rfp], state: reviewed }), "details").status, "ready");
 assert.equal(st(run({ project: complete, documents: [drawings, { ...rfp, id: "r2", series: "r1", revision: 2 }], state: reviewed }), "details").status, "needs-review", "A new RFP revision needs reviewing again");
+
+// The delivery method decides what the RFP is (Marcel, 24 Oct): none on a hard bid, required on design-build.
+const as = (deliveryMethod) => normalizeProject({ ...complete, deliveryMethod });
+const rfpItem = (project, documents = [drawings]) => st(run({ project, documents }), "details").items.find(i => i.id === "rfp");
+const prime = (project) => st(run({ project }), "contracts").items.find(i => i.id === "prime").label;
+assert.equal(rfpItem(as("hard-bid")), undefined, "A hard bid has no RFP to ask for");
+assert.equal(st(run({ project: as("hard-bid"), documents: [drawings] }), "details").status, "ready", "A hard bid's details are complete without an RFP");
+assert.deepEqual([rfpItem(as("hard-bid"), [drawings, rfp]).label, rfpItem(as("hard-bid"), [drawings, rfp]).status], ["Invitation to bid", "needs-review"], "An uploaded invitation to bid is still reviewed");
+assert.deepEqual([rfpItem(as("cmar")).label, rfpItem(as("cmar")).level, rfpItem(as("cmar")).status], ["RFP", "recommended", "missing"]);
+assert.match(rfpItem(as("cmar")).why, /GMP stage/);
+assert.deepEqual([rfpItem(as("design-build")).level, st(run({ project: as("design-build"), documents: [drawings] }), "details").status], ["required", "missing"], "Design-build starts from the RFP, so its details wait for it");
+assert.equal(st(run({ project: as("design-build"), documents: [drawings, rfp], state: reviewed }), "details").status, "ready");
+assert.equal(rfpItem(normalizeProject({ ...complete, id: "mine", deliveryMethod: null })).label, "RFP / invitation to bid", "Without a method, either document");
+assert.deepEqual([prime(as("hard-bid")), prime(as("cmar")), prime(as("design-build"))], ["Owner contract (lump sum)", "Owner contract / GMP agreement", "Owner contract / design-build agreement"]);
 assert.throws(() => S.markReviewed(S.EMPTY_SETUP, "r1", " "), /Sign in/);
 
 // Scopes: per trade, and AI proposals waiting count as needing review.

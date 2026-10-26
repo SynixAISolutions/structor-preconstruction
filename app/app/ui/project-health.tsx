@@ -41,7 +41,7 @@ export function TradeProgress({ packages, navigate }: { packages: TodoSummary["p
         <span className="health-milestones" aria-hidden="true">{pkg.milestones.map(m => <i key={m.key} className={m.done ? "done" : ""} title={`${m.label}: ${m.done ? "done" : "outstanding"}`}/>)}</span>
         <span className="health-trade-detail"><span>{pkg.done} / {pkg.total} milestones</span><span>{pkg.milestones.find(m => !m.done)?.label ?? "All milestones complete"}<ArrowUpRight size={12}/></span></span>
       </button>
-    </li>)}</ul> : <div className="health-empty"><ClipboardCheck size={25}/><strong>Your first trade starts here</strong><p>Confirm trades from your drawings or manual to see their progress.</p><Button onClick={() => navigate("setup")}>Set up trade packages<ArrowRight size={14}/></Button></div>}
+    </li>)}</ul> : <div className="health-empty"><ClipboardCheck size={25}/><strong>Your first trade starts here</strong><p>Confirm trades from your drawings or manual to see their progress.</p><Button onClick={() => navigate("scopes")}>Set up trade packages<ArrowRight size={14}/></Button></div>}
     {packages.length > 6 && <button className="health-expand" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>{expanded ? "Show fewer trades" : `View all ${packages.length} trades`}<ArrowRight size={14}/></button>}
   </section>;
 }
@@ -66,7 +66,7 @@ export function ProjectHealthCharts({ summary, navigate }: { summary: HealthSumm
           <li><i className="review"/><span>Check information</span><b>{setup?.review ?? 0}</b></li>
           <li><i className="waiting"/><span>Waiting on others</span><b>{setup?.waiting ?? 0}</b></li>
         </ul></div></div>
-        <div className="health-readiness-actions"><Button variant="primary" onClick={() => navigate("turnover")}><ListChecks size={15}/>Check to-do list for missing information<ArrowRight size={14}/></Button><button onClick={() => navigate("setup")}>{summary.setup?.next ? `Next: ${summary.setup.next.title}` : "Review project setup"}<ArrowUpRight size={14}/></button></div>
+        <div className="health-readiness-actions"><Button variant="primary" onClick={() => navigate("turnover")}><ListChecks size={15}/>Check to-do list for missing information<ArrowRight size={14}/></Button><button onClick={() => navigate("turnover")}>{summary.setup?.next ? `Next: ${summary.setup.next.title}` : "Review project setup"}<ArrowUpRight size={14}/></button></div>
       </section>
     </div>
     <div className="health-details-grid">
@@ -85,5 +85,5 @@ export function ProjectHealth({ project, navigate }: { project: Project; navigat
 
 export function SetupContinueCard({ project, navigate }: { project: Project; navigate: Navigate }) {
   const summary = useTodoSummary(project);
-  return <section className="setup-continue-card" aria-label="Continue project setup"><span className="setup-continue-icon"><ClipboardCheck size={22}/></span><div><span className="health-eyebrow">PROJECT SETUP</span><h3>{summary.setup?.next ? "A clear next step." : "Keep your project information current."}</h3><p>{summary.ready ? <>{summary.setup && <strong>{summary.setup.progress.done} / {summary.setup.progress.total} steps ready · </strong>}{summary.setup?.next?.title ?? "Review the files and details behind your project."}</> : "Checking the project's files and information…"}</p></div><Button onClick={() => navigate("setup")}>Continue project setup<ArrowRight size={15}/></Button></section>;
+  return <section className="setup-continue-card" aria-label="Continue project setup"><span className="setup-continue-icon"><ClipboardCheck size={22}/></span><div><span className="health-eyebrow">PROJECT SETUP</span><h3>{summary.setup?.next ? "A clear next step." : "Keep your project information current."}</h3><p>{summary.ready ? <>{summary.setup && <strong>{summary.setup.progress.done} / {summary.setup.progress.total} steps ready · </strong>}{summary.setup?.next?.title ?? "Review the files and details behind your project."}</> : "Checking the project's files and information…"}</p></div><Button onClick={() => navigate("turnover")}>Continue project setup<ArrowRight size={15}/></Button></section>;
 }

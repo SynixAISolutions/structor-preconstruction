@@ -60,7 +60,7 @@ export function BasisOfEstimatePreview({ project, budget, documents, setup, read
         <div className="boe-actions">{noBudget && <Button onClick={onBack}>Open Budget summary</Button>}{noDocuments && <Button onClick={() => navigate("documents")}>Open Project files</Button>}</div>
       </section>}
       {!empty && <>
-        <aside className="boe-review"><p>Review before sharing. This preview follows the budget, allowances, project files and saved setup decisions in this browser.</p><div className="boe-actions"><Button onClick={() => navigate("allowances")}>Review Allowances</Button><Button onClick={() => navigate("setup")}>Review Project setup</Button></div></aside>
+        <aside className="boe-review"><p>Review before sharing. This preview follows the budget, allowances, project files and saved setup decisions in this browser.</p><div className="boe-actions"><Button onClick={() => navigate("allowances")}>Review Allowances</Button><Button onClick={() => navigate("turnover")}>Review Project setup</Button></div></aside>
         {document}
         {typeof window !== "undefined" && createPortal(<div className="boe-print">{document}</div>, window.document.body)}
       </>}

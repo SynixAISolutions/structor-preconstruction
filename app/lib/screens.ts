@@ -12,7 +12,7 @@ export type Screen =
   | "projects" | "information" | "documents" | "scopes" | "takeoffs"
   | "packages" | "bidders" | "portal" | "leveling" | "budget" | "allowances"
   | "contracts" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
-  | "setup" | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
+  | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
   | "architect" | "ratings" | "prequalification" | "drawing-flip" | "buyout" | "model-mep" | "model-structural" | "model-exterior";
 
 export type ViewProps = { navigate: (screen: Screen) => void; notify: (message: string) => void; projectName: string };
@@ -46,8 +46,7 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "prequalification", label: "Subcontractor prequalification", icon: "ClipboardCheck", keywords: ["prequal", "qualified subcontractors", "questionnaire"] },
   ]},
   { label: "PRECONSTRUCTION", scope: "project", items: [
-    { id: "turnover", label: "Preconstruction to-do", icon: "ClipboardCheck", keywords: ["project turnover", "percent complete", "checklist", "overview", "dashboard", "project health"] },
-    { id: "setup", label: "Project setup", icon: "ListChecks", keywords: ["getting started", "onboarding", "missing documents", "checklist", "upload"] },
+    { id: "turnover", label: "Preconstruction to-do", icon: "ClipboardCheck", keywords: ["project turnover", "percent complete", "checklist", "overview", "dashboard", "project health", "progress", "project setup", "getting started", "onboarding", "missing documents", "upload"] },
     { id: "information", label: "Project information", icon: "Building2" },
     { id: "documents", label: "Project files", icon: "FileStack", keywords: ["documents", "document library", "rfp"] },
     { id: "scopes", label: "Scopes & bid forms", icon: "ListChecks" },
@@ -98,8 +97,9 @@ export const ALL_SCREENS: ScreenDef[] = [...SCREEN_GROUPS.flatMap(group => group
 /**
  * Screens that no longer exist, and where their old links now go. Messages: messaging lives in each Bid package (Marcel,
  * 20 Sep: remove Conversations, keep it inside Subcontractor Outreach). Overview: one page with the to-do (Marcel, 22 Oct).
+ * Project setup: part of the Preconstruction to-do, as its first step (Marcel, 24 Oct: "these 2 would be one").
  */
-export const RETIRED_SCREENS: Record<string, Screen> = { messages: "packages", overview: "turnover" };
+export const RETIRED_SCREENS: Record<string, Screen> = { messages: "packages", overview: "turnover", setup: "turnover" };
 
 /** A hash or link value → the screen to show: current screens as they are, retired ones redirected, anything else null. */
 export const resolveScreen = (value: string): Screen | null =>

@@ -8,6 +8,11 @@
 
 export type WorkType = "new" | "renovation" | "addition" | "both";
 export type TaxStatus = "taxable" | "non-taxable";
+/**
+ * How the job is bought (Marcel's write-up, 24 Oct meeting): a hard bid prices complete drawings and has no
+ * RFP; CM at-risk works to a GMP whose stage the owner sets in the RFP; design-build starts from the RFP response.
+ */
+export type DeliveryMethod = "hard-bid" | "cmar" | "design-build";
 export const ESTIMATE_STAGES = [{ value: "concept", label: "Concept" }, { value: "schematic", label: "Schematic design" }, { value: "dd", label: "Design development" }] as const;
 export type EstimateStage = typeof ESTIMATE_STAGES[number]["value"];
 export const estimateStageLabel = (stage: EstimateStage | null) => ESTIMATE_STAGES.find(item => item.value === stage)?.label ?? "Not recorded";
@@ -47,6 +52,7 @@ export type Project = {
   additionSquareFeet: number;
   taxStatus: TaxStatus | null;
   estimateStage: EstimateStage | null;
+  deliveryMethod: DeliveryMethod | null;
   /** Local participation / certification programs, e.g. "CBE", "MBE", "First Source". */
   certifications: string[];
   team: TeamMember[];
@@ -66,6 +72,12 @@ export const WORK_TYPES: { value: WorkType; label: string }[] = [
   { value: "addition", label: "Addition" },
   { value: "both", label: "Renovation and addition" },
 ];
+export const DELIVERY_METHODS: { value: DeliveryMethod; label: string }[] = [
+  { value: "hard-bid", label: "Hard bid" },
+  { value: "cmar", label: "CM at-risk (GMP)" },
+  { value: "design-build", label: "Design-build" },
+];
+export const deliveryMethodLabel = (method: DeliveryMethod | null) => DELIVERY_METHODS.find(item => item.value === method)?.label ?? "Not recorded";
 export const TAX_STATUSES: { value: TaxStatus; label: string }[] = [
   { value: "taxable", label: "Taxable" },
   { value: "non-taxable", label: "Non-taxable" },
@@ -77,7 +89,7 @@ export const CERTIFICATION_PROGRAMS = ["CBE", "MBE", "WBE", "SBE", "First Source
 export const PROJECT_FORM_FIELDS = {
   name: "name", location: "location", type: "type", value: "value", description: "description",
   squareFeet: "squareFeet", workType: "workType", renovationSquareFeet: "renovationSquareFeet", additionSquareFeet: "additionSquareFeet",
-  taxStatus: "taxStatus", estimateStage: "estimateStage", certifications: "certifications", rfp: "rfp", architect: "architect",
+  taxStatus: "taxStatus", estimateStage: "estimateStage", deliveryMethod: "deliveryMethod", certifications: "certifications", rfp: "rfp", architect: "architect",
   due: "due", rfi: "rfi", start: "start", finish: "finish", teamName: "teamName", teamRole: "teamRole",
   scopesDue: "scopesDue", rfiResponses: "rfiResponses", drawingFlip: "drawingFlip", demolitionStart: "demolitionStart",
   jobWalk: "jobWalk", minBidders: "minBidders", wageScale: "wageScale",
@@ -88,23 +100,24 @@ export type ProjectFormErrors = Partial<Record<ProjectFormField, string>>;
 
 export const squareFeetLabel = (squareFeet: number): string => squareFeet > 0 ? `${squareFeet.toLocaleString("en-US")} SF` : "Not recorded";
 
-const sample = (p: Omit<Project, "renovationSquareFeet" | "additionSquareFeet" | "workType" | "taxStatus" | "estimateStage" | "certifications" | "team" | "kickoff" | "rfpFileName" | "createdAt">, extra: Partial<Project> = {}): Project =>
-  ({ ...p, workType: null, renovationSquareFeet: 0, additionSquareFeet: 0, taxStatus: null, estimateStage: null, certifications: [], team: [], kickoff: EMPTY_KICKOFF, rfpFileName: "", createdAt: "2026-09-01", ...extra });
+const sample = (p: Omit<Project, "renovationSquareFeet" | "additionSquareFeet" | "workType" | "taxStatus" | "estimateStage" | "deliveryMethod" | "certifications" | "team" | "kickoff" | "rfpFileName" | "createdAt">, extra: Partial<Project> = {}): Project =>
+  ({ ...p, workType: null, renovationSquareFeet: 0, additionSquareFeet: 0, taxStatus: null, estimateStage: null, deliveryMethod: null, certifications: [], team: [], kickoff: EMPTY_KICKOFF, rfpFileName: "", createdAt: "2026-09-01", ...extra });
 
 export const sampleProjectRecords: Project[] = [
   // Jelleff facts from Marcel's shared drive: the DD Budget (26,500 SF gross, DLR Group, DD total
   // $33,328,991; a "1st Source" wage premium row) and his step-by-step precon write-up (bid dates,
   // construction start). Tax status is not stated in the Jelleff documents, so it stays unrecorded.
   sample({ id: "jelleff", name: "Project 1", location: "Washington, DC", type: "Community & recreation", status: "Preconstruction", value: 33328991, squareFeet: 26500, architect: "Architect of record", description: "Modernization of a recreation center for a public owner: a new building, pool renovation, and sitework, delivered by Contractor as CM at-risk.", due: "2026-02-02", rfi: "2026-01-20", start: "2026-06-01", finish: "" },
-    { certifications: ["First Source"], team: [{ name: "Marcel Khoury", role: "Estimator" }, { name: "Chris Taylor", role: "Project executive" }],
+    { deliveryMethod: "cmar", certifications: ["First Source"], team: [{ name: "Marcel Khoury", role: "Estimator" }, { name: "Chris Taylor", role: "Project executive" }],
       // From Marcel's Jelleff kickoff email (his precon write-up). Raze start was "between March and April 2026", so no date.
       kickoff: { ...EMPTY_KICKOFF, scopesDue: "2026-01-26", rfiResponses: "2026-01-27", drawingFlip: "2026-01-20", jobWalk: "N/A unless requested by your subcontractors", wageScale: true } }),
-  sample({ id: "whittier", name: "Project 2", location: "Washington, DC", type: "Education", status: "Design development", value: 26800000, squareFeet: 68200, architect: "Campus design team", description: "A school modernization, classroom addition, and associated site work.", due: "2026-11-06", rfi: "2026-10-23", start: "2027-03-01", finish: "2028-08-18" }),
-  sample({ id: "riverside", name: "Project 3", location: "Arlington, VA", type: "Mixed-use", status: "Bidding", value: 12300000, squareFeet: 31800, architect: "Project architect", description: "A mixed-use community space with new retail and public gathering areas.", due: "2026-10-16", rfi: "2026-10-02", start: "2027-02-01", finish: "2028-02-25" }),
+  sample({ id: "whittier", name: "Project 2", location: "Washington, DC", type: "Education", status: "Design development", value: 26800000, squareFeet: 68200, architect: "Campus design team", description: "A school modernization, classroom addition, and associated site work.", due: "2026-11-06", rfi: "2026-10-23", start: "2027-03-01", finish: "2028-08-18" }, { deliveryMethod: "cmar" }),
+  sample({ id: "riverside", name: "Project 3", location: "Arlington, VA", type: "Mixed-use", status: "Bidding", value: 12300000, squareFeet: 31800, architect: "Project architect", description: "A mixed-use community space with new retail and public gathering areas.", due: "2026-10-16", rfi: "2026-10-02", start: "2027-02-01", finish: "2028-02-25" }, { deliveryMethod: "hard-bid" }),
 ];
 
 const isWorkType = (v: unknown): v is WorkType => v === "new" || v === "renovation" || v === "addition" || v === "both";
 const isTaxStatus = (v: unknown): v is TaxStatus => v === "taxable" || v === "non-taxable";
+const isDeliveryMethod = (v: unknown): v is DeliveryMethod => DELIVERY_METHODS.some(item => item.value === v);
 const text = (v: unknown) => typeof v === "string" ? v : "";
 const count = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.round(v) : 0;
 
@@ -136,6 +149,8 @@ export function normalizeProject(raw: Record<string, unknown>): Project {
     ...split, workType,
     taxStatus: isTaxStatus(raw.taxStatus) ? raw.taxStatus : null,
     estimateStage: ESTIMATE_STAGES.some(stage => stage.value === raw.estimateStage) ? raw.estimateStage as EstimateStage : null,
+    // A sample project saved before delivery methods existed gets the sample's; any other old record stays unrecorded.
+    deliveryMethod: isDeliveryMethod(raw.deliveryMethod) ? raw.deliveryMethod : raw.deliveryMethod === undefined ? sampleProjectRecords.find(p => p.id === raw.id)?.deliveryMethod ?? null : null,
     certifications: Array.isArray(raw.certifications) ? raw.certifications.filter((c): c is string => typeof c === "string" && !!c.trim()) : [],
     team: Array.isArray(raw.team) ? raw.team.filter((m): m is TeamMember => !!m && typeof m.name === "string" && typeof m.role === "string") : [],
     // A Jelleff record saved before kickoffs existed gets the sample's (Marcel's kickoff email); the sample refresh never touches project records.
@@ -220,6 +235,9 @@ export function parseProjectForm(form: FormData, existing?: Project): { project?
   const stageRaw = get(f.estimateStage);
   const estimateStage = ESTIMATE_STAGES.some(stage => stage.value === stageRaw) ? stageRaw as EstimateStage : null;
   if (!estimateStage) errors.estimateStage = "Choose the estimate stage.";
+  const methodRaw = get(f.deliveryMethod);
+  const deliveryMethod = isDeliveryMethod(methodRaw) ? methodRaw : null;
+  if (!deliveryMethod) errors.deliveryMethod = "Choose hard bid, CM at-risk or design-build.";
 
   const dates = { due: get(f.due), rfi: get(f.rfi), start: get(f.start), finish: get(f.finish) };
   for (const key of ["due", "rfi", "start", "finish"] as const) {
@@ -259,7 +277,7 @@ export function parseProjectForm(form: FormData, existing?: Project): { project?
       status: existing?.status ?? "Preconstruction",
       createdAt: existing?.createdAt ?? new Date().toISOString().slice(0, 10),
       name, location, type, value, description: get(f.description), architect: get(f.architect),
-      ...dates, ...split, workType, taxStatus, estimateStage, certifications, team, kickoff, rfpFileName,
+      ...dates, ...split, workType, taxStatus, estimateStage, deliveryMethod, certifications, team, kickoff, rfpFileName,
     },
   };
 }
