@@ -33,8 +33,8 @@ export function ProgressRing({ percent, label, detail, segments, pending = false
 export function TradeProgress({ packages, navigate }: { packages: TodoSummary["packages"]; navigate: Navigate }) {
   const [expanded, setExpanded] = useState(false);
   return <section className="health-detail-panel" aria-label="Trade progress">
-    <header><div><span className="health-eyebrow">FROM SCOPE TO AWARD</span><h3>Trade progress</h3></div><Badge>{packages.length} trades</Badge></header>
-    <p className="health-panel-description">Each segment is a milestone, from approved scope to executed subcontract.</p>
+    <header><div><span className="health-eyebrow">FROM INVITATION TO AWARD</span><h3>Trade progress</h3></div><Badge>{packages.length} trades</Badge></header>
+    <p className="health-panel-description">Each segment is a milestone, from bidders invited to executed subcontract.</p>
     {packages.length ? <ul className="health-trade-list">{(expanded ? packages : packages.slice(0, 6)).map(pkg => <li key={pkg.packageId}>
       <button onClick={() => navigate("packages")} aria-label={`${pkg.name}: ${pkg.done} of ${pkg.total} milestones, ${pkg.percent}% complete. Open bid packages.`}>
         <span className="health-trade-title"><span><small>{pkg.code}</small><strong>{pkg.name}</strong></span><b>{pkg.percent}<small>%</small></b></span>

@@ -6,7 +6,7 @@
 // published bid forms, invitations, submitted bids, leveling, budget, allowances, awards,
 // Exhibit A and the subcontract. Nothing is stored; finishing the work removes the task.
 //
-// Progress: each trade package has 8 milestones (scope approved → subcontract executed); the
+// Progress: each trade package has 8 milestones (bidders invited → subcontract executed); the
 // project adds setup and budget milestones. Percent complete = milestones done / milestones.
 //
 // Marcel (22 Oct): "split it up into the modules", step by step as in his precon write-up. The groups
@@ -89,11 +89,14 @@ export type TodoInput = {
   buyout?: BuyoutState;
 };
 
-/** Marcel's steps, in order (22 Oct). */
+/**
+ * Marcel's steps, in order (22 Oct). 24 Oct: invite the subcontractors second, so they can look at the drawings,
+ * and approve the AI's scopes third ("it's always approving them"); the bid form goes to the invited companies then.
+ */
 export const TODO_GROUPS: { group: TodoGroup; label: string; screen: Screen }[] = [
   { group: "setup", label: "Project information & documents", screen: "documents" },
-  { group: "scopes", label: "Scopes", screen: "scopes" },
   { group: "outreach", label: "Invite subcontractors", screen: "packages" },
+  { group: "scopes", label: "Approve scopes", screen: "scopes" },
   { group: "rfis", label: "RFIs to the architect", screen: "checks" },
   { group: "leveling", label: "Bids & leveling", screen: "leveling" },
   { group: "budget", label: "Budget & allowances", screen: "budget" },
@@ -102,10 +105,11 @@ export const TODO_GROUPS: { group: TodoGroup; label: string; screen: Screen }[] 
   { group: "schedule", label: "Project schedule", screen: "schedule" },
 ];
 
+/** A trade's milestones in the order the work happens (24 Oct: invite first, then approve and publish the scope). */
 const MILESTONES: { key: MilestoneKey; label: string }[] = [
+  { key: "bidders-invited", label: "Bidders invited" },
   { key: "scope-approved", label: "Scope approved" },
   { key: "bid-form-published", label: "Bid form published" },
-  { key: "bidders-invited", label: "Bidders invited" },
   { key: "bids-received", label: "Bids received" },
   { key: "bids-leveled", label: "Bids leveled" },
   { key: "awarded", label: "Subcontractor selected" },
@@ -163,6 +167,11 @@ export function deriveTodo(input: TodoInput): TodoSummary {
   if (!input.setup && !input.documents.length) add({ id: "setup:files", group: "setup", title: "Upload the project files", detail: "Add the drawings, specifications and RFP.", status: "todo", priority: "high", screen: "documents", packageId: null, count: 0 });
   if (!input.setup && !procurement.packages.length) add({ id: "setup:packages", group: "setup", title: "Set up trade packages", detail: "No trade packages exist yet, so there is nothing to scope or bid.", status: "todo", priority: "high", screen: "scopes", packageId: null, count: 0 });
 
+  // The AI drafts scopes from the drawings or the project manual (24 Oct): with neither uploaded, an empty trade
+  // waits for them rather than asking for a scope nobody can write yet.
+  const documentsIn = input.setup ? input.setup.steps.find(s => s.id === "documents")?.status !== "missing" : input.documents.length > 0;
+  const waitingForFiles: string[] = [];
+
   // ── Per package ── (the kickoff sets when scopes go out and how many bids each trade needs)
   const kickoff = input.project?.kickoff;
   const scopesDue = kickoff?.scopesDue ? ` Scopes due to subs ${kickoff.scopesDue}.` : "";
@@ -180,14 +189,16 @@ export function deriveTodo(input: TodoInput): TodoSummary {
     const p = { packageId: pkg.id } as const;
 
     if (form.length && drafts.length) add({ ...p, id: `scopes:approve:${pkg.id}`, group: "scopes", title: `Approve ${plural(drafts.length, "scope item")} in ${pkg.name}`, detail: `${form.length - drafts.length} of ${form.length} approved. Owner: ${pkg.owner || "unassigned"}.${scopesDue}`, status: "todo", priority: "normal", screen: "scopes", count: drafts.length });
-    if (!form.length) add({ ...p, id: `scopes:empty:${pkg.id}`, group: "scopes", title: `Write the ${pkg.name} scope`, detail: `The bid form has no items yet.${scopesDue}`, status: "todo", priority: "normal", screen: "scopes", count: 0 });
+    if (!form.length && documentsIn) add({ ...p, id: `scopes:empty:${pkg.id}`, group: "scopes", title: `Draft the ${pkg.name} scope with AI`, detail: `The bid form has no items yet. Write scopes with AI drafts them from the drawings and manual for you to approve.${scopesDue}`, status: "todo", priority: "normal", screen: "scopes", count: 0 });
+    if (!form.length && !documentsIn) waitingForFiles.push(pkg.name);
     if (status === "ready") add({ ...p, id: `scopes:publish:${pkg.id}`, group: "scopes", title: `Publish the ${pkg.name} bid form`, detail: "Every item is approved; invited bidders can price it once it is published.", status: "todo", priority: "high", screen: "scopes" });
     if (status === "revised" && !drafts.length) add({ ...p, id: `scopes:republish:${pkg.id}`, group: "scopes", title: `Publish the revised ${pkg.name} bid form`, detail: `Bidders still have version ${pkg.published!.version}.`, status: "todo", priority: "high", screen: "scopes" });
 
+    // Invite before the scope is approved (24 Oct): invited companies look at the drawings and get the bid form when it is published.
+    if (!invitations.length && !award) add({ ...p, id: `outreach:invite:${pkg.id}`, group: "outreach", title: `Invite bidders to ${pkg.name}`, detail: pkg.published ? "The bid form is published but nobody is invited." : "Invite them now so they can look at the drawings; they get the bid form when it is published.", status: "todo", priority: pkg.published ? "high" : "normal", screen: "packages", count: 0 });
+    const minBidders = kickoff?.minBidders ?? 0;
+    if (invitations.length && invitations.length < minBidders && !award) add({ ...p, id: `outreach:more:${pkg.id}`, group: "outreach", title: `Invite ${plural(minBidders - invitations.length, "more company", "more companies")} to ${pkg.name}`, detail: `The kickoff asks for at least ${minBidders} bids per trade; ${invitations.length} invited.`, status: "todo", priority: pkg.published ? "high" : "normal", screen: "packages", count: minBidders - invitations.length });
     if (pkg.published) {
-      if (!invitations.length) add({ ...p, id: `outreach:invite:${pkg.id}`, group: "outreach", title: `Invite bidders to ${pkg.name}`, detail: "The bid form is published but nobody is invited.", status: "todo", priority: "high", screen: "packages", count: 0 });
-      const minBidders = kickoff?.minBidders ?? 0;
-      if (invitations.length && invitations.length < minBidders && !award) add({ ...p, id: `outreach:more:${pkg.id}`, group: "outreach", title: `Invite ${plural(minBidders - invitations.length, "more company", "more companies")} to ${pkg.name}`, detail: `The kickoff asks for at least ${minBidders} bids per trade; ${invitations.length} invited.`, status: "todo", priority: "high", screen: "packages", count: minBidders - invitations.length });
       const pending = invitations.filter(i => !submitted.some(s => s.invitationId === i.id) && i.status !== "submitted");
       const quiet = pending.filter(i => !procurement.outreach.some(o => o.packageId === pkg.id && o.bidderId === i.bidderId));
       if (quiet.length) add({ ...p, id: `outreach:follow-up:${pkg.id}`, group: "outreach", title: `Follow up with ${plural(quiet.length, "invited company", "invited companies")} for ${pkg.name}`, detail: "No call, note or message is logged for them yet.", status: "todo", priority: "normal", screen: "packages", refs: { invitationIds: quiet.map(i => i.id) }, count: quiet.length });
@@ -240,6 +251,8 @@ export function deriveTodo(input: TodoInput): TodoSummary {
     const count = milestones.filter(m => m.done).length;
     return { packageId: pkg.id, name: pkg.name, code: pkg.code, owner: pkg.owner, milestones, done: count, total: milestones.length, percent: percent(count, milestones.length) };
   });
+  // One task for every empty trade, not one each: they all wait for the same files.
+  if (waitingForFiles.length) add({ id: "scopes:wait-files", group: "scopes", title: `${plural(waitingForFiles.length, "trade")} wait${waitingForFiles.length === 1 ? "s" : ""} for the drawings`, detail: `${waitingForFiles.join(", ")}. Upload the drawings or the project manual in step 1; the AI drafts their scopes for you to approve.`, status: "waiting", priority: "low", screen: "documents", packageId: null, count: waitingForFiles.length });
 
   // ── Budget ──
   // Lines carried by the owner (when the budget marks them) are not the team's to approve or forecast.

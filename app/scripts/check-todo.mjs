@@ -40,7 +40,21 @@ assert.deepEqual(missingProjectFacts(null), ["project"]);
 const start = derive();
 assert.equal(ids(start).filter(id => id.startsWith("scopes:approve:")).length, 8, "Every package with draft items (Waterproofing has the air barrier), excluding Carpentry and the four published sample trades");
 for (const trade of ["concrete", "drywall"]) assert.deepEqual([start.packages.find(p => p.packageId === trade).percent, ids(start).filter(id => id.endsWith(`:${trade}`))], [100, []], `${trade}: every milestone done, nothing left to do`);
-assert(has(start, "scopes:empty:carpentry") && !ids(start).some(id => id.startsWith("scopes:publish") || (id.startsWith("outreach:") && !id.startsWith("outreach:more:"))), "Outreach work on the sample is only the kickoff's three-bid minimum");
+assert(has(start, "scopes:empty:carpentry") && !ids(start).some(id => id.startsWith("scopes:publish")));
+// 24 Oct: invite before the scope is approved. Every trade nobody is invited to asks for invitations, published or not.
+const uninvited = start.packages.filter(p => !base.procurement.invitations.some(i => i.packageId === p.packageId && i.status !== "declined")).map(p => p.packageId);
+assert(uninvited.length > 0 && uninvited.every(id => has(start, `outreach:invite:${id}`)), "Each trade without invitations asks for them");
+assert(ids(start).filter(id => id.startsWith("outreach:")).every(id => id.startsWith("outreach:invite:") || id.startsWith("outreach:more:")), "No follow-ups or waiting bids before a bid form is out");
+assert.deepEqual([task(start, "outreach:invite:carpentry").priority, task(start, "outreach:invite:carpentry").detail], ["normal", "Invite them now so they can look at the drawings; they get the bid form when it is published."]);
+assert.deepEqual(TODO_GROUPS.slice(0, 3).map(g => g.label), ["Project information & documents", "Invite subcontractors", "Approve scopes"], "Marcel's order: information, invite, approve");
+// The AI drafts an empty trade's scope from the drawings or manual; with neither, the trade waits for them.
+assert.deepEqual([task(start, "scopes:empty:carpentry").title, task(start, "scopes:empty:carpentry").status], ["Draft the Carpentry scope with AI", "todo"]);
+const withoutFiles = derive({ documents: [] });
+const noFiles = task(withoutFiles, "scopes:wait-files");
+assert(!ids(withoutFiles).some(id => id.startsWith("scopes:empty:")), "No drawings, no scope to ask for (Marcel, 24 Oct)");
+assert.deepEqual([noFiles.status, noFiles.screen, noFiles.count === start.tasks.filter(t => t.id.startsWith("scopes:empty:")).length], ["waiting", "documents", true], "One waiting task names every empty trade");
+assert.match(noFiles.detail, /^Carpentry, .*Upload the drawings or the project manual in step 1/);
+assert(!has(start, "scopes:wait-files"), "With files in, nothing waits for them");
 assert.deepEqual(task(start, "scopes:approve:demolition").count, 2);
 assert.deepEqual([task(start, "budget:approve").count, task(start, "budget:over").count, task(start, "budget:allowances").count, has(start, "budget:forecast")], [11, 2, 2, false]);
 assert.match(task(start, "budget:over").detail, /Structural steel \(Modernization\), Exterior improvements \(Site work\)/);
@@ -59,7 +73,7 @@ assert.deepEqual([task(t, "outreach:waiting:demolition").status, task(t, "outrea
 proc = freeze(P.inviteBidder(proc, "demolition", "b6", "Sadie", at));
 t = derive({ procurement: proc });
 assert.deepEqual([task(t, "outreach:follow-up:demolition").count, task(t, "outreach:waiting:demolition").count], [1, 2], "Greenline has no outreach logged");
-assert.deepEqual(milestones(t, "demolition"), ["scope-approved", "bid-form-published", "bidders-invited"]);
+assert.deepEqual(milestones(t, "demolition"), ["bidders-invited", "scope-approved", "bid-form-published"], "Milestones in the order the work happens: invite, approve, publish");
 
 // Bids submitted → load into leveling; loaded → exceptions + an awardable bid.
 const form = P.bidForm(proc, "demolition");
@@ -178,7 +192,7 @@ const reopened = T.reconcileTodo(second.history, t1, at2);
 assert.equal(reopened.history.done.some(d => d.id === "setup:details:rfp"), false, "A task that comes back is open again, not done");
 
 // Marcel's steps, in his order (22 Oct: "split it up into the modules").
-assert.deepEqual(TODO_GROUPS.map(g => g.label), ["Project information & documents", "Scopes", "Invite subcontractors", "RFIs to the architect", "Bids & leveling", "Budget & allowances", "Scope reviews & best and final", "Award & contracts", "Project schedule"]);
+assert.deepEqual(TODO_GROUPS.map(g => g.label), ["Project information & documents", "Invite subcontractors", "Approve scopes", "RFIs to the architect", "Bids & leveling", "Budget & allowances", "Scope reviews & best and final", "Award & contracts", "Project schedule"]);
 
 // RFIs to the architect: from Structor Check, with the project's RFI deadline.
 const { sampleStructorCheck } = await import("../lib/data/rfi.ts");
@@ -197,7 +211,7 @@ const jelleffKickoff = sampleProjectRecords[0].kickoff;
 assert.deepEqual([jelleffKickoff.minBidders, jelleffKickoff.scopesDue, jelleffKickoff.rfiResponses], [3, "2026-01-26", "2026-01-27"]);
 const more = start.tasks.filter(t => t.id.startsWith("outreach:more:")).map(t => [t.packageId, t.count]);
 const activeInvites = id => sampleProcurement.invitations.filter(i => i.packageId === id && i.status !== "declined").length;
-assert.deepEqual(more, sampleProcurement.packages.filter(p => p.published && activeInvites(p.id) > 0 && activeInvites(p.id) < 3 && !sampleAwards.awards.some(a => a.packageId === p.id && !a.cancelled)).map(p => [p.id, 3 - activeInvites(p.id)]), "Every published, unawarded trade with fewer than three bidders");
+assert.deepEqual(more.sort(), sampleProcurement.packages.filter(p => activeInvites(p.id) > 0 && activeInvites(p.id) < 3 && !sampleAwards.awards.some(a => a.packageId === p.id && !a.cancelled)).map(p => [p.id, 3 - activeInvites(p.id)]).sort(), "Every unawarded trade with fewer than three bidders, published or not (24 Oct: invite first)");
 assert(more.length > 0, "The Jelleff sample has trades below three bidders");
 assert.match(task(start, "scopes:approve:demolition").detail, /Scopes due to subs 2026-01-26\./);
 assert.equal(deriveTodo({ ...base, project: { ...sampleProjectRecords[0], kickoff: { ...jelleffKickoff, minBidders: 1 } } }).tasks.filter(t => t.id.startsWith("outreach:more:")).length, 0, "One bid is enough when the kickoff says so");
