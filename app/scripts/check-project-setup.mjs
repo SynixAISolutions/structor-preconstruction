@@ -66,8 +66,17 @@ assert.throws(() => S.markReviewed(S.EMPTY_SETUP, "r1", " "), /Sign in/);
 const proc = { ...emptyProc, packages: [{ id: "demolition", name: "Demolition", division: "02", code: "02 41 19", owner: "", due: "" }, { id: "drywall", name: "Drywall", division: "09", code: "09 29 00", owner: "", due: "" }], scopes: [{ id: "s1", packageId: "demolition" }] };
 assert.equal(st(run({ procurement: proc, documents: [drawings] }), "trades").status, "ready");
 assert.match(st(run({ procurement: proc, documents: [drawings] }), "trades").detail, /2 trades; 2 more suggested/);
-assert.equal(st(run({ procurement: proc }), "scopes").status, "in-progress");
+assert.equal(st(run({ procurement: proc, documents: [drawings] }), "scopes").status, "in-progress");
+assert.equal(st(run({ procurement: proc }), "scopes").title, "Approve scopes", "Marcel, 24 Oct: the AI writes the scopes; the team approves them");
+// No drawings or manual: the scopes wait for them and point to the files, never "write scopes" (Marcel, 24 Oct).
+for (const procurement of [emptyProc, proc]) {
+  const waiting = st(run({ procurement }), "scopes");
+  assert.deepEqual([waiting.status, waiting.screen], ["waiting", "documents"]);
+  assert.match(waiting.detail, /Waiting for the drawings or project manual/);
+}
+assert.notEqual(run({ procurement: proc }).next?.id, "scopes", "A step waiting for files is never the next step");
 assert.equal(st(run({ procurement: proc, pendingProposals: 3 }), "scopes").status, "needs-review");
+assert.match(st(run({ procurement: proc, pendingProposals: 3 }), "scopes").detail, /3 AI proposals to approve/);
 assert.equal(st(run({ procurement: { ...proc, scopes: [...proc.scopes, { id: "s2", packageId: "drywall" }] } }), "scopes").status, "ready");
 
 // Reports follow the work type, each with why; filenames confirm them.

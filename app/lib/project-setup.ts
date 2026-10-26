@@ -155,10 +155,13 @@ export function projectSetup(input: SetupInput): SetupSummary {
   const tradesStatus: SetupStatus = procurement.packages.length ? "ready" : suggestions.length ? "needs-review" : "missing";
   const tradesNote = procurement.packages.length ? `${plural(procurement.packages.length, "trade")}${suggestions.length ? `; ${suggestions.length} more suggested by the files` : ""}.` : suggestions.length ? `Confirm the ${plural(suggestions.length, "suggested trade")} from the drawings and manual.` : "Upload drawings or the project manual, or add trades by hand.";
 
-  // ── Scopes ──
+  // ── Scopes ── (24 Oct: the AI writes them from the drawings or manual and the team approves them, so with
+  // neither uploaded the step waits for the files instead of asking for scopes nobody can draft yet)
   const withScope = procurement.packages.filter(p => procurement.scopes.some(s => s.packageId === p.id)).length;
-  const scopesStatus: SetupStatus = !procurement.packages.length ? "missing" : input.pendingProposals ? "needs-review" : withScope === procurement.packages.length ? "ready" : withScope ? "in-progress" : "missing";
-  const scopesNote = input.pendingProposals ? `${plural(input.pendingProposals, "AI proposal")} to review.` : procurement.packages.length ? `${withScope} of ${plural(procurement.packages.length, "trade")} have scope items.` : "Add trades first.";
+  const allScoped = procurement.packages.length > 0 && withScope === procurement.packages.length;
+  const scopesWait = !drawings.length && !manuals.length && !allScoped && !input.pendingProposals;
+  const scopesStatus: SetupStatus = scopesWait ? "waiting" : !procurement.packages.length ? "missing" : input.pendingProposals ? "needs-review" : allScoped ? "ready" : withScope ? "in-progress" : "missing";
+  const scopesNote = input.pendingProposals ? `${plural(input.pendingProposals, "AI proposal")} to approve.` : scopesWait ? "Waiting for the drawings or project manual: the AI drafts the scopes from them for you to approve." : procurement.packages.length ? `${withScope} of ${plural(procurement.packages.length, "trade")} have scope items.` : "Confirm the trades first.";
 
   // ── Contracts ── (filenames; the contracts department's exhibits live on the Contracts screen)
   const contractItems = [
@@ -208,7 +211,7 @@ export function projectSetup(input: SetupInput): SetupSummary {
     step("documents", "Upload drawings and specifications", "Drawings alone are enough to start; the project manual adds specification requirements.", "required", docsStatus, "documents", docItems),
     step("details", "Review project details", method === "hard-bid" ? "Fill in the project information. A hard bid has no RFP; upload the invitation to bid if there is one." : "Fill in the project information, or upload the RFP and review what it says.", "required", detailsStatus, "information", detailItems),
     step("trades", "Confirm trades", tradesNote, "required", tradesStatus, "scopes"),
-    step("scopes", "Write scopes", scopesNote, "required", scopesStatus, "scopes"),
+    step("scopes", "Approve scopes", scopesNote, "required", scopesStatus, scopesWait ? "documents" : "scopes"),
     step("contracts", "Contract documents", "The owner contract, its conditions and your subcontract form.", "recommended", "missing", "documents", contractItems),
     step("reports", "Site and reports", w ? "Suggested for this project's work type." : "Set the work type to narrow these down.", "recommended", "missing", "documents", reportItems),
     step("budget", "Budget", input.budgetLines ? `${plural(input.budgetLines, "budget line")}.` : "Enter the owner's budget, or build a concept budget from past projects.", "recommended", input.budgetLines ? "ready" : "missing", "budget"),
