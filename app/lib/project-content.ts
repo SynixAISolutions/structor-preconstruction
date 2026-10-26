@@ -7,6 +7,7 @@
 // belongs to the revision it was drawn on (the next revision's pages may differ).
 
 import { latestDocuments, type StoredDocument } from "./project-files";
+import { checkFolderName, findFolder, folderAndInside, folderExists, folderPath, MAX_FOLDER_DEPTH, MAX_FOLDERS, ROOT } from "./project-folders";
 
 /** What a file or markup can support: the document check's issues, RFIs, bid packages, clarifications and VE items. */
 export type ContentLinkKind = "issue" | "rfi" | "package" | "clarification" | "ve";
@@ -20,7 +21,10 @@ export type ContentLink = { kind: ContentLinkKind; id: string; label: string };
 export const TAG_COLORS = ["blue", "orange", "pink", "purple", "green", "gray"] as const;
 export type TagColor = typeof TAG_COLORS[number];
 export type ContentTag = { id: string; name: string; color: TagColor };
-export type FileMeta = { tags: string[]; description: string; links: ContentLink[] };
+/** `folder`: where the file was moved in Project files (lib/project-folders); unset, it sits in its category's folder. */
+export type FileMeta = { tags: string[]; description: string; links: ContentLink[]; folder?: string };
+/** A folder the team made; `parent` is "root", a built-in folder or another made folder. */
+export type ContentFolder = { id: string; name: string; parent: string };
 
 export type MarkupComment = { id: string; by: string; at: string; text: string };
 /** A rectangle on one page: x, y, width and height as fractions of the page (0-1, from its top-left). */
@@ -29,7 +33,7 @@ export type Markup = {
   title: string; description: string; assignedTo: string; status: "open" | "resolved";
   createdBy: string; createdAt: string; updatedAt: string; comments: MarkupComment[]; links: ContentLink[];
 };
-export type ProjectContent = { projectId: string; tags: ContentTag[]; files: Record<string, FileMeta>; markups: Markup[]; updatedAt: string };
+export type ProjectContent = { projectId: string; tags: ContentTag[]; files: Record<string, FileMeta>; markups: Markup[]; folders: ContentFolder[]; updatedAt: string };
 
 export type MarkupInput = { docId: string; page: number; rect: [number, number, number, number]; color?: TagColor; title: string; description?: string; assignedTo?: string };
 export type ContentTarget = { series: string } | { markupId: string };
@@ -43,9 +47,16 @@ export type ContentOp =
   | { op: "markup-add"; markup: MarkupInput }
   | { op: "markup-edit"; id: string; title?: string; description?: string; assignedTo?: string; status?: "open" | "resolved"; color?: TagColor; rect?: [number, number, number, number] }
   | { op: "markup-delete"; id: string }
-  | { op: "comment-add"; markupId: string; text: string };
+  | { op: "comment-add"; markupId: string; text: string }
+  | { op: "folder-add"; name: string; parent: string }
+  | { op: "folder-rename"; id: string; name: string }
+  | { op: "folder-move"; id: string; parent: string }
+  | { op: "folder-delete"; id: string }
+  | { op: "file-move"; series: string; folder: string };
 
-export const emptyContent = (projectId: string): ProjectContent => ({ projectId, tags: [], files: {}, markups: [], updatedAt: "" });
+export const emptyContent = (projectId: string): ProjectContent => ({ projectId, tags: [], files: {}, markups: [], folders: [], updatedAt: "" });
+/** Stored content in today's shape: content saved before folders existed has none. */
+export const normalizeContent = (raw: Partial<ProjectContent>, projectId: string): ProjectContent => ({ ...emptyContent(projectId), ...raw, folders: Array.isArray(raw.folders) ? raw.folders : [] });
 const NO_META: FileMeta = { tags: [], description: "", links: [] };
 export const fileMeta = (content: ProjectContent, series: string): FileMeta => content.files[series] ?? NO_META;
 
@@ -143,8 +154,51 @@ export function applyContentOp(content: ProjectContent, op: ContentOp, by: strin
       const body = text(op.text, 2000, "Comment", true);
       return editMarkup(op.markupId, m => m.comments.length >= 200 ? fail("At most 200 comments on one markup.") : ({ ...m, comments: [...m.comments, { id: newId(), by, at: now, text: body }] }));
     }
+    // ── Folders (lib/project-folders): only the team's own folders change; the built-in four stay. ──
+    case "folder-add": {
+      const folders = content.folders ?? [];
+      if (!folderExists(content, op.parent)) fail("That folder was deleted.");
+      if (folders.length >= MAX_FOLDERS) fail(`At most ${MAX_FOLDERS} folders in a project.`);
+      if (folderPath(content, op.parent).length >= MAX_FOLDER_DEPTH) fail(`Folders go at most ${MAX_FOLDER_DEPTH} deep.`);
+      return { ...next, folders: [...folders, { id: newId(), name: checkFolderName(content, op.name, op.parent), parent: op.parent }] };
+    }
+    case "folder-rename": {
+      const folder = ownFolder(content, op.id, "renamed");
+      return { ...next, folders: content.folders.map(f => f.id === folder.id ? { ...f, name: checkFolderName(content, op.name, folder.parent, folder.id) } : f) };
+    }
+    case "folder-move": {
+      const folder = ownFolder(content, op.id, "moved");
+      if (!folderExists(content, op.parent)) fail("That folder was deleted.");
+      if (folderAndInside(content, folder.id).has(op.parent)) fail("A folder can't go inside itself.");
+      if (folderPath(content, op.parent).length + depthBelow(content, folder.id) >= MAX_FOLDER_DEPTH) fail(`Folders go at most ${MAX_FOLDER_DEPTH} deep.`);
+      return { ...next, folders: content.folders.map(f => f.id === folder.id ? { ...f, name: checkFolderName(content, folder.name, op.parent, folder.id), parent: op.parent } : f) };
+    }
+    case "folder-delete": {
+      // Deleting a folder never deletes files: what was inside moves up to where the folder was.
+      const folder = ownFolder(content, op.id, "deleted");
+      const parent = findFolder(content, folder.id)!.parent;
+      return {
+        ...next,
+        folders: content.folders.filter(f => f.id !== folder.id).map(f => f.parent === folder.id ? { ...f, parent } : f),
+        files: Object.fromEntries(Object.entries(content.files).map(([s, m]) => [s, m.folder === folder.id ? { ...m, folder: parent } : m])),
+      };
+    }
+    case "file-move":
+      if (!folderExists(content, op.folder)) fail("That folder was deleted.");
+      return editMeta(op.series, meta => ({ ...meta, folder: op.folder }));
     default: return fail("Unknown change.");
   }
+}
+
+function ownFolder(content: ProjectContent, folderId: string, what: string): ContentFolder {
+  const folder = (content.folders ?? []).find(f => f.id === folderId);
+  if (folder) return folder;
+  return fail(findFolder(content, folderId) ? `The built-in folders can't be ${what}.` : "That folder was deleted.");
+}
+/** How many levels of folders sit below `id` (0 when it has none). */
+function depthBelow(content: ProjectContent, id: string): number {
+  const below = [...folderAndInside(content, id)].filter(f => f !== id);
+  return below.reduce((deepest, f) => Math.max(deepest, folderPath(content, f).length - folderPath(content, id).length), 0);
 }
 
 /** Everything a file supports: its own links and its markups' (each record once), latest revision's markups and older ones alike. */

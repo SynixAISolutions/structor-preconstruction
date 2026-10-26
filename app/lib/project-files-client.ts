@@ -165,6 +165,16 @@ export async function removeProjectDocument(doc: StoredDocument) {
   setIndex(await api<ProjectFileIndex>("/api/project-files", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "remove", projectId: doc.projectId, docId: doc.id }) }));
 }
 
+/** Renames a file: every revision takes the new name (the server keeps names unique and adds ".pdf"). */
+export async function renameProjectDocument(doc: StoredDocument, name: string) {
+  return setIndex(await api<ProjectFileIndex>("/api/project-files", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "rename", projectId: doc.projectId, series: doc.series, name }) }));
+}
+
+/** Deletes a whole file: every revision, newest first, so a failure part-way leaves the older ones listed. */
+export async function removeProjectFile(revisions: StoredDocument[]) {
+  for (const doc of [...revisions].sort((a, b) => b.revision - a.revision)) await removeProjectDocument(doc);
+}
+
 /** Saves what was read from pages after upload (sheet titles, sections). */
 export async function updateProjectDocument(doc: StoredDocument) {
   return setIndex(await api<ProjectFileIndex>("/api/project-files", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "update", projectId: doc.projectId, docId: doc.id, document: doc }) }));

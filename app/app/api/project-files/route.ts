@@ -1,6 +1,6 @@
 import { renameDemoNamesDeep } from "../../../lib/demo-names";
 import { parseDocument, validId, type StoredDocument } from "../../../lib/project-files";
-import { readIndex, registerDocument, removeDocument, updateDocument } from "../../../lib/project-files-store";
+import { readIndex, registerDocument, removeDocument, renameDocument, updateDocument } from "../../../lib/project-files-store";
 
 // Project files index: list a project's stored documents, register an upload, update what was read
 // from its pages, or remove it. The demo password (proxy.ts) guards this like every route.
@@ -22,6 +22,7 @@ export async function POST(request: Request) {
   try {
     if (body.op === "register") return json(await registerDocument(parseDocument(body.document, projectId)));
     if (body.op === "remove" && validId(body.docId)) return json(await removeDocument(projectId, body.docId));
+    if (body.op === "rename" && validId(body.series)) return json(await renameDocument(projectId, body.series, body.name));
     if (body.op === "update" && validId(body.docId)) {
       // Only what pages say may change after upload: sheet titles and manual sections.
       const patch = parseDocument({ ...body.document, id: body.docId }, projectId);

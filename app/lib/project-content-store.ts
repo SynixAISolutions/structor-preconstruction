@@ -7,7 +7,7 @@
 import { get, put } from "@vercel/blob";
 import { randomUUID } from "node:crypto";
 import { blobRoot } from "./project-files";
-import { applyContentOp, emptyContent, type ContentOp, type ProjectContent } from "./project-content";
+import { applyContentOp, emptyContent, normalizeContent, type ContentOp, type ProjectContent } from "./project-content";
 import { strongEtag } from "./clarification-store";
 
 const pathOf = (projectId: string) => `${blobRoot(projectId)}/content.json`;
@@ -15,7 +15,7 @@ const pathOf = (projectId: string) => `${blobRoot(projectId)}/content.json`;
 export async function readContent(projectId: string): Promise<{ content: ProjectContent; etag: string | null }> {
   const result = await get(pathOf(projectId), { access: "private", useCache: false }).catch(() => null);
   if (!result || result.statusCode !== 200) return { content: emptyContent(projectId), etag: null };
-  return { content: await new Response(result.stream).json() as ProjectContent, etag: strongEtag(result.blob.etag) };
+  return { content: normalizeContent(await new Response(result.stream).json(), projectId), etag: strongEtag(result.blob.etag) };
 }
 
 /** Applies `ops` in order, all or none, as `by`; returns the stored content. */
