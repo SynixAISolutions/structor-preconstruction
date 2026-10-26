@@ -2,7 +2,7 @@
 // byte ranges of the original PDFs. Only reached through /api/project-files, behind the demo password.
 
 import { del, get, put } from "@vercel/blob";
-import { emptyIndex, indexPath, MAX_RANGE_BYTES, textPath, upsertDocument, type PageText, type ProjectFileIndex, type StoredDocument } from "./project-files";
+import { emptyIndex, indexPath, MAX_RANGE_BYTES, renameSeries, textPath, upsertDocument, type PageText, type ProjectFileIndex, type StoredDocument } from "./project-files";
 
 async function readJson<T>(pathname: string): Promise<T | null> {
   const result = await get(pathname, { access: "private", useCache: false }).catch(() => null);
@@ -32,6 +32,8 @@ async function writeIndex(index: ProjectFileIndex) {
 
 // ponytail: read-modify-write without a lock; two uploads finishing in the same instant could drop one entry.
 export const registerDocument = async (doc: StoredDocument) => writeIndex(upsertDocument(await readIndex(doc.projectId, true), doc));
+/** Renames every revision of a file (lib/project-files renameSeries). */
+export const renameDocument = async (projectId: string, series: string, name: unknown) => writeIndex(renameSeries(await readIndex(projectId, true), series, name));
 
 export async function updateDocument(projectId: string, docId: string, change: (doc: StoredDocument) => StoredDocument) {
   const index = await readIndex(projectId, true);

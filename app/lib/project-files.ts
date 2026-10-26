@@ -41,7 +41,8 @@ export const TEXT_CHUNK = 100;
 export const MAX_SOURCE_BYTES = 600 * 1024 * 1024;
 /** Largest byte range one request returns (functions answer at most 4.5 MB). */
 export const MAX_RANGE_BYTES = 4 * 1024 * 1024;
-export const DOCUMENT_CATEGORIES = ["Drawings", "Specifications", "Reports", "RFP", "Contracts", "Addenda", "Other"] as const;
+/** Budget: the owner's budget or an earlier estimate (Marcel, 24 Oct: "if you want to upload the budget, you can"). */
+export const DOCUMENT_CATEGORIES = ["Drawings", "Specifications", "Reports", "RFP", "Contracts", "Addenda", "Budget", "Other"] as const;
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/;
 export const validId = (value: unknown): value is string => typeof value === "string" && ID.test(value);
@@ -115,6 +116,29 @@ export function parseDocument(raw: unknown, projectId: string): StoredDocument {
 /** Adds or replaces a document in an index (pure). */
 export function upsertDocument(index: ProjectFileIndex, doc: StoredDocument): ProjectFileIndex {
   return { ...index, documents: [...index.documents.filter(d => d.id !== doc.id), doc], updatedAt: new Date().toISOString() };
+}
+
+/**
+ * A file name as typed when renaming: trimmed, without the characters a file name can't hold, and still a
+ * PDF ("Level 1 plan" → "Level 1 plan.pdf"). Throws a message for the person when nothing is left.
+ */
+export function cleanFileName(raw: unknown): string {
+  const name = (typeof raw === "string" ? raw : "").replace(/[\\/:*?"<>|\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim();
+  const base = name.replace(/\.pdf$/i, "").trim();
+  if (!base) throw new Error("Give the file a name.");
+  if (base.length > 250) throw new Error("A file name can be at most 250 characters.");
+  return `${base}.pdf`;
+}
+
+/**
+ * Renames a file: every revision of the series takes the new name, so the file reads the same in every
+ * screen (pure). No two files in a project share a name, the way uploads already work.
+ */
+export function renameSeries(index: ProjectFileIndex, series: string, raw: unknown): ProjectFileIndex {
+  const name = cleanFileName(raw);
+  if (!index.documents.some(d => d.series === series)) throw new Error("This file was deleted.");
+  if (latestDocuments(index.documents).some(d => d.series !== series && d.name.toLowerCase() === name.toLowerCase())) throw new Error(`There is already a file named ${name}.`);
+  return { ...index, documents: index.documents.map(d => d.series === series ? { ...d, name } : d), updatedAt: new Date().toISOString() };
 }
 
 export const emptyIndex = (projectId: string): ProjectFileIndex => ({ projectId, documents: [], updatedAt: "" });
