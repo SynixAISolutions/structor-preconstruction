@@ -1,4 +1,5 @@
-// Marcel (24 Oct): the case-study projects are proprietary, so the app is demoed with generic names.
+// Marcel (24 Oct): the case-study projects are proprietary, so the app is demoed with generic names
+// (projects, file names, and the people from Marcel's company).
 // The code now says Project 1 / 2 / 3; this rewrites what a browser saved before the rename (project
 // records, screen drafts, sample backups, the bid-leveling workspace) so the old names never show.
 
@@ -14,11 +15,18 @@ const PHRASES: [string, string][] = [
   ["Jelleff project manual", "Project 1 manual"],
   ["Whittier Campus", "Project 2"],
   ["Riverside Commons", "Project 3"],
+  ["JRC_GMP-Permit_Drawings_251209.pdf", "Project 1 GMP drawings.pdf"],
+  ["JRC_GMP-Permit_Project-Manual_251209.pdf", "Project 1 GMP project manual.pdf"],
+  ["Amit Patani", "Chris Taylor"],
   ['"version":"DGS"', '"version":"Public owner"'],
 ];
 // Whole words only, after the phrases: project ids ("jelleff") and code names are lower case and untouched.
-const WORDS: [RegExp, string][] = [[/\bJelleff\b/g, "Project 1"], [/\bJELLEFF\b/g, "PROJECT 1"], [/\bWhittier\b/g, "Project 2"]];
-const ANY = /Jelleff|JELLEFF|Whittier|Riverside Commons|DLR Group|General Services|3265 S St|"version":"DGS"/;
+// Sadie and Victor stand in for two of Marcel's colleagues who own scopes in the sample.
+const WORDS: [RegExp, string][] = [
+  [/\bJelleff\b/g, "Project 1"], [/\bJELLEFF\b/g, "PROJECT 1"], [/\bWhittier\b/g, "Project 2"],
+  [/\bSafi\b/g, "Sadie"], [/\bVijay\b/g, "Victor"],
+];
+const ANY = /Jelleff|JELLEFF|Whittier|Riverside Commons|DLR Group|General Services|3265 S St|"version":"DGS"|JRC_GMP|Amit Patani|\bSafi\b|\bVijay\b/;
 
 export function renameDemoNames(text: string): string {
   if (!ANY.test(text)) return text;

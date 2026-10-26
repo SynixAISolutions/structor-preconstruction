@@ -16,32 +16,32 @@ import { approveScope, bidForm, markInvitationSubmitted, publishPackage, type Pr
 import { stableIds } from "./stable-ids";
 
 const packages: TradePackage[] = [
-  { id: "demolition", name: "Demolition", division: "02", code: "02 41 19", owner: "Safi", due: "2026-10-02" },
-  { id: "concrete", name: "Concrete", division: "03", code: "03 30 00", owner: "Vijay", due: "2026-10-06" },
+  { id: "demolition", name: "Demolition", division: "02", code: "02 41 19", owner: "Sadie", due: "2026-10-02" },
+  { id: "concrete", name: "Concrete", division: "03", code: "03 30 00", owner: "Victor", due: "2026-10-06" },
   { id: "masonry", name: "Masonry", division: "04", code: "04 22 00", owner: "Naija", due: "2026-10-08" },
   { id: "steel", name: "Structural steel", division: "05", code: "05 12 00", owner: "Naija", due: "2026-10-08" },
-  { id: "carpentry", name: "Carpentry", division: "06", code: "06 10 00", owner: "Vijay", due: "2026-10-09" },
-  { id: "waterproofing", name: "Waterproofing, air barrier & joint sealants", division: "07", code: "07 10 00", owner: "Vijay", due: "2026-10-14" },
-  { id: "metal-panels", name: "Metal panels", division: "07", code: "07 42 00", owner: "Vijay", due: "2026-10-14" },
-  { id: "thermal", name: "Roofing", division: "07", code: "07 54 23", owner: "Vijay", due: "2026-10-09" },
-  { id: "openings", name: "Doors, frames & hardware", division: "08", code: "08 11 13", owner: "Safi", due: "2026-10-12" },
-  { id: "special-doors", name: "Special doors", division: "08", code: "08 33 13", owner: "Safi", due: "2026-10-14" },
-  { id: "glazing", name: "Aluminum & glazing", division: "08", code: "08 40 00", owner: "Safi", due: "2026-10-14" },
-  { id: "drywall", name: "Drywall", division: "09", code: "09 29 00", owner: "Safi", due: "2026-10-12" },
-  { id: "tile", name: "Tile", division: "09", code: "09 30 13", owner: "Safi", due: "2026-10-15" },
-  { id: "flooring", name: "Flooring", division: "09", code: "09 65 19", owner: "Vijay", due: "2026-10-12" },
-  { id: "painting", name: "Painting & wall coverings", division: "09", code: "09 91 23", owner: "Safi", due: "2026-10-15" },
+  { id: "carpentry", name: "Carpentry", division: "06", code: "06 10 00", owner: "Victor", due: "2026-10-09" },
+  { id: "waterproofing", name: "Waterproofing, air barrier & joint sealants", division: "07", code: "07 10 00", owner: "Victor", due: "2026-10-14" },
+  { id: "metal-panels", name: "Metal panels", division: "07", code: "07 42 00", owner: "Victor", due: "2026-10-14" },
+  { id: "thermal", name: "Roofing", division: "07", code: "07 54 23", owner: "Victor", due: "2026-10-09" },
+  { id: "openings", name: "Doors, frames & hardware", division: "08", code: "08 11 13", owner: "Sadie", due: "2026-10-12" },
+  { id: "special-doors", name: "Special doors", division: "08", code: "08 33 13", owner: "Sadie", due: "2026-10-14" },
+  { id: "glazing", name: "Aluminum & glazing", division: "08", code: "08 40 00", owner: "Sadie", due: "2026-10-14" },
+  { id: "drywall", name: "Drywall", division: "09", code: "09 29 00", owner: "Sadie", due: "2026-10-12" },
+  { id: "tile", name: "Tile", division: "09", code: "09 30 13", owner: "Sadie", due: "2026-10-15" },
+  { id: "flooring", name: "Flooring", division: "09", code: "09 65 19", owner: "Victor", due: "2026-10-12" },
+  { id: "painting", name: "Painting & wall coverings", division: "09", code: "09 91 23", owner: "Sadie", due: "2026-10-15" },
   { id: "specialties", name: "Specialties", division: "10", code: "10 00 00", owner: "Naija", due: "2026-10-15" },
   { id: "signage", name: "Signage", division: "10", code: "10 14 00", owner: "Naija", due: "2026-10-15" },
-  { id: "fire-protection", name: "Fire protection", division: "21", code: "21 13 13", owner: "Vijay", due: "2026-10-15" },
-  { id: "plumbing", name: "Plumbing", division: "22", code: "22 00 00", owner: "Vijay", due: "2026-10-13" },
-  { id: "mechanical", name: "Mechanical", division: "23", code: "23 73 13", owner: "Vijay", due: "2026-10-13" },
+  { id: "fire-protection", name: "Fire protection", division: "21", code: "21 13 13", owner: "Victor", due: "2026-10-15" },
+  { id: "plumbing", name: "Plumbing", division: "22", code: "22 00 00", owner: "Victor", due: "2026-10-13" },
+  { id: "mechanical", name: "Mechanical", division: "23", code: "23 73 13", owner: "Victor", due: "2026-10-13" },
   { id: "electrical", name: "Electrical", division: "26", code: "26 51 00", owner: "Naija", due: "2026-10-13" },
   { id: "low-voltage", name: "Low voltage", division: "27", code: "27 00 00", owner: "Naija", due: "2026-10-16" },
-  { id: "asphalt", name: "Asphalt paving", division: "32", code: "32 12 16", owner: "Safi", due: "2026-10-16" },
-  { id: "site-concrete", name: "Site concrete", division: "32", code: "32 13 13", owner: "Vijay", due: "2026-10-16" },
-  { id: "fencing", name: "Site fencing", division: "32", code: "32 31 00", owner: "Safi", due: "2026-10-16" },
-  { id: "landscaping", name: "Landscaping", division: "32", code: "32 90 00", owner: "Safi", due: "2026-10-16" },
+  { id: "asphalt", name: "Asphalt paving", division: "32", code: "32 12 16", owner: "Sadie", due: "2026-10-16" },
+  { id: "site-concrete", name: "Site concrete", division: "32", code: "32 13 13", owner: "Victor", due: "2026-10-16" },
+  { id: "fencing", name: "Site fencing", division: "32", code: "32 31 00", owner: "Sadie", due: "2026-10-16" },
+  { id: "landscaping", name: "Landscaping", division: "32", code: "32 90 00", owner: "Sadie", due: "2026-10-16" },
 ];
 
 const created = "2026-09-15T14:00:00.000Z";
@@ -85,31 +85,31 @@ const listed: Procurement = {
   scopes,
   invitations: [
     ...[["demo-inv-c2", "concrete", "demo-c2"], ["demo-inv-d1", "openings", "demo-d1"], ["demo-inv-d2", "openings", "demo-d2"], ["demo-inv-r1", "thermal", "demo-r1"], ["demo-inv-r2", "thermal", "demo-r2"]].map(([id, packageId, bidderId]) => ({ id, packageId, bidderId, status: "submitted" as const, invitedAt: "2026-10-12T12:00:00.000Z", by: "Sample estimator" })),
-    { id: "inv-1", packageId: "demolition", bidderId: "b1", status: "bidding", invitedAt: "2026-09-16T16:00:00.000Z", by: "Safi" },
-    { id: "inv-2", packageId: "concrete", bidderId: "b2", status: "invited", invitedAt: "2026-09-16T16:05:00.000Z", by: "Vijay" },
+    { id: "inv-1", packageId: "demolition", bidderId: "b1", status: "bidding", invitedAt: "2026-09-16T16:00:00.000Z", by: "Sadie" },
+    { id: "inv-2", packageId: "concrete", bidderId: "b2", status: "invited", invitedAt: "2026-09-16T16:05:00.000Z", by: "Victor" },
     { id: "inv-3", packageId: "steel", bidderId: "b3", status: "invited", invitedAt: "2026-09-17T13:00:00.000Z", by: "Naija" },
-    { id: "inv-4", packageId: "mechanical", bidderId: "b4", status: "declined", invitedAt: "2026-09-17T13:10:00.000Z", by: "Vijay" },
+    { id: "inv-4", packageId: "mechanical", bidderId: "b4", status: "declined", invitedAt: "2026-09-17T13:10:00.000Z", by: "Victor" },
     { id: "inv-5", packageId: "electrical", bidderId: "b5", status: "invited", invitedAt: "2026-09-17T13:20:00.000Z", by: "Naija" },
-    { id: "inv-6", packageId: "drywall", bidderId: "b7", status: "bidding", invitedAt: "2026-10-05T16:00:00.000Z", by: "Safi" },
-    { id: "inv-7", packageId: "drywall", bidderId: "b8", status: "bidding", invitedAt: "2026-10-05T16:05:00.000Z", by: "Safi" },
-    { id: "inv-8", packageId: "drywall", bidderId: "b9", status: "declined", invitedAt: "2026-10-05T16:10:00.000Z", by: "Safi" },
+    { id: "inv-6", packageId: "drywall", bidderId: "b7", status: "bidding", invitedAt: "2026-10-05T16:00:00.000Z", by: "Sadie" },
+    { id: "inv-7", packageId: "drywall", bidderId: "b8", status: "bidding", invitedAt: "2026-10-05T16:05:00.000Z", by: "Sadie" },
+    { id: "inv-8", packageId: "drywall", bidderId: "b9", status: "declined", invitedAt: "2026-10-05T16:10:00.000Z", by: "Sadie" },
   ],
   outreach: [
-    { id: "out-1", packageId: "demolition", bidderId: "b1", kind: "call", text: "Called Michael — confirmed they will bid. Asked about slab removal.", at: "2026-09-17T14:10:00.000Z", by: "Safi" },
-    { id: "out-2", packageId: "concrete", bidderId: "b2", kind: "call", text: "Called District Concrete — no answer, left a voicemail.", at: "2026-09-18T15:00:00.000Z", by: "Vijay" },
-    { id: "out-3", packageId: "mechanical", bidderId: "b4", kind: "note", text: "Declined: at capacity until spring.", at: "2026-09-18T16:20:00.000Z", by: "Vijay" },
-    { id: "out-4", packageId: "drywall", bidderId: "b7", kind: "call", text: "Called Avery — bidding; asked whether acoustical ceilings are in this package. Yes.", at: "2026-10-06T14:00:00.000Z", by: "Safi" },
-    { id: "out-5", packageId: "drywall", bidderId: "b9", kind: "note", text: "Declined: no crew available before March.", at: "2026-10-06T15:30:00.000Z", by: "Safi" },
+    { id: "out-1", packageId: "demolition", bidderId: "b1", kind: "call", text: "Called Michael — confirmed they will bid. Asked about slab removal.", at: "2026-09-17T14:10:00.000Z", by: "Sadie" },
+    { id: "out-2", packageId: "concrete", bidderId: "b2", kind: "call", text: "Called District Concrete — no answer, left a voicemail.", at: "2026-09-18T15:00:00.000Z", by: "Victor" },
+    { id: "out-3", packageId: "mechanical", bidderId: "b4", kind: "note", text: "Declined: at capacity until spring.", at: "2026-09-18T16:20:00.000Z", by: "Victor" },
+    { id: "out-4", packageId: "drywall", bidderId: "b7", kind: "call", text: "Called Avery — bidding; asked whether acoustical ceilings are in this package. Yes.", at: "2026-10-06T14:00:00.000Z", by: "Sadie" },
+    { id: "out-5", packageId: "drywall", bidderId: "b9", kind: "note", text: "Declined: no crew available before March.", at: "2026-10-06T15:30:00.000Z", by: "Sadie" },
   ],
   notifications: [],
 };
 
 const approveAll = (state: Procurement, packageId: string, by: string, at: string) =>
   bidForm(state, packageId).filter(i => i.status === "draft").reduce((next, i) => approveScope(next, i.id, by, at), state);
-const concrete = publishPackage(approveAll(listed, "concrete", "Vijay", "2026-09-17T13:00:00.000Z"), "concrete", "Vijay", "2026-09-17T15:00:00.000Z");
-const drywall = publishPackage(approveAll(concrete, "drywall", "Safi", "2026-10-05T13:00:00.000Z"), "drywall", "Safi", "2026-10-05T15:00:00.000Z");
-const roofing = publishPackage(approveAll(drywall, "thermal", "Vijay", "2026-10-12T13:00:00.000Z"), "thermal", "Vijay", "2026-10-12T14:00:00.000Z");
-const doors = publishPackage(approveAll(roofing, "openings", "Safi", "2026-10-12T13:00:00.000Z"), "openings", "Safi", "2026-10-12T14:00:00.000Z");
+const concrete = publishPackage(approveAll(listed, "concrete", "Victor", "2026-09-17T13:00:00.000Z"), "concrete", "Victor", "2026-09-17T15:00:00.000Z");
+const drywall = publishPackage(approveAll(concrete, "drywall", "Sadie", "2026-10-05T13:00:00.000Z"), "drywall", "Sadie", "2026-10-05T15:00:00.000Z");
+const roofing = publishPackage(approveAll(drywall, "thermal", "Victor", "2026-10-12T13:00:00.000Z"), "thermal", "Victor", "2026-10-12T14:00:00.000Z");
+const doors = publishPackage(approveAll(roofing, "openings", "Sadie", "2026-10-12T13:00:00.000Z"), "openings", "Sadie", "2026-10-12T14:00:00.000Z");
 const submitted = ["inv-2", "inv-6", "inv-7"].reduce(markInvitationSubmitted, doors);
 
 export const sampleProcurement: Procurement = stableIds(submitted, "pn");

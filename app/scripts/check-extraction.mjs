@@ -24,7 +24,7 @@ assert.deepEqual(base.runs.map(r => [r.id, r.packageIds, r.engine.mode, r.status
 assert.deepEqual(base.drafts.map(d => [d.kind, d.status]), [["scope", "pending-review"], ["scope", "pending-review"], ["scope", "pending-review"], ["scope", "rejected"], ["region", "pending-review"], ["quantity", "pending-review"]]);
 assert(base.drafts.every(d => /^ext-\d+$/.test(d.id) && d.runId === "ext-1" && d.citations.length && d.history[0].by === "Structor AI" && d.history[0].at === base.runs[0].finishedAt), "Fixed ids, cited, proposed by Structor AI when the run finished");
 assert.deepEqual([finish.original.title, finish.title, finish.history.at(-1).fields], ["Finish all gypsum board to Level 5.", "Finish gypsum board to Level 4 where exposed to view.", ["title"]], "The edit keeps the AI's wording");
-assert.deepEqual([doors.rejection, doors.reviewedBy], [{ reason: "wrong-trade", note: "Doors are in the Openings package; drywall only frames the opening." }, "Safi"]);
+assert.deepEqual([doors.rejection, doors.reviewedBy], [{ reason: "wrong-trade", note: "Doors are in the Openings package; drywall only frames the opening." }, "Sadie"]);
 assert.deepEqual([region.scopeDraftIds, quantity.scopeDraftId], [[framing.id], framing.id]);
 assert(sampleDrawingFlip.pages.some(p => p.sheet === region.sheet), "The sample region's sheet is a Drawing Flip page");
 assert.deepEqual(startingDraft("another-project", "extraction", sampleExtraction), { runs: [], drafts: [] }, "Other projects start empty");
@@ -69,63 +69,63 @@ assert.deepEqual([failed.runs[0].status, failed.runs[0].error, failed.drafts], [
 fails(() => run([scopeIn()], { error: "Stopped." }), /failed run can't carry findings/);
 
 // ── Accepting ──
-const scopeAccepted = X.acceptDraft(records, framing.id, "Safi", at);
+const scopeAccepted = X.acceptDraft(records, framing.id, "Sadie", at);
 const newScope = scopeAccepted.procurement.scopes.at(-1);
 assert.deepEqual([newScope.packageId, newScope.title, newScope.source, newScope.origin, newScope.status], ["drywall", framing.title, framing.source, "ai", "approved"]);
-assert.deepEqual(newScope.history.map(h => [h.kind, h.by, h.at]), [["created", "Structor AI", "2026-10-13T09:06:00.000Z"], ["approved", "Safi", at]], "Created by the AI at the run, approved by the reviewer");
+assert.deepEqual(newScope.history.map(h => [h.kind, h.by, h.at]), [["created", "Structor AI", "2026-10-13T09:06:00.000Z"], ["approved", "Sadie", at]], "Created by the AI at the run, approved by the reviewer");
 const acceptedFraming = scopeAccepted.extraction.drafts.find(d => d.id === framing.id);
-assert.deepEqual([acceptedFraming.status, acceptedFraming.acceptedId, acceptedFraming.reviewedBy, acceptedFraming.history.at(-1).kind], ["accepted", newScope.id, "Safi", "accepted"]);
+assert.deepEqual([acceptedFraming.status, acceptedFraming.acceptedId, acceptedFraming.reviewedBy, acceptedFraming.history.at(-1).kind], ["accepted", newScope.id, "Sadie", "accepted"]);
 assert.equal(scopeAccepted.flip, flip, "No region accepted yet: Drawing Flip untouched");
 
-const bothAccepted = X.acceptDraft(scopeAccepted, region.id, "Safi", at);
+const bothAccepted = X.acceptDraft(scopeAccepted, region.id, "Sadie", at);
 const newRegion = bothAccepted.flip.regions.at(-1);
 assert.deepEqual([newRegion.origin, newRegion.status, newRegion.reviewedBy, newRegion.packageId, newRegion.scopeIds, newRegion.confidence, newRegion.label],
-  ["ai", "approved", "Safi", "drywall", [newScope.id], 0.7, region.label]);
+  ["ai", "approved", "Sadie", "drywall", [newScope.id], 0.7, region.label]);
 assert.equal(newRegion.pageId, flip.pages.find(p => p.sheet === "A1.1").id);
 assert(newRegion.evidence.includes(region.citations[0].quote) && newRegion.evidence.startsWith("A1.1 p.46"), "The citation becomes the region's evidence");
 assert.equal(bothAccepted.extraction.drafts.find(d => d.id === region.id).acceptedId, newRegion.id);
 // The other order links too: region first, then its scope finding.
-const regionFirst = X.acceptDraft(X.acceptDraft(records, region.id, "Safi", at), framing.id, "Safi", at);
+const regionFirst = X.acceptDraft(X.acceptDraft(records, region.id, "Sadie", at), framing.id, "Sadie", at);
 assert.deepEqual(regionFirst.flip.regions.at(-1).scopeIds, [regionFirst.procurement.scopes.at(-1).id], "Accepting the scope later links the already-accepted region");
-assert.deepEqual(X.acceptDraft(records, region.id, "Safi", at).flip.regions.at(-1).scopeIds, [], "A region accepted before its scope starts unlinked");
+assert.deepEqual(X.acceptDraft(records, region.id, "Sadie", at).flip.regions.at(-1).scopeIds, [], "A region accepted before its scope starts unlinked");
 
-const quantityAccepted = X.acceptDraft(records, quantity.id, "Safi", at);
+const quantityAccepted = X.acceptDraft(records, quantity.id, "Sadie", at);
 assert.deepEqual([quantityAccepted.extraction.drafts.find(d => d.id === quantity.id).status, quantityAccepted.procurement, quantityAccepted.flip], ["accepted", proc, flip], "A quantity is only marked accepted");
-fails(() => X.acceptDraft(scopeAccepted, framing.id, "Safi", at), /Only a finding waiting/);
-fails(() => X.acceptDraft(records, doors.id, "Safi", at), /Only a finding waiting/);
+fails(() => X.acceptDraft(scopeAccepted, framing.id, "Sadie", at), /Only a finding waiting/);
+fails(() => X.acceptDraft(records, doors.id, "Sadie", at), /Only a finding waiting/);
 fails(() => X.acceptDraft(records, framing.id, " ", at), /who reviewed/);
-fails(() => X.acceptDraft(records, "nope", "Safi", at), /no longer exists/);
+fails(() => X.acceptDraft(records, "nope", "Sadie", at), /no longer exists/);
 const noSheet = freeze({ ...records, flip: { ...flip, pages: flip.pages.filter(p => p.sheet !== "A1.1") } });
-fails(() => X.acceptDraft(noSheet, region.id, "Safi", at), /Add sheet A1.1 to Drawing Flip/);
+fails(() => X.acceptDraft(noSheet, region.id, "Sadie", at), /Add sheet A1.1 to Drawing Flip/);
 const noPackage = freeze({ ...records, procurement: { ...proc, packages: proc.packages.filter(p => p.id !== "drywall") } });
-fails(() => X.acceptDraft(noPackage, framing.id, "Safi", at), /trade package no longer exists/);
+fails(() => X.acceptDraft(noPackage, framing.id, "Sadie", at), /trade package no longer exists/);
 
 // ── Editing, rejecting, reopening ──
-const edited = X.editDraft(base, proc, finish.id, { title: "Level 4 finish where exposed to view." }, "Vijay", at);
+const edited = X.editDraft(base, proc, finish.id, { title: "Level 4 finish where exposed to view." }, "Victor", at);
 assert.equal(edited.drafts.find(d => d.id === finish.id).original.title, "Finish all gypsum board to Level 5.", "A second edit keeps the AI's first version");
-assert.equal(X.editDraft(base, proc, framing.id, { title: framing.title }, "Safi", at), base, "No change, same state");
-const editedOnce = X.editDraft(base, proc, framing.id, { detail: "Deflection track at the top." }, "Safi", at).drafts.find(d => d.id === framing.id);
+assert.equal(X.editDraft(base, proc, framing.id, { title: framing.title }, "Sadie", at), base, "No change, same state");
+const editedOnce = X.editDraft(base, proc, framing.id, { detail: "Deflection track at the top." }, "Sadie", at).drafts.find(d => d.id === framing.id);
 assert.deepEqual([editedOnce.original.detail, editedOnce.detail, editedOnce.history.at(-1).fields], [framing.detail, "Deflection track at the top.", ["detail"]]);
-fails(() => X.editDraft(base, proc, framing.id, { title: " " }, "Safi", at), /scope item is missing/);
-fails(() => X.editDraft(base, proc, quantity.id, { quantity: -1 }, "Safi", at), /above 0/);
-fails(() => X.editDraft(base, proc, doors.id, { title: "x" }, "Safi", at), /Only a finding waiting/);
-fails(() => X.editDraft(base, proc, framing.id, { packageId: "nope" }, "Safi", at), /doesn't exist/);
-const moved = X.editDraft(base, proc, framing.id, { packageId: "flooring" }, "Safi", at);
+fails(() => X.editDraft(base, proc, framing.id, { title: " " }, "Sadie", at), /scope item is missing/);
+fails(() => X.editDraft(base, proc, quantity.id, { quantity: -1 }, "Sadie", at), /above 0/);
+fails(() => X.editDraft(base, proc, doors.id, { title: "x" }, "Sadie", at), /Only a finding waiting/);
+fails(() => X.editDraft(base, proc, framing.id, { packageId: "nope" }, "Sadie", at), /doesn't exist/);
+const moved = X.editDraft(base, proc, framing.id, { packageId: "flooring" }, "Sadie", at);
 assert.deepEqual([moved.drafts.find(d => d.id === region.id).scopeDraftIds, moved.drafts.find(d => d.id === quantity.id).scopeDraftId], [[], null], "Moving a scope finding unlinks findings of the old trade");
-const regionMoved = X.editDraft(base, proc, region.id, { packageId: "flooring" }, "Safi", at).drafts.find(d => d.id === region.id);
+const regionMoved = X.editDraft(base, proc, region.id, { packageId: "flooring" }, "Sadie", at).drafts.find(d => d.id === region.id);
 assert.deepEqual([regionMoved.packageId, regionMoved.scopeDraftIds, regionMoved.original.label], ["flooring", [], region.label], "A moved region drops its links to the old trade's scope");
 
-fails(() => X.rejectDraft(base, ceilings.id, "other", "", "Safi", at), /note is missing/);
-fails(() => X.rejectDraft(base, ceilings.id, "bogus", "", "Safi", at), /why it is rejected/);
-const rejectedCeilings = X.rejectDraft(base, ceilings.id, "duplicate", "", "Safi", at);
+fails(() => X.rejectDraft(base, ceilings.id, "other", "", "Sadie", at), /note is missing/);
+fails(() => X.rejectDraft(base, ceilings.id, "bogus", "", "Sadie", at), /why it is rejected/);
+const rejectedCeilings = X.rejectDraft(base, ceilings.id, "duplicate", "", "Sadie", at);
 assert.deepEqual(rejectedCeilings.drafts.find(d => d.id === ceilings.id).rejection, { reason: "duplicate", note: "" });
-const reopened = X.reopenDraft(base, doors.id, "Safi", at).drafts.find(d => d.id === doors.id);
+const reopened = X.reopenDraft(base, doors.id, "Sadie", at).drafts.find(d => d.id === doors.id);
 assert.deepEqual([reopened.status, reopened.rejection, reopened.reviewedBy, reopened.history.at(-1).kind], ["pending-review", null, null, "reopened"]);
-fails(() => X.reopenDraft(base, framing.id, "Safi", at), /already waiting/);
-fails(() => X.reopenDraft(scopeAccepted.extraction, framing.id, "Safi", at), /changed where it now lives/);
+fails(() => X.reopenDraft(base, framing.id, "Sadie", at), /already waiting/);
+fails(() => X.reopenDraft(scopeAccepted.extraction, framing.id, "Sadie", at), /changed where it now lives/);
 
 // ── Reading: the run's accuracy picture ──
-const reviewed = X.acceptDraft(X.acceptDraft(records, framing.id, "Safi", at), finish.id, "Safi", at);
+const reviewed = X.acceptDraft(X.acceptDraft(records, framing.id, "Sadie", at), finish.id, "Sadie", at);
 assert.equal(reviewed.procurement.scopes.at(-1).title, "Finish gypsum board to Level 4 where exposed to view.", "The corrected wording reaches the bid form");
 assert.deepEqual(X.runSummary(reviewed.extraction, "ext-1"), {
   findings: 6, pending: 3, acceptedAsProposed: 1, acceptedEdited: 1, rejected: 1,

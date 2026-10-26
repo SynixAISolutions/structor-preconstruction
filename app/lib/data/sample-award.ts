@@ -40,11 +40,11 @@ const candidates = levelingCandidates({ packageId: "concrete", items: imported.i
 let awards: AwardState = createAward({ awards: [], notifications: [] }, {
   projectId: project.id, projectName: project.name, procurement, submissions, candidates, budget: sampleBudget, directory: initialBidders,
   owner: "Public owner", projectAddress: project.location, projectStart: project.start,
-}, { levelingBidderId: candidates[0].levelingBidderId, basis: "base", budgetLineId: "nc-03000" }, "Vijay", at("2026-09-23"));
+}, { levelingBidderId: candidates[0].levelingBidderId, basis: "base", budgetLineId: "nc-03000" }, "Victor", at("2026-09-23"));
 const awardId = awards.awards[0].id;
 awards = shareExhibit(awards, awardId, at("2026-09-23", "15:00"));
 awards = agreeExhibit(awards, awardId, "Sarah Chen", "subcontractor", at("2026-09-24"));
-awards = generateSubcontract(awards, awardId, "General contractor", "Vijay", at("2026-09-24", "15:00"));
+awards = generateSubcontract(awards, awardId, "General contractor", "Victor", at("2026-09-24", "15:00"));
 awards = sendSubcontract(awards, awardId, at("2026-09-24", "16:00"));
 awards = signSubcontract(awards, awardId, "subcontractor", { name: "Sarah Chen", title: "Project manager", email: "sarah@example.com" }, at("2026-09-25", "13:00"));
 awards = signSubcontract(awards, awardId, "contractor", { name: "Marcel Khoury", title: "Estimator", email: "marcel@example.com" }, at("2026-09-25", "15:00"));
@@ -86,11 +86,11 @@ const capitol = drywallCandidates.find(c => c.bidderName === "Capitol Wall Syste
 let drywallAwards: AwardState = createAward(stable.awards, {
   projectId: project.id, projectName: project.name, procurement, submissions: drywallSubmissions, candidates: drywallCandidates, budget: sampleBudget, directory: initialBidders,
   owner: "Public owner", projectAddress: project.location, projectStart: project.start,
-}, { levelingBidderId: capitol.levelingBidderId, basis: "base", budgetLineId: "nc-09200" }, "Safi", at("2026-10-09"));
+}, { levelingBidderId: capitol.levelingBidderId, basis: "base", budgetLineId: "nc-09200" }, "Sadie", at("2026-10-09"));
 const drywallAwardId = drywallAwards.awards.at(-1)!.id;
 drywallAwards = shareExhibit(drywallAwards, drywallAwardId, at("2026-10-09", "15:00"));
 drywallAwards = agreeExhibit(drywallAwards, drywallAwardId, "Avery Morgan", "subcontractor", at("2026-10-10"));
-drywallAwards = generateSubcontract(drywallAwards, drywallAwardId, "General contractor", "Safi", at("2026-10-10", "15:00"));
+drywallAwards = generateSubcontract(drywallAwards, drywallAwardId, "General contractor", "Sadie", at("2026-10-10", "15:00"));
 drywallAwards = sendSubcontract(drywallAwards, drywallAwardId, at("2026-10-10", "16:00"));
 drywallAwards = signSubcontract(drywallAwards, drywallAwardId, "subcontractor", { name: "Avery Morgan", title: "Owner", email: "avery@example.com" }, at("2026-10-12", "13:00"));
 drywallAwards = signSubcontract(drywallAwards, drywallAwardId, "contractor", { name: "Marcel Khoury", title: "Estimator", email: "marcel@example.com" }, at("2026-10-12", "15:00"));

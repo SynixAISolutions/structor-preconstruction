@@ -769,8 +769,8 @@ export const modelForProject = (projectId: string): ModelObject[] => projectId =
 /** Jelleff's starting review: one finish checked, one wall waiting on the envelope details. */
 export const sampleModelReview: ModelReviewState = {
   reviews: [
-    { objectId: "floor-gym", status: "verified", note: "Matches the FAF-01 tag on A12.2.", by: "Safi", at: "2026-09-29T15:00:00.000Z", history: [{ status: "verified", note: "Matches the FAF-01 tag on A12.2.", by: "Safi", at: "2026-09-29T15:00:00.000Z" }] },
-    { objectId: "gym-north", status: "flagged", note: "Exterior wall layers not verified; check the wall sections.", by: "Vijay", at: "2026-09-29T15:10:00.000Z", history: [{ status: "flagged", note: "Exterior wall layers not verified; check the wall sections.", by: "Vijay", at: "2026-09-29T15:10:00.000Z" }] },
+    { objectId: "floor-gym", status: "verified", note: "Matches the FAF-01 tag on A12.2.", by: "Sadie", at: "2026-09-29T15:00:00.000Z", history: [{ status: "verified", note: "Matches the FAF-01 tag on A12.2.", by: "Sadie", at: "2026-09-29T15:00:00.000Z" }] },
+    { objectId: "gym-north", status: "flagged", note: "Exterior wall layers not verified; check the wall sections.", by: "Victor", at: "2026-09-29T15:10:00.000Z", history: [{ status: "flagged", note: "Exterior wall layers not verified; check the wall sections.", by: "Victor", at: "2026-09-29T15:10:00.000Z" }] },
   ],
   hidden: { interior: [], mep: [], structural: [], exterior: [] },
 };

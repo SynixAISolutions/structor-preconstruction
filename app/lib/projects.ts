@@ -96,7 +96,7 @@ export const sampleProjectRecords: Project[] = [
   // $33,328,991; a "1st Source" wage premium row) and his step-by-step precon write-up (bid dates,
   // construction start). Tax status is not stated in the Jelleff documents, so it stays unrecorded.
   sample({ id: "jelleff", name: "Project 1", location: "Washington, DC", type: "Community & recreation", status: "Preconstruction", value: 33328991, squareFeet: 26500, architect: "Architect of record", description: "Modernization of a recreation center for a public owner: a new building, pool renovation, and sitework, delivered by Contractor as CM at-risk.", due: "2026-02-02", rfi: "2026-01-20", start: "2026-06-01", finish: "" },
-    { certifications: ["First Source"], team: [{ name: "Marcel Khoury", role: "Estimator" }, { name: "Amit Patani", role: "Project executive" }],
+    { certifications: ["First Source"], team: [{ name: "Marcel Khoury", role: "Estimator" }, { name: "Chris Taylor", role: "Project executive" }],
       // From Marcel's Jelleff kickoff email (his precon write-up). Raze start was "between March and April 2026", so no date.
       kickoff: { ...EMPTY_KICKOFF, scopesDue: "2026-01-26", rfiResponses: "2026-01-27", drawingFlip: "2026-01-20", jobWalk: "N/A unless requested by your subcontractors", wageScale: true } }),
   sample({ id: "whittier", name: "Project 2", location: "Washington, DC", type: "Education", status: "Design development", value: 26800000, squareFeet: 68200, architect: "Campus design team", description: "A school modernization, classroom addition, and associated site work.", due: "2026-11-06", rfi: "2026-10-23", start: "2027-03-01", finish: "2028-08-18" }),

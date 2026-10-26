@@ -65,36 +65,36 @@ fails(() => record({ document: { name: "Proposal.pdf", pages: 1, size: 50 * 1024
 fails(() => record({ engine: { mode: "guess", model: "m" } }), /sample, offline or live/);
 
 // ── Correcting ──
-const priced = R.editReading(base, reading.id, { baseBid: 1770000, exclusions: ["Testing and inspection (by owner)", "Dewatering"] }, "Vijay", at);
+const priced = R.editReading(base, reading.id, { baseBid: 1770000, exclusions: ["Testing and inspection (by owner)", "Dewatering"] }, "Victor", at);
 const p1 = priced.readings[0];
-assert.deepEqual([p1.content.baseBid, p1.content.baseBidCitations, p1.original, p1.history.at(-1)], [1770000, [], reading.content, { kind: "edited", at, by: "Vijay", fields: ["baseBid", "exclusions"] }]);
+assert.deepEqual([p1.content.baseBid, p1.content.baseBidCitations, p1.original, p1.history.at(-1)], [1770000, [], reading.content, { kind: "edited", at, by: "Victor", fields: ["baseBid", "exclusions"] }]);
 assert.deepEqual(p1.content.exclusions.map(l => [l.text, l.citations.length > 0]), [["Testing and inspection (by owner)", true], ["Dewatering", false]], "A kept line keeps its citation; an added one has none");
-assert.equal(R.editReading(base, reading.id, { baseBid: 1768000 }, "Vijay", at), base, "No change, same state");
-const twice = R.editReading(priced, reading.id, { baseBid: 1771000 }, "Vijay", at).readings[0];
+assert.equal(R.editReading(base, reading.id, { baseBid: 1768000 }, "Victor", at), base, "No change, same state");
+const twice = R.editReading(priced, reading.id, { baseBid: 1771000 }, "Victor", at).readings[0];
 assert.equal(twice.original, reading.content, "A second correction keeps the AI's first reading");
-const kept = R.editReading(base, reading.id, { alternates: [{ kind: "deduct", description: "Delete housekeeping pads (by mechanical)", amount: 18500 }, { kind: "add", description: "Sealer", amount: 4000 }] }, "Vijay", at).readings[0];
+const kept = R.editReading(base, reading.id, { alternates: [{ kind: "deduct", description: "Delete housekeeping pads (by mechanical)", amount: 18500 }, { kind: "add", description: "Sealer", amount: 4000 }] }, "Victor", at).readings[0];
 assert.deepEqual(kept.content.alternates.map(a => a.citations.length > 0), [true, false]);
-const answered = R.setReadAnswer(base, reading.id, "scope-6", "Y", "", "Vijay", at).readings[0];
+const answered = R.setReadAnswer(base, reading.id, "scope-6", "Y", "", "Victor", at).readings[0];
 assert.deepEqual([answered.content.responses[1].answer, answered.content.responses[1].citations], ["Y", []], "A changed answer is the estimator's, not the proposal's");
-assert.equal(R.setReadAnswer(base, reading.id, "scope-6", "P", "Gym slab only.", "Vijay", at).readings[0].content.responses[1].citations.length, 1, "A clarified note keeps the citation");
-fails(() => R.setReadAnswer(base, reading.id, "scope-1", "Y", "", "Vijay", at), /isn't on the bid form/);
-fails(() => R.setReadAnswer(base, reading.id, "scope-6", "Q", "", "Vijay", at), /Y, N, P or N\/A/);
-fails(() => R.editReading(base, reading.id, { baseBid: -5 }, "Vijay", at), /above 0/);
+assert.equal(R.setReadAnswer(base, reading.id, "scope-6", "P", "Gym slab only.", "Victor", at).readings[0].content.responses[1].citations.length, 1, "A clarified note keeps the citation");
+fails(() => R.setReadAnswer(base, reading.id, "scope-1", "Y", "", "Victor", at), /isn't on the bid form/);
+fails(() => R.setReadAnswer(base, reading.id, "scope-6", "Q", "", "Victor", at), /Y, N, P or N\/A/);
+fails(() => R.editReading(base, reading.id, { baseBid: -5 }, "Victor", at), /above 0/);
 fails(() => R.editReading(base, reading.id, { baseBid: 1 }, " ", at), /who reviewed/);
 assert.deepEqual(R.readingCorrections(reading), { baseBid: false, answers: [], exclusions: false, clarifications: false, alternates: false, submitter: false });
-const corrected = R.setReadAnswer(priced, reading.id, "scope-6", "Y", "", "Vijay", at).readings[0];
-assert.deepEqual(R.readingCorrections(R.setReadAnswer(base, reading.id, "scope-6", "P", "Gym slab only.", "Vijay", at).readings[0]).answers, ["scope-6"], "A reworded note is a correction too");
+const corrected = R.setReadAnswer(priced, reading.id, "scope-6", "Y", "", "Victor", at).readings[0];
+assert.deepEqual(R.readingCorrections(R.setReadAnswer(base, reading.id, "scope-6", "P", "Gym slab only.", "Victor", at).readings[0]).answers, ["scope-6"], "A reworded note is a correction too");
 assert.deepEqual(R.readingCorrections(corrected), { baseBid: true, answers: ["scope-6"], exclusions: true, clarifications: false, alternates: false, submitter: false });
 
-const discarded = R.discardReading(base, reading.id, "Superseded by the phone call.", "Vijay", at);
+const discarded = R.discardReading(base, reading.id, "Superseded by the phone call.", "Victor", at);
 assert.deepEqual([discarded.readings[0].status, discarded.readings[0].discardReason], ["discarded", "Superseded by the phone call."]);
-fails(() => R.discardReading(base, reading.id, " ", "Vijay", at), /Why it is discarded is missing/);
-fails(() => R.editReading(discarded, reading.id, { baseBid: 1 }, "Vijay", at), /discarded/);
+fails(() => R.discardReading(base, reading.id, " ", "Victor", at), /Why it is discarded is missing/);
+fails(() => R.editReading(discarded, reading.id, { baseBid: 1 }, "Victor", at), /discarded/);
 assert.equal(record({}, discarded).readings.length, 2, "A discarded reading doesn't block a new one");
 
 // ── Applying: the reading becomes the company's next revision ──
 assert.deepEqual(R.applyBlockers(records, reading.id, "jelleff"), []);
-const applied = R.applyReading(records, reading.id, "jelleff", "Vijay", at);
+const applied = R.applyReading(records, reading.id, "jelleff", "Victor", at);
 const s1 = applied.submissions.find(s => s.invitationId === "inv-2");
 const rev2 = s1.revisions.at(-1);
 assert.deepEqual([s1.revisions.length, s1.status, rev2.number, rev2.formVersion, rev2.baseBid, rev2.submitter, rev2.submittedAt], [2, "revised", 2, 1, 1768000, { name: "Sarah Chen", email: "sarah@example.com" }, at]);
@@ -104,25 +104,25 @@ assert(rev2.attachments.some(a => a.name === FILE && a.size === 412000), "The pr
 assert.deepEqual(s1.revisions[0], subs.find(s => s.invitationId === "inv-2").revisions[0], "Revision 1 is untouched");
 assert.equal(applied.procurement.invitations.find(i => i.id === "inv-2").status, "submitted");
 const done = applied.proposals.readings[0];
-assert.deepEqual([done.status, done.applied, done.reviewedBy, done.history.at(-1).kind], ["applied", { submissionId: s1.id, revisionNumber: 2 }, "Vijay", "applied"]);
-fails(() => R.applyReading(applied, reading.id, "jelleff", "Vijay", at), /already applied/);
-fails(() => R.setReadAnswer(applied.proposals, reading.id, "scope-6", "Y", "", "Vijay", at), /already applied/);
+assert.deepEqual([done.status, done.applied, done.reviewedBy, done.history.at(-1).kind], ["applied", { submissionId: s1.id, revisionNumber: 2 }, "Victor", "applied"]);
+fails(() => R.applyReading(applied, reading.id, "jelleff", "Victor", at), /already applied/);
+fails(() => R.setReadAnswer(applied.proposals, reading.id, "scope-6", "Y", "", "Victor", at), /already applied/);
 
 // What blocks applying: the submission's own rules, the contact, and a revised form.
 const blockers = (proposals, procurement = proc) => R.applyBlockers({ proposals, submissions: subs, procurement }, reading.id, "jelleff");
-assert.deepEqual(blockers(R.setReadAnswer(base, reading.id, "scope-6", "P", "", "Vijay", at)), ["Explain the partial answer for \"Prepare concrete slab surfaces to the specified floor-flatness tolerance.\"."]);
-assert.deepEqual(blockers(R.setReadAnswer(base, reading.id, "scope-5", null, "", "Vijay", at)), ["Answer \"Provide cast-in-place concrete foundations, slabs, and housekeeping pads.\"."]);
-assert.deepEqual(blockers(R.editReading(base, reading.id, { baseBid: null }, "Vijay", at)), ["Enter a base bid greater than zero."]);
-assert.match(blockers(R.editReading(base, reading.id, { submitter: null }, "Vijay", at))[0], /contact name and email/);
-const republished = P.publishPackage(P.approveScope(P.editScope(proc, "scope-5", { detail: "Include vapor retarder." }, "Vijay", at), "scope-5", "Vijay", at), "concrete", "Vijay", at);
+assert.deepEqual(blockers(R.setReadAnswer(base, reading.id, "scope-6", "P", "", "Victor", at)), ["Explain the partial answer for \"Prepare concrete slab surfaces to the specified floor-flatness tolerance.\"."]);
+assert.deepEqual(blockers(R.setReadAnswer(base, reading.id, "scope-5", null, "", "Victor", at)), ["Answer \"Provide cast-in-place concrete foundations, slabs, and housekeeping pads.\"."]);
+assert.deepEqual(blockers(R.editReading(base, reading.id, { baseBid: null }, "Victor", at)), ["Enter a base bid greater than zero."]);
+assert.match(blockers(R.editReading(base, reading.id, { submitter: null }, "Victor", at))[0], /contact name and email/);
+const republished = P.publishPackage(P.approveScope(P.editScope(proc, "scope-5", { detail: "Include vapor retarder." }, "Victor", at), "scope-5", "Victor", at), "concrete", "Victor", at);
 assert.match(blockers(base, republished)[0], /revised \(version 1 → 2\) after this proposal was read/);
-const issues = (() => { try { R.applyReading({ proposals: R.setReadAnswer(base, reading.id, "scope-6", "N/A", "", "Vijay", at), submissions: subs, procurement: proc }, reading.id, "jelleff", "Vijay", at); } catch (e) { return e.issues; } })();
+const issues = (() => { try { R.applyReading({ proposals: R.setReadAnswer(base, reading.id, "scope-6", "N/A", "", "Victor", at), submissions: subs, procurement: proc }, reading.id, "jelleff", "Victor", at); } catch (e) { return e.issues; } })();
 assert.deepEqual(issues.map(i => [i.field, i.scopeItemId]), [["responses", "scope-6"]], "The submission's field issues come through for the UI");
 
 // A company with no submission yet: the reading opens one and becomes revision 1.
-const demo = P.publishPackage(["scope-1", "scope-2", "scope-3", "scope-4"].reduce((s, id) => P.approveScope(s, id, "Safi", at), proc), "demolition", "Safi", at);
+const demo = P.publishPackage(["scope-1", "scope-2", "scope-3", "scope-4"].reduce((s, id) => P.approveScope(s, id, "Sadie", at), proc), "demolition", "Sadie", at);
 const demoReading = R.recordReading(R.EMPTY_PROPOSALS, demo, input({ invitationId: "inv-1", responses: ["scope-1", "scope-2", "scope-3", "scope-4"].map(id => ({ scopeItemId: id, answer: "Y", citations: cite(2) })) }));
-const first = R.applyReading({ proposals: demoReading, submissions: subs, procurement: demo }, demoReading.readings[0].id, "jelleff", "Safi", at);
+const first = R.applyReading({ proposals: demoReading, submissions: subs, procurement: demo }, demoReading.readings[0].id, "jelleff", "Sadie", at);
 const newSub = first.submissions.find(s => s.invitationId === "inv-1");
 assert.deepEqual([first.submissions.length, newSub.status, newSub.revisions.length, newSub.revisions[0].baseBid, newSub.revisions[0].attachments.map(a => a.name), first.procurement.invitations.find(i => i.id === "inv-1").status],
   [subs.length + 1, "submitted", 1, 1700000, ["Proposal.pdf"], "submitted"]);

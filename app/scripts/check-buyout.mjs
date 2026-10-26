@@ -29,17 +29,17 @@ assert.deepEqual(["thermal", "drywall", "demolition"].map(id => (({ bic, contrac
 assert.deepEqual(Y.buyoutSummary(rows), { contracts: rows.filter(r => r.award).reduce((s, r) => s + r.award.amount, 0), awarded: 2, executed: 2, open: rows.length - 2 });
 
 // Marcel's flow: scope review, minutes, held, best and final, then choose.
-let s = Y.scheduleScopeReview(Y.EMPTY_BUYOUT, sampleProcurement, "thermal", { date: "2026-10-27", attendees: "Potomac Roof Systems" }, "Vijay", at);
+let s = Y.scheduleScopeReview(Y.EMPTY_BUYOUT, sampleProcurement, "thermal", { date: "2026-10-27", attendees: "Potomac Roof Systems" }, "Victor", at);
 assert.deepEqual((({ status, next }) => [status, next])(row(Y.buyoutRows({ ...base, buyout: s }), "thermal")), ["review-scheduled", "Scope review 2026-10-27"]);
-s = Y.addMinutes(s, sampleProcurement, "thermal", "Flashings at the curtain wall are included.", "Vijay", at);
-s = Y.markScopeReviewHeld(s, sampleProcurement, "thermal", "Vijay", at);
+s = Y.addMinutes(s, sampleProcurement, "thermal", "Flashings at the curtain wall are included.", "Victor", at);
+s = Y.markScopeReviewHeld(s, sampleProcurement, "thermal", "Victor", at);
 assert.deepEqual((({ status, ballInCourt, bic }) => [status, ballInCourt, bic])(row(Y.buyoutRows({ ...base, buyout: s }), "thermal")), ["negotiating", "subcontractor", "Potomac Roof Systems (sample)"], "Waiting for best and final: the low bidder has the ball");
-s = Y.recordBafo(s, sampleProcurement, "thermal", { bidderId: "demo-r2", company: "Potomac Roof Systems (sample)", amount: 505000 }, "Vijay", at);
-s = Y.recordBafo(s, sampleProcurement, "thermal", { bidderId: "demo-r2", company: "Potomac Roof Systems (sample)", amount: 501000, note: "Final" }, "Vijay", at);
+s = Y.recordBafo(s, sampleProcurement, "thermal", { bidderId: "demo-r2", company: "Potomac Roof Systems (sample)", amount: 505000 }, "Victor", at);
+s = Y.recordBafo(s, sampleProcurement, "thermal", { bidderId: "demo-r2", company: "Potomac Roof Systems (sample)", amount: 501000, note: "Final" }, "Victor", at);
 const roof = row(Y.buyoutRows({ ...base, buyout: s }), "thermal");
 assert.deepEqual([roof.status, roof.ballInCourt, roof.next, roof.bestAndFinal.amount, roof.entry.bafos.length, roof.delta, roof.entry.scopeReview.minutes.map(m => m.text)],
   ["negotiating", "contractor", "Choose the subcontractor", 501000, 1, Math.round((1961479.38 - 501000) * 100) / 100, ["Flashings at the curtain wall are included."]], "A newer offer replaces the company's earlier one");
-s = Y.setBuyoutPlan(s, sampleProcurement, "thermal", { recommended: "Potomac Roof Systems (sample)", targets: ["District Roofing (sample)", "District Roofing (sample)", " "], anticipatedAward: "2026-10-30", notes: " Award after BAFO. ", welcomeSent: true }, "Vijay", at);
+s = Y.setBuyoutPlan(s, sampleProcurement, "thermal", { recommended: "Potomac Roof Systems (sample)", targets: ["District Roofing (sample)", "District Roofing (sample)", " "], anticipatedAward: "2026-10-30", notes: " Award after BAFO. ", welcomeSent: true }, "Victor", at);
 assert.deepEqual((({ recommended, targets, anticipatedAward, notes, welcomeSent }) => [recommended, targets, anticipatedAward, notes, welcomeSent])(s.entries.find(e => e.packageId === "thermal")), ["Potomac Roof Systems (sample)", ["District Roofing (sample)"], "2026-10-30", "Award after BAFO.", true]);
 
 // Rules, in words for the person.
@@ -55,9 +55,9 @@ fails(() => Y.setBuyoutPlan(Y.EMPTY_BUYOUT, sampleProcurement, "openings", { dro
 // Step 7 of the to-do follows the buyout.
 const todo = (buyout) => deriveTodo({ project: sampleProjectRecords[0], documents: sampleFiles, procurement: sampleProcurement, submissions: sampleSubmissions, leveling: null, budget: sampleBudget, awards: sampleAwards, buyout })
   .tasks.filter(t => t.group === "scope-review").map(t => [t.id, t.status, t.screen]);
-const scheduled = Y.scheduleScopeReview(Y.EMPTY_BUYOUT, sampleProcurement, "thermal", { date: "2026-10-27" }, "Vijay", at);
+const scheduled = Y.scheduleScopeReview(Y.EMPTY_BUYOUT, sampleProcurement, "thermal", { date: "2026-10-27" }, "Victor", at);
 assert.deepEqual(todo(scheduled), [["buyout:review:thermal", "todo", "buyout"]]);
-assert.deepEqual(todo(Y.markScopeReviewHeld(scheduled, sampleProcurement, "thermal", "Vijay", at)), [["buyout:bafo:thermal", "waiting", "buyout"]]);
+assert.deepEqual(todo(Y.markScopeReviewHeld(scheduled, sampleProcurement, "thermal", "Victor", at)), [["buyout:bafo:thermal", "waiting", "buyout"]]);
 assert.deepEqual(todo(s), [["award:select:thermal", "todo", "contracts"]], "With a best and final in, choose the subcontractor");
 
 console.log("Buyout checked: rows per trade, status and ball in court from bids and awards, scope review, minutes, best and final, plan, rules, and the to-do's scope review step.");

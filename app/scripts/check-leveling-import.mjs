@@ -11,16 +11,16 @@ const { bidderTotals, rankedBidders } = await import("../lib/leveling.mjs");
 
 const freeze = (v) => { if (v && typeof v === "object") { Object.values(v).forEach(freeze); Object.freeze(v); } return v; };
 const at = "2026-09-26T12:00:00.000Z";
-const approveAll = (s, pkg) => bidForm(s, pkg).reduce((acc, item) => approveScope(acc, item.id, "Safi", at), s);
+const approveAll = (s, pkg) => bidForm(s, pkg).reduce((acc, item) => approveScope(acc, item.id, "Sadie", at), s);
 const codes = (result) => result.issues.map(i => i.code);
 
 // Demolition: dust control applied to all trades, one item without a source, published v1.
 // Invited: b1 (from the sample), b6 and b2.
 let proc = structuredClone(sampleProcurement);
-proc = applyScopeToAllTrades(proc, proc.scopes.find(s => s.title.includes("dust-control")).id, "Safi", at);
-proc = addScope(proc, { packageId: "demolition", title: "Cap and make safe abandoned services." }, "Safi", at);
-proc = ["b6", "b2"].reduce((s, b) => inviteBidder(s, "demolition", b, "Safi", at), proc);
-proc = freeze(publishPackage(approveAll(proc, "demolition"), "demolition", "Safi", at));
+proc = applyScopeToAllTrades(proc, proc.scopes.find(s => s.title.includes("dust-control")).id, "Sadie", at);
+proc = addScope(proc, { packageId: "demolition", title: "Cap and make safe abandoned services." }, "Sadie", at);
+proc = ["b6", "b2"].reduce((s, b) => inviteBidder(s, "demolition", b, "Sadie", at), proc);
+proc = freeze(publishPackage(approveAll(proc, "demolition"), "demolition", "Sadie", at));
 const form = bidForm(proc, "demolition");
 const inv = (bidderId) => proc.invitations.find(i => i.packageId === "demolition" && i.bidderId === bidderId).id;
 
@@ -86,7 +86,7 @@ const resolved = { ...green, responses: Object.fromEntries(Object.entries(green.
 assert.deepEqual(rankedBidders([result.bidders[0], resolved], result.items).map(r => r.bidder.name), ["Greenline Civil", "Capital Demolition"]);
 
 // The GC revises the form (v2). Capital Demolition priced v1: shown, flagged, never ranked.
-const proc2 = freeze(publishPackage(approveAll(addScope(proc, { packageId: "demolition", title: "Remove the existing ceiling grid.", source: "AD-102" }, "Safi", at), "demolition"), "demolition", "Safi", at));
+const proc2 = freeze(publishPackage(approveAll(addScope(proc, { packageId: "demolition", title: "Remove the existing ceiling grid.", source: "AD-102" }, "Sadie", at), "demolition"), "demolition", "Sadie", at));
 const v2 = buildLevelingImport({ ...input, procurement: proc2 });
 const capital = v2.bidders.find(b => b.name === "Capital Demolition");
 const newItem = v2.items.at(-1).id;
@@ -105,7 +105,7 @@ assert.deepEqual([fresh.provenance[capital2.id].stale, fresh.provenance[capital2
 
 // An item removed from the form: the stale revision's answer is kept aside, not in the grid.
 const removed = form[1].id;
-const proc3 = freeze(publishPackage(approveAll(moveScope(proc, removed, "concrete", "Safi", at), "demolition"), "demolition", "Safi", at));
+const proc3 = freeze(publishPackage(approveAll(moveScope(proc, removed, "concrete", "Sadie", at), "demolition"), "demolition", "Sadie", at));
 const moved = buildLevelingImport({ ...input, procurement: proc3 });
 const greenMoved = moved.bidders.find(b => b.name === "Greenline Civil");
 assert.equal(greenMoved.responses[removed], undefined);

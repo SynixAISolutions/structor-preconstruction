@@ -69,7 +69,7 @@ assert.deepEqual(numbers(S.filterSubmittals(base, proc, { packageId: "electrical
 assert.deepEqual(numbers(S.filterSubmittals(base, proc, { bidderId: "b2", status: "requested" }, today)), ["03 30 00-02"]);
 assert.deepEqual(numbers(S.filterSubmittals(base, proc, { bidderId: "b2" }, today)), concrete4);
 assert.deepEqual(numbers(S.filterSubmittals(base, proc, { bidderId: "b5" }, today)), []);
-assert.deepEqual(numbers(S.submittalLog(S.addRequirement(base, proc, { specSection: "03 30 00", title: "Curing compound data", packageId: "concrete" }, "Vijay", at), proc, today)).slice(0, 6), ["03 30 00-01", "03 30 00-02", "03 30 00-03", "03 30 00-04", "03 30 00-05", "04 22 00-01"], "The log is in number order");
+assert.deepEqual(numbers(S.submittalLog(S.addRequirement(base, proc, { specSection: "03 30 00", title: "Curing compound data", packageId: "concrete" }, "Victor", at), proc, today)).slice(0, 6), ["03 30 00-01", "03 30 00-02", "03 30 00-03", "03 30 00-04", "03 30 00-05", "04 22 00-01"], "The log is in number order");
 assert.deepEqual(numbers(S.filterSubmittals(base, proc, { specSection: "09 29 00" }, today)), ["09 29 00-01", "09 29 00-02"]);
 assert.deepEqual(numbers(S.filterSubmittals(base, proc, { query: "district" }, today)), concrete4, "Searches the subcontractor");
 const drywall4 = ["09 22 16-01", "09 29 00-01", "09 29 00-02", "09 51 13-01"];
@@ -78,16 +78,16 @@ assert.deepEqual([numbers(S.filterSubmittals(base, proc, { bidderId: "b7" }, tod
 assert.deepEqual(by(base, "09 29 00-01").revisions.map(r => [r.number, r.files.map(f => f.name)]), [[0, ["Type X gypsum board data.pdf"]]], "Gypsum board data is in, waiting for the contractor");
 
 // ── Requirements from the spec matrix and by hand ──
-const fresh = S.requirementsFromSpecs(S.EMPTY_SUBMITTALS, proc, initialSpecs, "Vijay", at);
+const fresh = S.requirementsFromSpecs(S.EMPTY_SUBMITTALS, proc, initialSpecs, "Victor", at);
 assert.equal(fresh.submittals.length, 14, "Mix design · Test reports → two requirements, for each of 7 rows");
 assert.deepEqual((({ specSection, title, packageId, owner, specItemId, description, status }) => ({ specSection, title, packageId, owner, specItemId, description, status }))(fresh.submittals[0]),
-  { specSection: "03 30 00", title: "Mix design", packageId: "concrete", owner: "Vijay", specItemId: "p1", description: "Cast-in-place concrete: 4,000 PSI normal-weight concrete", status: "draft" });
-assert.equal(S.requirementsFromSpecs(fresh, proc, initialSpecs, "Vijay", at).submittals.length, 14, "Importing again adds nothing");
-fails(() => S.requirementsFromSpecs(S.EMPTY_SUBMITTALS, proc, [{ ...initialSpecs[0], section: "11 40 00" }], "Vijay", at), "packageId", /11 40 00/);
-fails(() => S.addRequirement(base, proc, { specSection: "3300", title: "x", packageId: "concrete" }, "Vijay", at), "specSection", /like 03 30 00/);
-fails(() => S.addRequirement(base, proc, { specSection: "03 30 00", title: " ", packageId: "concrete" }, "Vijay", at), "title", /what must be submitted/);
-fails(() => S.addRequirement(base, proc, { specSection: "03 30 00", title: "x", packageId: "nope" }, "Vijay", at), "packageId", /trade package/);
-fails(() => S.addRequirement(base, proc, { specSection: "03 30 00", title: "mix DESIGN", packageId: "concrete" }, "Vijay", at), "title", /already required/);
+  { specSection: "03 30 00", title: "Mix design", packageId: "concrete", owner: "Victor", specItemId: "p1", description: "Cast-in-place concrete: 4,000 PSI normal-weight concrete", status: "draft" });
+assert.equal(S.requirementsFromSpecs(fresh, proc, initialSpecs, "Victor", at).submittals.length, 14, "Importing again adds nothing");
+fails(() => S.requirementsFromSpecs(S.EMPTY_SUBMITTALS, proc, [{ ...initialSpecs[0], section: "11 40 00" }], "Victor", at), "packageId", /11 40 00/);
+fails(() => S.addRequirement(base, proc, { specSection: "3300", title: "x", packageId: "concrete" }, "Victor", at), "specSection", /like 03 30 00/);
+fails(() => S.addRequirement(base, proc, { specSection: "03 30 00", title: " ", packageId: "concrete" }, "Victor", at), "title", /what must be submitted/);
+fails(() => S.addRequirement(base, proc, { specSection: "03 30 00", title: "x", packageId: "nope" }, "Victor", at), "packageId", /trade package/);
+fails(() => S.addRequirement(base, proc, { specSection: "03 30 00", title: "mix DESIGN", packageId: "concrete" }, "Victor", at), "title", /already required/);
 fails(() => S.addRequirement(base, proc, { specSection: "03 30 00", title: "x", packageId: "concrete" }, " ", at), "by", /who/);
 let s = freeze(S.addRequirement(base, proc, { specSection: "04 22 00", title: "  Mortar color samples ", packageId: "masonry" }, "Naija", at));
 assert.deepEqual([s.submittals.at(-1).number, s.submittals.at(-1).title, s.submittals.at(-1).owner], ["04 22 00-03", "Mortar color samples", "Naija"]);
@@ -105,19 +105,19 @@ s = freeze(S.assignSubcontractor(s, "masonry", keystone, "Naija", at));
 assert.deepEqual(s.submittals.filter(x => x.packageId === "masonry").map(x => [x.subcontractor.company, x.history.at(-1).kind]), [["Keystone Masonry", "assigned"], ["Keystone Masonry", "assigned"], ["Keystone Masonry", "assigned"]]);
 assert.equal(by(s, "07 54 23-01").subcontractor, null, "Other trades untouched");
 const award = { id: "aw-1", packageId: "thermal", bidderId: "b8", cancelled: null, snapshot: { company: { name: "Tri-State Roofing", contact: "Lee Park", email: "lee@example.com" } } };
-const fromAward = S.assignFromAward(s, award, "Vijay", at);
+const fromAward = S.assignFromAward(s, award, "Victor", at);
 assert.deepEqual(by(fromAward, "07 54 23-01").subcontractor, { bidderId: "b8", company: "Tri-State Roofing", contact: "Lee Park", email: "lee@example.com", awardId: "aw-1" });
 assert.deepEqual(S.portalSubmittals(fromAward, "b8"), [], "Assigned but not requested yet: nothing in the portal");
-fails(() => S.assignFromAward(s, { ...award, cancelled: { by: "Vijay", at, reason: "x" } }, "Vijay", at), "award", /cancelled/);
+fails(() => S.assignFromAward(s, { ...award, cancelled: { by: "Victor", at, reason: "x" } }, "Victor", at), "award", /cancelled/);
 
 // ── Requesting ──
-fails(() => S.requestSubmittal(s, idOf(s, "07 54 23-01"), "2026-10-15", "Vijay", at), "subcontractor", /Assign/);
+fails(() => S.requestSubmittal(s, idOf(s, "07 54 23-01"), "2026-10-15", "Victor", at), "subcontractor", /Assign/);
 fails(() => S.requestSubmittal(s, idOf(s, "04 22 00-01"), "next week", "Naija", at), "due", /due date/);
 fails(() => S.requestSubmittal(s, idOf(s, "04 22 00-01"), "2026-11-31", "Naija", at), "due", /Choose a due date/);
 fails(() => S.requestSubmittal(s, idOf(s, "04 22 00-01"), "2026-13-01", "Naija", at), "due", /Choose a due date/);
 fails(() => S.requestSubmittal(s, idOf(s, "04 22 00-01"), "2026-09-30", "Naija", at), "due", /past/);
-fails(() => S.requestSubmittal(s, idOf(s, "03 30 00-02"), "2026-10-15", "Vijay", at), "submittal", /already requested/);
-fails(() => S.requestPackage(s, "thermal", "2026-10-15", "Vijay", at), "submittal", /Nothing in this package/);
+fails(() => S.requestSubmittal(s, idOf(s, "03 30 00-02"), "2026-10-15", "Victor", at), "submittal", /already requested/);
+fails(() => S.requestPackage(s, "thermal", "2026-10-15", "Victor", at), "submittal", /Nothing in this package/);
 s = freeze(S.requestPackage(s, "masonry", "2026-10-15", "Naija", at));
 const masonry = s.submittals.filter(x => x.packageId === "masonry");
 assert(masonry.every(x => x.status === "requested" && x.due === "2026-10-15"));
@@ -189,10 +189,10 @@ assert.deepEqual([by(round2, "04 22 00-01").status, by(round2, "04 22 00-01").re
 assert.equal(S.submittalLog(round2, proc, today).find(r => r.number === "04 22 00-01").architectAction, "approved-as-noted", "The log shows the latest architect action");
 
 // ── Reminders and overdue ──
-fails(() => S.sendReminder(base, idOf(base, "03 30 00-01"), "Vijay", at), "submittal", /isn't waiting on the subcontractor or the architect/);
-const toSub = S.sendReminder(base, idOf(base, "03 30 00-02"), "Vijay", at);
+fails(() => S.sendReminder(base, idOf(base, "03 30 00-01"), "Victor", at), "submittal", /isn't waiting on the subcontractor or the architect/);
+const toSub = S.sendReminder(base, idOf(base, "03 30 00-02"), "Victor", at);
 assert.deepEqual([toSub.notifications.at(-1).recipient, toSub.notifications.at(-1).text], ["b2", "Reminder: please submit 03 30 00-02 Test reports. It was due 2026-09-30."]);
-const toArch = S.sendReminder(base, idOf(base, "03 30 00-03"), "Vijay", at);
+const toArch = S.sendReminder(base, idOf(base, "03 30 00-03"), "Victor", at);
 assert.deepEqual([toArch.notifications.at(-1).recipientType, toArch.notifications.at(-1).recipient, toArch.notifications.at(-1).text], ["architect", "architect@example.com", "Reminder: please review 03 30 00-03 Shop drawings. It is due 2026-10-13."]);
 const atToday = "2026-10-02T15:00:00.000Z";
 const nudged = freeze(S.remindOverdue(base, today, "Structor", atToday));

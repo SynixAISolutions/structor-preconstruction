@@ -149,7 +149,7 @@ assert.deepEqual(J.screenProposal({ baseBid: "$1,742,000", baseBidCitation: { pa
 // What survives screening records as a reading and applies as a revision.
 const readingInput = { ...read.reading, invitationId: "inv-2", formVersion: form.version, document: { name: "DC proposal.pdf", pages: 2, size: 5000 }, engine: { mode: "live", model: "deepseek-flash" }, readAt: "2026-10-14T10:00:00.000Z" };
 const recorded = R.recordReading(R.EMPTY_PROPOSALS, sampleProcurement, readingInput);
-const applied = R.applyReading({ proposals: recorded, submissions: sampleSubmissions, procurement: sampleProcurement }, recorded.readings[0].id, "jelleff", "Vijay");
+const applied = R.applyReading({ proposals: recorded, submissions: sampleSubmissions, procurement: sampleProcurement }, recorded.readings[0].id, "jelleff", "Victor");
 assert.equal(applied.submissions.find(s => s.invitationId === "inv-2").revisions.at(-1).baseBid, 1742000, "Screened AI reading → reviewed revision");
 
 // ── Splitting pages into requests ──

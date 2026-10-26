@@ -23,7 +23,7 @@ test("nine numbered steps stay in contract order, collapsed and filtered by task
 });
 
 const summary: BidSheetSummary = { rows: [
-  { packageId: "concrete", code: "03 30 00", trade: "Concrete", owner: "Safi", budget: 1700000, carried: { packageId: "concrete", bidderId: "a", submissionId: "bid", name: "Low sub", value: 1685000, basis: "base" }, delta: -15000, perSquareFoot: 25, bids: [{ packageId: "concrete", bidderId: "a", submissionId: "bid", name: "Low sub", value: 1685000, basis: "base" }] },
+  { packageId: "concrete", code: "03 30 00", trade: "Concrete", owner: "Sadie", budget: 1700000, carried: { packageId: "concrete", bidderId: "a", submissionId: "bid", name: "Low sub", value: 1685000, basis: "base" }, delta: -15000, perSquareFoot: 25, bids: [{ packageId: "concrete", bidderId: "a", submissionId: "bid", name: "Low sub", value: 1685000, basis: "base" }] },
   { packageId: "asphalt", code: "32 12 16", trade: "Asphalt", owner: "", budget: null, carried: null, delta: null, perSquareFoot: null, bids: [] },
 ], total: { budget: 1700000, carried: 1685000, delta: -15000, perSquareFoot: 25 }, withoutBids: 1 };
 

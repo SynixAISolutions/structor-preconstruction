@@ -77,60 +77,60 @@ assert.deepEqual(two("SF", 5), ["2026-10-08", "2026-10-12"], "SF: B finishes 5 d
 assert.deepEqual(two("SS", -5), ["2026-10-05", "2026-10-07"], "Never earlier than its own start");
 
 // ── The date-shift rule: push later, never pull ──
-const longer = freeze(S.editActivity(base, id(base, "A1030"), { duration: 20 }, "Safi", at));
+const longer = freeze(S.editActivity(base, id(base, "A1030"), { duration: 20 }, "Sadie", at));
 const moved = longer.log.at(-1).shifted.map(x => [x.code, x.from, x.to]);
 assert.deepEqual(moved, [
   ["A1040", "2026-10-23", "2026-10-30"], ["A1050", "2026-10-26", "2026-11-02"], ["A1060", "2026-10-26", "2026-11-02"], ["A1070", "2026-11-09", "2026-11-16"],
   ["A1080", "2026-12-07", "2026-12-14"], ["A1090", "2027-02-01", "2027-02-08"], ["A1100", "2027-06-01", "2027-06-08"], ["A1110", "2027-07-30", "2027-08-06"],
 ], "Five more days on A1030 push every successor five working days");
-assert.deepEqual([longer.log.at(-1).action, longer.log.at(-1).by], ["Changed A1030 Bid leveling & owner approval", "Safi"]);
-const shorter = S.editActivity(longer, id(longer, "A1030"), { duration: 15 }, "Safi", at);
+assert.deepEqual([longer.log.at(-1).action, longer.log.at(-1).by], ["Changed A1030 Bid leveling & owner approval", "Sadie"]);
+const shorter = S.editActivity(longer, id(longer, "A1030"), { duration: 15 }, "Sadie", at);
 assert.deepEqual([act(shorter, "A1040").start, shorter.log.at(-1).shifted, shorter.log.length], ["2026-10-30", [], 2], "Shortening it again does not pull successors back; both changes are logged");
-fails(() => S.editActivity(base, id(base, "A1030"), { start: "2026-10-01" }, "Safi", at), "start", /A1030 can't start before 2026-10-05: it follows A1010 \(FS\)/);
-assert.equal(act(S.editActivity(base, id(base, "A1030"), { start: "2026-10-10" }, "Safi", at), "A1030").start, "2026-10-12", "A Saturday start moves to Monday");
-const started = S.setProgress(base, id(base, "A1030"), 10, "Safi", at);
-assert.equal(act(S.editActivity(started, id(started, "A1010"), { duration: 20 }, "Vijay", at), "A1030").start, "2026-10-05", "A started activity keeps its start");
-assert.equal(act(S.editActivity(base, id(base, "A1010"), { duration: 20 }, "Vijay", at), "A1030").start, "2026-10-12", "…a not-started one moves");
+fails(() => S.editActivity(base, id(base, "A1030"), { start: "2026-10-01" }, "Sadie", at), "start", /A1030 can't start before 2026-10-05: it follows A1010 \(FS\)/);
+assert.equal(act(S.editActivity(base, id(base, "A1030"), { start: "2026-10-10" }, "Sadie", at), "A1030").start, "2026-10-12", "A Saturday start moves to Monday");
+const started = S.setProgress(base, id(base, "A1030"), 10, "Sadie", at);
+assert.equal(act(S.editActivity(started, id(started, "A1010"), { duration: 20 }, "Victor", at), "A1030").start, "2026-10-05", "A started activity keeps its start");
+assert.equal(act(S.editActivity(base, id(base, "A1010"), { duration: 20 }, "Victor", at), "A1030").start, "2026-10-12", "…a not-started one moves");
 
 // ── Activities ──
-fails(() => S.addActivity(base, { name: " ", start: today, duration: 1 }, "Safi", at), "name", /Name/);
-fails(() => S.addActivity(base, { name: "x", start: "2026-02-30", duration: 1 }, "Safi", at), "start", /start date/);
-fails(() => S.addActivity(base, { name: "x", start: today, duration: -1 }, "Safi", at), "duration", /whole working days/);
-fails(() => S.addActivity(base, { name: "x", start: today, duration: 1.5 }, "Safi", at), "duration", /whole working days/);
-fails(() => S.addActivity(base, { name: "x", start: today, duration: 2001 }, "Safi", at), "duration", /2000/);
-fails(() => S.addActivity(base, { name: "x", start: today, duration: 1, code: "A1000" }, "Safi", at), "code", /already used/);
+fails(() => S.addActivity(base, { name: " ", start: today, duration: 1 }, "Sadie", at), "name", /Name/);
+fails(() => S.addActivity(base, { name: "x", start: "2026-02-30", duration: 1 }, "Sadie", at), "start", /start date/);
+fails(() => S.addActivity(base, { name: "x", start: today, duration: -1 }, "Sadie", at), "duration", /whole working days/);
+fails(() => S.addActivity(base, { name: "x", start: today, duration: 1.5 }, "Sadie", at), "duration", /whole working days/);
+fails(() => S.addActivity(base, { name: "x", start: today, duration: 2001 }, "Sadie", at), "duration", /2000/);
+fails(() => S.addActivity(base, { name: "x", start: today, duration: 1, code: "A1000" }, "Sadie", at), "code", /already used/);
 fails(() => S.addActivity(base, { name: "x", start: today, duration: 1 }, " ", at), "by", /who/);
-const added = S.addActivity(base, { name: " Punch list ", phase: "", start: "2026-10-04", duration: 5 }, "Safi", at);
+const added = S.addActivity(base, { name: " Punch list ", phase: "", start: "2026-10-04", duration: 5 }, "Sadie", at);
 assert.deepEqual((({ code, name, phase, start, progress, predecessors }) => ({ code, name, phase, start, progress, predecessors }))(added.activities.at(-1)),
   { code: "A1120", name: "Punch list", phase: "General", start: "2026-10-05", progress: 0, predecessors: [] }, "Next code, Sunday → Monday, default phase");
-fails(() => S.setProgress(base, id(base, "A1030"), 101, "Safi", at), "progress", /0 to 100/);
-fails(() => S.setProgress(base, id(base, "A1030"), 12.5, "Safi", at), "progress", /0 to 100/);
-fails(() => S.setProgress(base, id(base, "A1040"), 50, "Safi", at), "progress", /milestone/);
-fails(() => S.setProgress(base, "nope", 50, "Safi", at), "activity", /no longer exists/);
-const removed = S.removeActivity(base, id(base, "A1050"), "Safi", at);
+fails(() => S.setProgress(base, id(base, "A1030"), 101, "Sadie", at), "progress", /0 to 100/);
+fails(() => S.setProgress(base, id(base, "A1030"), 12.5, "Sadie", at), "progress", /0 to 100/);
+fails(() => S.setProgress(base, id(base, "A1040"), 50, "Sadie", at), "progress", /milestone/);
+fails(() => S.setProgress(base, "nope", 50, "Sadie", at), "activity", /no longer exists/);
+const removed = S.removeActivity(base, id(base, "A1050"), "Sadie", at);
 assert(!removed.activities.some(a => a.predecessors.some(p => p.activityId === id(base, "A1050"))), "Links to it go too");
 assert.equal(act(removed, "A1070").start, "2026-11-09", "Removing a predecessor doesn't pull its successor in");
-assert.equal(S.addActivity(removed, { name: "x", start: today, duration: 1 }, "Safi", at).activities.at(-1).code, "A1120", "Codes are never reused");
+assert.equal(S.addActivity(removed, { name: "x", start: today, duration: 1 }, "Sadie", at).activities.at(-1).code, "A1120", "Codes are never reused");
 const saturday = S.reschedule({ ...S.EMPTY_SCHEDULE, activities: [{ ...act(base, "A1030"), predecessors: [], start: "2026-10-10" }] });
 assert.deepEqual([saturday.state.activities[0].start, saturday.shifted.map(x => x.to)], ["2026-10-12", ["2026-10-12"]], "Stored weekend starts move to the Monday");
-const done = rows(S.setProgress(base, id(base, "A1010"), 100, "Vijay", at));
+const done = rows(S.setProgress(base, id(base, "A1010"), 100, "Victor", at));
 assert.deepEqual([done.find(r => r.code === "A1010").float, done.find(r => r.code === "A1010").critical, codes(S.lookahead(done, today))], [0, false, ["A1030"]], "Finished work is neither critical nor in the look-ahead");
 assert.deepEqual(rows(base, "2026-10-06").filter(r => r.notStartedOnTime).map(r => r.code), ["A1030"], "Should have started by 10-06");
 assert.deepEqual(rows(added).map(r => r.code).slice(0, 6), ["A1000", "A1010", "A1020", "A1030", "A1120", "A1040"], "Rows run by start date, then code");
 
 // ── Links ──
 const a1000 = id(base, "A1000"), a1010 = id(base, "A1010"), a1110 = id(base, "A1110");
-fails(() => S.addDependency(base, a1000, { activityId: a1000, type: "FS", lag: 0 }, "Safi", at), "link", /can't follow itself/);
-fails(() => S.addDependency(base, a1010, { activityId: a1000, type: "FS", lag: 0 }, "Safi", at), "link", /already follows A1000/);
-fails(() => S.addDependency(base, a1000, { activityId: a1110, type: "XX", lag: 0 }, "Safi", at), "type", /FS, SS, FF or SF/);
-fails(() => S.addDependency(base, a1000, { activityId: a1110, type: "FS", lag: 0.5 }, "Safi", at), "lag", /whole working days/);
-fails(() => S.addDependency(base, a1000, { activityId: a1110, type: "FS", lag: 251 }, "Safi", at), "lag", /250/);
-fails(() => S.addDependency(base, a1000, { activityId: a1110, type: "FS", lag: 0 }, "Safi", at), "link", /loop/);
+fails(() => S.addDependency(base, a1000, { activityId: a1000, type: "FS", lag: 0 }, "Sadie", at), "link", /can't follow itself/);
+fails(() => S.addDependency(base, a1010, { activityId: a1000, type: "FS", lag: 0 }, "Sadie", at), "link", /already follows A1000/);
+fails(() => S.addDependency(base, a1000, { activityId: a1110, type: "XX", lag: 0 }, "Sadie", at), "type", /FS, SS, FF or SF/);
+fails(() => S.addDependency(base, a1000, { activityId: a1110, type: "FS", lag: 0.5 }, "Sadie", at), "lag", /whole working days/);
+fails(() => S.addDependency(base, a1000, { activityId: a1110, type: "FS", lag: 251 }, "Sadie", at), "lag", /250/);
+fails(() => S.addDependency(base, a1000, { activityId: a1110, type: "FS", lag: 0 }, "Sadie", at), "link", /loop/);
 const linked = S.addDependency(base, id(base, "A1060"), { activityId: id(base, "A1050"), type: "FS", lag: 0 }, "Naija", at);
 assert.deepEqual([act(linked, "A1060").start, linked.log.at(-1).action], ["2026-11-09", "A1060 now follows A1050 (FS)"], "A new link pushes the successor");
 const unlinked = S.removeDependency(linked, id(linked, "A1060"), id(linked, "A1050"), "Naija", at);
 assert.deepEqual([act(unlinked, "A1060").start, act(unlinked, "A1060").predecessors.length], ["2026-11-09", 1], "Removing a link doesn't pull back");
-assert.equal(S.removeDependency(base, a1000, a1110, "Safi", at), base, "Removing a link that isn't there changes nothing");
+assert.equal(S.removeDependency(base, a1000, a1110, "Sadie", at), base, "Removing a link that isn't there changes nothing");
 
 // ── Microsoft Project XML (P6 reads and writes it too) ──
 const xml = S.toMsProjectXml(base, "Jelleff & Partners <Rec>");
@@ -144,9 +144,9 @@ const round = S.parseMsProjectXml(xml);
 assert.deepEqual(round.warnings, []);
 const simple = (s) => s.activities.map(a => [a.code, a.name, a.phase, a.owner, a.start, a.duration, a.progress, a.predecessors.map(p => `${s.activities.find(x => x.id === p.activityId).code} ${p.type}${p.lag}`)]);
 assert.deepEqual(simple(round).sort(), simple(base).map(([c, n, ph, o, st, d, pr, pre]) => [c, n, ph, o, st, d, pr, pre]).sort(), "Round trip keeps codes, names, phases, owners, dates, durations, progress and links");
-const imported = freeze(S.replaceSchedule(base, round, " jelleff.xml ", "Safi", at));
+const imported = freeze(S.replaceSchedule(base, round, " jelleff.xml ", "Sadie", at));
 assert.deepEqual([imported.importedFrom, imported.log.at(-1).action, imported.log.at(-1).shifted], ["jelleff.xml", "Imported 12 activities from jelleff.xml", []]);
-fails(() => S.replaceSchedule(base, { activities: [], warnings: [] }, "x.xml", "Safi", at), "file", /Nothing to import/);
+fails(() => S.replaceSchedule(base, { activities: [], warnings: [] }, "x.xml", "Sadie", at), "file", /Nothing to import/);
 
 // A file as MS Project writes it: no WBS codes, hours, an SS link with 2 days' lag, a summary link, a missing task.
 const msp = `<?xml version="1.0"?><Project xmlns="http://schemas.microsoft.com/project"><Name>Test</Name><Tasks>
@@ -172,9 +172,9 @@ const loop = `<Project><Tasks><Task><UID>1</UID><Name>A</Name><Start>2026-11-02T
 fails(() => S.parseMsProjectXml(loop), "file", /loop/);
 
 // ── CSV ──
-const csv = S.toCsv(S.editActivity(base, id(base, "A1050"), { name: 'Award "remaining", trades' }, "Safi", at), today).split("\n");
+const csv = S.toCsv(S.editActivity(base, id(base, "A1050"), { name: 'Award "remaining", trades' }, "Sadie", at), today).split("\n");
 assert.equal(csv[0], "Activity ID,Activity,Phase,Owner,Start,Finish,Working days,Progress %,Predecessors,Total float,Critical");
-assert.equal(csv.find(l => l.startsWith("A1050")), 'A1050,"Award ""remaining"", trades",Procurement,Vijay,2026-10-26,2026-11-06,10,0,A1040 FS,0,Yes');
+assert.equal(csv.find(l => l.startsWith("A1050")), 'A1050,"Award ""remaining"", trades",Procurement,Victor,2026-10-26,2026-11-06,10,0,A1040 FS,0,Yes');
 assert.equal(csv.find(l => l.startsWith("A1080")), "A1080,Foundations & structure,Construction,Naija,2026-12-07,2027-02-26,60,0,A1070 SS+20,0,Yes");
 assert.equal(csv.length, 14, "Header, 12 rows, trailing newline");
 

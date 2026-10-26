@@ -67,9 +67,9 @@ test("an ambiguous CSI match requires an explicit budget-line link", () => {
 });
 
 test("Contractor basis label exposes its snapshot, reviewer and later estimate changes", () => {
-  const applied = applyEstimateValue(sampleBudget, "nc-09200", pkg("drywall"), trade("drywall"), "Safi", "2026-10-14T08:00:00Z");
+  const applied = applyEstimateValue(sampleBudget, "nc-09200", pkg("drywall"), trade("drywall"), "Sadie", "2026-10-14T08:00:00Z");
   const html = renderToStaticMarkup(<EstimateBasisLabel line={applied.lines.find(l => l.id === "nc-09200")!} trades={trades.map(t => t.packageId === "drywall" ? { ...t, total: t.total + 100 } : t)}/>);
-  assert.match(html, /In-house estimate/); assert.match(html, /Safi/); assert.match(html, new RegExp(`${trade("drywall").unreviewed} unreviewed at application`));
+  assert.match(html, /In-house estimate/); assert.match(html, /Sadie/); assert.match(html, new RegExp(`${trade("drywall").unreviewed} unreviewed at application`));
   assert.match(html, /Estimate changed since application/);
   assert.equal(applied.lines.find(l => l.id === "nc-09200")!.budget, line("nc-09200").budget);
 });
@@ -82,7 +82,7 @@ test("missing estimates and bids stay unavailable, not zero-valued comparisons",
 });
 
 test("variance labels expose direction, percent and an applied provisional bid's provenance", () => {
-  const row: VarianceRow = { packageId: "drywall", name: "Drywall", owner: "Safi", estimate: 100, estimateLines: 1, estimateUnreviewed: 0, bid: { bidderName: "Test bidder", value: 125, basis: "provisional", from: "budget-forecast" }, budget: 90, forecast: 125, budgetBasis: "linked", bidOverEstimate: { amount: 25, percent: 25 }, budgetOverEstimate: -10 };
+  const row: VarianceRow = { packageId: "drywall", name: "Drywall", owner: "Sadie", estimate: 100, estimateLines: 1, estimateUnreviewed: 0, bid: { bidderName: "Test bidder", value: 125, basis: "provisional", from: "budget-forecast" }, budget: 90, forecast: 125, budgetBasis: "linked", bidOverEstimate: { amount: 25, percent: 25 }, budgetOverEstimate: -10 };
   const html = renderToStaticMarkup(<TradeVarianceTable rows={[row]}/>);
   assert.match(html, /\+\$25/); assert.match(html, /\+25%/); assert.match(html, /Bid above In-house estimate/);
   assert.match(html, /Estimate above budget/); assert.match(html, /Provisional total/); assert.match(html, /Applied budget forecast snapshot/);
