@@ -1,3 +1,4 @@
+import { renameDemoNamesDeep } from "../../../lib/demo-names";
 import { validId } from "../../../lib/project-files";
 import type { ContentOp } from "../../../lib/project-content";
 import { changeContent, readContent } from "../../../lib/project-content-store";
@@ -6,7 +7,7 @@ import { changeContent, readContent } from "../../../lib/project-content-store";
 // GET reads them; POST applies a list of changes, all or none. The demo password (proxy.ts) guards this like every route.
 export const runtime = "nodejs";
 
-const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
+const json = (body: unknown, status = 200) => Response.json(renameDemoNamesDeep(body), { status, headers: { "cache-control": "no-store" } });
 
 export async function GET(request: Request) {
   const projectId = new URL(request.url).searchParams.get("project");

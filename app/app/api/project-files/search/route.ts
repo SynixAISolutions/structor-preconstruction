@@ -1,3 +1,4 @@
+import { renameDemoNamesDeep } from "../../../../lib/demo-names";
 import { indexPages, searchPages, type PageIndex } from "../../../../lib/file-search";
 import { DOCUMENT_CATEGORIES, latestDocuments, validId } from "../../../../lib/project-files";
 import { readIndex, readText } from "../../../../lib/project-files-store";
@@ -9,7 +10,7 @@ export const runtime = "nodejs";
 
 const MAX_CHUNKS = 400;
 const indexes = new Map<string, PageIndex>();
-const json = (body: unknown, status = 200) => Response.json(body, { status });
+const json = (body: unknown, status = 200) => Response.json(renameDemoNamesDeep(body), { status });
 
 async function chunkIndex(projectId: string, docId: string, chunk: number): Promise<PageIndex | null> {
   const key = `${projectId}/${docId}/${chunk}`;

@@ -40,7 +40,7 @@ export function CeilingSchedulePanel({ objects, level, onInspect, onSource }: { 
   const shown = schedule.map(row => ({ ...row, zones: row.zones.filter(zone => (!status || (status === "resolved" ? zone.status === "tagged" : zone.status !== "tagged")) && (!q || [row.room, zone.tag, zone.heightText, objects.find(object => object.id === zone.id)?.name].join(" ").toLowerCase().includes(q))) })).filter(row => row.zones.length);
   const missing = roomsWithoutCeiling.filter(item => !level || item.level === level);
   const unplaced = unplacedCeilingTags.filter(item => !level || item.level === level);
-  const sourceFor = (level: LevelId): ModelSource => ({ ...(level === "L2" ? rcpL2 : rcpL1), drawing: "Jelleff drawing set" });
+  const sourceFor = (level: LevelId): ModelSource => ({ ...(level === "L2" ? rcpL2 : rcpL1), drawing: "Project 1 drawing set" });
   return <details className="ms-room-schedule ms-ceiling-schedule">
     <summary><span><span className="ms-section-label">CEILINGS BY ROOM AND ZONE</span><strong>Room ceiling schedule</strong></span><small>{ceilings.length} zones · {ceilings.filter(object => object.ceiling?.status !== "tagged").length} unresolved</small><ChevronDown size={16}/></summary>
     <p>Heights are above finished floor; elevation adds the level's floor height. Unresolved zones retain their measured area and source outline, and are listed without a 3D placement. Areas cover traced zones only. Room numbers follow the ceiling plans.</p>

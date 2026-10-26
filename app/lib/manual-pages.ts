@@ -160,7 +160,7 @@ export const pageGuides = [
       { name: "Approved as noted", meaning: "The architect accepts the submittal with comments the subcontractor must follow; no resubmission is needed." },
     ],
     example: "District Concrete submits the slab mix design. Approve it for the architect and send it; the architect asks for the fly-ash content, so return the response and District Concrete resubmits it as revision 1.",
-    reality: "The log, revisions, and notifications save in this browser for the open project. Requests, sends, responses, and reminders are recorded, not emailed, and files are listed by name only. In the Jelleff sample, the Concrete submittals belong to District Concrete's executed award and the four Drywall submittals to Capitol Wall Systems', both in Contracts & exhibits; the other trades wait for their awards.",
+    reality: "The log, revisions, and notifications save in this browser for the open project. Requests, sends, responses, and reminders are recorded, not emailed, and files are listed by name only. In the Project 1 sample, the Concrete submittals belong to District Concrete's executed award and the four Drywall submittals to Capitol Wall Systems', both in Contracts & exhibits; the other trades wait for their awards.",
     related: ["specifications", "contracts", "portal"],
   },
   {
@@ -229,7 +229,7 @@ export const pageGuides = [
       { name: "Project manual", meaning: "The bound set of written specifications and contract requirements issued with the drawings." },
     ],
     example: "Before sending the concrete package, confirm that 03 30 00 is current and at the same revision the bidders will price.",
-    reality: "The sections shown are sample rows for the Jelleff project. Uploading a project manual does not yet create or update this list.",
+    reality: "The sections shown are sample rows for Project 1. Uploading a project manual does not yet create or update this list.",
     related: ["drawings", "specs", "documents"],
   },
   {
@@ -275,7 +275,7 @@ export const pageGuides = [
       { name: "Proposal reading", meaning: "The AI's reading of an emailed proposal against the published bid form. It becomes a bid only when an estimator confirms it." },
     ],
     example: "Invite District Concrete, log “Called — no answer, left voicemail”, and change the status to Bidding when they confirm.",
-    reality: "Invitations, statuses, outreach, and proposal readings save in this browser for the open project. No email or message is sent. Confirming a reading records the proposal file's details, not the file. A reading can't be confirmed while an item is unanswered, a P or N/A has no note, the base bid or contact is missing, or the bid form was revised after the proposal was read. The built-in Jelleff reading is illustrative. A live reading sends the chosen proposal text and published form items to DeepSeek. Its original PDF stays in browser memory and opens at the cited page; choose that same file again after a reload.",
+    reality: "Invitations, statuses, outreach, and proposal readings save in this browser for the open project. No email or message is sent. Confirming a reading records the proposal file's details, not the file. A reading can't be confirmed while an item is unanswered, a P or N/A has no note, the base bid or contact is missing, or the bid form was revised after the proposal was read. The built-in Project 1 reading is illustrative. A live reading sends the chosen proposal text and published form items to DeepSeek. Its original PDF stays in browser memory and opens at the cited page; choose that same file again after a reload.",
     related: ["scopes", "bidders", "leveling"],
   },
   {
@@ -365,7 +365,7 @@ export const pageGuides = [
       "Open Historical concept budget to upload Estimate Summary workbooks or flat budget CSVs. Record each historical project's gross building area, year, stage, location and profile; choose comparable projects, then review the area-weighted cost build and explicit location, cost and profile factors. Modified factors need a source explanation. Create project budget from this concept fills an empty cost plan with draft lines; export a preview when a budget already exists. No RSMeans feed or automatic tax/labor premium is assumed.",
       "Read the cards: Total budget (direct and indirect), Current forecast (lines without a forecast count at their budget), Forecast variance, and Committed.",
       "In Budget lines, choose All costs, Direct costs, or Indirect costs, and a cost center (Renovation (pool), New construction, Sitework, Project-wide). Cost centers and Direct cost by CSI division summarize the same lines.",
-      "In All cost centers, a trade carried in more than one cost center (structural steel, miscellaneous metals, equipment, HVAC and electrical on Jelleff) shows as one row with its total; open it to see and edit each cost center's line.",
+      "In All cost centers, a trade carried in more than one cost center (structural steel, miscellaneous metals, equipment, HVAC and electrical on Project 1) shows as one row with its total; open it to see and edit each cost center's line.",
       "To set a line's in-house budget, type the amount, or choose Pull lowest sub to take the lowest subcontractor's price: the whole bid, or the line's share when the trade spans several lines (split the bid first). The line notes where the figure came from until you type over it.",
       "Choose Add line, or a line's pencil, to set its cost center, cost class, CSI division or section, description, owner, budget, forecast, and committed value. Carried by owner keeps a line visible but out of the contractor's totals. Changing the budget or what the line is sends an approved line back to review; Approve line confirms it.",
       "On a direct line, choose Choose forecast basis. Pick In-house estimate and the trade to use that trade's estimate from Quantity takeoffs, or pick Base bid, Provisional total, or Reviewed total and a bidder from the saved Bid leveling comparison. Apply selected value sets the forecast; the budget and the bid figures keep their values.",
@@ -381,7 +381,7 @@ export const pageGuides = [
       { name: "Trade variance", meaning: "the in-house estimate beside the lowest eligible current reviewed bid for each trade, or the bid already applied to its forecast, to see why they differ." },
     ],
     example: "A trade's In-house estimate is $1,700,000 and its reviewed low bid is $1,785,000: Trade variance shows Bid − estimate of $85,000 (5.0%), so the estimator checks whether the bid carries scope the estimate misses before choosing the forecast basis.",
-    reality: "The Jelleff lines are Marcel's DD budget; changes and budget versions save in this browser for the open project. Versions retain cost-plan copies and explanations; they do not restore or overwrite the working budget. Approval is a local review status, not an owner authorization. Trade variance compares trade totals only: In-house estimates exclude indirect costs, markups, and allowances, so confirm equivalent scope before reading a difference.",
+    reality: "The Project 1 lines are Marcel's DD budget; changes and budget versions save in this browser for the open project. Versions retain cost-plan copies and explanations; they do not restore or overwrite the working budget. Approval is a local review status, not an owner authorization. Trade variance compares trade totals only: In-house estimates exclude indirect costs, markups, and allowances, so confirm equivalent scope before reading a difference.",
     related: ["takeoffs", "leveling", "allowances", "contracts"],
   },
   {
@@ -448,7 +448,7 @@ export const pageGuides = [
       { name: "Award value", meaning: "The leveled amount you choose to award: the base bid, the provisional leveled total (with current adjustments), or the reviewed leveled total (every exception resolved)." },
       { name: "Executed", meaning: "Both parties have signed. The final copy is frozen; later template changes never alter it." },
     ],
-    example: "In the Jelleff sample, Concrete is awarded to District Concrete at its $1,742,000 base bid against the concrete budget line, and Drywall to Capitol Wall Systems at $1,012,400 against the gypsum wallboard line, though Rock Creek Interiors bid less: its bid excludes the acoustical ceilings and stays open in Bid leveling. Both have Exhibit A agreed and the subcontract executed, so their submittals run under Submittal packages.",
+    example: "In the Project 1 sample, Concrete is awarded to District Concrete at its $1,742,000 base bid against the concrete budget line, and Drywall to Capitol Wall Systems at $1,012,400 against the gypsum wallboard line, though Rock Creek Interiors bid less: its bid excludes the acoustical ceilings and stays open in Bid leveling. Both have Exhibit A agreed and the subcontract executed, so their submittals run under Submittal packages.",
     reality: "Awards, Exhibit A revisions, comments, signatures, and notifications save in this browser for the open project. Shares and signature requests are recorded, not emailed. Typed signatures are demonstration records, not legal electronic signatures, and documents download as text; no PDF or Word file is assembled.",
     related: ["leveling", "budget", "specs"],
   },
@@ -475,7 +475,7 @@ export const pageGuides = [
       { name: "Critical path / float", meaning: "Float is how many working days an activity can slip without delaying the project finish. Activities with no float form the critical path." },
     ],
     example: "Add five working days to Bid leveling & owner approval: GMP approved, the trade awards, and every construction activity after them move five working days later, and the Change log lists each move.",
-    reality: "The schedule saves in this browser for the open project; the Jelleff dates are illustrative. The calendar has no holidays. Importing replaces the current schedule once you confirm; export it first if you want to keep it. Imports bring in tasks, dates, durations, progress, links, and phases from summary tasks; resources, calendars, and costs are not imported. The XML follows Microsoft's published format but has not been tested against every version of Project or P6.",
+    reality: "The schedule saves in this browser for the open project; the Project 1 dates are illustrative. The calendar has no holidays. Importing replaces the current schedule once you confirm; export it first if you want to keep it. Imports bring in tasks, dates, durations, progress, links, and phases from summary tasks; resources, calendars, and costs are not imported. The XML follows Microsoft's published format but has not been tested against every version of Project or P6.",
     related: ["packages", "contracts", "turnover"],
   },
   {

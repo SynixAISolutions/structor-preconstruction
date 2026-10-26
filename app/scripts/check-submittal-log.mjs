@@ -18,7 +18,7 @@ const today = "2026-10-02", at = "2026-10-01T15:00:00.000Z";
 const by = (s, number) => s.submittals.find(x => x.number === number);
 const idOf = (s, number) => by(s, number).id;
 const pdf = (name, size = 1000) => ({ name, size, type: "application/pdf" });
-const architect = { name: "Project architect", company: "DLR Group", email: "architect@example.com" };
+const architect = { name: "Project architect", company: "Architect of record", email: "architect@example.com" };
 const b2 = { bidderId: "b2", company: "District Concrete", contact: "Sarah Chen", email: "sarah@example.com", awardId: null };
 
 // ── Sample: 14 spec-matrix requirements + 2 more each for concrete and drywall, the awarded trades ──

@@ -103,7 +103,7 @@ assert.deepEqual(S.searchTerms("Where is the SA3.21 wall, sheet A-101?"), ["sa3.
 // ── Tool runners on the Jelleff sample (nothing saved: the pages' starting data) ──
 const run = (name, args = {}, ctx = {}) => R.runAssistantTool({ id: "r", name, arguments: args }, { projectId: "jelleff", today: "2026-10-22", ...ctx }).then(r => ({ ...r, data: JSON.parse(r.content) }));
 let r = await run("project_overview");
-assert.equal(r.data.project.name, "Jelleff Recreation Center");
+assert.equal(r.data.project.name, "Project 1");
 assert.deepEqual(r.screens, ["turnover"]);
 assert.ok(r.data.counts.tradePackages > 0 && typeof r.data.budget.totalBudget === "number");
 r = await run("trade_packages", { trade: "drywall" });
@@ -122,8 +122,8 @@ assert.match(r.data.note, /No cost center named "Nowhere"/);
 for (const name of ["value_engineering", "issues_and_rfis", "schedule"]) assert.ok(!(await run(name)).data.error, `${name} runs on the sample`);
 // Danial's 22 Oct test: "How many projects are still incomplete" needs every project, not just the open one.
 r = await run("all_projects");
-assert.deepEqual(r.data.projects.map(p => [p.name, p.status]), [["Jelleff Recreation Center", "Preconstruction"], ["Whittier Campus", "Design development"], ["Riverside Commons", "Bidding"]]);
-assert.deepEqual([r.data.openProject, r.screens], ["Jelleff Recreation Center", ["projects"]]);
+assert.deepEqual(r.data.projects.map(p => [p.name, p.status]), [["Project 1", "Preconstruction"], ["Project 2", "Design development"], ["Project 3", "Bidding"]]);
+assert.deepEqual([r.data.openProject, r.screens], ["Project 1", ["projects"]]);
 assert.ok(r.data.projects[0].tradePackages > 0 && r.data.projects[1].tradePackages === 0, "Counts come from each project's own data");
 // …and "draft an RFI from these" must not offer issues an RFI would refuse.
 r = await run("issues_and_rfis");

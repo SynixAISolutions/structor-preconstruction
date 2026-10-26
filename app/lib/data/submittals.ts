@@ -14,7 +14,7 @@ import {
 
 const at = (date: string, time = "14:00") => `${date}T${time}:00.000Z`;
 const MB = 1024 * 1024;
-const architect = { name: "Project architect", company: "DLR Group", email: "architect@example.com" };
+const architect = { name: "Project architect", company: "Architect of record", email: "architect@example.com" };
 const procurement = sampleProcurement;
 
 let s: SubmittalState = requirementsFromSpecs(EMPTY_SUBMITTALS, procurement, initialSpecs, "Vijay", at("2026-09-12"));

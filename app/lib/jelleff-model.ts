@@ -18,22 +18,22 @@ export const planTransform = {
 };
 
 const plan: SourceRef = {
-  drawing: "Jelleff drawing set", sheet: "A1.1", page: 46, detail: "Level 01 - first floor plan", asset: "/models/jelleff/a1-1.png",
+  drawing: "Project 1 drawing set", sheet: "A1.1", page: 46, detail: "Level 01 - first floor plan", asset: "/models/jelleff/a1-1.png",
 };
 const partitions: SourceRef = {
-  drawing: "Jelleff drawing set", sheet: "A8.1", page: 64, detail: "Partition schedules S_-_-1 and S_-_-2, and the partition type legend", asset: "/models/jelleff/a8-1.png",
+  drawing: "Project 1 drawing set", sheet: "A8.1", page: 64, detail: "Partition schedules S_-_-1 and S_-_-2, and the partition type legend", asset: "/models/jelleff/a8-1.png",
 };
 const finishSchedule: SourceRef = {
-  drawing: "Jelleff drawing set", sheet: "A12.1", page: 79, detail: "Finish schedules and details", asset: "/models/jelleff/a12-1.png",
+  drawing: "Project 1 drawing set", sheet: "A12.1", page: 79, detail: "Finish schedules and details", asset: "/models/jelleff/a12-1.png",
 };
 const finishPlan: SourceRef = {
-  drawing: "Jelleff drawing set", sheet: "A12.2", page: 80, detail: "Level 01 - finish plan", asset: "/models/jelleff/a12-2.png",
+  drawing: "Project 1 drawing set", sheet: "A12.2", page: 80, detail: "Level 01 - finish plan", asset: "/models/jelleff/a12-2.png",
 };
 const finishPlanL2: SourceRef = {
-  drawing: "Jelleff drawing set", sheet: "A12.3", page: 81, detail: "Level 02 - finish plan", asset: "/models/jelleff/a12-3.png",
+  drawing: "Project 1 drawing set", sheet: "A12.3", page: 81, detail: "Level 02 - finish plan", asset: "/models/jelleff/a12-3.png",
 };
 export const levelSource: SourceRef = {
-  drawing: "Jelleff drawing set", sheet: "A5.1", page: 57, detail: "Building sections: first floor 0 ft, second floor 14 ft, low roof 28 ft", asset: "/models/jelleff/a5-1.png",
+  drawing: "Project 1 drawing set", sheet: "A5.1", page: 57, detail: "Building sections: first floor 0 ft, second floor 14 ft, low roof 28 ft", asset: "/models/jelleff/a5-1.png",
 };
 
 // A8.1 partition type legend. A tag reads construction, rating/height, stud width, gypsum layers,
@@ -318,7 +318,7 @@ export const systemMaterials: MaterialInfo[] = [
     discipline: "structural", division: "05", specSection: "05 12 00", unit: "LF", views: ["structural"],
     properties: illustrative([["Depth", "24 in. (illustrative)"], ["Spacing", "About 25 ft (illustrative)"]]) },
   { id: "roof-membrane", name: "TPO roof assembly", color: "#d9d6cf", status: "Illustrative", sources: [levelSource],
-    description: "Roof over the gym at the low-roof datum. Membrane and insulation follow the demo's specification list, not the Jelleff roof details.",
+    description: "Roof over the gym at the low-roof datum. Membrane and insulation follow the demo's specification list, not the Project 1 roof details.",
     discipline: "architectural", division: "07", specSection: "07 54 23", unit: "SF", views: ["exterior"],
     properties: illustrative([["Membrane", "60-mil reinforced TPO (illustrative)"], ["Insulation", "Tapered polyiso, R-30 (illustrative)"], ["Assembly thickness", "6 in. (illustrative)"]]) },
   { id: "ductwork", name: "Galvanized supply and return ductwork", color: "#b9c4cc", status: "Illustrative", sources: [plan],
@@ -469,7 +469,7 @@ export const interiorTransitions: ModelInput[] = [
 // plan transform. The floor sits 14 ft up (A5.1). Floor finishes, finish lines and transition
 // marks are read from the Level 02 finish plan (A12.3) and resolved through A12.1.
 
-const planL2: SourceRef = { drawing: "Jelleff drawing set", sheet: "A1.2", page: 47, detail: "Level 02 - second floor plan", asset: "/models/jelleff/a1-2.png" };
+const planL2: SourceRef = { drawing: "Project 1 drawing set", sheet: "A1.2", page: 47, detail: "Level 02 - second floor plan", asset: "/models/jelleff/a1-2.png" };
 const L2 = 14;
 const tracedL2 = "Simplified manual trace from A1.2 for visualization; not surveyed geometry, quantities, or construction coordination.";
 
@@ -689,7 +689,7 @@ export const doorInputs: ModelInput[] = doorTraces.map((t, i) => {
 // One object per ceiling zone. Its height is above the room's floor; its elevation adds the level.
 // Walls keep their own heights (they run to the deck, A3.1 general note I); nothing is cut or capped.
 
-const manualSection = (section: string, title: string, page: number): SourceRef => ({ drawing: "Jelleff project manual", sheet: section, page, detail: title, asset: "" });
+const manualSection = (section: string, title: string, page: number): SourceRef => ({ drawing: "Project 1 manual", sheet: section, page, detail: title, asset: "" });
 const ceilingAssembly = (id: string, name: string, color: string, extra: Partial<MaterialInfo> & Pick<MaterialInfo, "description" | "sources">): MaterialInfo => ({
   id, name, color, status: "Documented", discipline: "architectural", division: "09", specSection: null, unit: "SF", views: ["interior"], properties: [], ...extra,
 });

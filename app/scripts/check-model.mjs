@@ -27,9 +27,9 @@ for (const element of elements) {
   if (element.kind !== "floor") assert(Math.hypot(element.points[1][0] - element.points[0][0], element.points[1][1] - element.points[0][1]) > 0.1, `${element.id}: zero-length segment`);
 }
 for (const source of [...elements.map(e => e.source), ...allMaterials.flatMap(m => m.sources), ...systemElements.map(e => e.source)]) {
-  if (source.drawing === "Jelleff project manual") { assert(/^\d\d \d\d \d\d$/.test(source.sheet) && source.page > 0 && source.asset === "", `${source.sheet}: a manual section and page, no sheet image`); continue; }
+  if (source.drawing === "Project 1 manual") { assert(/^\d\d \d\d \d\d$/.test(source.sheet) && source.page > 0 && source.asset === "", `${source.sheet}: a manual section and page, no sheet image`); continue; }
   assert(existsSync(new URL(`../public${source.asset}`, import.meta.url)), `Source image missing: ${source.asset}`);
-  assert.equal(source.drawing, "Jelleff drawing set", `${source.sheet}: names its drawing set`);
+  assert.equal(source.drawing, "Project 1 drawing set", `${source.sheet}: names its drawing set`);
 }
 
 function contains(polygon, [x, z]) {

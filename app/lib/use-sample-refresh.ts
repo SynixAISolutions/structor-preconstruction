@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import "./demo-names";
 import {
   SampleRefreshError, deleteSampleBackup, keepMyData, listSampleBackups, loadUpdatedSample, markFreshBrowser,
   restoreSampleBackup, sampleBackupFile, sampleStatus, type SampleBackup, type SampleStatus,

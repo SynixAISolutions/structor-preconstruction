@@ -10,9 +10,9 @@ import type { DoorSchedule, DoorScheduleRow, MaterialInfo, Point, SourceRef } fr
 import { hardwareSets } from "./data/jelleff-hardware";
 
 export const doorScheduleSource: SourceRef = {
-  drawing: "Jelleff drawing set", sheet: "A8.2", page: 65, detail: "Door and frame schedule, door panel and frame types", asset: "/models/jelleff/a8-2.png",
+  drawing: "Project 1 drawing set", sheet: "A8.2", page: 65, detail: "Door and frame schedule, door panel and frame types", asset: "/models/jelleff/a8-2.png",
 };
-const manualSection = (section: string, title: string, page: number): SourceRef => ({ drawing: "Jelleff project manual", sheet: section, page, detail: title, asset: "" });
+const manualSection = (section: string, title: string, page: number): SourceRef => ({ drawing: "Project 1 manual", sheet: section, page, detail: title, asset: "" });
 
 /** How far a traced opening or leaf may differ from the schedule before it's flagged (3 in.). */
 export const DOOR_WIDTH_TOLERANCE_FT = 0.25;

@@ -1,3 +1,4 @@
+import { renameDemoNamesDeep } from "./demo-names";
 import { projectScopedKey } from "./project-scope";
 
 const DATABASE_NAME = "structor-workspace";
@@ -203,7 +204,7 @@ export async function loadWorkspace<Project, Item, Bidder>(): Promise<LoadedWork
         originalWorkbook = workbook.bytes.slice(0);
       }
       return {
-        ...(record.state as WorkspaceState<Project, Item, Bidder>),
+        ...renameDemoNamesDeep(record.state as WorkspaceState<Project, Item, Bidder>),
         savedAt: record.savedAt,
         originalWorkbook,
       };
