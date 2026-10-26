@@ -16,11 +16,11 @@ const at = "2026-09-26T12:00:00.000Z";
 const later = "2026-09-27T09:00:00.000Z";
 const fields = (issues) => issues.map(i => i.field);
 const rule = (fn, field, pattern) => assert.throws(fn, e => e instanceof SubmissionRuleError && e.issues.some(i => i.field === field && pattern.test(i.message)));
-const approveAll = (s, pkg) => bidForm(s, pkg).reduce((acc, item) => approveScope(acc, item.id, "Safi", at), s);
+const approveAll = (s, pkg) => bidForm(s, pkg).reduce((acc, item) => approveScope(acc, item.id, "Sadie", at), s);
 
 // Jelleff: publish demolition (inv-1, Capital Demolition, bidding). Structural steel stays unpublished; mechanical's invitee declined.
-const proc = freeze(publishPackage(approveAll(structuredClone(sampleProcurement), "demolition"), "demolition", "Safi", at));
-const withMechanical = freeze(publishPackage(approveAll(proc, "mechanical"), "mechanical", "Vijay", at));
+const proc = freeze(publishPackage(approveAll(structuredClone(sampleProcurement), "demolition"), "demolition", "Sadie", at));
+const withMechanical = freeze(publishPackage(approveAll(proc, "mechanical"), "mechanical", "Victor", at));
 const who = { name: "  Michael Brooks ", email: "michael@example.com " };
 const input = { projectId: "jelleff", invitationId: "inv-1" };
 
@@ -98,8 +98,8 @@ const changes = revisionChanges(subs[0].revisions[0], subs[0].revisions[1]);
 assert.deepEqual([changes.baseBidDelta, changes.changedResponses, changes.exclusionsChanged, changes.attachmentsChanged], [14000, [c], false, false]);
 
 // The GC revises the form: the submitted price is now stale; reopening aligns the draft.
-let proc2 = addScope(proc, { packageId: "demolition", title: "Remove the existing ceiling grid." }, "Safi", later);
-proc2 = freeze(publishPackage(approveAll(proc2, "demolition"), "demolition", "Safi", later));
+let proc2 = addScope(proc, { packageId: "demolition", title: "Remove the existing ceiling grid." }, "Sadie", later);
+proc2 = freeze(publishPackage(approveAll(proc2, "demolition"), "demolition", "Sadie", later));
 assert.equal(isStale(subs[0], proc2), true);
 const newItem = bidForm(proc2, "demolition").at(-1).id;
 assert(validateSubmission(subs[0], proc2, who).some(i => i.scopeItemId === newItem), "The new item must be answered");
@@ -109,10 +109,10 @@ assert.equal(subs[0].draft.responses.find(r => r.scopeItemId === a).answer, "Y")
 subs = freeze(submitBid(setResponse(subs, sub.id, newItem, "Y", "", later), proc2, sub.id, who, later));
 assert.deepEqual([latestRevision(subs[0]).formVersion, isStale(subs[0], proc2)], [2, false]);
 // Resubmitting identical content against a NEWER form version is allowed (it confirms the price).
-const proc3 = freeze(publishPackage(approveAll(editScope(proc2, a, { detail: "Include mezzanine partitions." }, "Safi", later), "demolition"), "demolition", "Safi", later));
+const proc3 = freeze(publishPackage(approveAll(editScope(proc2, a, { detail: "Include mezzanine partitions." }, "Sadie", later), "demolition"), "demolition", "Sadie", later));
 assert.equal(submitBid(subs, proc3, sub.id, who, later)[0].revisions.length, 4);
 // An item moved out of the form leaves a stray answer until the draft is reopened.
-const proc4 = freeze(publishPackage(approveAll(moveScope(proc3, d, "concrete", "Safi", later), "demolition"), "demolition", "Safi", later));
+const proc4 = freeze(publishPackage(approveAll(moveScope(proc3, d, "concrete", "Sadie", later), "demolition"), "demolition", "Sadie", later));
 assert(validateSubmission(subs[0], proc4, who).some(i => i.field === "form" && /no longer in it/.test(i.message)));
 assert(!openSubmission(subs, proc4, input, later)[0].draft.responses.some(r => r.scopeItemId === d));
 

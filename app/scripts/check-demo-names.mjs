@@ -13,6 +13,10 @@ assert.equal(renameDemoNames("Invitation to bid — Jelleff.pdf"), "Invitation t
 assert.equal(renameDemoNames("JELLEFF RECREATION CENTER 55-22112-00"), "PROJECT 1 55-22112-00");
 assert.equal(renameDemoNames("Modernization of the Jelleff Recreation Center for the DC Department of General Services: a new building"), "Modernization of a recreation center for a public owner: a new building");
 assert.equal(renameDemoNames("Whittier Campus, Riverside Commons"), "Project 2, Project 3");
+assert.equal(renameDemoNames("JRC_GMP-Permit_Drawings_251209.pdf · JRC_GMP-Permit_Project-Manual_251209.pdf"), "Project 1 GMP drawings.pdf · Project 1 GMP project manual.pdf");
+assert.equal(renameDemoNames('{"by":"Safi"},{"by":"Vijay"},{"name":"Amit Patani"}'), '{"by":"Sadie"},{"by":"Victor"},{"name":"Chris Taylor"}', "Marcel's colleagues are never named");
+assert.equal(renameDemoNames("Safiya Vijayan"), "Safiya Vijayan", "Only the whole names are replaced");
+for (const person of ["Amit Patani", "Safi", "Vijay"]) assert(!shown.includes(person), `The sample projects never name ${person}`);
 assert.equal(renameDemoNames('{"id":"jelleff","key":"structor-ui-jelleff"}'), '{"id":"jelleff","key":"structor-ui-jelleff"}', "Project ids and storage keys stay as they are");
 
 const store = new Map([

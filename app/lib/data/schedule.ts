@@ -7,22 +7,22 @@ import { addActivity, addDependency, editActivity, setProgress, EMPTY_SCHEDULE, 
 import { stableIds } from "./stable-ids";
 
 const at = "2026-09-01T12:00:00.000Z";
-const by = "Safi";
+const by = "Sadie";
 type Row = ActivityInput & { code: string; after?: [string, Dependency["type"], number][]; progress?: number };
 
 const rows: Row[] = [
-  { code: "A1000", name: "Design development review", phase: "Design", owner: "Safi", start: "2026-09-01", duration: 19, progress: 80 },
-  { code: "A1010", name: "Scope packages & bid invitations", phase: "Preconstruction", owner: "Vijay", start: "2026-09-14", duration: 15, progress: 55, after: [["A1000", "SS", 9]] },
-  { code: "A1020", name: "Concrete subcontract executed", phase: "Preconstruction", owner: "Vijay", packageId: "concrete", start: "2026-09-25", duration: 0, progress: 100 },
-  { code: "A1030", name: "Bid leveling & owner approval", phase: "Preconstruction", owner: "Safi", start: "2026-10-05", duration: 15, after: [["A1010", "FS", 0]] },
-  { code: "A1040", name: "GMP approved", phase: "Preconstruction", owner: "Safi", start: "2026-10-23", duration: 0, after: [["A1030", "FS", 0]] },
-  { code: "A1050", name: "Award remaining trades", phase: "Procurement", owner: "Vijay", start: "2026-10-26", duration: 10, after: [["A1040", "FS", 0]] },
+  { code: "A1000", name: "Design development review", phase: "Design", owner: "Sadie", start: "2026-09-01", duration: 19, progress: 80 },
+  { code: "A1010", name: "Scope packages & bid invitations", phase: "Preconstruction", owner: "Victor", start: "2026-09-14", duration: 15, progress: 55, after: [["A1000", "SS", 9]] },
+  { code: "A1020", name: "Concrete subcontract executed", phase: "Preconstruction", owner: "Victor", packageId: "concrete", start: "2026-09-25", duration: 0, progress: 100 },
+  { code: "A1030", name: "Bid leveling & owner approval", phase: "Preconstruction", owner: "Sadie", start: "2026-10-05", duration: 15, after: [["A1010", "FS", 0]] },
+  { code: "A1040", name: "GMP approved", phase: "Preconstruction", owner: "Sadie", start: "2026-10-23", duration: 0, after: [["A1030", "FS", 0]] },
+  { code: "A1050", name: "Award remaining trades", phase: "Procurement", owner: "Victor", start: "2026-10-26", duration: 10, after: [["A1040", "FS", 0]] },
   { code: "A1060", name: "Long-lead procurement", phase: "Procurement", owner: "Naija", start: "2026-10-26", duration: 40, after: [["A1040", "FS", 0]] },
-  { code: "A1070", name: "Mobilization & selective demolition", phase: "Construction", owner: "Vijay", packageId: "demolition", start: "2026-11-09", duration: 25, after: [["A1050", "FS", 0]] },
+  { code: "A1070", name: "Mobilization & selective demolition", phase: "Construction", owner: "Victor", packageId: "demolition", start: "2026-11-09", duration: 25, after: [["A1050", "FS", 0]] },
   { code: "A1080", name: "Foundations & structure", phase: "Construction", owner: "Naija", packageId: "concrete", start: "2026-12-07", duration: 60, after: [["A1070", "SS", 20]] },
-  { code: "A1090", name: "Enclosure & interior buildout", phase: "Construction", owner: "Safi", start: "2027-02-01", duration: 100, after: [["A1080", "SS", 40], ["A1060", "FS", 0]] },
-  { code: "A1100", name: "Commissioning & turnover", phase: "Construction", owner: "Vijay", start: "2027-06-01", duration: 44, after: [["A1090", "FF", 30]] },
-  { code: "A1110", name: "Substantial completion", phase: "Construction", owner: "Safi", start: "2027-07-30", duration: 0, after: [["A1100", "FS", 0]] },
+  { code: "A1090", name: "Enclosure & interior buildout", phase: "Construction", owner: "Sadie", start: "2027-02-01", duration: 100, after: [["A1080", "SS", 40], ["A1060", "FS", 0]] },
+  { code: "A1100", name: "Commissioning & turnover", phase: "Construction", owner: "Victor", start: "2027-06-01", duration: 44, after: [["A1090", "FF", 30]] },
+  { code: "A1110", name: "Substantial completion", phase: "Construction", owner: "Sadie", start: "2027-07-30", duration: 0, after: [["A1100", "FS", 0]] },
 ];
 
 let s: ScheduleState = rows.reduce((next, { after: _a, progress: _p, ...input }) => addActivity(next, input, by, at), EMPTY_SCHEDULE);

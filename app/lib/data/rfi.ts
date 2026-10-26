@@ -9,8 +9,8 @@ type Sample = "reviewed" | "waiting" | "resolved";
 const issue = (number: string, title: string, detail: string, category: string, severity: Severity, trade: string, packageId: string | null, source: string, crossReference: string, sample: Sample): StructorIssue => ({
   id: number.toLowerCase(), number, title, detail, category, severity, trade, packageId, source, crossReference, origin: "ai", raisedBy: "Structor Check", bidderId: null,
   status: sample === "waiting" ? "pending-review" : sample === "resolved" ? "resolved" : "open",
-  reviewedBy: sample === "waiting" ? null : "Safi", reviewedAt: sample === "waiting" ? null : at, combinedInto: null,
-  rfiId: null, resolution: sample === "resolved" ? { note: "Confirmed against the latest drawings.", by: "Safi", at } : null, createdAt: at, updatedAt: at,
+  reviewedBy: sample === "waiting" ? null : "Sadie", reviewedAt: sample === "waiting" ? null : at, combinedInto: null,
+  rfiId: null, resolution: sample === "resolved" ? { note: "Confirmed against the latest drawings.", by: "Sadie", at } : null, createdAt: at, updatedAt: at,
 });
 
 export const sampleStructorCheck: StructorCheckState = {

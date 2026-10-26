@@ -8,7 +8,7 @@ import { rectangle } from "../drawing-flip";
 import { sampleProcurement } from "./procurement";
 import { stableIds } from "./stable-ids";
 
-const ARCH = "JRC_GMP-Permit_Drawings_251209.pdf", MANUAL = "JRC_GMP-Permit_Project-Manual_251209.pdf";
+const ARCH = "Project 1 GMP drawings.pdf", MANUAL = "Project 1 GMP project manual.pdf";
 
 const input: RunInput = {
   packageIds: ["drywall"],
@@ -41,7 +41,7 @@ const input: RunInput = {
 const reviewed = "2026-10-13T10:00:00.000Z";
 const recorded = recordRun(EMPTY_EXTRACTION, sampleProcurement, input);
 const idOf = (title: string) => recorded.drafts.find(d => d.kind === "scope" && d.title.startsWith(title))!.id;
-const corrected = editDraft(recorded, sampleProcurement, idOf("Finish all gypsum board"), { title: "Finish gypsum board to Level 4 where exposed to view." }, "Safi", reviewed);
-const rejected = rejectDraft(corrected, idOf("Provide flush wood doors"), "wrong-trade", "Doors are in the Openings package; drywall only frames the opening.", "Safi", reviewed);
+const corrected = editDraft(recorded, sampleProcurement, idOf("Finish all gypsum board"), { title: "Finish gypsum board to Level 4 where exposed to view." }, "Sadie", reviewed);
+const rejected = rejectDraft(corrected, idOf("Provide flush wood doors"), "wrong-trade", "Doors are in the Openings package; drywall only frames the opening.", "Sadie", reviewed);
 
 export const sampleExtraction: ExtractionState = stableIds(rejected, "ext");

@@ -28,23 +28,23 @@ s = freeze(V.setMarkupFactor(s, 1.248));
 assert.equal(V.weightedImpact(-132000, s.markupFactor), -164736, "Weighted impact = cost impact × markup factor");
 
 // Ideas: validation, numbering that never reuses a removed number.
-fails(() => V.addVeIdea(s, { description: " ", costImpact: 0 }, "Safi", at), "description", /Describe/);
-fails(() => V.addVeIdea(s, { description: "x", costImpact: 1.234 }, "Safi", at), "costImpact", /two decimal/);
-s = V.addVeIdea(s, { description: "Alternative roofing membrane", category: "Envelope", csiCode: "07 54 23", costImpact: -132000, source: "07 54 23 · §2.1" }, "Safi", at);
-s = V.addVeIdea(s, { description: "Reduce storefront height", costImpact: -80000, origin: "ai" }, "Safi", at);
-s = V.addVeIdea(s, { description: "Upgrade lobby finish", costImpact: 25000 }, "Safi", at);
+fails(() => V.addVeIdea(s, { description: " ", costImpact: 0 }, "Sadie", at), "description", /Describe/);
+fails(() => V.addVeIdea(s, { description: "x", costImpact: 1.234 }, "Sadie", at), "costImpact", /two decimal/);
+s = V.addVeIdea(s, { description: "Alternative roofing membrane", category: "Envelope", csiCode: "07 54 23", costImpact: -132000, source: "07 54 23 · §2.1" }, "Sadie", at);
+s = V.addVeIdea(s, { description: "Reduce storefront height", costImpact: -80000, origin: "ai" }, "Sadie", at);
+s = V.addVeIdea(s, { description: "Upgrade lobby finish", costImpact: 25000 }, "Sadie", at);
 assert.deepEqual(s.ideas.map(i => [i.number, i.status, i.origin]), [["VE-01", "idea", "team"], ["VE-02", "idea", "ai"], ["VE-03", "idea", "team"]]);
 const third = s.ideas[2].id;
-s = freeze(V.addVeIdea(V.removeVeIdea(s, third), { description: "Simplify site paving", costImpact: -40000 }, "Safi", at));
+s = freeze(V.addVeIdea(V.removeVeIdea(s, third), { description: "Simplify site paving", costImpact: -40000 }, "Sadie", at));
 assert.deepEqual(s.ideas.map(i => i.number), ["VE-01", "VE-02", "VE-04"], "VE-03 is never reused");
 const [roof, storefront, paving] = s.ideas.map(i => i.id);
 
 // Pricing from subcontractors: recorded, each company once, quotes and declines.
-fails(() => V.requestVePricing(s, roof, [], "Safi", at), "bidders", /at least one/);
-s = freeze(V.requestVePricing(s, roof, [b1, b2], "Safi", at));
+fails(() => V.requestVePricing(s, roof, [], "Sadie", at), "bidders", /at least one/);
+s = freeze(V.requestVePricing(s, roof, [b1, b2], "Sadie", at));
 let r = s.ideas[0];
 assert.deepEqual([r.status, r.pricing.map(p => [p.company, p.status]), s.notifications.map(n => n.recipient)], ["pricing", [[b1.company, "requested"], [b2.company, "requested"]], [b1.id, b2.id]]);
-fails(() => V.requestVePricing(s, roof, [b1], "Safi", at), "bidders", /already asked/);
+fails(() => V.requestVePricing(s, roof, [b1], "Sadie", at), "bidders", /already asked/);
 fails(() => V.recordVeQuote(s, roof, "nope", { quotedImpact: -1 }, at), "quote", /no longer exists/);
 s = freeze(V.recordVeQuote(s, roof, r.pricing[0].id, { quotedImpact: -120000, note: "Membrane B" }, at));
 s = freeze(V.declineVePricing(s, roof, r.pricing[1].id, "Not our system", at));
@@ -58,7 +58,7 @@ fails(() => V.decideVeIdea(s, roof, "maybe", {}, "Marcel", at), "decision", /Acc
 s = freeze(V.decideVeIdea(s, roof, "accepted", { acceptedImpact: -120000, note: "Owner approved" }, "Marcel", at));
 s = freeze(V.decideVeIdea(s, storefront, "rejected", { note: "Architect declined" }, "Marcel", at));
 fails(() => V.editVeIdea(s, roof, { costImpact: -1 }, at), "decision", /VE-01 is accepted; reopen it first/);
-fails(() => V.requestVePricing(s, roof, [b2], "Safi", at), "decision", /reopen/);
+fails(() => V.requestVePricing(s, roof, [b2], "Sadie", at), "decision", /reopen/);
 fails(() => V.removeVeIdea(s, roof), "decision", /accepted; reopen it before removing/);
 assert.equal(V.removeVeIdea(s, storefront).ideas.length, 2, "A rejected idea can be removed");
 assert.deepEqual([V.reopenVeIdea(s, roof, at).ideas[0].status, V.reopenVeIdea(s, storefront, at).ideas[1].status], ["priced", "idea"]);

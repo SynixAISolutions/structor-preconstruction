@@ -48,14 +48,14 @@ assert.deepEqual(milestones(start, "demolition"), ["bidders-invited"]);
 assert.equal(start.tasks.at(-1).status, "todo");
 
 // Approve Demolition → it becomes "publish"; publish → outreach.
-let proc = P.bidForm(base.procurement, "demolition").reduce((s, i) => P.approveScope(s, i.id, "Safi", at), base.procurement);
+let proc = P.bidForm(base.procurement, "demolition").reduce((s, i) => P.approveScope(s, i.id, "Sadie", at), base.procurement);
 let t = derive({ procurement: proc });
 assert(!has(t, "scopes:approve:demolition") && task(t, "scopes:publish:demolition").priority === "high");
-proc = P.publishPackage(proc, "demolition", "Safi", at);
+proc = P.publishPackage(proc, "demolition", "Sadie", at);
 t = derive({ procurement: proc });
 assert(!has(t, "scopes:publish:demolition"));
 assert.deepEqual([task(t, "outreach:waiting:demolition").status, task(t, "outreach:waiting:demolition").count, has(t, "outreach:follow-up:demolition")], ["waiting", 1, false], "Capital Demolition already has a call logged");
-proc = freeze(P.inviteBidder(proc, "demolition", "b6", "Safi", at));
+proc = freeze(P.inviteBidder(proc, "demolition", "b6", "Sadie", at));
 t = derive({ procurement: proc });
 assert.deepEqual([task(t, "outreach:follow-up:demolition").count, task(t, "outreach:waiting:demolition").count], [1, 2], "Greenline has no outreach logged");
 assert.deepEqual(milestones(t, "demolition"), ["scope-approved", "bid-form-published", "bidders-invited"]);
@@ -79,13 +79,13 @@ assert(milestones(t, "demolition").includes("bids-leveled") && milestones(t, "de
 assert.equal(derive({ procurement: proc, submissions: subs, leveling: { ...leveling, packageId: "concrete" } }).tasks.find(x => x.id === "leveling:load:demolition").count, 2, "Leveling loaded for another package does not count");
 
 // A revised form makes the submitted bids stale.
-const withItem = P.addScope(proc, { packageId: "demolition", title: "Remove the ceiling grid." }, "Safi", at);
-const revised = P.publishPackage(P.bidForm(withItem, "demolition").reduce((acc, i) => P.approveScope(acc, i.id, "Safi", at), withItem), "demolition", "Safi", at);
+const withItem = P.addScope(proc, { packageId: "demolition", title: "Remove the ceiling grid." }, "Sadie", at);
+const revised = P.publishPackage(P.bidForm(withItem, "demolition").reduce((acc, i) => P.approveScope(acc, i.id, "Sadie", at), withItem), "demolition", "Sadie", at);
 assert.equal(task(derive({ procurement: revised, submissions: subs }), "leveling:stale:demolition").count, 2);
 
 // Award → Exhibit A → subcontract: exactly one next step at each stage.
 const candidates = levelingCandidates({ packageId: "demolition", items: imported.items, bidders: imported.bidders, provenance: imported.provenance });
-let aw = A.createAward(base.awards, { projectId: "jelleff", projectName: "Jelleff", procurement: proc, submissions: subs, candidates, budget: base.budget, directory: initialBidders }, { levelingBidderId: candidates[0].levelingBidderId, basis: "reviewed" }, "Safi", at);
+let aw = A.createAward(base.awards, { projectId: "jelleff", projectName: "Jelleff", procurement: proc, submissions: subs, candidates, budget: base.budget, directory: initialBidders }, { levelingBidderId: candidates[0].levelingBidderId, basis: "reviewed" }, "Sadie", at);
 const id = aw.awards.at(-1).id; // after the sample's executed concrete and drywall awards
 const stageTask = (awards) => { const s = derive({ procurement: proc, submissions: subs, leveling, awards }); return s.tasks.filter(x => x.group === "award").map(x => [x.id, x.status]); };
 const expectStep = (awards, id2, status) => assert.deepEqual(stageTask(awards), [[`award:${id2}:demolition`, status]], id2);
@@ -95,9 +95,9 @@ expectStep(aw, "exhibit-draft", "todo");
 aw = A.shareExhibit(aw, id, at); expectStep(aw, "exhibit-shared", "waiting");
 aw = A.requestExhibitChanges(aw, id, { author: "Michael", text: "Slab by others." }, at); expectStep(aw, "exhibit-changes-requested", "todo");
 assert.match(derive({ procurement: proc, submissions: subs, leveling, awards: aw }).tasks.find(x => x.group === "award").detail, /1 comment unresolved/);
-aw = A.setCommentResolved(A.shareExhibit(aw, id, at), id, aw.awards.at(-1).exhibit.comments[0].id, true, "Safi", at);
+aw = A.setCommentResolved(A.shareExhibit(aw, id, at), id, aw.awards.at(-1).exhibit.comments[0].id, true, "Sadie", at);
 aw = A.agreeExhibit(aw, id, "Michael", "subcontractor", at); expectStep(aw, "exhibit-agreed", "todo");
-aw = A.generateSubcontract(aw, id, "Contractor LLC", "Safi", at); expectStep(aw, "subcontract-draft", "todo");
+aw = A.generateSubcontract(aw, id, "Contractor LLC", "Sadie", at); expectStep(aw, "subcontract-draft", "todo");
 aw = A.sendSubcontract(aw, id, at); expectStep(aw, "signature-pending", "waiting");
 aw = A.signSubcontract(aw, id, "subcontractor", { name: "Michael", title: "", email: "m@example.com" }, at); expectStep(aw, "subcontractor-signed", "todo");
 aw = A.signSubcontract(aw, id, "contractor", { name: "Marcel", title: "", email: "k@example.com" }, at); expectStep(aw, "countersigned", "todo");
