@@ -11,7 +11,6 @@ import type { Project } from "../../lib/projects";
 import { ProcurementPackagesView } from "./procurement";
 import { SubmissionPortalView } from "./submission-ui";
 import { ScheduleView } from "./schedule-ui";
-import { TurnoverView } from "./todo-ui";
 import { AllowancesView, BudgetView } from "./budget-ui";
 import { AwardView } from "./award-ui";
 import { ValueEngineeringView } from "./value-engineering-ui";
@@ -42,5 +41,5 @@ function PrequalificationView({ navigate }: ViewProps) {
 }
 
 export function CommercialView(props: ViewProps & { screen: Screen; project: Project }) {
-  switch(props.screen){case "packages":return <ProcurementPackagesView {...props}/>;case "bidders":return <BiddersView {...props}/>;case "ratings":return <RatingsView {...props}/>;case "prequalification":return <PrequalificationView {...props}/>;case "portal":return <SubmissionPortalView {...props}/>;case "budget":return <BudgetView {...props}/>;case "allowances":return <AllowancesView {...props}/>;case "value-engineering":return <ValueEngineeringView {...props}/>;case "contracts":return <AwardView {...props}/>;case "schedule":return <ScheduleView {...props}/>;case "turnover":return <TurnoverView {...props}/>;default:return null;}
+  switch(props.screen){case "packages":return <ProcurementPackagesView {...props}/>;case "bidders":return <BiddersView {...props}/>;case "ratings":return <RatingsView {...props}/>;case "prequalification":return <PrequalificationView {...props}/>;case "portal":return <SubmissionPortalView {...props}/>;case "budget":return <BudgetView {...props}/>;case "allowances":return <AllowancesView {...props}/>;case "value-engineering":return <ValueEngineeringView {...props}/>;case "contracts":return <AwardView {...props}/>;case "schedule":return <ScheduleView {...props}/>;default:return null;}
 }

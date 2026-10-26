@@ -19,3 +19,47 @@
 .todo-readiness .health-ring { width: 95px; flex-shrink: 0; }
 .todo-step summary:focus-visible, .todo-pulse summary:focus-visible { outline: 2px solid #b75526; outline-offset: 3px; }
 @media(max-width: 600px) { .todo-steps { padding: 0 8px 10px; } .todo-step > summary { gap: 9px; padding: 12px 9px; } .todo-step-title strong { font-size: 12px; } .todo-step > summary .ui-badge { font-size: 10px; } .todo-step-body { padding: 0 7px 10px; } }
+/* Steps with progress bars (Marcel, 24 Oct); open a step for its tasks. Project setup is step 1. */
+.todo-row-steps { list-style: none; margin: 0; padding: 0 18px 18px; display: grid; gap: 10px; }
+.todo-row-step { border: 1px solid var(--line); border-radius: 9px; background: var(--paper); }
+.todo-row-head { display: grid; grid-template-columns: 32px minmax(0, 1fr) minmax(140px, 220px) auto 16px; align-items: center; gap: 14px; width: 100%; padding: 14px 15px; border: 0; background: none; text-align: left; cursor: pointer; color: var(--ink); }
+.todo-row-head:focus-visible { outline: 2px solid #b75526; outline-offset: 2px; border-radius: 9px; }
+.todo-row-title { min-width: 0; }
+.todo-row-title strong { display: block; font-size: 13px; }
+.todo-row-title small { display: block; margin-top: 5px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.todo-row-progress { display: flex; align-items: center; gap: 9px; }
+.todo-row-progress b { min-width: 36px; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
+.todo-row-bar { position: relative; flex: 1; height: 8px; border-radius: 999px; background: var(--line-soft); overflow: hidden; }
+.todo-row-bar i { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--accent); transition: width .3s ease; }
+.todo-row-step.is-done .todo-row-bar i { background: var(--green); }
+.todo-row-step.is-none .todo-row-progress b { color: var(--muted); font-weight: 500; }
+.todo-row-counts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.todo-row-chevron { color: var(--muted); transition: transform .2s ease; }
+.todo-row-head[aria-expanded="true"] .todo-row-chevron { transform: rotate(180deg); }
+.todo-row-body { border-top: 1px solid var(--line-soft); padding: 12px; display: grid; gap: 10px; justify-items: start; }
+.todo-row-body > .todo-work-list, .todo-row-body > .setup-checklist { width: 100%; }
+.todo-row-empty { padding: 4px 6px; color: var(--muted); font-size: 12px; }
+.todo-row-pulse { margin-top: 18px; }
+@media (prefers-reduced-motion: reduce) { .todo-row-bar i, .todo-row-chevron { transition: none; } }
+@media (max-width: 760px) {
+  .todo-row-steps { padding: 0 8px 10px; }
+  .todo-row-head { grid-template-columns: 28px minmax(0, 1fr) 16px; gap: 10px; padding: 12px 10px; }
+  .todo-row-progress, .todo-row-counts { grid-column: 2 / 3; }
+  .todo-row-chevron { grid-row: 1; grid-column: 3; }
+  .todo-row-counts { justify-content: flex-start; }
+}
+/* Project setup inside step 1: the same task rows, with their upload, review and decision actions inline. */
+.setup-checklist { display: grid; gap: 12px; min-width: 0; }
+.setup-checklist > .todo-work-list { padding: 0 6px; }
+.setup-task .setup-why, .setup-task .setup-saved-decision { margin-top: 8px; font-size: 12px; }
+.setup-task .setup-item-actions { justify-content: flex-start; margin-top: 12px; }
+.setup-task .setup-rfp-file { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 7px; }
+.setup-task .setup-rfp-file small { color: var(--muted); }
+.setup-all-set { padding: 4px 8px; color: var(--muted); font-size: 12px; }
+.setup-in-place { margin: 0 6px; border: 1px solid var(--line-soft); border-radius: 8px; }
+.setup-in-place > summary { display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--green); }
+.setup-in-place > summary:focus-visible { outline: 2px solid #b75526; outline-offset: 2px; }
+.setup-in-place ul { list-style: none; margin: 0; padding: 0 12px 10px; display: grid; gap: 8px; }
+.setup-in-place li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
+.setup-in-place li strong { display: block; font-size: 12px; }
+.setup-in-place li small { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }

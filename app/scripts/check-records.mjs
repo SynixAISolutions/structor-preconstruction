@@ -11,7 +11,7 @@ const form = (fields) => {
   for (const [k, v] of Object.entries(fields)) for (const item of [].concat(v)) f.append(k, item);
   return f;
 };
-const valid = { name: "Jelleff Recreation Center", location: "Washington, DC", type: "Community & recreation", value: "$18,400,000", workType: "renovation", squareFeet: "42,500", taxStatus: "non-taxable", estimateStage: "concept" };
+const valid = { name: "Jelleff Recreation Center", location: "Washington, DC", type: "Community & recreation", value: "$18,400,000", workType: "renovation", squareFeet: "42,500", taxStatus: "non-taxable", estimateStage: "concept", deliveryMethod: "cmar" };
 
 // Samples satisfy the record invariants.
 for (const p of sampleProjectRecords) {
@@ -44,6 +44,16 @@ assert.deepEqual([single.project.squareFeet, single.project.renovationSquareFeet
 assert.deepEqual(single.project.certifications, ["CBE", "First Source"], "Certifications are trimmed and de-duplicated");
 assert.deepEqual(single.project.team, [{ name: "Marcel Khoury", role: "Project manager" }, { name: "Rawad", role: "Estimator" }], "Team rows keep name/role pairing and drop blank names");
 assert.equal(squareFeetLabel(single.project.squareFeet), "42,500 SF");
+
+// Delivery method (Marcel, 24 Oct): required on the form; decides whether an RFP is expected.
+assert.equal(single.project.deliveryMethod, "cmar");
+assert.equal(parseProjectForm(form({ ...valid, deliveryMethod: "" })).errors.deliveryMethod, "Choose hard bid, CM at-risk or design-build.");
+assert.equal(parseProjectForm(form({ ...valid, deliveryMethod: "negotiated" })).errors.deliveryMethod, "Choose hard bid, CM at-risk or design-build.", "Only the three methods are accepted");
+assert.deepEqual(sampleProjectRecords.map(p => p.deliveryMethod), ["cmar", "cmar", "hard-bid"], "Projects 1 and 2 are GMP jobs; Project 3 is a hard bid");
+assert.equal(normalizeProject({ id: "jelleff", name: "Project 1" }).deliveryMethod, "cmar", "A sample saved before delivery methods existed gets the sample's");
+assert.equal(normalizeProject({ id: "mine", name: "Mine" }).deliveryMethod, null, "Any other old record stays not recorded");
+assert.equal(normalizeProject({ id: "jelleff", name: "Project 1", deliveryMethod: null }).deliveryMethod, null, "A method cleared on purpose stays cleared");
+assert.equal(normalizeProject({ id: "x", name: "x", deliveryMethod: "design-build" }).deliveryMethod, "design-build");
 assert(!("size" in legacy), "Migration drops the legacy size string");
 
 // New construction: a ground-up building has area but no renovation/addition split.
@@ -58,7 +68,7 @@ assert.deepEqual(Object.keys(parseProjectForm(form({ ...valid, workType: "both" 
 // Required fields, each with its own message, and no project returned.
 const empty = parseProjectForm(form({}));
 assert.equal(empty.project, undefined);
-assert.deepEqual(Object.keys(empty.errors).sort(), ["estimateStage", "location", "name", "squareFeet", "taxStatus", "type", "workType"]);
+assert.deepEqual(Object.keys(empty.errors).sort(), ["deliveryMethod", "estimateStage", "location", "name", "squareFeet", "taxStatus", "type", "workType"]);
 assert.equal(parseProjectForm(form({ ...valid, value: "" })).project.value, 0, "Blank value is allowed");
 assert(parseProjectForm(form({ ...valid, value: "lots" })).errors.value);
 assert(parseProjectForm(form({ ...valid, squareFeet: "0" })).errors.squareFeet);

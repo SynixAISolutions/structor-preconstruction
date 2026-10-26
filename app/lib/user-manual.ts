@@ -64,8 +64,8 @@ const workspaceGuides: ManualGuide[] = [
       "Choose Back to All projects at the top of the menu to switch projects. Each project keeps its own files, scopes, takeoffs, budget, bid leveling workbook, and other saved screen data; the subcontractor directory is shared by every project. Keep exports of important work.",
     ],
     terms: [{ name: "Design development", meaning: "A stage where the design is being refined before final construction details are complete." }, { name: "Bidding", meaning: "The stage when companies are being asked to submit prices." }],
-    example: "Create a school modernization project to demonstrate its project brief and dates. A new project opens Project setup: upload its drawings (and the project manual when you have it), and Structor suggests its trades and writes their scopes with AI. Its 3D studio stays empty; the traced model is the Project 1 sample's.",
-    reality: "Project records are saved in this browser. The RFP field on the form keeps the file's name only; upload the RFP in Project setup (or Project files, category RFP) to have its details read and reviewed. Project 1 holds the sample content; other projects hold only what is entered for them. Bid leveling shows labelled demo data until a workbook is imported for the project.",
+    example: "Create a school modernization project to demonstrate its project brief and dates. A new project opens the Preconstruction to-do at step 1, Project information & documents: upload its drawings (and the project manual when you have it), and Structor suggests its trades and writes their scopes with AI. Its 3D studio stays empty; the traced model is the Project 1 sample's.",
+    reality: "Project records are saved in this browser. The RFP field on the form keeps the file's name only; upload the RFP in step 1 of the Preconstruction to-do (or Project files, category RFP) to have its details read and reviewed. Project 1 holds the sample content; other projects hold only what is entered for them. Bid leveling shows labelled demo data until a workbook is imported for the project.",
     related: ["information", "saving", "documents"],
   },
   {

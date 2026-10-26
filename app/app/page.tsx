@@ -9,7 +9,7 @@ import { CommercialView } from "./ui/commercial";
 import { BuyoutView } from "./ui/buyout-ui";
 import { UserManual } from "./ui/user-manual";
 import { ProjectForm, ProjectInformation } from "./ui/project-record";
-import { ProjectSetupView } from "./ui/project-setup";
+import { TurnoverView } from "./ui/todo-ui";
 import { SidebarNavigation } from "./ui/sidebar-navigation";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, SearchBox, Tabs, usd, type Screen } from "./ui/shared";
 import { DEFAULT_SCREEN, resolveScreen, screenGroup, screenLabel, searchScreens } from "../lib/screens";
@@ -49,7 +49,7 @@ export default function StructorApp(){
  const [newProjectBusy,setNewProjectBusy]=useState(false);
  const props={navigate,notify,projectName:project.name};
  function inspectModel(target:ModelInspection){navigate("model");setModelInspection(target);}
- function createProject(p:Project){setProjects(v=>[...v,p]);selectProject(p.id);setNewProject(false);navigate("setup");notify("Project created. Start with your drawings or project manual.");}
+ function createProject(p:Project){setProjects(v=>[...v,p]);selectProject(p.id);setNewProject(false);navigate("turnover");notify("Project created. Start with your drawings or project manual.");}
  return <div className={`product-app ${reduced?"motion-off":""}`}>
   {menuOpen&&<button className="mobile-scrim" aria-label="Close navigation" onClick={()=>setMenuOpen(false)}/>}
   <aside className={`product-sidebar ${menuOpen?"is-open":""}`}>
@@ -64,13 +64,13 @@ export default function StructorApp(){
    <div className="product-content" ref={scrollRef}>
     <div className="page-enter" key={screen}>
       {activeId===SAMPLE_PROJECT_ID&&<SampleRefreshBanner refresh={sampleRefresh}/>}
-     {screen==="setup"&&<ProjectSetupView key={project.id} project={project} navigate={navigate} notify={notify} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Reviewed project information saved.");}}/>}
+     {screen==="turnover"&&<TurnoverView key={project.id} {...props} project={project} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Reviewed project information saved.");}}/>}
      {modelView&&<ModelStudio project={project} view={modelView} projectId={project.id} projectName={project.name} navigate={navigate} notify={notify} inspection={modelView==="interior"?modelInspection:null}/>}
      {screen==="projects"&&<Projects projects={projects} onNew={()=>setNewProject(true)} onOpen={p=>{selectProject(p.id);navigate("information");}}/>}
      {screen==="architect"&&<ArchitectView {...props}/>}
      {screen==="information"&&<ProjectInformation project={project} cover={<BuildingModel/>} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Project information saved locally.");}} navigate={navigate}/>}
       {['documents','scopes','drawing-flip','takeoffs','specs','checks','drawings','specifications','revisions'].includes(screen)&&<IntelligenceView key={project.id} {...props} project={project} screen={screen} quantityFilters={quantityFilters} onQuantityFilters={setQuantityFilters} onInspectModel={inspectModel}/>}
-     {['packages','bidders','ratings','prequalification','portal','budget','allowances','value-engineering','contracts','schedule','turnover'].includes(screen)&&<CommercialView {...props} screen={screen} project={project}/>}
+     {['packages','bidders','ratings','prequalification','portal','budget','allowances','value-engineering','contracts','schedule'].includes(screen)&&<CommercialView {...props} screen={screen} project={project}/>}
      {screen==="buyout"&&<BuyoutView key={project.id} {...props}/>}
      {screen==="leveling"&&<><PageHeader eyebrow="BID & AWARD" title="Bid leveling" description="A complete scope. A comparable price. A confident decision." actions={<Button onClick={()=>navigate("budget")}><Wallet size={16}/>Budget summary<ArrowRight size={16}/></Button>}/><BidLevelingPage key={project.id} projectName={project.name} squareFeet={project.squareFeet}/></>}
      {screen==="settings"&&<WorkspaceSettings notify={notify} reduced={reduced} setReduced={setReduced} navigate={navigate} sampleRefresh={sampleRefresh}/>}

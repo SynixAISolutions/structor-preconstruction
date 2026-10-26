@@ -134,16 +134,21 @@ export function projectSetup(input: SetupInput): SetupSummary {
   const missing = missingProjectFacts(project);
   const rfps = docs.filter(d => d.category === "RFP");
   const unreviewed = rfps.filter(d => !state.reviews.some(r => r.docId === d.id));
+  // The RFP depends on how the job is bought (Marcel, 24 Oct): a hard bid has none (an invitation to bid, if one is
+  // uploaded, is reviewed the same way), CM at-risk sets its GMP stage in it, and design-build starts from it.
+  const method = project.deliveryMethod;
+  const rfpLabel = method === "hard-bid" ? "Invitation to bid" : method === "cmar" || method === "design-build" ? "RFP" : "RFP / invitation to bid";
   const detailItems = [
     item("details", "facts", "Project information", "required", missing.length ? "missing" : "ready", missing.length ? `Missing: ${missing.join(", ")}.` : "Complete."),
-    item("details", "rfp", "RFP / invitation to bid", "recommended", !rfps.length ? "missing" : unreviewed.length ? "needs-review" : fromDocs(rfps),
-      !rfps.length ? "Upload the RFP and its details are read for you to review." : unreviewed.length ? `Review the details read from ${unreviewed.map(d => d.name).join(", ")}.` : "Reviewed.", { category: "RFP", why: "Due dates, areas, tax status and participation programs come from it." }),
+    ...(method === "hard-bid" && !rfps.length ? [] : [item("details", "rfp", rfpLabel, method === "design-build" ? "required" : "recommended", !rfps.length ? "missing" : unreviewed.length ? "needs-review" : fromDocs(rfps),
+      !rfps.length ? `Upload the ${rfpLabel === "RFP" ? "RFP" : "RFP or invitation to bid"} and its details are read for you to review.` : unreviewed.length ? `Review the details read from ${unreviewed.map(d => d.name).join(", ")}.` : "Reviewed.",
+      { category: "RFP", why: method === "design-build" ? "Design-build work starts from the RFP response: its requirements, submissions and dates." : method === "cmar" ? "The owner sets the GMP stage, due dates and requirements in it." : "Due dates, areas, tax status and participation programs come from it." })]),
   ];
   // Addenda (phase 2): each one is reviewed like the RFP, for changed dates and details.
   const addenda = docs.filter(d => d.category === "Addenda");
   const openAddenda = addenda.filter(d => !state.reviews.some(r => r.docId === d.id));
   if (addenda.length) detailItems.push(item("details", "addenda", "Addenda", "recommended", openAddenda.length ? "needs-review" : fromDocs(addenda), openAddenda.length ? `Review what ${openAddenda.map(d => d.name).join(", ")} change${openAddenda.length === 1 ? "s" : ""}: bid dates, areas and other details are compared with the project's.` : `${plural(addenda.length, "addendum", "addenda")} reviewed.`, { category: "Addenda", why: "An addendum can move the bid date or change the scope." }));
-  const detailsStatus: SetupStatus = detailItems.slice(1).some(i => i.status === "needs-review") ? "needs-review" : detailItems[0].status;
+  const detailsStatus: SetupStatus = detailItems.some(i => i.level === "required" && i.status === "missing") ? "missing" : detailItems.slice(1).some(i => i.status === "needs-review") ? "needs-review" : detailItems[0].status;
 
   // ── Trades ──
   const suggestions = suggestTrades(procurement.packages, { sections: manuals.flatMap(d => d.sections), sheets: drawingRegister(docs) });
@@ -157,7 +162,7 @@ export function projectSetup(input: SetupInput): SetupSummary {
 
   // ── Contracts ── (filenames; the contracts department's exhibits live on the Contracts screen)
   const contractItems = [
-    item("contracts", "prime", "Owner contract / GMP agreement", "recommended", docsMatching(docs, /agreement|prime contract|\bGMP\b|owner contract/i).length ? "ready" : "missing", "", { category: "Contracts", why: "Sets the terms every subcontract has to flow down." }),
+    item("contracts", "prime", method === "hard-bid" ? "Owner contract (lump sum)" : method === "design-build" ? "Owner contract / design-build agreement" : "Owner contract / GMP agreement", "recommended", docsMatching(docs, /agreement|prime contract|\bGMP\b|owner contract/i).length ? "ready" : "missing", "", { category: "Contracts", why: "Sets the terms every subcontract has to flow down." }),
     item("contracts", "conditions", "General and supplementary conditions", "recommended", docsMatching(docs, /general conditions|supplementary conditions|\bA201\b/i).length ? "ready" : "missing", "", { category: "Contracts", why: "Insurance, bonds, retainage and change-order rules." }),
     item("contracts", "subcontract", "Your subcontract form", "recommended", docsMatching(docs, /subcontract/i).length ? "ready" : "missing", "", { category: "Contracts", why: "Exhibit A and the subcontract are generated in your company's form." }),
   ];
@@ -201,7 +206,7 @@ export function projectSetup(input: SetupInput): SetupSummary {
   };
   const steps: SetupStep[] = [
     step("documents", "Upload drawings and specifications", "Drawings alone are enough to start; the project manual adds specification requirements.", "required", docsStatus, "documents", docItems),
-    step("details", "Review project details", "Fill in the project information, or upload the RFP and review what it says.", "required", detailsStatus, "information", detailItems),
+    step("details", "Review project details", method === "hard-bid" ? "Fill in the project information. A hard bid has no RFP; upload the invitation to bid if there is one." : "Fill in the project information, or upload the RFP and review what it says.", "required", detailsStatus, "information", detailItems),
     step("trades", "Confirm trades", tradesNote, "required", tradesStatus, "scopes"),
     step("scopes", "Write scopes", scopesNote, "required", scopesStatus, "scopes"),
     step("contracts", "Contract documents", "The owner contract, its conditions and your subcontract form.", "recommended", "missing", "documents", contractItems),

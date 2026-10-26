@@ -26,9 +26,10 @@ const base = freeze({ project: sampleProjectRecords[0], documents: sampleFiles, 
 const derive = (patch = {}) => deriveTodo({ ...base, ...patch });
 
 // An empty project: only setup and budget work, nothing invented.
-const newProject = parseProjectForm((() => { const f = new FormData(); for (const [k, v] of Object.entries({ name: "New job", location: "DC", type: "Civic", workType: "new", squareFeet: "1000", taxStatus: "taxable", estimateStage: "concept" })) f.append(k, v); return f; })()).project;
+const newProject = parseProjectForm((() => { const f = new FormData(); for (const [k, v] of Object.entries({ name: "New job", location: "DC", type: "Civic", workType: "new", squareFeet: "1000", taxStatus: "taxable", estimateStage: "concept", deliveryMethod: "hard-bid" })) f.append(k, v); return f; })()).project;
 assert(newProject, "The setup fixture must be a valid project");
 assert(missingProjectFacts({ ...newProject, estimateStage: null }).includes("estimate stage"));
+assert(missingProjectFacts({ ...newProject, deliveryMethod: null }).includes("delivery method"), "Delivery method is a project fact (Marcel, 24 Oct)");
 const empty = deriveTodo({ project: newProject, documents: [], procurement: { packages: [], scopes: [], invitations: [], outreach: [], notifications: [] }, submissions: [], leveling: null, budget: { lines: [], allowances: [] }, awards: noAwards });
 assert.deepEqual(ids(empty).sort(), ["budget:empty", "setup:facts", "setup:files", "setup:packages"]);
 assert.equal(task(empty, "setup:facts").detail, "Missing: bid due date, RFI deadline.", "Marcel, 22 Oct: the RFI deadline is part of the project information");

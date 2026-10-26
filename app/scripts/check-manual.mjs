@@ -46,7 +46,7 @@ const guideIds = new Set(ids);
 const unique = (values, message) => assert.equal(new Set(values).size, values.length, message);
 const nonempty = (value, message) => assert(typeof value === "string" && value.trim(), message);
 
-assert.equal(screens.length, 31, "Expected coverage of all 31 current app screens (Overview joined the to-do; Scope review & buyout added, 22 Oct)");
+assert.equal(screens.length, 30, "Expected coverage of all 30 current app screens (Project setup joined the Preconstruction to-do, 24 Oct)");
 unique(screens, "Screen ids must be unique");
 unique(ids, "Manual article ids must be unique");
 unique(manualGroups, "Manual group names must be unique");
@@ -92,7 +92,7 @@ assert.equal(SUBCONTRACTOR_VIEW.scope, "subcontractor");
 assert.equal(PORTAL_PREVIEW_SCREEN.id, "portal");
 assert.equal(screenGroup("portal")?.label, "SUBCONTRACTOR VIEW", "The portal keeps a group for breadcrumbs and the manual");
 assert.equal(ALL_SCREENS.find(screen => screen.id === "prequalification").label, "Subcontractor prequalification");
-for (const [former, id] of [["prequalification", "prequalification"], ["preview as subcontractor", "portal"], ["spec matrix", "specs"], ["drawing register", "drawings"], ["bidder directory", "bidders"], ["project turnover", "turnover"], ["conversations", "packages"], ["documents", "documents"]]) {
+for (const [former, id] of [["prequalification", "prequalification"], ["preview as subcontractor", "portal"], ["spec matrix", "specs"], ["drawing register", "drawings"], ["bidder directory", "bidders"], ["project turnover", "turnover"], ["project setup", "turnover"], ["conversations", "packages"], ["documents", "documents"]]) {
   assert(searchScreens(former).some(screen => screen.id === id), `Quick find must still reach ${id} by its former name "${former}"`);
 }
 // The manual follows the navigation: same group, and each title starts with the nav label.
