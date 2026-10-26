@@ -114,7 +114,7 @@ export const MCN_EXHIBIT_TEMPLATE: DocumentTemplate = {
 };
 
 export const MCN_SUBCONTRACT_TEMPLATE: DocumentTemplate = {
-  id: "mcn-subcontract", name: "Contractor Subcontract Agreement", version: "DGS", sample: false,
+  id: "mcn-subcontract", name: "Contractor Subcontract Agreement", version: "Public owner", sample: false,
   notice: "The contractor's subcontract agreement. Articles 1–29 apply as in the contractor's full agreement.",
   layout: {
     title: "Subcontract agreement · {trade}",

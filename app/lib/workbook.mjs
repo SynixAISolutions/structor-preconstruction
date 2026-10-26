@@ -240,14 +240,14 @@ export function importBidWorkbook(input, { sheetName } = {}) {
       ?? supported[0];
 
   if (!selected) {
-    throw new WorkbookMappingError("UNSUPPORTED_TEMPLATE", "No supported Jelleff-style bid sheet was found.", [
+    throw new WorkbookMappingError("UNSUPPORTED_TEMPLATE", "No supported Project 1-style bid sheet was found.", [
       { field: "sheet", message: "Expected Section 1, Section 2, Section 3, and seven Base Bid labels." },
     ]);
   }
   if (!selected.validation.supported) {
     throw new WorkbookMappingError(
       "UNSUPPORTED_TEMPLATE",
-      `${selected.name} is not a supported Jelleff-style bid sheet.`,
+      `${selected.name} is not a supported Project 1-style bid sheet.`,
       selected.validation.issues.map((message) => ({ field: "sheet", sheetName: selected.name, message })),
     );
   }

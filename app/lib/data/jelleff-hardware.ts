@@ -5,7 +5,7 @@
 
 import type { HardwareSet, SourceRef } from "../model";
 
-const manualPage = (page: number, set: string): SourceRef => ({ drawing: "Jelleff project manual", sheet: "08 71 00", page, detail: `Door hardware set #${set}`, asset: "" });
+const manualPage = (page: number, set: string): SourceRef => ({ drawing: "Project 1 manual", sheet: "08 71 00", page, detail: `Door hardware set #${set}`, asset: "" });
 
 /** The section's manufacturer list. */
 export const hardwareManufacturers: Record<string, string> = {

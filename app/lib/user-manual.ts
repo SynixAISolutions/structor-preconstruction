@@ -64,8 +64,8 @@ const workspaceGuides: ManualGuide[] = [
       "Choose Back to All projects at the top of the menu to switch projects. Each project keeps its own files, scopes, takeoffs, budget, bid leveling workbook, and other saved screen data; the subcontractor directory is shared by every project. Keep exports of important work.",
     ],
     terms: [{ name: "Design development", meaning: "A stage where the design is being refined before final construction details are complete." }, { name: "Bidding", meaning: "The stage when companies are being asked to submit prices." }],
-    example: "Create a school modernization project to demonstrate its project brief and dates. A new project opens Project setup: upload its drawings (and the project manual when you have it), and Structor suggests its trades and writes their scopes with AI. Its 3D studio stays empty; the traced model is the Jelleff sample's.",
-    reality: "Project records are saved in this browser. The RFP field on the form keeps the file's name only; upload the RFP in Project setup (or Project files, category RFP) to have its details read and reviewed. The Jelleff Recreation Center project holds the sample content; other projects hold only what is entered for them. Bid leveling shows labelled demo data until a workbook is imported for the project.",
+    example: "Create a school modernization project to demonstrate its project brief and dates. A new project opens Project setup: upload its drawings (and the project manual when you have it), and Structor suggests its trades and writes their scopes with AI. Its 3D studio stays empty; the traced model is the Project 1 sample's.",
+    reality: "Project records are saved in this browser. The RFP field on the form keeps the file's name only; upload the RFP in Project setup (or Project files, category RFP) to have its details read and reviewed. Project 1 holds the sample content; other projects hold only what is entered for them. Bid leveling shows labelled demo data until a workbook is imported for the project.",
     related: ["information", "saving", "documents"],
   },
   {
@@ -87,7 +87,7 @@ const workspaceGuides: ManualGuide[] = [
   },
   {
     id: "model", group: "Preconstruction", title: "Interior finishes (3D model studio)",
-    purpose: "Explore the prepared interior of Jelleff Recreation Center on both floors. Rotate the building, select floor finishes, transitions, walls, doors, and storefront, read their quantities and the architect's finish schedule, and compare them with the supplied drawing sheets.",
+    purpose: "Explore the prepared interior of Project 1 on both floors. Rotate the building, select floor finishes, transitions, walls, doors, and storefront, read their quantities and the architect's finish schedule, and compare them with the supplied drawing sheets.",
     steps: [
       "In 3D model, drag to rotate, use the mouse wheel or pinch to zoom, and right-drag to pan. The viewer also provides zoom, home/reset, and top-view controls. Focus the canvas and use arrow keys to move the view.",
       "Use Cutaway to lower the displayed walls and see inside. Material colours distinguish assigned material types; room labels identify spaces. The walls toggle can hide vertical elements so floor zones are easier to see.",
@@ -129,7 +129,7 @@ const workspaceGuides: ManualGuide[] = [
     ],
     terms: [{ name: "Evidence label", meaning: "What an object rests on, instead of a percentage: measured from a scaled sheet with its assembly documented, measured with its assembly still unverified, or placed for illustration. A traced measurement follows the drawn lines; only your review confirms it." }, { name: "Verified / flagged", meaning: "The contractor's review of an object: verified can be relied on; flagged needs checking, with a note." }],
     example: "Select the gym supply duct to read its length and size, then check how it runs past the sprinkler main and the light fixtures below the roof.",
-    reality: "Every object in this view is an illustrative placement on the traced Jelleff plan: positions, sizes and products are not taken from the mechanical, plumbing, electrical or fire-protection drawings, so each is labelled Illustrative placement. Reviews and show/hide choices save in this browser for the open project.",
+    reality: "Every object in this view is an illustrative placement on the traced Project 1 plan: positions, sizes and products are not taken from the mechanical, plumbing, electrical or fire-protection drawings, so each is labelled Illustrative placement. Reviews and show/hide choices save in this browser for the open project.",
     related: ["model", "model-structural", "drawings"],
   },
   {
@@ -145,7 +145,7 @@ const workspaceGuides: ManualGuide[] = [
     ],
     terms: [{ name: "Evidence label", meaning: "What an object rests on, instead of a percentage: measured from a scaled sheet with its assembly documented, measured with its assembly still unverified, or placed for illustration. A traced measurement follows the drawn lines; only your review confirms it." }, { name: "Verified / flagged", meaning: "The contractor's review of an object: verified can be relied on; flagged needs checking, with a note." }],
     example: "Select a gym slab to read its area, thickness and concrete volume in cubic yards.",
-    reality: "Every object in this view is an illustrative placement on the traced Jelleff plan: positions, sizes and products are not taken from the structural drawings, so each is labelled Illustrative placement. Reviews and show/hide choices save in this browser for the open project.",
+    reality: "Every object in this view is an illustrative placement on the traced Project 1 plan: positions, sizes and products are not taken from the structural drawings, so each is labelled Illustrative placement. Reviews and show/hide choices save in this browser for the open project.",
     related: ["model", "model-mep", "model-exterior"],
   },
   {
@@ -161,7 +161,7 @@ const workspaceGuides: ManualGuide[] = [
     ],
     terms: [{ name: "Evidence label", meaning: "What an object rests on, instead of a percentage: measured from a scaled sheet with its assembly documented, measured with its assembly still unverified, or placed for illustration. A traced measurement follows the drawn lines; only your review confirms it." }, { name: "Verified / flagged", meaning: "The contractor's review of an object: verified can be relied on; flagged needs checking, with a note." }],
     example: "Select the gym roof to read its area and the insulation R-value; select a storefront panel to read its glazed area.",
-    reality: "Exterior walls and storefront are traced from A1.1, but their layers are not verified. The roof is an illustrative placement at the low-roof level from A5.1, and its products are from the demo's specification list, not the Jelleff roof details. Reviews and show/hide choices save in this browser for the open project.",
+    reality: "Exterior walls and storefront are traced from A1.1, but their layers are not verified. The roof is an illustrative placement at the low-roof level from A5.1, and its products are from the demo's specification list, not the Project 1 roof details. Reviews and show/hide choices save in this browser for the open project.",
     related: ["model", "model-structural", "drawings"],
   },
   {
@@ -196,11 +196,11 @@ const workspaceGuides: ManualGuide[] = [
       "Open Connections, then Gmail → View connection → Open bid workspace. In Bid leveling choose Proposal inbox to use the real read-only connector after setup.",
       "The Outlook, BuildingConnected, and Google Drive / OneDrive cards are planned integrations. Their buttons explain the preview; they do not authorize or synchronize those services.",
       "In Appearance, turn on Reduce animation if movement is distracting. The interface also respects the device’s reduced-motion preference.",
-      "Open Sample data to see the current Jelleff sample. Load updated sample backs up this browser's Jelleff data first, then reloads with the latest sample; a saved subcontractor directory keeps your companies and only gains sample companies it lacks. Saved backups lists each backup with Restore (your current Jelleff data is backed up before it is replaced), Download (a JSON copy), and Delete. When the sample has changed since this browser last saved Jelleff work, a banner offers Load updated sample or Keep my data.",
+      "Open Sample data to see the current Project 1 sample. Load updated sample backs up this browser's Project 1 data first, then reloads with the latest sample; a saved subcontractor directory keeps your companies and only gains sample companies it lacks. Saved backups lists each backup with Restore (your current Project 1 data is backed up before it is replaced), Download (a JSON copy), and Delete. When the sample has changed since this browser last saved Project 1 work, a banner offers Load updated sample or Keep my data.",
     ],
-    terms: [{ name: "Role", meaning: "A person’s intended responsibilities and access in a future shared workspace." }, { name: "Connection", meaning: "An authorized link to another service. Seeing a service logo does not mean it is connected." }, { name: "Sample backup", meaning: "A copy of this browser's Jelleff data, made before a newer sample or an older backup replaces it, so nothing you saved is lost." }],
+    terms: [{ name: "Role", meaning: "A person’s intended responsibilities and access in a future shared workspace." }, { name: "Connection", meaning: "An authorized link to another service. Seeing a service logo does not mean it is connected." }, { name: "Sample backup", meaning: "A copy of this browser's Project 1 data, made before a newer sample or an older backup replaces it, so nothing you saved is lost." }],
     example: "For a calmer walkthrough, enable Reduce animation. To inspect incoming proposals, use the Gmail connection route, not a Bid package's Messages tab, which is a separate draft conversation.",
-    reality: "Workspace preferences and roles are UI previews, not durable organization settings or enforced account permissions. Reduce animation lasts for the current app session. Gmail needs server configuration and account authorization; the other connection cards are not live integrations. Sample data affects only the Jelleff demo in this browser; other projects and the shared subcontractor directory stay as they are, and if the browser has no room for the backup, nothing is replaced.",
+    reality: "Workspace preferences and roles are UI previews, not durable organization settings or enforced account permissions. Reduce animation lasts for the current app session. Gmail needs server configuration and account authorization; the other connection cards are not live integrations. Sample data affects only the Project 1 demo in this browser; other projects and the shared subcontractor directory stay as they are, and if the browser has no room for the backup, nothing is replaced.",
     related: ["gmail", "saving", "packages"],
   },
   {
@@ -215,7 +215,7 @@ const workspaceGuides: ManualGuide[] = [
       "Return to the grid, add/edit the bidder, and manually record the base bid, Y/N/P answers, notes, and adjustments. Keep unclear answers blank and request clarification through your usual communication channel.",
     ],
     terms: [{ name: "Read-only", meaning: "The connector retrieves messages and attachments; it does not send email or change your mailbox." }, { name: "Automatic extraction", meaning: "Software reading a proposal and proposing structured fields. This is not enabled in the current inbox." }],
-    example: "Download a steel proposal, confirm it is for the right Jelleff package, and enter its price and exclusions in Bid leveling. Opening the email does not create a bidder or mark rows automatically.",
+    example: "Download a steel proposal, confirm it is for the right Project 1 package, and enter its price and exclusions in Bid leveling. Opening the email does not create a bidder or mark rows automatically.",
     reality: "Connection availability depends on local server configuration and the account’s authorization. No automatic project matching, email-to-scope creation, bidder creation, PDF price extraction, or Y/N/P population is enabled. Outlook is planned, not another live inbox option.",
     related: ["leveling", "settings", "bidders", "saving"],
   },

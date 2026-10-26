@@ -14,7 +14,7 @@ export const sampleFiles: LibraryFile[] = [
   { id: "jrc-drawings-251209", name: "JRC_GMP-Permit_Drawings_251209.pdf", category: "Drawings", type: "PDF", size: "166.5 MB", date: "2025-12-09", sample: true, revision: "GMP 12-09-2025" },
   { id: "jrc-manual-251209", name: "JRC_GMP-Permit_Project-Manual_251209.pdf", category: "Specifications", type: "PDF", size: "110.5 MB", date: "2025-12-09", sample: true, revision: "GMP 12-09-2025" },
   { id: "d5", name: "Geotechnical investigation report.pdf", category: "Reports", type: "PDF", size: "4.1 MB", date: "2026-08-29", sample: true, revision: "Final" },
-  { id: "d6", name: "Invitation to bid — Jelleff.pdf", category: "RFP", type: "PDF", size: "1.2 MB", date: "2026-08-28", sample: true, revision: "Original" },
+  { id: "d6", name: "Invitation to bid — Project 1.pdf", category: "RFP", type: "PDF", size: "1.2 MB", date: "2026-08-28", sample: true, revision: "Original" },
   { id: "d7", name: "Subcontract agreement template.docx", category: "Contracts", type: "DOCX", size: "268 KB", date: "2026-08-28", sample: true, revision: "Template" },
 ];
 

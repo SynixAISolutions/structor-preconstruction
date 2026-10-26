@@ -16,7 +16,7 @@ import { GLOBAL_DRAFT_KEYS } from "./project-scope";
 /** Bump when the Jelleff sample changes in a way returning browsers should be offered. */
 export const SAMPLE_VERSION = "2026-10-23";
 /** What changed, for the offer to load it. */
-export const SAMPLE_CHANGES = "Every Jelleff bid package is now its own trade: 26 trades in CSI order. Waterproofing, Metal panels and Roofing are split, and Special doors, Aluminum & glazing, Tile, Painting & wall coverings, Specialties, Signage, Fire protection, Low voltage, Asphalt paving, Site concrete, Site fencing and Landscaping are added.";
+export const SAMPLE_CHANGES = "Every Project 1 bid package is now its own trade: 26 trades in CSI order. Waterproofing, Metal panels and Roofing are split, and Special doors, Aluminum & glazing, Tile, Painting & wall coverings, Specialties, Signage, Fire protection, Low voltage, Asphalt paving, Site concrete, Site fencing and Landscaping are added.";
 
 export const SAMPLE_VERSION_KEY = "structor-sample-version";
 const BACKUP_PREFIX = "structor-sample-backup:";
@@ -154,9 +154,9 @@ export function restoreSampleBackup(storage: StorageLike, key: string, at = new 
       if (currentVersion === null) storage.removeItem(SAMPLE_VERSION_KEY); else storage.setItem(SAMPLE_VERSION_KEY, currentVersion);
       storage.removeItem(saved);
     } catch {
-      throw new SampleRefreshError("Restore stopped. Your previous Jelleff data is in the newest backup; download it before trying again.");
+      throw new SampleRefreshError("Restore stopped. Your previous Project 1 data is in the newest backup; download it before trying again.");
     }
-    throw new SampleRefreshError("This backup could not be restored with the available browser storage. Your current Jelleff data was kept.");
+    throw new SampleRefreshError("This backup could not be restored with the available browser storage. Your current Project 1 data was kept.");
   }
   return saved;
 }

@@ -152,7 +152,7 @@ const money = new Intl.NumberFormat("en-US", {
 });
 
 const BIDDER_SLOT_COUNT = 7;
-const demoProject: Project = { name: "Jelleff Recreation Center", trade: "02 40 00 — Demolition", budget: 320000, sheetName: "Demo", isDemo: true };
+const demoProject: Project = { name: "Project 1", trade: "02 40 00 — Demolition", budget: 320000, sheetName: "Demo", isDemo: true };
 
 const glossaryTerms = [
   ["Scope sheet", "The trade checklist used to make every bidder price the same required work."],

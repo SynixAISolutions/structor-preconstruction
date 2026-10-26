@@ -39,7 +39,7 @@ const candidates = levelingCandidates({ packageId: "concrete", items: imported.i
 
 let awards: AwardState = createAward({ awards: [], notifications: [] }, {
   projectId: project.id, projectName: project.name, procurement, submissions, candidates, budget: sampleBudget, directory: initialBidders,
-  owner: "DC Department of General Services", projectAddress: project.location, projectStart: project.start,
+  owner: "Public owner", projectAddress: project.location, projectStart: project.start,
 }, { levelingBidderId: candidates[0].levelingBidderId, basis: "base", budgetLineId: "nc-03000" }, "Vijay", at("2026-09-23"));
 const awardId = awards.awards[0].id;
 awards = shareExhibit(awards, awardId, at("2026-09-23", "15:00"));
@@ -85,7 +85,7 @@ const drywallCandidates = levelingCandidates({ packageId: "drywall", items: dryw
 const capitol = drywallCandidates.find(c => c.bidderName === "Capitol Wall Systems")!;
 let drywallAwards: AwardState = createAward(stable.awards, {
   projectId: project.id, projectName: project.name, procurement, submissions: drywallSubmissions, candidates: drywallCandidates, budget: sampleBudget, directory: initialBidders,
-  owner: "DC Department of General Services", projectAddress: project.location, projectStart: project.start,
+  owner: "Public owner", projectAddress: project.location, projectStart: project.start,
 }, { levelingBidderId: capitol.levelingBidderId, basis: "base", budgetLineId: "nc-09200" }, "Safi", at("2026-10-09"));
 const drywallAwardId = drywallAwards.awards.at(-1)!.id;
 drywallAwards = shareExhibit(drywallAwards, drywallAwardId, at("2026-10-09", "15:00"));

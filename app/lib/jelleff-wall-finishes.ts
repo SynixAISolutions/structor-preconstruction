@@ -9,7 +9,7 @@
 
 import type { FaceBase, FinishBand, LevelId, Point, SourceRef, WallFinishStatus } from "./model";
 
-const sheet = (name: string, page: number, asset: string) => (detail: string): SourceRef => ({ drawing: "Jelleff drawing set", sheet: name, page, detail, asset: `/models/jelleff/${asset}.png` });
+const sheet = (name: string, page: number, asset: string) => (detail: string): SourceRef => ({ drawing: "Project 1 drawing set", sheet: name, page, detail, asset: `/models/jelleff/${asset}.png` });
 const A122 = sheet("A12.2", 80, "a12-2"), A123 = sheet("A12.3", 81, "a12-3"), A101 = sheet("A10.1", 71, "a10-1"), A102 = sheet("A10.2", 72, "a10-2");
 const A103 = sheet("A10.3", 73, "a10-3"), A104 = sheet("A10.4", 74, "a10-4"), A105 = sheet("A10.5", 75, "a10-5"), A21 = sheet("A2.1", 50, "a2-1"), A22 = sheet("A2.2", 51, "a2-2");
 const view = (src: (d: string) => SourceRef, n: number, title: string) => src(`${n}/${src("").sheet} ${title}`);

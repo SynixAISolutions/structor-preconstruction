@@ -10,9 +10,9 @@
 
 import type { CeilingSchedule, CeilingStatus, CeilingType, LevelId, Point, SourceRef } from "./model";
 
-export const rcpL1: SourceRef = { drawing: "Jelleff drawing set", sheet: "A3.1", page: 53, detail: "Level 01 - reflected ceiling plan", asset: "/models/jelleff/a3-1.png" };
-export const rcpL2: SourceRef = { drawing: "Jelleff drawing set", sheet: "A3.2", page: 54, detail: "Level 02 - reflected ceiling plan", asset: "/models/jelleff/a3-2.png" };
-export const ceilingDetails: SourceRef = { drawing: "Jelleff drawing set", sheet: "A11.1", page: 77, detail: "Ceiling details (bulkheads, soffits, perimeter conditions)", asset: "/models/jelleff/a11-1.png" };
+export const rcpL1: SourceRef = { drawing: "Project 1 drawing set", sheet: "A3.1", page: 53, detail: "Level 01 - reflected ceiling plan", asset: "/models/jelleff/a3-1.png" };
+export const rcpL2: SourceRef = { drawing: "Project 1 drawing set", sheet: "A3.2", page: 54, detail: "Level 02 - reflected ceiling plan", asset: "/models/jelleff/a3-2.png" };
+export const ceilingDetails: SourceRef = { drawing: "Project 1 drawing set", sheet: "A11.1", page: 77, detail: "Ceiling details (bulkheads, soffits, perimeter conditions)", asset: "/models/jelleff/a11-1.png" };
 
 /** The A3.1 / A3.2 sheet offsets from A1.1 / A1.2, in the 2400 x 1715 viewBox (same 1/8" scale). */
 export const RCP_OFFSETS = { "A3.1": [-35.2, 12.8], "A3.2": [-37.6, 11.2] } as const;

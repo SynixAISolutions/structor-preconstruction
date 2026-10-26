@@ -22,12 +22,12 @@ for (const p of sampleProjectRecords) {
 
 // Jelleff carries its real facts (Marcel's DD Budget and precon write-up).
 const jelleff = sampleProjectRecords.find(p => p.id === "jelleff");
-assert.deepEqual([jelleff.squareFeet, jelleff.architect, jelleff.value, jelleff.due, jelleff.rfi, jelleff.start, jelleff.certifications, jelleff.taxStatus], [26500, "DLR Group", 33328991, "2026-02-02", "2026-01-20", "2026-06-01", ["First Source"], null]);
+assert.deepEqual([jelleff.squareFeet, jelleff.architect, jelleff.value, jelleff.due, jelleff.rfi, jelleff.start, jelleff.certifications, jelleff.taxStatus], [26500, "Architect of record", 33328991, "2026-02-02", "2026-01-20", "2026-06-01", ["First Source"], null]);
 // A browser that saved the old placeholder Jelleff gets the real one; edited records and own projects are untouched.
 const placeholder = { id: "jelleff", name: "Jelleff Recreation Center", location: "Washington, DC", type: "Community & recreation", status: "Preconstruction", value: 18400000, size: "42,500 SF", architect: "Project design team", description: "", due: "2026-10-02", rfi: "", start: "", finish: "" };
 const stored = (list) => { globalThis.localStorage = { getItem: () => JSON.stringify(list), setItem() {} }; const out = loadProjects(); delete globalThis.localStorage; return out; };
 const upgraded = stored([placeholder, { id: "mine", name: "Mine", architect: "Project design team" }]);
-assert.deepEqual([upgraded[0].squareFeet, upgraded[0].architect, upgraded[1].name, upgraded[1].architect], [26500, "DLR Group", "Mine", "Project design team"]);
+assert.deepEqual([upgraded[0].squareFeet, upgraded[0].architect, upgraded[1].name, upgraded[1].architect], [26500, "Architect of record", "Mine", "Project design team"]);
 assert.deepEqual([stored([{ ...placeholder, architect: "Our architect" }])[0].squareFeet, stored([{ ...placeholder, architect: "Our architect" }])[0].architect], [42500, "Our architect"], "An edited Jelleff record is kept as saved");
 
 // A record saved before the 20 Sep fields is upgraded, not rejected.

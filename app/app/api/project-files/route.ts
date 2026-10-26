@@ -1,3 +1,4 @@
+import { renameDemoNamesDeep } from "../../../lib/demo-names";
 import { parseDocument, validId, type StoredDocument } from "../../../lib/project-files";
 import { readIndex, registerDocument, removeDocument, updateDocument } from "../../../lib/project-files-store";
 
@@ -5,7 +6,7 @@ import { readIndex, registerDocument, removeDocument, updateDocument } from "../
 // from its pages, or remove it. The demo password (proxy.ts) guards this like every route.
 export const runtime = "nodejs";
 
-const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
+const json = (body: unknown, status = 200) => Response.json(renameDemoNamesDeep(body), { status, headers: { "cache-control": "no-store" } });
 
 export async function GET(request: Request) {
   const projectId = new URL(request.url).searchParams.get("project");

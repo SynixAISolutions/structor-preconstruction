@@ -114,7 +114,7 @@ const largeTarget = memoryStorage({
 const largeBefore = largeTarget.snapshot();
 const largeLimit = Object.entries(largeBefore).reduce((n, [k, v]) => n + k.length + v.length, 0) + 300;
 const limitedLargeRestore = memoryStorage(largeBefore, largeLimit);
-fails(() => R.restoreSampleBackup(limitedLargeRestore, "structor-sample-backup:large", at), /current Jelleff data was kept/);
+fails(() => R.restoreSampleBackup(limitedLargeRestore, "structor-sample-backup:large", at), /current Project 1 data was kept/);
 assert.deepEqual(limitedLargeRestore.snapshot(), largeBefore, "A failed restore does not partially remove the active draft");
 
 // Bad backups.
