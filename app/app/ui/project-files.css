@@ -72,3 +72,10 @@
 /* In grid view a folder is its name, hint and count; the file-only fields are left out. */
 .cm-files-table.grid .pf-folder-row td:not(:first-child):not(:last-child) { display: none; }
 .cm-files-table.grid .pf-folder-row td:last-child { grid-column: auto; justify-self: end; }
+/* The words a source was read from, marked like the reference viewer Marcel showed: orange, on the page. */
+.stored-viewer-sheet { position: relative; }
+.stored-viewer-sheet .stored-page-image { display: block; width: 100%; height: auto; }
+.stored-viewer-mark { position: absolute; border: 2px solid #f05a22; border-radius: 3px; background: rgb(240 90 34 / .22); box-shadow: 0 0 0 3px rgb(240 90 34 / .18); pointer-events: none; animation: stored-mark-in .9s ease-out; }
+@keyframes stored-mark-in { 0% { box-shadow: 0 0 0 14px rgb(240 90 34 / 0); background: rgb(240 90 34 / .45); } 100% { box-shadow: 0 0 0 3px rgb(240 90 34 / .18); background: rgb(240 90 34 / .22); } }
+@media (prefers-reduced-motion: reduce) { .stored-viewer-mark { animation: none; } }
+.stored-viewer-status { margin: 0; color: var(--muted); font-size: 12px; }

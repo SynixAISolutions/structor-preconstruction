@@ -10,7 +10,7 @@ import { manualSections } from "./manual-sections";
 import { aiJob, readTitleBlock } from "./ai-more-client";
 import { rfpPages, type RfpFact } from "./rfp";
 import { useActiveProject } from "./project-scope";
-import type { TextBox } from "./text-anchor";
+import { pageTextBoxes, type TextBox } from "./text-anchor";
 import {
   chunkFor, emptyIndex, kindForCategory, MAX_RANGE_BYTES, sourcePath, TEXT_CHUNK,
   type PageText, type ProjectFileIndex, type StoredDocument, type StoredSheet,
@@ -236,16 +236,7 @@ export function readPageTextBoxes(doc: StoredDocument, pageNumber: number): Prom
   if (!textBoxes.has(key)) {
     const job = (async () => {
       const page = await (await openStoredPdf(doc)).getPage(pageNumber);
-      const viewport = page.getViewport({ scale: 1 });
-      const content = await page.getTextContent();
-      const boxes: TextBox[] = [];
-      for (const item of content.items as (TextItem & { width: number; height: number })[]) {
-        if (!("str" in item) || !item.str.trim()) continue;
-        const [, , , , e, f] = item.transform;
-        const height = item.height || Math.hypot(item.transform[2], item.transform[3]);
-        const [x1, y1, x2, y2] = viewport.convertToViewportRectangle([e, f, e + item.width, f + height]) as number[];
-        boxes.push({ str: item.str, x: Math.min(x1, x2) / viewport.width, y: Math.min(y1, y2) / viewport.height, w: Math.abs(x2 - x1) / viewport.width, h: Math.abs(y2 - y1) / viewport.height });
-      }
+      const boxes = pageTextBoxes((await page.getTextContent()).items, page.getViewport({ scale: 1 }));
       page.cleanup();
       return boxes;
     })();
