@@ -10,6 +10,10 @@ export async function resolve(specifier, context, next) {
     if (error?.code === "ERR_MODULE_NOT_FOUND" && /^\.{1,2}\//.test(specifier) && !/\.[cm]?[jt]sx?$/.test(specifier)) {
       return next(`${specifier}.ts`, context);
     }
+    // A package file named without its extension, e.g. "next/server" (node_modules/next/server.js).
+    if (error?.code === "ERR_MODULE_NOT_FOUND" && /^[@a-z]/i.test(specifier) && specifier.includes("/") && !/\.[cm]?js$/.test(specifier)) {
+      return next(`${specifier}.js`, context);
+    }
     throw error;
   }
 }
