@@ -6,7 +6,7 @@ import type { ScopeRunResult } from "../../lib/ai-client";
 import { addPage } from "../../lib/drawing-flip";
 import { addPackage } from "../../lib/procurement";
 import { recordRun } from "../../lib/extraction";
-import { drawingRegister, findManual } from "../../lib/project-files";
+import { drawingRegister, latestDocuments, specificationSections } from "../../lib/project-files";
 import { useProjectDocuments } from "../../lib/project-files-client";
 import { sectionsByTrade, sheetsForTrade, tradesToAdd as packagesToAdd, uncoveredSections } from "../../lib/project-scopes";
 import { readTradeScope } from "../../lib/scope-reading";
@@ -27,15 +27,17 @@ let reopenAfterTrades = false;
  */
 export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnType<typeof useExtraction>; notify: (text: string) => void; onOpenFiles: () => void }) {
   const { documents, ready } = useProjectDocuments();
-  const manual = findManual(documents);
+  // The project manual may come in volumes (24 Oct); every one is read.
+  const volumes = useMemo(() => latestDocuments(documents).filter(d => d.kind === "manual"), [documents]);
+  const specs = useMemo(() => specificationSections(documents), [documents]);
   const [open, setOpen] = useState(() => { const again = reopenAfterTrades; reopenAfterTrades = false; return again; });
   const packages = review.procurement.packages;
-  const assigned = useMemo(() => manual ? sectionsByTrade(manual.sections, packages) : new Map(), [manual, packages]);
+  const assigned = useMemo(() => sectionsByTrade(specs, packages), [specs, packages]);
   const register = useMemo(() => drawingRegister(documents), [documents]);
-  const uncovered = useMemo(() => manual ? uncoveredSections(manual.sections, packages) : [], [manual, packages]);
+  const uncovered = useMemo(() => uncoveredSections(specs, packages), [specs, packages]);
   // A new project has no trades yet: offer the ones its manual calls for (15 Oct, Marcel's first question).
   // Standard trades first, then a CSI group (Marcel's list) for every section no trade covers.
-  const proposals = useMemo(() => packagesToAdd(packages, { sections: manual?.sections ?? [], sheets: register }), [packages, manual, register]);
+  const proposals = useMemo(() => packagesToAdd(packages, { sections: specs, sheets: register }), [packages, specs, register]);
   const [newTrades, setNewTrades] = useState<string[] | null>(null);
   const tradesToAdd = newTrades ?? (packages.length ? [] : proposals.map(p => p.id));
   function createTrades() {
@@ -70,7 +72,7 @@ export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnT
     const pkg = packages.find(p => p.id === id)!;
     update(id, { status: "reading" });
     const outcome = await readTradeScope({
-      pkg, manual, sections: assigned.get(id) ?? [], sheets: sheetsFor(id), signal,
+      pkg, sections: assigned.get(id) ?? [], sheets: sheetsFor(id), signal,
       onProgress: p => update(id, { status: "reading", done: p.done, total: p.total, note: p.note }),
       addFlipPages: pages => { const errors = latest.current.runFlip(current => pages.reduce((state, page) => state.pages.some(x => x.sheet === page.sheet) ? state : addPage(state, page), current)); return errors ? Object.values(errors)[0] ?? "A sheet could not be added to Drawing Flip." : null; },
     });
@@ -80,7 +82,7 @@ export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnT
   }
 
   async function start() {
-    if ((!manual && !register.length) || busy) return;
+    if ((!volumes.length && !register.length) || busy) return;
     const projectId = getActiveProjectId();
     controller.current = new AbortController();
     const signal = controller.current.signal;
@@ -105,8 +107,8 @@ export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnT
   return <>
     <Button onClick={() => setOpen(true)}><Sparkles size={15}/>Write scopes with AI</Button>
     {open && <Modal title="Write scopes with AI" subtitle="The AI reads the project manual and the drawing sheets in Project files and proposes bid-form lines for each trade. You accept, reject, move or delete every line." wide onClose={() => { if (!busy) setOpen(false); }}>
-      {!ready ? <p role="status">Looking for the project manual and drawings in Project files…</p> : !manual && !register.length ? <div className="ai-reader"><p>No project manual is stored for this project yet.</p><Button variant="primary" onClick={() => { setOpen(false); onOpenFiles(); }}>Upload it in Project files</Button></div> : <div className="ai-reader">
-        <p>{manual ? <><strong>{manual.name}</strong> · {manual.pageCount} pages · {manual.sections.length} specification sections. Division 01 general requirements stay in the General section.</> : "No project manual is stored, so the drawings alone will be read. Scopes from drawings can miss specification requirements: upload the manual when you have it."}</p>
+      {!ready ? <p role="status">Looking for the project manual and drawings in Project files…</p> : !volumes.length && !register.length ? <div className="ai-reader"><p>No project manual is stored for this project yet.</p><Button variant="primary" onClick={() => { setOpen(false); onOpenFiles(); }}>Upload it in Project files</Button></div> : <div className="ai-reader">
+        <p>{volumes.length ? <><strong>{volumes.map(v => v.name).join(", ")}</strong> · {volumes.reduce((n, v) => n + v.pageCount, 0)} pages · {specs.length} specification sections{volumes.length > 1 ? `, read from all ${volumes.length} volumes` : ""}. Division 01 general requirements stay in the General section.</> :"No project manual is stored, so the drawings alone will be read. Scopes from drawings can miss specification requirements: upload the manual when you have it."}</p>
         {register.length > 0 && <label className="ai-drawings-toggle"><input type="checkbox" checked={withDrawings} disabled={busy} onChange={e => setWithDrawings(e.target.checked)}/> Also read each trade's drawing sheets ({register.length} sheets stored): plans, schedules and notes, up to six per trade. Highlights go to Drawing Flip.</label>}
         <div className="ai-section-actions"><Button disabled={busy} onClick={() => setChosen(packages.filter(p => pages(p.id) > 0 || sheetsFor(p.id).length > 0).map(p => p.id))}>Select every trade</Button><Button disabled={busy} onClick={() => setChosen([])}>Clear</Button></div>
         <div className="ai-section-list">{packages.map(pkg => {

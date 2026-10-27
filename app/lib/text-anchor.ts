@@ -12,6 +12,26 @@ import type { DraftInput } from "./extraction";
 export type TextBox = { str: string; x: number; y: number; w: number; h: number };
 export type Box = { x: number; y: number; width: number; height: number };
 
+/** What pdf.js gives for a page: its text items and the viewport the page is rendered in (rotation included). */
+type PdfTextItem = { str?: string; transform?: number[]; width?: number; height?: number };
+type PdfViewport = { width: number; height: number; convertToViewportPoint: (x: number, y: number) => number[] };
+
+/**
+ * Every piece of a page's text with its box, from pdf.js getTextContent() and getViewport({ scale: 1 }). The one
+ * conversion the viewer, the drawing reader and the checks all use (pdf.js 6 has convertToViewportPoint only).
+ */
+export function pageTextBoxes(items: readonly PdfTextItem[], viewport: PdfViewport): TextBox[] {
+  const boxes: TextBox[] = [];
+  for (const item of items) {
+    if (!item.str?.trim() || !item.transform) continue;
+    const [, , c, d, e, f] = item.transform;
+    const height = item.height || Math.hypot(c, d);
+    const [x1, y1] = viewport.convertToViewportPoint(e, f), [x2, y2] = viewport.convertToViewportPoint(e + (item.width ?? 0), f + height);
+    boxes.push({ str: item.str, x: Math.min(x1, x2) / viewport.width, y: Math.min(y1, y2) / viewport.height, w: Math.abs(x2 - x1) / viewport.width, h: Math.abs(y2 - y1) / viewport.height });
+  }
+  return boxes;
+}
+
 /** Most places one tag is marked on a sheet. */
 export const MAX_TAG_MARKS = 12;
 const PAD = 0.003;
@@ -30,9 +50,9 @@ const union = (boxes: Box[]): Box => {
 };
 const overlaps = (a: Box, b: Box) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
-/** The part of a text box holding characters [start, end) of its string, by the share of its width. */
-function part(box: TextBox, start: number, end: number): Box {
-  const length = Math.max(1, box.str.length);
+/** The part of a text box holding characters [start, end) of its `length` characters, by the share of its width. */
+function part(box: TextBox, start: number, end: number, length = box.str.length): Box {
+  length = Math.max(1, length);
   return { x: box.x + box.w * (start / length), y: box.y, width: box.w * ((end - start) / length), height: box.h };
 }
 
@@ -52,33 +72,56 @@ function findTag(boxes: TextBox[], tag: string, max: number): Box[] {
   return found;
 }
 
-/** Where a sentence or note is written: the boxes its words cover, read line by line in reading order. */
-function findText(boxes: TextBox[], quote: string): Box[] {
-  // Reading order: lines top to bottom (boxes whose middles are within half a line), each left to right.
-  const sorted = [...boxes].filter(b => b.str.trim()).sort((a, b) => a.y + a.h / 2 - (b.y + b.h / 2) || a.x - b.x);
+/**
+ * Letters and digits only: the comparison the AI's quote screen makes (lib/ai-jobs quoteOnPage), so a quote that
+ * passed the screen is found here too. A PDF splits words into pieces and drops or doubles spaces and punctuation.
+ */
+const squeeze = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+/** Lines top to bottom (boxes whose middles are within half a line), each left to right. */
+function readingOrder(boxes: TextBox[]): TextBox[] {
   const lines: TextBox[][] = [];
-  for (const box of sorted) {
+  for (const box of [...boxes].sort((a, b) => a.y + a.h / 2 - (b.y + b.h / 2) || a.x - b.x)) {
     const line = lines.at(-1), mid = box.y + box.h / 2;
     if (line && Math.abs(line[0].y + line[0].h / 2 - mid) < Math.max(line[0].h, box.h) / 2) line.push(box); else lines.push([box]);
   }
+  return lines.flatMap(line => line.sort((a, b) => a.x - b.x));
+}
+
+/** Where each part of a quote is written in the boxes, read in this order; null for a part that isn't. */
+function placeParts(order: TextBox[], parts: string[]): (Box | null)[] {
   let page = "";
-  const spans: { start: number; end: number; box: TextBox }[] = [];
-  for (const line of lines) for (const box of line.sort((a, b) => a.x - b.x)) {
-    const start = page.length;
-    page += norm(box.str) + " ";
-    spans.push({ start, end: start + norm(box.str).length, box });
+  const spans = order.map(box => { const start = page.length; page += squeeze(box.str); return { start, end: page.length, box }; });
+  return parts.map(quote => {
+    // The whole part, else its opening words (a note wraps, or the AI shortened its end).
+    const words = quote.split(" ");
+    for (const tryWords of [words, words.slice(0, 8), words.slice(0, 5)]) {
+      const phrase = squeeze(tryWords.join(" "));
+      if (phrase.length < 6) break;
+      const at = page.indexOf(phrase);
+      if (at < 0) continue;
+      const covered = spans.filter(s => s.end > at && s.start < at + phrase.length).map(s => part(s.box, Math.max(0, at - s.start), Math.min(s.end, at + phrase.length) - s.start, s.end - s.start));
+      if (covered.length) return padded(union(covered));
+    }
+    return null;
+  });
+}
+
+/**
+ * Where a sentence or note is written: one box over the words of each part (a quote "A … B" has two). The PDF's
+ * own text order first, the order the AI's quote was checked in; then reading order, for a note stored out of order.
+ */
+function findText(boxes: TextBox[], quote: string): Box[] {
+  const kept = boxes.filter(b => squeeze(b.str));
+  const parts = quote.split(/\.{3}|…/).map(p => p.trim()).filter(p => squeeze(p).length >= 6);
+  if (!parts.length) return [];
+  let best: Box[] = [];
+  for (const order of [kept, readingOrder(kept)]) {
+    const found = placeParts(order, parts).filter((b): b is Box => !!b);
+    if (found.length === parts.length) return found;
+    if (found.length > best.length) best = found;
   }
-  // The whole quote, else its opening words (a note wraps, or the AI shortened its end).
-  const words = norm(quote).split(" ");
-  for (const tryWords of [words, words.slice(0, 8), words.slice(0, 5)]) {
-    const phrase = tryWords.join(" ");
-    if (phrase.replace(/[^A-Z0-9]/g, "").length < 6) break;
-    const at = page.indexOf(phrase);
-    if (at < 0) continue;
-    const covered = spans.filter(s => s.end > at && s.start < at + phrase.length).map(s => part(s.box, Math.max(0, at - s.start), Math.min(s.end, at + phrase.length) - s.start));
-    if (covered.length) return [padded(union(covered))];
-  }
-  return [];
+  return best;
 }
 
 /** Where a quote is on a sheet: every place for a tag, the written place for a sentence; empty when it isn't in the text. */

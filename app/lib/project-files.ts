@@ -82,12 +82,32 @@ export function findManual(docs: StoredDocument[]): StoredDocument | null {
   return latestDocuments(docs).filter(d => d.kind === "manual").sort((a, b) => b.pageCount - a.pageCount)[0] ?? null;
 }
 
-/** A section's page range in the stored manual, e.g. "09 29 00". */
+/** A specification section and the volume (stored file) it is printed in. */
+export type VolumeSection = StoredSection & { doc: StoredDocument };
+
+/**
+ * Every specification section of the project, across all its specification files (Marcel, 24 Oct: the manual
+ * can come as "Project manual V1" and "V2", not combined). The newest revision of each file, volumes in name
+ * order (Vol 1 before Vol 2), sections in page order. A section found in two volumes counts once, where it
+ * runs longer (a table of contents line is one page; the section itself is several).
+ */
+export function specificationSections(docs: StoredDocument[]): VolumeSection[] {
+  const volumes = latestDocuments(docs).filter(d => d.kind === "manual").sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const best = new Map<string, VolumeSection>();
+  for (const doc of volumes) for (const s of [...doc.sections].sort((a, b) => a.first - b.first)) {
+    const key = s.section.replace(/\s+/g, ""), was = best.get(key);
+    if (!was || s.last - s.first > was.last - was.first) best.set(key, { ...s, doc });
+  }
+  return [...best.values()];
+}
+
+/** A section's page range in whichever specification volume holds it, e.g. "09 29 00". */
 export function findSection(docs: StoredDocument[], section: string): { doc: StoredDocument; section: StoredSection } | null {
-  const manual = findManual(docs);
   const key = section.replace(/\s+/g, "");
-  const found = manual?.sections.find(s => s.section.replace(/\s+/g, "") === key);
-  return manual && found ? { doc: manual, section: found } : null;
+  const found = specificationSections(docs).find(s => s.section.replace(/\s+/g, "") === key);
+  if (!found) return null;
+  const { doc, ...stored } = found;
+  return { doc, section: stored };
 }
 
 export const chunkFor = (page: number, size = TEXT_CHUNK) => Math.floor((page - 1) / size);

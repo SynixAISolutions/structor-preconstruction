@@ -19,8 +19,8 @@ const AFFINITY: Record<string, string> = { "093": "096", "095": "092", "097": "0
  * with the same level-2 code (10 14 signage), then a whole-division trade (10 00 00 specialties), then
  * the same CSI group (09 2x drywall), then the group's usual partner (AFFINITY), then the closest code.
  */
-export function sectionsByTrade(sections: StoredSection[], packages: Pick<TradePackage, "id" | "division" | "code">[]): Map<string, StoredSection[]> {
-  const out = new Map<string, StoredSection[]>(packages.map(p => [p.id, []]));
+export function sectionsByTrade<S extends StoredSection>(sections: S[], packages: Pick<TradePackage, "id" | "division" | "code">[]): Map<string, S[]> {
+  const out = new Map<string, S[]>(packages.map(p => [p.id, []]));
   for (const section of sections) {
     const code = digits(section.section);
     if (code.startsWith("00") || code.startsWith("01")) continue;
