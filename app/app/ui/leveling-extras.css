@@ -81,3 +81,37 @@
 @media (max-width: 950px) { .submission-load-controls { width: 100%; justify-content: flex-start; flex-wrap: wrap; } .submission-review-columns { grid-template-columns: 1fr; } }
 @media (max-width: 700px) { .submission-load-controls .trade-select { flex: 1 1 150px; } .submission-load-controls .trade-select select { width: 100%; } .submission-source-bar { align-items: flex-start; flex-wrap: wrap; } .submission-source-bar button { width: 100%; margin-left: 27px; } .submission-review-summary { grid-template-columns: 1fr 1fr; } .submission-review-actions { align-items: stretch; flex-direction: column; } .submission-review-actions > span { margin: 0 0 3px; } }
 .legacy-leveling .topbar{flex-shrink:0}
+
+/* Bid leveling grid (Marcel, 24 Oct): compact bidder columns, note as an icon, plugs you can spot. */
+.legacy-leveling .leveling-grid .bid-status-col { width: 86px; }
+.legacy-leveling .leveling-grid .bid-note-col { width: 34px; }
+.legacy-leveling .leveling-grid col.number-col { width: 44px; }
+.legacy-leveling .leveling-grid col.scope-col { width: 285px; }
+.legacy-leveling .leveling-grid col.source-col { width: 95px; }
+.legacy-leveling .leveling-grid td.note-cell { padding: 0; text-align: center; }
+.note-heading-icon { width: 12px; height: 12px; vertical-align: -2px; }
+.note-trigger { width: 24px; height: 24px; display: inline-grid; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 4px; color: #b7c0c9; background: transparent; cursor: pointer; }
+.note-trigger svg { width: 13px; height: 13px; }
+.note-trigger:hover, .note-trigger:focus-visible, .note-trigger[aria-expanded="true"] { border-color: #b9c7d4; color: var(--ink); background: white; }
+.note-trigger.has-note { color: #c26a12; }
+.note-trigger.has-note svg { fill: #ffe7b8; }
+.note-popover-scrim { position: fixed; inset: 0; z-index: 140; }
+.note-popover { position: fixed; z-index: 141; width: 280px; display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: white; box-shadow: 0 10px 30px rgb(16 34 53 / .18); }
+.note-popover textarea { width: 100%; resize: vertical; padding: 7px 8px; border: 1px solid var(--line); border-radius: 5px; font: inherit; font-size: 11px; line-height: 1.4; }
+.note-popover .button { justify-self: end; height: 28px; font-size: 10px; }
+.plug-badge { display: inline-block; margin-right: 5px; padding: 1px 5px; border-radius: 3px; color: #8a3a12; background: #ffe2d2; font-size: 8px; font-weight: 760; letter-spacing: .03em; text-transform: uppercase; vertical-align: 1px; }
+.review-cell.plugged { background: #fff4ec; }
+.review-cell.plugged .plug-badge { display: block; width: max-content; margin: 0 0 1px auto; }
+.review-cell.plugged .money-input { color: #8a3a12; font-weight: 700; }
+tfoot .plug-total-row th, tfoot .plug-total-row td { height: 34px; background: #fbf3ee; color: #8a3a12; }
+tfoot .plug-total-row small { color: var(--muted); font-weight: 500; }
+.bidder-name.bid-changed { animation: bid-changed 4s ease-out; }
+@keyframes bid-changed { 0%, 60% { background: #ffe2d2; box-shadow: inset 0 -3px 0 var(--accent); } 100% { background: #f6f8fa; box-shadow: none; } }
+@media (prefers-reduced-motion: reduce) { .bidder-name.bid-changed { animation: none; background: #ffe2d2; } }
+/* On a desktop the sheet grows with the page and the grid gets a window-high box of its own, so rows have room
+   and the sideways scrollbar sits at the bottom of the screen instead of the bottom of a long table. */
+@media (min-width: 951px) {
+  .legacy-leveling > main.app-shell { height: auto; min-height: 0; }
+  .legacy-leveling > main.app-shell > .workspace { height: auto; overflow: visible; }
+  .legacy-leveling .content-grid > .table-wrap, .legacy-leveling .content-grid > .inspector { max-height: max(440px, calc(100dvh - 130px)); }
+}
