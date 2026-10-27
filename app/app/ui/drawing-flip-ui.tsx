@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -22,10 +22,11 @@ import {
   ShieldCheck,
   Unlink,
   UserRound,
-} from "lucide-react";
+  ZoomIn } from "lucide-react";
 import {
   addPage,
   addRegion,
+  bounds,
   importRegions,
   approveRegion,
   corrections,
@@ -50,6 +51,9 @@ import {
 import { displayDate } from "../../lib/format";
 import { useDrawingFlip } from "../../lib/use-drawing-flip";
 import { useProcurement } from "../../lib/use-procurement";
+import { editPackage } from "../../lib/procurement";
+import { loadProjects, sampleProjectRecords } from "../../lib/projects";
+import { getActiveProjectId } from "../../lib/project-scope";
 import { rememberPdf, useSourceFile } from "../../lib/pdf-session";
 import { renderStoredPage, useProjectDocuments } from "../../lib/project-files-client";
 import { locatePlan } from "../../lib/drawing-ai";
@@ -72,6 +76,9 @@ const eventLabel = (kind: FlipRegion["history"][number]["kind"]) => ({
   redrawn: "Outline redrawn",
 })[kind];
 
+/** Full-view zoom limit: sheets render at 3,600 px there, sharp to about six times the window. */
+const MAX_ZOOM = 600;
+
 type Filters = { query: string; packageId: string; status: "" | RegionStatus; origin: "" | RegionOrigin; corrected: boolean };
 type PageDraft = { sheet: string; title: string; discipline: string; revision: string; documentId: string; documentName: string; pageNumber: string };
 type RegionDraft = { label: string; packageId: string; x: string; y: string; width: string; height: string; notes: string };
@@ -92,7 +99,7 @@ function DrawingBackdrop({ page, height }: { page: DrawingPage; height: number }
   </g>;
 }
 
-export type CanvasRegion = Pick<FlipRegion, "id" | "number" | "label" | "polygon" | "packageId" | "status">;
+export type CanvasRegion = Pick<FlipRegion, "id" | "number" | "label" | "polygon" | "packageId" | "status" | "anchor">;
 
 export function pointerToPage(clientX: number, clientY: number, bounds: Pick<DOMRect, "left" | "top" | "width" | "height">): Point | null {
   if (bounds.width <= 0 || bounds.height <= 0) return null;
@@ -126,7 +133,7 @@ export function TraceControls({ trace, number, onUndo, onFinish, onCancel, onRea
   </section>;
 }
 
-export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, expandable = true, fullPage = false, onFullPage, regionDetail, trace, traceActions, comparison, onClearComparison }: {
+export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, expandable = true, fullPage = false, onFullPage, regionDetail, trace, traceActions, comparison, onClearComparison, focus, describe }: {
   page: DrawingPage;
   regions: CanvasRegion[];
   selectedId: string;
@@ -136,13 +143,42 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
   fullPage?: boolean; onFullPage?: (open: boolean) => void; regionDetail?: ReactNode;
   trace?: Trace | null; traceActions?: TraceActions;
   comparison?: { regionId: string; from: Point[] } | null; onClearComparison?: () => void;
+  /** Zoom the full view to this region; a new `n` zooms again. */
+  focus?: { regionId: string; n: number } | null;
+  /** The hover text for a region: number, label, trade and owner. */
+  describe?: (region: CanvasRegion) => string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [zoom, setZoom] = useState(100);
   const pan = useRef<{x:number;y:number;left:number;top:number}|null>(null);
   const panElement = useRef<HTMLDivElement>(null);
+  // Zooming keeps a point of the sheet in place (the cursor, or a region's middle); applied once the new size is laid out.
+  const zoomRef = useRef(zoom); zoomRef.current = zoom;
+  const keep = useRef<{ fx: number; fy: number; px: number; py: number } | null>(null);
+  const [laid, setLaid] = useState(0);
+  function zoomAt(next: number, clientX?: number, clientY?: number) {
+    const el = panElement.current, value = Math.min(MAX_ZOOM, Math.max(50, Math.round(next)));
+    if (el) {
+      const rect = el.getBoundingClientRect(), px = (clientX ?? rect.left + rect.width / 2) - rect.left, py = (clientY ?? rect.top + rect.height / 2) - rect.top;
+      keep.current = { fx: (el.scrollLeft + px) / el.scrollWidth, fy: (el.scrollTop + py) / el.scrollHeight, px, py };
+    }
+    setZoom(value); setLaid(n => n + 1);
+  }
+  useLayoutEffect(() => {
+    const el = panElement.current, k = keep.current;
+    if (!el || !k) return;
+    el.scrollLeft = k.fx * el.scrollWidth - k.px; el.scrollTop = k.fy * el.scrollHeight - k.py; keep.current = null;
+  }, [zoom, laid]);
   const [hoverPoint, setHoverPoint] = useState<Point | null>(null);
   const isExpanded = fullPage || expanded;
+  // Scroll wheel or trackpad pinch zooms toward the cursor, like Wire AI; dragging pans.
+  useEffect(() => {
+    const el = panElement.current;
+    if (!el || !isExpanded) return;
+    const wheel = (e: WheelEvent) => { if (trace) return; e.preventDefault(); zoomAt(zoomRef.current * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX, e.clientY); };
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => el.removeEventListener("wheel", wheel);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
   function expand(open:boolean){if(onFullPage)onFullPage(open);else setExpanded(open);}
   useEffect(() => { pan.current = null; setHoverPoint(null); panElement.current?.focus({ preventScroll: true }); }, [trace?.regionId]);
 
@@ -158,15 +194,24 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
     const found = findSheet(documents, page.sheet);
     return found ? { doc: found.doc, pageNumber: found.sheet.page } : null;
   }, [documents, page.documentId, page.pageNumber, page.sheet]);
-  const storedKey = stored ? `${stored.doc.id}:${stored.pageNumber}` : "";
+  const renderSize = isExpanded ? 3600 : 2400;
+  const storedKey = stored ? `${stored.doc.id}:${stored.pageNumber}:${renderSize}` : "";
   const [storedImage, setStoredImage] = useState<{ key: string; image: string; aspect: number } | null>(null);
   useEffect(() => {
     if (!stored) return;
     let live = true;
-    renderStoredPage(stored.doc, stored.pageNumber, 2400).then(result => { if (live) setStoredImage({ key: storedKey, ...result }); }, error => { if (live) setSourceError(error instanceof Error ? error.message : "The sheet could not be rendered."); });
+    renderStoredPage(stored.doc, stored.pageNumber, renderSize).then(result => { if (live) setStoredImage({ key: storedKey, ...result }); }, error => { if (live) setSourceError(error instanceof Error ? error.message : "The sheet could not be rendered."); });
     return () => { live = false; };
   }, [storedKey]);
   const storedReady = storedImage?.key === storedKey ? storedImage : null;
+  useEffect(() => {
+    const region = focus && regions.find(r => r.id === focus.regionId), el = panElement.current;
+    if (!isExpanded || !region || !el) return;
+    const b = bounds(region.polygon), sheetHeight = el.clientWidth * (1 / (storedReady?.aspect ?? page.aspect));
+    const next = Math.min(MAX_ZOOM, Math.max(100, 100 * Math.min(0.35 / Math.max(b.width, 0.005), (0.35 * el.clientHeight / sheetHeight) / Math.max(b.height, 0.005))));
+    keep.current = { fx: b.x + b.width / 2, fy: b.y + b.height / 2, px: el.clientWidth / 2, py: el.clientHeight / 2 };
+    setZoom(Math.round(next)); setLaid(n => n + 1);
+  }, [focus?.n, isExpanded]); // eslint-disable-line react-hooks/exhaustive-deps
   const image = page.image || storedReady?.image || (rendered?.file === file && rendered?.page === page.pageNumber ? rendered.image : null);
   useEffect(() => {
     let current = true;
@@ -189,7 +234,8 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
       const centerX = region.polygon.reduce((sum, point) => sum + point.x, 0) / region.polygon.length * 1000;
       const centerY = region.polygon.reduce((sum, point) => sum + point.y, 0) / region.polygon.length * height;
       const color = colors.get(region.packageId) ?? "#697b8c";
-      return <g key={region.id} role={interactive && trace ? undefined : "button"} tabIndex={interactive && trace ? undefined : 0} aria-label={`${region.number}: ${region.label}`} className={`${selectedId === region.id ? "selected" : ""} ${region.status === "pending-review" ? "pending" : ""} ${trace?.regionId === region.id ? "trace-original" : ""}`} onClick={() => { if (!(interactive && trace)) onSelect(region.id); }} onKeyDown={event => { if (!(interactive && trace) && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onSelect(region.id); } }}>
+      return <g key={region.id} role={interactive && trace ? undefined : "button"} tabIndex={interactive && trace ? undefined : 0} aria-label={`${region.number}: ${region.label}`} className={`${selectedId === region.id ? "selected" : ""} ${region.status === "pending-review" ? "pending" : ""} ${region.anchor === "image" ? "approximate" : ""} ${trace?.regionId === region.id ? "trace-original" : ""}`} onClick={() => { if (!(interactive && trace)) onSelect(region.id); }} onKeyDown={event => { if (!(interactive && trace) && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onSelect(region.id); } }}>
+        <title>{describe ? describe(region) : `${region.number}: ${region.label}`}</title>
         <polygon points={points} fill={`${color}30`} stroke={color}/>
         <circle cx={centerX} cy={centerY} r="16" fill={color}/>
         <text x={centerX} y={centerY + 4}>{region.number.replace("R-", "")}</text>
@@ -208,7 +254,7 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
       {expandable && <button className="flip-expand" onClick={() => expand(true)} aria-label="Expand drawing"><Maximize2 size={16}/></button>}
       {!image && <span className="flip-image-state"><PencilRuler size={13}/>Diagram preview</span>}
     </div>
-    {isExpanded && <Modal title={`${page.sheet} · ${page.title}`} subtitle={trace ? "Redraw outline · Trace the work on the sheet." : "Zoom, then drag the sheet or use arrow keys to pan. Select a region to see its scope items. Esc closes."} fullScreen onClose={() => { if (trace) traceActions?.onCancel(); else expand(false); }}>
+    {isExpanded && <Modal title={`${page.sheet} · ${page.title}`} subtitle={trace ? "Redraw outline · Trace the work on the sheet." : "Scroll to zoom where you point, drag or use arrow keys to pan, double-click to zoom in. Select a region to see its scope items. Esc closes."} fullScreen onClose={() => { if (trace) traceActions?.onCancel(); else expand(false); }}>
       <div className="flip-full-content" onKeyDownCapture={event => {
         if (!trace) return;
         if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); traceActions?.onCancel(); return; }
@@ -218,10 +264,10 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
         const delta = { ArrowLeft: [-60, 0], ArrowRight: [60, 0], ArrowUp: [0, -60], ArrowDown: [0, 60] }[event.key];
         if (delta) { event.preventDefault(); panElement.current?.scrollBy(delta[0], delta[1]); }
       }}>
-      <div className="flip-full-toolbar"><Button onClick={()=>setZoom(v=>Math.max(50,v-25))}>Zoom out</Button><label>Zoom <input aria-label="Sheet zoom" type="range" min="50" max="400" step="25" value={zoom} onChange={e=>setZoom(Number(e.target.value))}/></label><output>{zoom}%</output><Button onClick={()=>setZoom(v=>Math.min(400,v+25))}>Zoom in</Button><Button onClick={()=>setZoom(100)}>Fit page</Button></div>
+      <div className="flip-full-toolbar"><Button onClick={()=>zoomAt(zoom/1.25)}>Zoom out</Button><label>Zoom <input aria-label="Sheet zoom" type="range" min="50" max={MAX_ZOOM} step="25" value={zoom} onChange={e=>zoomAt(Number(e.target.value))}/></label><output>{zoom}%</output><Button onClick={()=>zoomAt(zoom*1.25)}>Zoom in</Button><Button onClick={()=>setZoom(100)}>Fit page</Button></div>
       {trace && traceActions && <TraceControls trace={trace} number={regions.find(r => r.id === trace.regionId)?.number ?? "region"} {...traceActions}/>}
       {!trace && comparison && <div className="flip-comparison-note" role="status">Dashed: previous outline · Colored: current outline <Button onClick={onClearComparison}>Hide previous outline</Button></div>}
-      <div className="flip-full-layout"><div ref={panElement} className={`flip-pan ${trace ? "is-tracing" : ""}`} tabIndex={0} role="region" aria-label="Drawing sheet; arrow keys pan" onPointerDown={e=>{if(trace||(e.target as Element).closest('[role="button"]')||e.button!==0)return;pan.current={x:e.clientX,y:e.clientY,left:e.currentTarget.scrollLeft,top:e.currentTarget.scrollTop};e.currentTarget.setPointerCapture(e.pointerId);}} onPointerMove={e=>{if(!pan.current)return;e.currentTarget.scrollLeft=pan.current.left+pan.current.x-e.clientX;e.currentTarget.scrollTop=pan.current.top+pan.current.y-e.clientY;}} onPointerUp={()=>{pan.current=null;}} onPointerCancel={()=>{pan.current=null;}}><div className="flip-zoom-sheet" style={{width:`${zoom}%`}}>{drawing(true)}</div></div>{!trace && regionDetail&&<aside className="flip-full-detail">{regionDetail}</aside>}</div>
+      <div className="flip-full-layout"><div ref={panElement} className={`flip-pan ${trace ? "is-tracing" : ""}`} tabIndex={0} role="region" aria-label="Drawing sheet; scroll to zoom, drag or arrow keys to pan, double-click to zoom in" onDoubleClick={e=>{if(trace||(e.target as Element).closest('[role="button"]'))return;zoomAt(zoom*2,e.clientX,e.clientY);}} onPointerDown={e=>{if(trace||(e.target as Element).closest('[role="button"]')||e.button!==0)return;pan.current={x:e.clientX,y:e.clientY,left:e.currentTarget.scrollLeft,top:e.currentTarget.scrollTop};e.currentTarget.setPointerCapture(e.pointerId);}} onPointerMove={e=>{if(!pan.current)return;e.currentTarget.scrollLeft=pan.current.left+pan.current.x-e.clientX;e.currentTarget.scrollTop=pan.current.top+pan.current.y-e.clientY;}} onPointerUp={()=>{pan.current=null;}} onPointerCancel={()=>{pan.current=null;}}><div className="flip-zoom-sheet" style={{width:`${zoom}%`}}>{drawing(true)}</div></div>{!trace && regionDetail&&<aside className="flip-full-detail">{regionDetail}</aside>}</div>
       </div>
     </Modal>}
   </>;
@@ -253,7 +299,7 @@ function RegionEditor({ packages, errors, onClose, onSave }: { packages: ReturnT
 
 export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProps) {
   const { state, run } = useDrawingFlip();
-  const { state: procurement } = useProcurement();
+  const { state: procurement, run: runProcurement } = useProcurement();
   const { documents } = useProjectDocuments();
   const [fullPage,setFullPage] = useState(false);
   const [trace, setTrace] = useState<Trace | null>(null);
@@ -267,6 +313,10 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
   useEffect(()=>()=>abort.current?.abort(),[]);
   const [pageId, setPageId] = useState("");
   const [regionId, setRegionId] = useState("");
+  const [owner, setOwner] = useState("");
+  const [focus, setFocus] = useState<{ regionId: string; n: number } | null>(null);
+  /** Opens the full view zoomed to a region (Marcel, 24 Oct: "look how it zooms in to where it's written"). */
+  const zoomTo = (id: string) => { setRegionId(id); setFullPage(true); setFocus(f => ({ regionId: id, n: (f?.n ?? 0) + 1 })); };
   const [filters, setFilters] = useState<Filters>({ query: "", packageId: "", status: "", origin: "", corrected: false });
   const [mode, setMode] = useState<"regions" | "corrections" | "unlocated">("regions");
   const [reassignOpen, setReassignOpen] = useState(false);
@@ -288,7 +338,7 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
     status: filters.status || undefined,
     origin: filters.origin || undefined,
     corrected: filters.corrected || undefined,
-  }), [state, procurement, activePageId, filters]);
+  }).filter(region => !owner || procurement.packages.find(pkg => pkg.id === region.packageId)?.owner === owner), [state, procurement, activePageId, filters, owner]);
   const selected = visible.find(item => item.id === regionId) ?? visible[0] ?? null;
   const pageIndex = Math.max(0, state.pages.findIndex(item => item.id === activePageId));
   const summary = flipSummary(state);
@@ -298,6 +348,17 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
   const missing = unlocatedScopes(state, procurement);
   const correctionLog = corrections(state);
   const selectedPackage = selected ? procurement.packages.find(pkg => pkg.id === selected.packageId) : undefined;
+  // One trade, one person (Marcel, 24 Oct): the package's owner. People are the project team and today's owners.
+  const ownerOf = (packageId: string) => procurement.packages.find(pkg => pkg.id === packageId)?.owner ?? "";
+  const team = useMemo(() => ((loadProjects() ?? sampleProjectRecords).find(p => p.id === getActiveProjectId())?.team ?? []).map(m => m.name), []);
+  const people = [...new Set([...team, ...procurement.packages.map(pkg => pkg.owner), CURRENT_USER].filter(Boolean))].sort();
+  const owners = [...new Set(procurement.packages.map(pkg => pkg.owner).filter(Boolean))].sort();
+  const describe = (region: CanvasRegion) => { const pkg = procurement.packages.find(p => p.id === region.packageId); return [`${region.number} · ${region.label}`, pkg?.name, pkg?.owner, region.anchor === "image" ? "approximate position" : ""].filter(Boolean).join(" · "); };
+  function setTradeOwner(packageId: string, name: string) {
+    const pkg = procurement.packages.find(p => p.id === packageId);
+    const issue = runProcurement(current => editPackage(current, packageId, { owner: name }));
+    notify(issue ?? (name ? `${pkg?.name} is now ${name}'s trade.` : `${pkg?.name} has no owner now.`));
+  }
   const linkedScopes = selected ? procurement.scopes.filter(scope => selected.scopeIds.includes(scope.id)) : [];
   const availableScopes = selected ? procurement.scopes.filter(scope => !selected.scopeIds.includes(scope.id) && (scope.packageId === selected.packageId || scope.allTrades)) : [];
   const comparedEvent = comparison?.regionId === selected?.id ? comparison?.event : null;
@@ -323,7 +384,7 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
     const scopeId = sessionStorage.getItem("drawing-flip-scope");
     if (!scopeId) return;
     const region = regionsForScope(state, scopeId)[0];
-    if (region) { sessionStorage.removeItem("drawing-flip-scope"); setMode("regions"); setPageId(region.pageId); setRegionId(region.id); setFilters({ query:"", packageId:"", status:"", origin:"", corrected:false }); setFullPage(true); }
+    if (region) { sessionStorage.removeItem("drawing-flip-scope"); setMode("regions"); setPageId(region.pageId); setFilters({ query:"", packageId:"", status:"", origin:"", corrected:false }); setOwner(""); zoomTo(region.id); }
     else setMode("unlocated");
   }, [state]);
 
@@ -370,13 +431,14 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
         <div className="flip-filterbar">
           <label className="flip-search"><Search size={15}/><input aria-label="Search drawing regions" value={filters.query} onChange={event => setFilters({ ...filters, query: event.target.value })} placeholder="Search regions…"/></label>
           <select aria-label="Filter by trade" value={filters.packageId} onChange={event => setFilters({ ...filters, packageId: event.target.value })}><option value="">All trades</option>{procurement.packages.map(pkg => <option value={pkg.id} key={pkg.id}>{pkg.division} · {pkg.name} ({legend.find(item => item.packageId === pkg.id)?.regions ?? 0})</option>)}</select>
+          <select aria-label="Filter by person" value={owner} onChange={event => setOwner(event.target.value)}><option value="">Everyone's trades</option>{owners.map(name => <option key={name} value={name}>{name}'s trades</option>)}</select>
           <select aria-label="Filter by review status" value={filters.status} onChange={event => setFilters({ ...filters, status: event.target.value as Filters["status"] })}><option value="">All review states</option><option value="pending-review">Awaiting review</option><option value="approved">Approved</option></select>
           <select aria-label="Filter by origin" value={filters.origin} onChange={event => setFilters({ ...filters, origin: event.target.value as Filters["origin"] })}><option value="">All origins</option><option value="ai">Structor AI</option><option value="estimator">Estimator</option></select>
           <label className="flip-corrected"><input type="checkbox" checked={filters.corrected} onChange={event => setFilters({ ...filters, corrected: event.target.checked })}/>Corrections</label>
         </div>
-        <div className="flip-legend" aria-label="Trade color legend">{legend.map(item => <button key={item.packageId} className={filters.packageId === item.packageId ? "active" : ""} onClick={() => setFilters({ ...filters, packageId: filters.packageId === item.packageId ? "" : item.packageId })}><i style={{ background: colors.get(item.packageId) }}/><span>{item.name}</span><small>{item.regions}</small></button>)}</div>
+        <div className="flip-legend" aria-label="Trade color legend">{legend.map(item => <button key={item.packageId} className={filters.packageId === item.packageId ? "active" : ""} onClick={() => setFilters({ ...filters, packageId: filters.packageId === item.packageId ? "" : item.packageId })}><i style={{ background: colors.get(item.packageId) }}/><span>{item.name}{ownerOf(item.packageId) ? ` · ${ownerOf(item.packageId)}` : ""}</span><small>{item.regions}</small></button>)}</div>
         <Button onClick={()=>setFullPage(true)}><Maximize2 size={15}/>Open full page</Button>
-        <div className="flip-drawing"><DrawingCanvas page={page} regions={visible} selectedId={selected?.id ?? ""} colors={colors} onSelect={id=>{setRegionId(id);setMode("regions");}} fullPage={fullPage} onFullPage={setFullPage} regionDetail={fullDetail} trace={trace} traceActions={traceActions} comparison={comparedEvent && selected ? { regionId: selected.id, from: comparedEvent.from } : null} onClearComparison={() => setComparison(null)}/>{!visible.length && <div className="flip-empty-note" role="status">{pageSummary.regions ? <>No highlights match these filters. <button onClick={() => setFilters({ query: "", packageId: "", status: "", origin: "", corrected: false })}>Clear filters</button></> : <>No highlights yet. Review AI scope proposals or use Mark region to add one.</>}</div>}</div>
+        <div className="flip-drawing"><DrawingCanvas page={page} regions={visible} selectedId={selected?.id ?? ""} colors={colors} onSelect={id=>{setRegionId(id);setMode("regions");}} fullPage={fullPage} onFullPage={setFullPage} regionDetail={fullDetail} trace={trace} traceActions={traceActions} comparison={comparedEvent && selected ? { regionId: selected.id, from: comparedEvent.from } : null} focus={focus} describe={describe} onClearComparison={() => setComparison(null)}/>{!visible.length && <div className="flip-empty-note" role="status">{pageSummary.regions ? <>No highlights match these filters. <button onClick={() => setFilters({ query: "", packageId: "", status: "", origin: "", corrected: false })}>Clear filters</button></> : <>No highlights yet. Review AI scope proposals or use Mark region to add one.</>}</div>}</div>
         <div className="flip-region-strip">{visible.map(region => <button key={region.id} className={selected?.id === region.id ? "selected" : ""} onClick={() => setRegionId(region.id)}><i style={{ background: colors.get(region.packageId) }}/><span><strong>{region.number} · {region.label}</strong><small>{procurement.packages.find(pkg => pkg.id === region.packageId)?.name} · {region.status === "pending-review" ? "Awaiting contractor" : "Approved"}</small></span><ChevronRight size={15}/></button>)}</div>
       </section>
 
@@ -385,8 +447,9 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
         {mode === "regions" && selected && <Panel className="flip-region-detail">
           <div className="flip-detail-title"><span style={{ background: `${colors.get(selected.packageId)}1f`, color: colors.get(selected.packageId) }}>{selected.origin === "ai" ? <Bot size={19}/> : <UserRound size={19}/>}</span><div><small>{selected.number} · {selected.origin === "ai" ? "STRUCTOR PROPOSAL" : "ESTIMATOR REGION"}</small><h2>{selected.label}</h2></div></div>
           <div className={`flip-review-state ${selected.status}`}><ShieldCheck size={18}/><div><strong>{selected.status === "pending-review" ? "Contractor review required" : "Trade assignment approved"}</strong><small>{selected.reviewedBy ? `${selected.reviewedBy} · ${activityDate(selected.reviewedAt)}` : "Review or correct this assignment before it is relied on."}</small></div></div>
-          <dl><div><dt>Responsible trade</dt><dd><i style={{ background: colors.get(selected.packageId) }}/>{selectedPackage?.code} · {selectedPackage?.name}</dd></div><div><dt>Drawing evidence</dt><dd>{selected.evidence || "Estimator marked region"}</dd></div><div><dt>Confidence</dt><dd>{selected.confidence === null ? "Estimator reviewed" : `${Math.round(selected.confidence * 100)}% · AI proposal; verify on sheet`}</dd></div><div><dt>Review notes</dt><dd>{selected.notes || "No notes recorded"}</dd></div></dl>
+          <dl><div><dt>Responsible trade</dt><dd><i style={{ background: colors.get(selected.packageId) }}/>{selectedPackage?.code} · {selectedPackage?.name}</dd></div><div><dt>Trade owner</dt><dd><select className="flip-owner-select" aria-label={`Owner of ${selectedPackage?.name ?? "this trade"}`} value={selectedPackage?.owner ?? ""} onChange={event => selectedPackage && setTradeOwner(selectedPackage.id, event.target.value)}><option value="">Unassigned</option>{people.map(name => <option key={name} value={name}>{name}</option>)}</select></dd></div>{selected.anchor && <div><dt>Position</dt><dd className={selected.anchor === "image" ? "flip-approximate-note" : undefined}>{selected.anchor === "text" ? "On the printed words it cites." : "Approximate: the AI's outline from the sheet image, because the words it cites aren't in the sheet's text. Check it and redraw the outline if it's off."}</dd></div>}<div><dt>Drawing evidence</dt><dd>{selected.evidence || "Estimator marked region"}</dd></div><div><dt>Confidence</dt><dd>{selected.confidence === null ? "Estimator reviewed" : `${Math.round(selected.confidence * 100)}% · AI proposal; verify on sheet`}</dd></div><div><dt>Review notes</dt><dd>{selected.notes || "No notes recorded"}</dd></div></dl>
           {selected.status === "pending-review" && <Button variant="primary" onClick={() => act(current => approveRegion(current, selected.id, CURRENT_USER), `${selected.number} approved.`)}><Check size={15}/>Approve trade assignment</Button>}
+          <Button onClick={() => zoomTo(selected.id)}><ZoomIn size={15}/>Zoom to highlight</Button>
           <RedrawOutlineButton onClick={startRedraw}/><div className="flip-detail-actions"><Button onClick={() => { setReassignTo(""); setReassignReason(""); setReassignOpen(true); }}><RotateCcw size={15}/>Correct trade</Button><Button onClick={() => { setNotes(selected.notes); setNotesOpen(true); }}><PencilRuler size={15}/>Notes</Button></div>
           <div className="flip-scope-links"><header><div><Link2 size={15}/><strong>Linked scope items</strong></div><Badge>{linkedScopes.length}</Badge></header>{linkedScopes.map(scope => <article key={scope.id}><div><strong>{scope.title}</strong><small>{scope.source || "No source reference"}</small></div><button aria-label={`Unlink ${scope.title}`} onClick={() => act(current => unlinkScope(current, selected.id, scope.id, CURRENT_USER), "Scope item unlinked.")}><Unlink size={14}/></button></article>)}{!linkedScopes.length && <p>This region is not linked to a bid-form item yet.</p>}{availableScopes.length > 0 && <div className="flip-link-picker"><select aria-label="Scope item to link" value={linkId} onChange={event => setLinkId(event.target.value)}><option value="">Choose scope item…</option>{availableScopes.map(scope => <option value={scope.id} key={scope.id}>{scope.title}</option>)}</select><button disabled={!linkId} aria-label="Link scope item" onClick={() => { if (linkId && act(current => linkScope(current, procurement, selected.id, linkId, CURRENT_USER), "Scope item linked to the drawing.")) setLinkId(""); }}><Link2 size={15}/></button></div>}</div>
           {history}
