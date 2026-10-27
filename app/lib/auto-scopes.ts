@@ -116,7 +116,8 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
         writeDraft(projectId, "extraction", added.extraction);
         writeDraft(projectId, "procurement", added.procurement);
         const failed = !!outcome.input.error && !outcome.input.drafts.length;
-        setTrade(pkg.id, { status: failed ? "failed" : "done", added: added.added, note: outcome.input.error ?? (outcome.failures.length ? `${outcome.failures.length} request(s) failed.` : "") }, { added: run.added + added.added, duplicates: run.duplicates + added.duplicates });
+        const notes = [outcome.failures.length ? `${outcome.failures.length} request(s) failed.` : "", added.held ? `${added.held} held back: the words they quote aren't printed on the sheet.` : ""].filter(Boolean).join(" ");
+        setTrade(pkg.id, { status: failed ? "failed" : "done", added: added.added, note: outcome.input.error ?? notes }, { added: run.added + added.added, duplicates: run.duplicates + added.duplicates });
       } catch (error) {
         setTrade(pkg.id, { status: "failed", note: error instanceof Error ? error.message : "The reading failed." });
       }

@@ -2,12 +2,12 @@
 
 import { useRef, useState, type FormEvent } from "react";
 import { Check, FileText, Pencil, RotateCcw, X } from "lucide-react";
-import { editDraft, filterDrafts, isEdited, recordRun, REJECT_REASONS, rejectDraft, reopenDraft, runSummary, type Citation, type Draft, type DraftKind, type DraftStatus, type RejectReason } from "../../lib/extraction";
+import { editDraft, filterDrafts, isEdited, notOnSheet, recordRun, REJECT_REASONS, rejectDraft, reopenDraft, runSummary, type Citation, type Draft, type DraftKind, type DraftStatus, type RejectReason } from "../../lib/extraction";
 import type { useExtraction } from "../../lib/use-extraction";
 import type { SpecSection } from "../../lib/data/preconstruction";
 import { Badge, Button, Empty, Modal, Panel, PreviewNote, type ViewProps } from "./shared";
 import { ScopeSourceDialog } from "./scope-source-dialog";
-import { findingCitationSources, findingTitle } from "./extraction-citations";
+import { findingCitationSources, findingTitle, IMAGE_CHECK_NOTES } from "./extraction-citations";
 import { SpecificationReader } from "./specification-reader";
 import { DrawingReader } from "./drawing-reader";
 import { addPage } from "../../lib/drawing-flip";
@@ -127,7 +127,7 @@ export function ExtractionReview({ review, packageId, sections, colors, by, noti
       <div className="ext-list">{drafts.map(draft => <article className={`ext-card ${draft.status}`} key={draft.id}>
         <header><div>{draft.status === "pending-review" && <input type="checkbox" aria-label={`Select ${findingTitle(draft)}`} checked={selected.includes(draft.id)} onChange={e => setSelected(e.target.checked ? [...selected, draft.id] : selected.filter(id => id !== draft.id))}/>}<Badge>{kinds[draft.kind]}</Badge><Badge tone={draft.status === "accepted" ? "green" : draft.status === "rejected" ? "neutral" : "amber"}>{statuses[draft.status]}</Badge>{isEdited(draft) && <Badge tone="blue">Edited</Badge>}</div></header>
         <h3>{findingTitle(draft)}</h3>
-        {draft.citations.some(c => c.verification === "image") && <p className="proc-modal-note">Image citation · check the sheet before accepting</p>}
+        {notOnSheet(draft) ? <p className="proc-modal-note warning">{IMAGE_CHECK_NOTES["not-printed"]}</p> : draft.citations.some(c => c.verification === "image") && <p className="proc-modal-note">Image citation · check the sheet before accepting</p>}
         {draft.kind === "scope" ? <><p>{draft.detail}</p><small>{draft.source}</small></> : draft.kind === "region" ? <p>{draft.sheet} · {draft.status === "accepted" ? "Highlight saved in Drawing Flip." : "Highlight stays out of Drawing Flip until accepted."}</p> : <><strong className="ext-quantity">{draft.quantity.toLocaleString()} {draft.unit}</strong><p>{draft.basis}</p></>}
         <div className="ext-citations">{draft.citations.map((citation, index) => <button key={index} onClick={() => setDialog({ kind: "citation", draft, citation })}><FileText size={13}/>{citation.sheet ?? citation.document} · p. {citation.page}</button>)}</div>
         {draft.rejection && <p className="ext-rejection">{REJECT_REASONS[draft.rejection.reason]}{draft.rejection.note && ` · ${draft.rejection.note}`}</p>}

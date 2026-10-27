@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Citation, RegionDraft } from "../../lib/extraction";
 import type { ScopeSources } from "../../lib/scope-sources";
 import { DrawingCanvas, type CanvasRegion } from "./drawing-flip-ui";
+import { IMAGE_CHECK_NOTES } from "./extraction-citations";
 import { Badge, Empty, Modal, PreviewNote } from "./shared";
 import { SourcePdf } from "./source-pdf";
 import { useProjectDocuments } from "../../lib/project-files-client";
@@ -36,7 +37,7 @@ export function ScopeSourceDialog({ title, sources, kind, colors, onClose, citat
 
   return <Modal title={citation ? "Source citation" : kind === "drawings" ? "Drawing source" : "Specification source"} subtitle={title} wide onClose={onClose}>
     {sample && !documents.length && <PreviewNote>Illustrative example: no documents were read. The quote and page reference are sample data.</PreviewNote>}
-    {citation?.verification === "image" && <p role="note" className="proc-modal-note">Image citation: the AI read these words from the drawing. There is no matching text-layer check; verify the wording, location and dimensions on the sheet.</p>}
+    {citation?.verification && <p role="note" className="proc-modal-note">{IMAGE_CHECK_NOTES[citation.verification]}</p>}
     {citation && <blockquote className="proc-citation-quote"><strong>Cited text</strong><p>{citation.quote}</p></blockquote>}
     {kind === "drawings" ? drawing ? <div className="proc-source-dialog">
       {sources.drawings.length > 1 && <label className="ui-field">Source sheet<select value={drawingIndex} onChange={event => { setDrawingIndex(Number(event.target.value)); setRegionId(""); }}>{sources.drawings.map(({ page }, index) => <option key={page.id} value={index}>{page.sheet} · {page.title}</option>)}</select></label>}

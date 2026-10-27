@@ -62,12 +62,12 @@ export function scopeEvidence(item: Pick<ScopeItem, "id" | "source">, records: {
       const key = `quote:${c.document}:${c.page}`, there = evidence.find(e => e.key === key);
       if (there) {
         if (!there.quotes.includes(c.quote)) there.quotes.push(c.quote);
-        there.fromImage ||= c.verification === "image";
+        there.fromImage ||= !!c.verification;
         continue;
       }
       const doc = storedByName(documents, c.document);
       evidence.push({ key, kind: "quote", label: c.sheet ? `${c.sheet} · p. ${c.page}` : `${shortName(c.document, doc)} p. ${c.page}`,
-        documentName: c.document, doc, missing: doc ? null : "file", page: c.page, quotes: [c.quote], fromImage: c.verification === "image", outline: null, paragraph: null });
+        documentName: c.document, doc, missing: doc ? null : "file", page: c.page, quotes: [c.quote], fromImage: !!c.verification, outline: null, paragraph: null });
     }
   }
 
