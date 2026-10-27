@@ -161,6 +161,23 @@ export function findOnSheet(boxes: TextBox[], quote: string, max = MAX_TAG_MARKS
   return isTag(q) ? findTag(boxes, q, max) : findText(boxes, q, fuzzy);
 }
 
+/** Print size OCR reads well (27 Oct, A12.1: at 155 dpi the finish schedule came back garbled, at 300 dpi 90%+ right). */
+export const OCR_DPI = 300;
+const OCR_TILE_PX = 2400, OCR_OVERLAP = 0.02;
+
+/**
+ * How to cut a page `width` × `height` points (1/72") into overlapping tiles OCR reads at OCR_DPI: each tile's
+ * place on the page (0–1, reading order) and the pixel size of its longest side. A 42" × 30" sheet is 6 × 4.
+ */
+export function ocrTiles(width: number, height: number): { boxes: Box[]; size: number } {
+  const inchesW = width / 72, inchesH = height / 72;
+  const cols = Math.max(1, Math.ceil(inchesW * OCR_DPI / OCR_TILE_PX)), rows = Math.max(1, Math.ceil(inchesH * OCR_DPI / OCR_TILE_PX));
+  const w = Math.min(1, 1 / cols + OCR_OVERLAP), h = Math.min(1, 1 / rows + OCR_OVERLAP);
+  const boxes: Box[] = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) boxes.push({ x: Math.min(1 - w, Math.max(0, c / cols - OCR_OVERLAP / 2)), y: Math.min(1 - h, Math.max(0, r / rows - OCR_OVERLAP / 2)), width: w, height: h });
+  return { boxes, size: Math.ceil(Math.max(w * inchesW, h * inchesH) * OCR_DPI) };
+}
+
 /** What OCR read on one tile of a sheet: the tile's place on the page (0–1), its size in pixels, and its words. */
 export type OcrTile = { box: Box; width: number; height: number; words: { text: string; confidence: number; bbox: { x0: number; y0: number; x1: number; y1: number } }[] };
 

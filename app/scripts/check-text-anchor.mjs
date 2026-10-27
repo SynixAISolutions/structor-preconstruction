@@ -76,6 +76,16 @@ const ceramic = read[0];
 assert(Math.abs(ceramic.x - 0.05) < 1e-9 && Math.abs(ceramic.y - 0.1) < 1e-9 && Math.abs(ceramic.w - 0.07) < 1e-9 && Math.abs(ceramic.h - 0.03) < 1e-9, "Tile pixels become page fractions");
 assert(Math.abs(read[2].x - 0.54) < 1e-9 && read.filter(w => w.str === "FLOOR").length === 1, "The overlap's word, read on both tiles at the same place, is kept once");
 
+// Tiles sized so OCR reads at 300 dpi (at 155 dpi A12.1's finish schedule came back garbled).
+const sheet42 = T.ocrTiles(3024, 2160);
+assert.equal(sheet42.boxes.length, 24, "A 42 × 30 sheet: 6 × 4 tiles");
+assert(sheet42.size / (sheet42.boxes[0].height * 30) >= T.OCR_DPI - 1 && sheet42.size / (sheet42.boxes[0].width * 42) >= T.OCR_DPI - 1, "Every tile is read at 300 dpi or more");
+assert(sheet42.boxes.every(b => b.x >= 0 && b.y >= 0 && b.x + b.width <= 1 + 1e-9 && b.y + b.height <= 1 + 1e-9), "Tiles stay on the page");
+assert.deepEqual([sheet42.boxes[0].x, sheet42.boxes[0].y], [0, 0], "Reading order: top left first");
+const covers = (x, y) => sheet42.boxes.some(b => x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height);
+assert([0.001, 0.25, 0.5, 0.75, 0.999].every(x => [0.001, 0.33, 0.66, 0.999].every(y => covers(x, y))), "The tiles cover the whole sheet");
+assert.equal(T.ocrTiles(612, 792).boxes.length, 4, "A letter page: 2 × 2");
+
 // Words read by OCR may be a letter or two off: found close, never something unlike them.
 assert.deepEqual(T.approximateFind("XXCERAMICTILEYY", "CERAMICTILE", 0), { at: 2, end: 13 });
 assert.deepEqual(T.approximateFind("XXCERAMlCTlLEYY", "CERAMICTILE", 2), { at: 2, end: 13 });
