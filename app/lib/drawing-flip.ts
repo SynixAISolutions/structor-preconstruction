@@ -47,6 +47,12 @@ export type DrawingPage = {
 };
 
 export type RegionOrigin = "ai" | "estimator";
+/**
+ * Where an AI mark's position came from (26 Oct): "text", the words it cites found in the sheet's text layer
+ * (lib/text-anchor); "image", the AI's own outline read from the picture, so only approximate. Unset for an
+ * estimator's region and for marks made before positions were checked.
+ */
+export type RegionAnchor = "text" | "image";
 export type RegionStatus = "pending-review" | "approved";
 
 export type RegionEvent =
@@ -74,6 +80,7 @@ export type FlipRegion = {
   /** The AI's confidence in its trade call, 0–1. Null for an estimator's region. */
   confidence: number | null;
   origin: RegionOrigin;
+  anchor?: RegionAnchor;
   status: RegionStatus;
   reviewedBy: string | null; reviewedAt: string | null;
   notes: string;
@@ -91,7 +98,7 @@ export type PageInput = {
 };
 export type RegionInput = {
   pageId: string; label: string; polygon: Point[]; packageId: string; scopeIds?: string[];
-  evidence?: string; confidence?: number | null; origin?: RegionOrigin; notes?: string;
+  evidence?: string; confidence?: number | null; origin?: RegionOrigin; notes?: string; anchor?: RegionAnchor;
 };
 /** `division` is the CSI trade ("09"), `packageId` one package within it. `corrected`: reassigned at least once. */
 export type RegionFilter = { pageId?: string; division?: string; packageId?: string; status?: RegionStatus; origin?: RegionOrigin; corrected?: boolean; query?: string };
@@ -293,7 +300,7 @@ export function addRegion(state: DrawingFlipState, procurement: Procurement, inp
   const n = Math.max(state.lastRegionNumber || 0, ...state.regions.map(r => Number(r.number.replace(/\D/g, "")) || 0)) + 1;
   const region: FlipRegion = {
     id: newId(), number: `R-${pad(n)}`, pageId: input.pageId, label: input.label.trim(), polygon, packageId: input.packageId, scopeIds,
-    evidence: input.evidence?.trim() ?? "", confidence: ai ? c! : null, origin,
+    evidence: input.evidence?.trim() ?? "", confidence: ai ? c! : null, origin, ...(ai && input.anchor ? { anchor: input.anchor } : {}),
     status: ai ? "pending-review" : "approved", reviewedBy: ai ? null : by, reviewedAt: ai ? null : at,
     notes: input.notes?.trim() ?? "", createdAt: at, createdBy: by,
     history: [{ kind: "created", at, by, packageId: input.packageId }, ...scopeIds.map(scopeId => ({ kind: "linked" as const, at, by, scopeId }))],

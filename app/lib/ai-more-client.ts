@@ -64,7 +64,8 @@ export async function locateScopes(args: {
   pageIdFor: (sheet: string) => string | null;
   signal?: AbortSignal; onProgress?: (done: number, total: number) => void;
 }): Promise<{ regions: import("./drawing-flip").RegionInput[]; dropped: import("./ai-jobs").Dropped[]; failures: { sheet: string; error: string }[] }> {
-  const { renderStoredPage, readStoredText } = await import("./project-files-client");
+  const { renderStoredPage, readStoredText, readPageTextBoxes } = await import("./project-files-client");
+  const { boxPolygon, findOnSheet } = await import("./text-anchor");
   const regions: import("./drawing-flip").RegionInput[] = [], dropped: import("./ai-jobs").Dropped[] = [], failures: { sheet: string; error: string }[] = [];
   for (const [i, { row, items }] of args.plan.entries()) {
     try {
@@ -72,7 +73,15 @@ export async function locateScopes(args: {
       if (!pageId) throw new Error(`Sheet ${row.sheet} is not a Drawing Flip page.`);
       const [{ image }, text] = await Promise.all([renderStoredPage(row.doc, row.page, 2000), readStoredText(row.doc, { first: row.page, last: row.page }).then(p => p.find(x => x.page === row.page)?.text ?? "").catch(() => "")]);
       const result = await aiJob<{ regions: import("./drawing-ai").LocatedRegion[]; dropped: import("./ai-jobs").Dropped[] }>("scope-locate", { pkg: args.pkg, document: row.doc.name, sheet: row.sheet, page: row.page, text: text.slice(0, 60_000), image, items }, args.signal);
-      regions.push(...result.regions.map(r => ({ pageId, label: r.label, polygon: r.polygon, packageId: args.pkg.id, scopeIds: [r.scopeId], evidence: r.evidence, confidence: r.confidence, origin: "ai" as const })));
+      // Each mark goes where its evidence is printed (every place, for a tag); otherwise the AI's outline, approximate.
+      const boxes = await readPageTextBoxes(row.doc, row.page).catch(() => null);
+      for (const r of result.regions) {
+        const found = boxes && r.text ? findOnSheet(boxes, r.text) : [];
+        const base = { pageId, packageId: args.pkg.id, scopeIds: [r.scopeId], evidence: r.evidence, confidence: r.confidence, origin: "ai" as const };
+        if (!found.length && r.polygon.length < 3) dropped.push({ what: r.label, reason: `"${r.text}" is not in the sheet's text, and no area was marked.` });
+        else if (!found.length) regions.push({ ...base, label: r.label, polygon: r.polygon, anchor: "image" });
+        else found.forEach((box, i) => regions.push({ ...base, label: found.length > 1 ? `${r.label} (${i + 1} of ${found.length})` : r.label, polygon: boxPolygon(box), anchor: "text" }));
+      }
       dropped.push(...result.dropped);
     } catch (error) {
       failures.push({ sheet: row.sheet, error: error instanceof Error ? error.message : String(error) });

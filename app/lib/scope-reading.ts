@@ -11,7 +11,8 @@ import type { PageInput } from "./drawing-flip";
 import type { ManualSection } from "./manual-sections";
 import type { TradePackage } from "./procurement";
 import type { RegisterRow, StoredDocument, StoredSection } from "./project-files";
-import { readStoredText, renderStoredPage } from "./project-files-client";
+import { readPageTextBoxes, readStoredText, renderStoredPage } from "./project-files-client";
+import { pinFindings, type TextBox } from "./text-anchor";
 
 export type TradeReadProgress = { note: string; done: number; total: number };
 
@@ -66,6 +67,10 @@ export async function readTradeScope(args: {
         render: page => renderStoredPage(doc, page, 2000).then(r => { aspects.set(page, r.aspect); return { image: r.image }; }),
       });
       done += rows.length;
+      // Marks go where the cited words are printed; the AI's own outlines stay only where the text can't place them.
+      const boxes = new Map<string, TextBox[]>();
+      await Promise.all((drawn.drawingPages ?? []).map(async p => { try { boxes.set(p.sheet, await readPageTextBoxes(doc, p.page)); } catch { /* no text layer: outlines stay approximate */ } }));
+      drawn.input = { ...drawn.input, drafts: pinFindings(drawn.input.drafts, boxes) };
       const highlighted = new Set(drawn.input.drafts.filter(d => d.kind === "region").map(d => (d as { sheet: string }).sheet));
       const flipError = args.addFlipPages((drawn.drawingPages ?? []).filter(p => highlighted.has(p.sheet)).map(p => ({ sheet: p.sheet, title: rows.find(r => r.page === p.page)?.title ?? p.sheet, discipline: rows.find(r => r.page === p.page)?.discipline ?? "", revision: "", documentId: doc.id, documentName: doc.name, pageNumber: p.page, aspect: aspects.get(p.page) })));
       if (flipError) drawn.dropped.push({ what: "Drawing highlights", reason: flipError });

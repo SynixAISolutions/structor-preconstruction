@@ -16,7 +16,7 @@
 // this module validates it and owns everything after. AI output is untrusted: text is trimmed,
 // length-capped and rejected rather than silently cut, so a citation is never misquoted.
 
-import { addRegion, approveRegion, linkScope, DrawingFlipRuleError, type DrawingFlipState, type Point } from "./drawing-flip";
+import { addRegion, approveRegion, linkScope, DrawingFlipRuleError, type DrawingFlipState, type Point, type RegionAnchor } from "./drawing-flip";
 import { addScope, approveScope, ProcurementRuleError, type Procurement } from "./procurement";
 import type { QuantityUnit } from "./model";
 
@@ -68,7 +68,7 @@ type DraftBase = {
   history: DraftEvent[];
 };
 export type ScopeFields = { title: string; detail: string; source: string };
-export type RegionFields = { sheet: string; label: string; polygon: Point[] };
+export type RegionFields = { sheet: string; label: string; polygon: Point[]; anchor?: RegionAnchor };
 export type QuantityFields = { item: string; quantity: number; unit: QuantityUnit; basis: string };
 
 /** `source` reads like a Scopes reference: "09 29 00 · §3.6" or "A8.1 · Partition schedule". */
@@ -163,7 +163,7 @@ function cleanRegion(input: Partial<RegionFields>): RegionFields {
   const polygon = input.polygon;
   if (!Array.isArray(polygon) || polygon.length < 3 || !polygon.every(p => p && [p.x, p.y].every(v => typeof v === "number" && v >= 0 && v <= 1)))
     fail("A region needs at least three points, each 0 to 1 from the sheet's top-left.");
-  return { sheet: text(input.sheet, "sheet", "The sheet"), label: text(input.label, "label", "What the region shows"), polygon: polygon!.map(({ x, y }) => ({ x, y })) };
+  return { sheet: text(input.sheet, "sheet", "The sheet"), label: text(input.label, "label", "What the region shows"), polygon: polygon!.map(({ x, y }) => ({ x, y })), ...(input.anchor === "text" || input.anchor === "image" ? { anchor: input.anchor } : {}) };
 }
 function cleanQuantity(input: Partial<QuantityFields>): QuantityFields {
   const quantity = input.quantity;
@@ -408,7 +408,7 @@ export function acceptDraft(records: ReviewRecords, draftId: string, by: string,
         .filter((d): d is ScopeDraft => d?.kind === "scope" && !!d.acceptedId && d.packageId === draft.packageId)
         .map(d => d.acceptedId!);
       const evidence = draft.citations.map(c => `${c.sheet ?? c.document} p.${c.page}: “${c.quote}”`).join(" ").slice(0, 2000);
-      flip = addRegion(flip, procurement, { pageId: page!.id, label: draft.label, polygon: draft.polygon, packageId: draft.packageId, scopeIds, evidence, confidence: draft.confidence, origin: "ai" }, AI_ACTOR, run.finishedAt);
+      flip = addRegion(flip, procurement, { pageId: page!.id, label: draft.label, polygon: draft.polygon, packageId: draft.packageId, scopeIds, evidence, confidence: draft.confidence, origin: "ai", anchor: draft.anchor }, AI_ACTOR, run.finishedAt);
       acceptedId = flip.regions.at(-1)!.id;
       flip = approveRegion(flip, acceptedId, by.trim(), at);
     }

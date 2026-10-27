@@ -62,3 +62,9 @@
 .flip-history-compare strong { font-size:12px; }.flip-history-compare small,.flip-history-compare em { font-size:11px; color:#607385; }
 .flip-history-compare:focus-visible,.flip-pan:focus-visible { outline:2px solid #267b62; outline-offset:2px; }
 @media(max-width:650px) { .flip-trace-controls { max-height:35dvh; overflow:auto; padding:9px; }.flip-trace-actions .ui-field { flex-basis:100%; }.flip-full-toolbar label { min-width:0; }.flip-full-detail { flex-shrink:1; } }
+/* 26 Oct: marks on the printed words are solid (or dashed while awaiting review); an AI outline the text
+   couldn't place is dotted, so its position reads as approximate. */
+.flip-region-layer g.approximate polygon { stroke-dasharray:2 6; stroke-linecap:round; fill-opacity:.5; }
+.flip-owner-select { max-width:100%; padding:4px 8px; border:1px solid var(--line); border-radius:6px; background:var(--paper); color:var(--ink); font:inherit; }
+.flip-approximate-note { color:#9a5b12; }
+.flip-pan { overscroll-behavior:contain; }

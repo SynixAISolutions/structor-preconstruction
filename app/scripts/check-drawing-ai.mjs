@@ -103,7 +103,11 @@ const located = D.screenLocate({ sheet: "a-1.1", found: [
   { id: "scope-17", polygon: [{ x: 0.1, y: 0.1 }, { x: 1.4, y: 0.1 }, { x: 0.2, y: 0.2 }], evidence: "Studs" },
 ] }, lj);
 assert.deepEqual([located.sheet, located.regions.map(r => [r.scopeId, r.confidence, r.evidence]), located.dropped.map(d => d.reason)],
-  ["a-1.1", [["scope-12", 0.8, "a-1.1: Partition tags P3 at locker rooms"]], ["Only one area per item and sheet.", "Not one of the scope items sent.", "No usable area on the sheet."]], "Only the items sent, one area each, inside the sheet, with evidence");
+  ["a-1.1", [["scope-12", 0.8, "a-1.1: Partition tags P3 at locker rooms"]], ["Only one area per item and sheet.", "Not one of the scope items sent.", "No usable area or printed words on the sheet."]], "Only the items sent, one area each, inside the sheet, with evidence");
+// 26 Oct: the printed words place a mark (lib/text-anchor), so an item with text but no outline is kept, outline empty.
+const byText = D.screenLocate({ found: [{ id: "scope-12", text: "P3", evidence: "Partition tag P3", confidence: 0.8 }] }, lj).regions[0];
+assert.deepEqual([byText.text, byText.polygon], ["P3", []]);
+assert.match(D.locateMessages(lj)[0].content, /Give text: the exact words, tag or keynote number printed on the sheet/);
 assert.deepEqual(D.screenLocate({ found: [{ id: "scope-17", polygon: box, evidence: "x" }] }, lj).dropped.map(d => d.reason), ["No evidence on the sheet was given."]);
 assert.equal(D.screenLocate({ sheet: "Z9.9", found: [] }, lj).sheet, "A1.1", "A different sheet number read from the image does not rename the page");
 assert.deepEqual(D.screenLocate({ found: [{ id: "scope-12", polygon: box, evidence: "General notes", confidence: 0.25 }] }, lj).dropped.map(d => d.reason), ["Too unsure to mark; check the sheet yourself."], "A guess is not a highlight (Jelleff A1.1: a 0.25 mark sat on the mechanical yard)");

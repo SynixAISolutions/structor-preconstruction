@@ -10,6 +10,7 @@ import { manualSections } from "./manual-sections";
 import { aiJob, readTitleBlock } from "./ai-more-client";
 import { rfpPages, type RfpFact } from "./rfp";
 import { useActiveProject } from "./project-scope";
+import type { TextBox } from "./text-anchor";
 import {
   chunkFor, emptyIndex, kindForCategory, MAX_RANGE_BYTES, sourcePath, TEXT_CHUNK,
   type PageText, type ProjectFileIndex, type StoredDocument, type StoredSheet,
@@ -222,6 +223,36 @@ export function openStoredPdf(doc: StoredDocument): Promise<PdfDoc> {
   promise.catch(() => opened.delete(doc.id));
   opened.set(doc.id, promise);
   return promise;
+}
+
+const textBoxes = new Map<string, Promise<TextBox[]>>();
+
+/**
+ * Every piece of a stored page's text with its box, 0 to 1 from the page's top-left in the orientation the
+ * page is rendered (rotated sheets included), for pinning highlights to the words (lib/text-anchor).
+ */
+export function readPageTextBoxes(doc: StoredDocument, pageNumber: number): Promise<TextBox[]> {
+  const key = `${doc.id}:${pageNumber}`;
+  if (!textBoxes.has(key)) {
+    const job = (async () => {
+      const page = await (await openStoredPdf(doc)).getPage(pageNumber);
+      const viewport = page.getViewport({ scale: 1 });
+      const content = await page.getTextContent();
+      const boxes: TextBox[] = [];
+      for (const item of content.items as (TextItem & { width: number; height: number })[]) {
+        if (!("str" in item) || !item.str.trim()) continue;
+        const [, , , , e, f] = item.transform;
+        const height = item.height || Math.hypot(item.transform[2], item.transform[3]);
+        const [x1, y1, x2, y2] = viewport.convertToViewportRectangle([e, f, e + item.width, f + height]) as number[];
+        boxes.push({ str: item.str, x: Math.min(x1, x2) / viewport.width, y: Math.min(y1, y2) / viewport.height, w: Math.abs(x2 - x1) / viewport.width, h: Math.abs(y2 - y1) / viewport.height });
+      }
+      page.cleanup();
+      return boxes;
+    })();
+    job.catch(() => textBoxes.delete(key));
+    textBoxes.set(key, job);
+  }
+  return textBoxes.get(key)!;
 }
 
 const renders = new Map<string, Promise<{ image: string; aspect: number }>>();
