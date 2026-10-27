@@ -30,3 +30,4 @@
 
 /* Five stat tiles (Overview with Bought out) sit on one row on wide screens instead of leaving one alone. */
 @media(min-width:1200px){.ui-stats:has(>.ui-stat:nth-child(5):last-child){grid-template-columns:repeat(5,minmax(0,1fr))}}
+.sidebar-signout{width:28px;height:28px;display:grid;place-items:center;flex-shrink:0;padding:0;border:0;border-radius:7px;background:transparent;color:#84979f}.sidebar-signout:hover,.sidebar-signout:focus-visible{background:#22373e;color:#fff}.sidebar-signout:focus-visible{outline:2px solid #ed6a36;outline-offset:1px}
