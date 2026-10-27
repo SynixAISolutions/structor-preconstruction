@@ -5,6 +5,7 @@ import { Activity, ArrowRight, ArrowUpRight, Bell, BookOpen, BookOpenText, Box, 
 import BidLevelingPage from "./leveling-workspace";
 import { IntelligenceView } from "./ui/intelligence";
 import { ActivityInbox } from "./ui/activity-inbox";
+import { AiRunCard } from "./ui/ai-run-card";
 import { CommercialView } from "./ui/commercial";
 import { BuyoutView } from "./ui/buyout-ui";
 import { UserManual } from "./ui/user-manual";
@@ -80,6 +81,7 @@ export default function StructorApp(){
   </div>
   {toast&&<div className="product-toast" role="status"><CheckCheck size={18}/><span>{toast}</span><button onClick={()=>setToast("")} aria-label="Dismiss notification"><X size={16}/></button></div>}
    {searchOpen&&<Modal title="Find your next step" subtitle="Jump to any part of your workspace." onClose={()=>setSearchOpen(false)}><SearchBox value={search} onChange={setSearch} placeholder="Search scopes, budget, drawings…"/><div className="command-list">{searchScreens(search).map(s=><button key={s.id} onClick={()=>navigate(s.id)}><NavIcon id={s.id} name={s.icon} size={19}/>{s.label}<ArrowRight size={15}/></button>)}</div></Modal>}
+  <AiRunCard projectId={activeId}/>
   <UserManual open={helpOpen} onOpen={()=>setHelpOpen(true)} onClose={()=>setHelpOpen(false)} currentScreen={screen} onNavigate={id=>{const next=resolveScreen(id);if(next&&next!==screen)navigate(next);}}/>
   <PageVoiceFeedback page={{screen,projectId:projectOpen?project.id:null,projectName:projectOpen?project.name:null}} notify={notify} onOpenPage={message=>{if(message.projectId){if(!projects.some(p=>p.id===message.projectId)){notify(`The message is for ${message.projectName}. That project is not saved in this browser.`);return false;}selectProject(message.projectId);}navigate(message.screen);return true;}}/>
    {newProject&&<Modal title="A new project starts here" subtitle="Set up the workspace, then add your RFP and project documents." wide onClose={()=>{if(!newProjectBusy)setNewProject(false);}}><ProjectForm onBusyChange={setNewProjectBusy} onCancel={()=>setNewProject(false)} onSave={createProject}/></Modal>}

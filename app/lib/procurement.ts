@@ -20,6 +20,7 @@ export type ScopeStatus = "draft" | "approved";
 export type ScopeEvent =
   | { kind: "created" | "approved" | "reopened" | "edited"; at: string; by: string }
   | { kind: "moved"; at: string; by: string; from: string; to: string }
+  | { kind: "copied"; at: string; by: string; from: string; to: string }
   | { kind: "applied-to-all"; at: string; by: string };
 
 export type ScopeItem = {
@@ -280,6 +281,26 @@ export function moveScope(state: Procurement, id: string, toPackageId: string, b
   return { ...next, notifications: [...next.notifications, notify({
     kind: "scope-moved", recipientType: "team", recipient: to.owner, packageId: to.id, at,
     text: `${by} moved "${item.title}" from ${from.name} to ${to.name}. It needs your review.`,
+  })] };
+}
+
+/**
+ * Copies an item into another trade's bid form (Danial, 26 Oct: move or copy). The copy is a draft there,
+ * remembers where it came from, and the receiving estimator is tagged; the original stays as it was.
+ */
+export function copyScope(state: Procurement, id: string, toPackageId: string, by: string, at = now()): Procurement {
+  const item = findScope(state, id);
+  const from = findPackage(state, item.packageId);
+  const to = findPackage(state, toPackageId);
+  if (to.id === from.id && !item.allTrades) fail(`This item is already in ${to.name}.`);
+  const words = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (state.scopes.some(s => s.packageId === to.id && !s.allTrades && words(s.title) === words(item.title))) fail(`${to.name} already has this item.`);
+  const copy: ScopeItem = { ...item, id: newId(), packageId: to.id, allTrades: false, status: "draft", history: [{ kind: "copied", at, by, from: from.id, to: to.id }] };
+  const next = { ...state, scopes: [...state.scopes, copy] };
+  if (!to.owner || to.owner === by) return next;
+  return { ...next, notifications: [...next.notifications, notify({
+    kind: "scope-moved", recipientType: "team", recipient: to.owner, packageId: to.id, at,
+    text: `${by} copied "${item.title}" from ${from.name} to ${to.name}. It needs your review.`,
   })] };
 }
 

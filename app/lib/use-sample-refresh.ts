@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import "./demo-names";
+import { isRunning } from "./auto-scopes";
 import {
   SampleRefreshError, deleteSampleBackup, keepMyData, listSampleBackups, loadUpdatedSample, markFreshBrowser,
   restoreSampleBackup, sampleBackupFile, sampleStatus, type SampleBackup, type SampleStatus,
@@ -22,6 +23,8 @@ export function useSampleRefresh() {
   useEffect(read, [read]);
 
   const attempt = useCallback((action: () => void, reload: boolean): string | null => {
+    // Swapping the sample's data under a running AI scope run would mix the two (lib/auto-scopes).
+    if (reload && isRunning()) return "The AI is still reading this project's files. Load the sample once it finishes.";
     try { action(); } catch (error) { if (error instanceof SampleRefreshError) return error.message; return "Browser storage is unavailable."; }
     if (reload) window.location.reload(); else read();
     return null;

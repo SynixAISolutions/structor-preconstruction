@@ -2,16 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
-import { extractDrawingScope, extractTradeScope, chunkPages, type ScopeRunResult } from "../../lib/ai-client";
+import type { ScopeRunResult } from "../../lib/ai-client";
 import { addPage } from "../../lib/drawing-flip";
 import { addPackage } from "../../lib/procurement";
 import { recordRun } from "../../lib/extraction";
-import { consolidateScope } from "../../lib/ai-more-client";
-import { drawingRegister, findManual, type RegisterRow } from "../../lib/project-files";
-import { readStoredText, renderStoredPage, useProjectDocuments } from "../../lib/project-files-client";
-import { sectionsByTrade, sheetsForTrade, suggestTrades, uncoveredSections } from "../../lib/project-scopes";
+import { drawingRegister, findManual } from "../../lib/project-files";
+import { useProjectDocuments } from "../../lib/project-files-client";
+import { sectionsByTrade, sheetsForTrade, tradesToAdd as packagesToAdd, uncoveredSections } from "../../lib/project-scopes";
+import { readTradeScope } from "../../lib/scope-reading";
 import { getActiveProjectId } from "../../lib/project-scope";
-import type { ManualSection } from "../../lib/manual-sections";
 import type { useExtraction } from "../../lib/use-extraction";
 import { Button, Modal } from "./shared";
 
@@ -20,15 +19,6 @@ const PARALLEL_TRADES = 3;
 // ponytail: creating the first trades swaps the empty Scopes page for the full one, which remounts
 // this button; the flag reopens the dialog there so the reading can start.
 let reopenAfterTrades = false;
-
-/** One trade's specification and drawing readings as one run (both documents cited). */
-const mergeRuns = (a: ScopeRunResult, b: ScopeRunResult): ScopeRunResult => {
-  const drafts = [...a.input.drafts, ...b.input.drafts];
-  return {
-    input: { ...a.input, documents: [...a.input.documents, ...b.input.documents.filter(d => !a.input.documents.some(x => x.name === d.name))], drafts, finishedAt: b.input.finishedAt, error: drafts.length ? undefined : a.input.error ?? b.input.error },
-    dropped: [...a.dropped, ...b.dropped], failures: [...a.failures, ...b.failures], drawingPages: [...(a.drawingPages ?? []), ...(b.drawingPages ?? [])],
-  };
-};
 
 /**
  * "Write scopes with AI" (Marcel, 15 Oct): the AI reads the project manual already stored in Project
@@ -44,7 +34,8 @@ export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnT
   const register = useMemo(() => drawingRegister(documents), [documents]);
   const uncovered = useMemo(() => manual ? uncoveredSections(manual.sections, packages) : [], [manual, packages]);
   // A new project has no trades yet: offer the ones its manual calls for (15 Oct, Marcel's first question).
-  const proposals = useMemo(() => suggestTrades(packages, { sections: manual?.sections ?? [], sheets: register }), [packages, manual, register]);
+  // Standard trades first, then a CSI group (Marcel's list) for every section no trade covers.
+  const proposals = useMemo(() => packagesToAdd(packages, { sections: manual?.sections ?? [], sheets: register }), [packages, manual, register]);
   const [newTrades, setNewTrades] = useState<string[] | null>(null);
   const tradesToAdd = newTrades ?? (packages.length ? [] : proposals.map(p => p.id));
   function createTrades() {
@@ -75,57 +66,14 @@ export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnT
     return latest.current.run(current => recordRun(current, latest.current.procurement, input));
   }
 
-  /** Reads a trade's drawing sheets (image + text layer), one set at a time, and adds missing sheets to Drawing Flip for the highlights. */
-  async function readSheets(pkg: (typeof packages)[number], sheets: RegisterRow[], signal: AbortSignal, onProgress: (done: number, total: number) => void): Promise<ScopeRunResult | null> {
-    let merged: ScopeRunResult | null = null, done = 0;
-    for (const rows of Map.groupBy(sheets, r => r.doc.id).values()) {
-      const doc = rows[0].doc, aspects = new Map<number, number>();
-      const text = await readStoredText(doc, { first: Math.min(...rows.map(r => r.page)), last: Math.max(...rows.map(r => r.page)) });
-      const outcome = await extractDrawingScope({
-        pkg, document: doc.name, pageCount: doc.pageCount, signal, onProgress: d => onProgress(done + d, sheets.length),
-        pages: rows.map(r => ({ page: r.page, sheet: r.sheet, text: text.find(p => p.page === r.page)?.text ?? "" })),
-        render: page => renderStoredPage(doc, page, 2000).then(r => { aspects.set(page, r.aspect); return { image: r.image }; }),
-      });
-      done += rows.length;
-      const highlighted = new Set(outcome.input.drafts.filter(d => d.kind === "region").map(d => (d as { sheet: string }).sheet));
-      const flipErrors = latest.current.runFlip(current => (outcome.drawingPages ?? []).filter(p => highlighted.has(p.sheet)).reduce((state, p) => state.pages.some(x => x.sheet === p.sheet) ? state : addPage(state, { sheet: p.sheet, title: rows.find(r => r.page === p.page)?.title ?? p.sheet, discipline: rows.find(r => r.page === p.page)?.discipline ?? "", revision: "", documentId: doc.id, documentName: doc.name, pageNumber: p.page, aspect: aspects.get(p.page) }), current));
-      if (flipErrors) outcome.dropped.push({ what: "Drawing highlights", reason: Object.values(flipErrors)[0] ?? "A sheet could not be added to Drawing Flip." });
-      merged = merged ? mergeRuns(merged, outcome) : outcome;
-    }
-    return merged;
-  }
-
   async function readTrade(id: string, signal: AbortSignal) {
     const pkg = packages.find(p => p.id === id)!;
-    const stored = assigned.get(id) ?? [];
-    const sheets = sheetsFor(id);
-    update(id, { status: "reading", done: 0, total: 0, note: stored.length ? "Loading section text…" : "Reading drawing sheets…" });
-    let outcome: ScopeRunResult | null = null;
-    if (stored.length && manual) {
-      const text = await readStoredText(manual, { first: Math.min(...stored.map((s: { first: number }) => s.first)), last: Math.max(...stored.map((s: { last: number }) => s.last)) });
-      const sections: ManualSection[] = stored.map((s: { section: string; title: string; first: number; last: number }) => ({ section: s.section, title: s.title, firstPage: s.first, lastPage: s.last, pages: text.filter(p => p.page >= s.first && p.page <= s.last && p.text.trim()) })).filter((s: ManualSection) => s.pages.length);
-      const total = sections.reduce((n, s) => n + chunkPages(s.pages).length, 0);
-      update(id, { total, note: "" });
-      outcome = await extractTradeScope({ pkg, manual: { name: manual.name, pageCount: manual.pageCount }, sections, signal, onProgress: (done, all) => update(id, { done, total: all }) });
-    }
-    // One finding per paragraph → one line per thing the subcontractor prices. Specification findings
-    // only: drawing findings are already one per item, and their highlights point at their keys.
-    if (outcome && outcome.input.drafts.length > 12 && !signal.aborted) {
-      update(id, { note: "Writing bid-form lines…", total: 0 });
-      try {
-        const lines = await consolidateScope(pkg.name, outcome.input.drafts, signal, Object.fromEntries(stored.map((s: { section: string; title: string }) => [s.section, s.title])));
-        outcome.input = { ...outcome.input, drafts: lines.drafts };
-        if (lines.merged) outcome.dropped.push({ what: `${lines.merged} paragraph findings`, reason: `Merged into ${lines.drafts.filter(d => d.kind === "scope").length} bid-form lines${lines.dropped ? `; ${lines.dropped} judged boilerplate` : ""}.` });
-      } catch (error) {
-        outcome.dropped.push({ what: "Bid-form lines", reason: `Could not merge findings (${error instanceof Error ? error.message : "AI error"}); every paragraph finding is listed.` });
-      }
-    }
-    if (sheets.length && !signal.aborted) {
-      update(id, { total: 0, note: `Reading drawing sheet 1 of ${sheets.length}` });
-      const drawn = await readSheets(pkg, sheets, signal, (done, all) => update(id, { total: 0, note: `Reading drawing sheet ${Math.min(done + 1, all)} of ${all}` }));
-      if (drawn) outcome = outcome ? mergeRuns(outcome, drawn) : drawn;
-    }
-    if (!outcome) throw new Error("This trade has no specification sections or drawing sheets to read.");
+    update(id, { status: "reading" });
+    const outcome = await readTradeScope({
+      pkg, manual, sections: assigned.get(id) ?? [], sheets: sheetsFor(id), signal,
+      onProgress: p => update(id, { status: "reading", done: p.done, total: p.total, note: p.note }),
+      addFlipPages: pages => { const errors = latest.current.runFlip(current => pages.reduce((state, page) => state.pages.some(x => x.sheet === page.sheet) ? state : addPage(state, page), current)); return errors ? Object.values(errors)[0] ?? "A sheet could not be added to Drawing Flip." : null; },
+    });
     const message = record(outcome);
     if (message) throw new Error(message);
     update(id, { status: outcome.input.error && !outcome.input.drafts.length ? "failed" : "done", found: outcome.input.drafts.filter(d => d.kind === "scope").length, note: outcome.input.error ?? (outcome.failures.length ? `${outcome.failures.length} request(s) failed; the run notes list the pages.` : "") });
