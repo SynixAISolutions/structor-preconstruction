@@ -79,3 +79,4 @@
 @keyframes stored-mark-in { 0% { box-shadow: 0 0 0 14px rgb(240 90 34 / 0); background: rgb(240 90 34 / .45); } 100% { box-shadow: 0 0 0 3px rgb(240 90 34 / .18); background: rgb(240 90 34 / .22); } }
 @media (prefers-reduced-motion: reduce) { .stored-viewer-mark { animation: none; } }
 .stored-viewer-status { margin: 0; color: var(--muted); font-size: 12px; }
+.stored-viewer-status.warning { padding: 8px 12px; border-radius: 8px; background: #fff6e5; color: #7a4b00; }

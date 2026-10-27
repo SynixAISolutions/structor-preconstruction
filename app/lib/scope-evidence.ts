@@ -20,12 +20,16 @@ export type Evidence = {
   label: string;
   /** The file as the source names it, for when it isn't in Project files. */
   documentName: string;
-  /** The stored file to open; null when it isn't in Project files. */
+  /** The stored file to open; null when it can't be opened (see `missing`). */
   doc: StoredDocument | null;
+  /** Why `doc` is null: the file isn't in Project files, or the manual is there but has no such section. */
+  missing: "file" | "section" | null;
   /** 1-based page to open. */
   page: number;
-  /** The words to find and highlight on the page; null when only an outline or the page is known. */
-  quote: string | null;
+  /** The words to find and highlight on the page: every quote the AI read there. Empty when only an outline or the page is known. */
+  quotes: string[];
+  /** The AI read some of the words from the sheet image (no text layer): the viewer reads the image with OCR. */
+  fromImage: boolean;
   /** A Drawing Flip outline on that page, 0–1 from its top-left. */
   outline: Point[] | null;
   /** A specification paragraph to look for in these manual pages ("3.2"); `page` is the section's first. */
@@ -51,15 +55,19 @@ export function scopeEvidence(item: Pick<ScopeItem, "id" | "source">, records: {
   const evidence: Evidence[] = [];
   const [head, ...rest] = item.source.split("·").map(part => part.trim());
 
-  // 1. What the AI read: every citation of the accepted finding that became this item.
+  // 1. What the AI read: every citation of the accepted finding that became this item, one source per page.
   for (const draft of records.extraction.drafts) {
     if (draft.kind !== "scope" || draft.acceptedId !== item.id) continue;
     for (const c of draft.citations) {
-      const key = `quote:${c.document}:${c.page}:${c.quote}`;
-      if (evidence.some(e => e.key === key)) continue;
+      const key = `quote:${c.document}:${c.page}`, there = evidence.find(e => e.key === key);
+      if (there) {
+        if (!there.quotes.includes(c.quote)) there.quotes.push(c.quote);
+        there.fromImage ||= c.verification === "image";
+        continue;
+      }
       const doc = storedByName(documents, c.document);
       evidence.push({ key, kind: "quote", label: c.sheet ? `${c.sheet} · p. ${c.page}` : `${shortName(c.document, doc)} p. ${c.page}`,
-        documentName: c.document, doc, page: c.page, quote: c.quote, outline: null, paragraph: null });
+        documentName: c.document, doc, missing: doc ? null : "file", page: c.page, quotes: [c.quote], fromImage: c.verification === "image", outline: null, paragraph: null });
     }
   }
 
@@ -70,9 +78,10 @@ export function scopeEvidence(item: Pick<ScopeItem, "id" | "source">, records: {
     if (!page) continue;
     const byId = documents.find(d => d.id === page.documentId);
     const sheet = byId ? null : findSheet(documents, page.sheet);
+    const doc = byId ?? sheet?.doc ?? null;
     evidence.push({ key: `region:${region.id}`, kind: "region", label: head === page.sheet ? item.source : `${page.sheet} · ${region.number}`,
-      documentName: page.documentName, doc: byId ?? sheet?.doc ?? null, page: byId ? page.pageNumber : sheet?.sheet.page ?? page.pageNumber,
-      quote: null, outline: region.polygon, paragraph: null });
+      documentName: page.documentName, doc, missing: doc ? null : "file", page: byId ? page.pageNumber : sheet?.sheet.page ?? page.pageNumber,
+      quotes: [], fromImage: false, outline: region.polygon, paragraph: null });
   }
   if (evidence.length || !head) return evidence;
 
@@ -80,12 +89,14 @@ export function scopeEvidence(item: Pick<ScopeItem, "id" | "source">, records: {
   if (SECTION.test(head)) {
     const found = findSection(documents, head);
     const label = rest.join(" · ").replace(/^§\s*/, "");
-    return [{ key: `section:${item.source}`, kind: "section", label: item.source, documentName: "the project manual", doc: found?.doc ?? null,
-      page: found?.section.first ?? 1, quote: null, outline: null,
+    // The manual may be stored but not hold the section the item names (a reference typed wrong, or a sample).
+    const manuals = latestDocuments(documents).filter(d => d.kind === "manual");
+    return [{ key: `section:${item.source}`, kind: "section", label: item.source, documentName: found?.doc.name ?? (manuals.map(d => d.name).join(", ") || "the project manual"),
+      doc: found?.doc ?? null, missing: found ? null : manuals.length ? "section" : "file", page: found?.section.first ?? 1, quotes: [], fromImage: false, outline: null,
       paragraph: found && label ? { label, pages: { first: found.section.first, last: found.section.last } } : null }];
   }
   const sheet = findSheet(documents, head);
-  return sheet ? [{ key: `sheet:${item.source}`, kind: "sheet", label: item.source, documentName: sheet.doc.name, doc: sheet.doc, page: sheet.sheet.page, quote: null, outline: null, paragraph: null }] : [];
+  return sheet ? [{ key: `sheet:${item.source}`, kind: "sheet", label: item.source, documentName: sheet.doc.name, doc: sheet.doc, missing: null, page: sheet.sheet.page, quotes: [], fromImage: false, outline: null, paragraph: null }] : [];
 }
 
 /**

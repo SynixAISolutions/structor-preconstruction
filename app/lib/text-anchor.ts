@@ -88,8 +88,34 @@ function readingOrder(boxes: TextBox[]): TextBox[] {
   return lines.flatMap(line => line.sort((a, b) => a.x - b.x));
 }
 
+/**
+ * The closest place `pattern` is written in `text` with at most `maxErrors` letters wrong, missing or extra
+ * (Sellers' edit-distance search), for words read by OCR ("CERAM1C TlLE"). Null when nothing is that close.
+ */
+export function approximateFind(text: string, pattern: string, maxErrors: number): { at: number; end: number } | null {
+  const m = pattern.length;
+  if (!m) return null;
+  let prev = Array.from({ length: m + 1 }, (_, i) => i), prevStart = new Array<number>(m + 1).fill(0);
+  let best: { at: number; end: number; errors: number } | null = null;
+  for (let j = 1; j <= text.length; j++) {
+    const cur = [0], curStart = [j];
+    for (let i = 1; i <= m; i++) {
+      const swap = prev[i - 1] + (pattern[i - 1] === text[j - 1] ? 0 : 1), extra = prev[i] + 1, missing = cur[i - 1] + 1;
+      if (swap <= extra && swap <= missing) { cur[i] = swap; curStart[i] = prevStart[i - 1]; }
+      else if (extra <= missing) { cur[i] = extra; curStart[i] = prevStart[i]; }
+      else { cur[i] = missing; curStart[i] = curStart[i - 1]; }
+    }
+    if (cur[m] <= maxErrors && (!best || cur[m] < best.errors)) best = { at: curStart[m], end: j, errors: cur[m] };
+    prev = cur; prevStart = curStart;
+  }
+  return best && { at: best.at, end: best.end };
+}
+
+/** Letters OCR may get wrong in a phrase of this length: one in five, at most four. */
+const ocrErrors = (length: number) => Math.min(4, Math.floor(length / 5));
+
 /** Where each part of a quote is written in the boxes, read in this order; null for a part that isn't. */
-function placeParts(order: TextBox[], parts: string[]): (Box | null)[] {
+function placeParts(order: TextBox[], parts: string[], fuzzy: boolean): (Box | null)[] {
   let page = "";
   const spans = order.map(box => { const start = page.length; page += squeeze(box.str); return { start, end: page.length, box }; });
   return parts.map(quote => {
@@ -98,9 +124,10 @@ function placeParts(order: TextBox[], parts: string[]): (Box | null)[] {
     for (const tryWords of [words, words.slice(0, 8), words.slice(0, 5)]) {
       const phrase = squeeze(tryWords.join(" "));
       if (phrase.length < 6) break;
-      const at = page.indexOf(phrase);
-      if (at < 0) continue;
-      const covered = spans.filter(s => s.end > at && s.start < at + phrase.length).map(s => part(s.box, Math.max(0, at - s.start), Math.min(s.end, at + phrase.length) - s.start, s.end - s.start));
+      const exact = page.indexOf(phrase);
+      const found = exact >= 0 ? { at: exact, end: exact + phrase.length } : fuzzy ? approximateFind(page, phrase, ocrErrors(phrase.length)) : null;
+      if (!found) continue;
+      const covered = spans.filter(s => s.end > found.at && s.start < found.end).map(s => part(s.box, Math.max(0, found.at - s.start), Math.min(s.end, found.end) - s.start, s.end - s.start));
       if (covered.length) return padded(union(covered));
     }
     return null;
@@ -111,24 +138,70 @@ function placeParts(order: TextBox[], parts: string[]): (Box | null)[] {
  * Where a sentence or note is written: one box over the words of each part (a quote "A … B" has two). The PDF's
  * own text order first, the order the AI's quote was checked in; then reading order, for a note stored out of order.
  */
-function findText(boxes: TextBox[], quote: string): Box[] {
+function findText(boxes: TextBox[], quote: string, fuzzy: boolean): Box[] {
   const kept = boxes.filter(b => squeeze(b.str));
   const parts = quote.split(/\.{3}|…/).map(p => p.trim()).filter(p => squeeze(p).length >= 6);
   if (!parts.length) return [];
   let best: Box[] = [];
   for (const order of [kept, readingOrder(kept)]) {
-    const found = placeParts(order, parts).filter((b): b is Box => !!b);
+    const found = placeParts(order, parts, fuzzy).filter((b): b is Box => !!b);
     if (found.length === parts.length) return found;
     if (found.length > best.length) best = found;
   }
   return best;
 }
 
-/** Where a quote is on a sheet: every place for a tag, the written place for a sentence; empty when it isn't in the text. */
-export function findOnSheet(boxes: TextBox[], quote: string, max = MAX_TAG_MARKS): Box[] {
+/**
+ * Where a quote is on a sheet: every place for a tag, the written place for a sentence; empty when it isn't in the
+ * text. `fuzzy` is for words read by OCR (sheetWords): a sentence may then be a few letters off.
+ */
+export function findOnSheet(boxes: TextBox[], quote: string, max = MAX_TAG_MARKS, { fuzzy = false } = {}): Box[] {
   const q = norm(quote);
   if (!q) return [];
-  return isTag(q) ? findTag(boxes, q, max) : findText(boxes, q);
+  return isTag(q) ? findTag(boxes, q, max) : findText(boxes, q, fuzzy);
+}
+
+/** Print size OCR reads well (27 Oct, A12.1: at 155 dpi the finish schedule came back garbled, at 300 dpi 90%+ right). */
+export const OCR_DPI = 300;
+const OCR_TILE_PX = 2400, OCR_OVERLAP = 0.02;
+
+/**
+ * How to cut a page `width` × `height` points (1/72") into overlapping tiles OCR reads at OCR_DPI: each tile's
+ * place on the page (0–1, reading order) and the pixel size of its longest side. A 42" × 30" sheet is 6 × 4.
+ */
+export function ocrTiles(width: number, height: number): { boxes: Box[]; size: number } {
+  const inchesW = width / 72, inchesH = height / 72;
+  const cols = Math.max(1, Math.ceil(inchesW * OCR_DPI / OCR_TILE_PX)), rows = Math.max(1, Math.ceil(inchesH * OCR_DPI / OCR_TILE_PX));
+  const w = Math.min(1, 1 / cols + OCR_OVERLAP), h = Math.min(1, 1 / rows + OCR_OVERLAP);
+  const boxes: Box[] = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) boxes.push({ x: Math.min(1 - w, Math.max(0, c / cols - OCR_OVERLAP / 2)), y: Math.min(1 - h, Math.max(0, r / rows - OCR_OVERLAP / 2)), width: w, height: h });
+  return { boxes, size: Math.ceil(Math.max(w * inchesW, h * inchesH) * OCR_DPI) };
+}
+
+/** What OCR read on one tile of a sheet: the tile's place on the page (0–1), its size in pixels, and its words. */
+export type OcrTile = { box: Box; width: number; height: number; words: { text: string; confidence: number; bbox: { x0: number; y0: number; x1: number; y1: number } }[] };
+
+/**
+ * The words OCR read on a sheet's tiles, as TextBoxes of the whole page in reading order. Tiles overlap so no
+ * word is cut in two; a word read on two tiles is kept from the tile whose middle it is nearest. Words OCR
+ * isn't sure of (below `minConfidence` of 100) are left out.
+ */
+export function sheetWords(tiles: OcrTile[], minConfidence = 40): TextBox[] {
+  const middle = (b: Box) => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
+  const words: TextBox[] = [];
+  tiles.forEach((tile, index) => {
+    for (const word of tile.words) {
+      if (!squeeze(word.text) || word.confidence < minConfidence) continue;
+      const x = tile.box.x + (word.bbox.x0 / tile.width) * tile.box.width, y = tile.box.y + (word.bbox.y0 / tile.height) * tile.box.height;
+      const w = ((word.bbox.x1 - word.bbox.x0) / tile.width) * tile.box.width, h = ((word.bbox.y1 - word.bbox.y0) / tile.height) * tile.box.height;
+      const cx = x + w / 2, cy = y + h / 2;
+      const nearest = tiles.map((t, i) => ({ i, inside: cx >= t.box.x && cx <= t.box.x + t.box.width && cy >= t.box.y && cy <= t.box.y + t.box.height, d: Math.hypot(cx - middle(t.box).x, cy - middle(t.box).y) }))
+        .filter(t => t.inside).sort((a, b) => a.d - b.d)[0];
+      if (nearest && nearest.i !== index) continue;
+      words.push({ str: word.text, x, y, w, h });
+    }
+  });
+  return readingOrder(words);
 }
 
 export const boxPolygon = (b: Box): Point[] => rectangle(b.x, b.y, b.width, b.height);

@@ -15,8 +15,9 @@ const documents = [manual, manual2, drawings];
 const extraction = { runs: [], drafts: [
   { kind: "scope", id: "d1", acceptedId: "s-ai", citations: [
     { document: "Project manual.pdf", page: 441, sheet: null, quote: "Level 4: At panel surfaces exposed to view." },
-    { document: "Drawing set.pdf", page: 46, sheet: "A1.1", quote: "GYP BD TYPE X" },
+    { document: "Drawing set.pdf", page: 46, sheet: "A1.1", quote: "GYP BD TYPE X", verification: "image" },
     { document: "Project manual.pdf", page: 441, sheet: null, quote: "Level 4: At panel surfaces exposed to view." },
+    { document: "Project manual.pdf", page: 441, sheet: null, quote: "Level 5: Where indicated." },
   ] },
   { kind: "scope", id: "d2", acceptedId: null, citations: [{ document: "Project manual.pdf", page: 9, sheet: null, quote: "Pending, not in a bid form" }] },
 ] };
@@ -25,16 +26,16 @@ const flip = { pages: [{ id: "pg", sheet: "CIV0102", documentId: "sample-set", d
 ] };
 const of = (id, source) => S.scopeEvidence({ id, source }, { extraction, flip }, documents);
 
-// 1. What the AI read: each quote once, in the latest revision of the file it names.
+// 1. What the AI read: one source per page with every quote on it (each once), in the latest revision of the file it names.
 const ai = of("s-ai", "09 29 00 · §3.6");
-assert.deepEqual(ai.map(e => [e.kind, e.label, e.page, e.quote]), [["quote", "Manual p. 441", 441, "Level 4: At panel surfaces exposed to view."], ["quote", "A1.1 · p. 46", 46, "GYP BD TYPE X"]]);
+assert.deepEqual(ai.map(e => [e.kind, e.label, e.page, e.quotes, e.fromImage]), [["quote", "Manual p. 441", 441, ["Level 4: At panel surfaces exposed to view.", "Level 5: Where indicated."], false], ["quote", "A1.1 · p. 46", 46, ["GYP BD TYPE X"], true]], "Words the AI read off a sheet image are marked for OCR");
 assert.equal(ai[0].doc.id, "man2", "The newest revision of the manual");
 assert.equal(ai[1].doc.id, "dwg");
 assert.equal(of("s-ai", "").length, 2, "The AI's quotes don't depend on the typed reference");
 
 // 2. A Drawing Flip region: its outline on the stored sheet with that number.
 const [region] = of("s-region", "CIV0102 · Keynote 1");
-assert.deepEqual([region.kind, region.label, region.doc.id, region.page, region.quote], ["region", "CIV0102 · Keynote 1", "dwg", 12, null]);
+assert.deepEqual([region.kind, region.label, region.doc.id, region.page, region.quotes], ["region", "CIV0102 · Keynote 1", "dwg", 12, []]);
 assert.equal(region.outline.length, 3);
 
 // 3. The typed reference: a section opens the manual at its first page and looks for the paragraph; a sheet opens the sheet.
@@ -48,8 +49,12 @@ assert.deepEqual(of("s-x", ""), []);
 
 // Files that aren't in Project files are still named, so the viewer can say what to upload.
 const missing = S.scopeEvidence({ id: "s-ai", source: "" }, { extraction, flip }, []);
-assert.deepEqual(missing.map(e => [e.doc, e.documentName]), [[null, "Project manual.pdf"], [null, "Drawing set.pdf"]]);
-assert.equal(S.scopeEvidence({ id: "s-spec", source: "02 41 19 · §3.2" }, { extraction, flip }, [])[0].doc, null);
+assert.deepEqual(missing.map(e => [e.doc, e.missing, e.documentName]), [[null, "file", "Project manual.pdf"], [null, "file", "Drawing set.pdf"]]);
+assert.deepEqual(["doc", "missing"].map(k => S.scopeEvidence({ id: "s-spec", source: "02 41 19 · §3.2" }, { extraction, flip }, [])[0][k]), [null, "file"]);
+// The manual is stored but doesn't hold the section the item names (the sample's 02 41 19; the real manual has 02 41 16).
+const absent = of("s-spec", "02 41 16 · §3.1")[0];
+assert.deepEqual([absent.doc, absent.missing, absent.documentName], [null, "section", "Project manual.pdf"], "Said as a missing section, not a missing file");
+assert.equal(section.missing, null);
 const other = (document) => S.scopeEvidence({ id: "s-o", source: "" }, { extraction: { runs: [], drafts: [{ kind: "scope", acceptedId: "s-o", citations: [{ document, page: 7, sheet: null, quote: "x" }] }] }, flip }, [])[0].label;
 assert.equal(other("Geotechnical report.pdf"), "Geotechnical report p. 7", "Any other file goes by its name");
 assert.equal(other("Hazardous materials survey and abatement report.pdf"), "Hazardous materials survey… p. 7", "A long name is shortened");
