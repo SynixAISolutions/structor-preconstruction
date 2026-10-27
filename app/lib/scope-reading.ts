@@ -10,7 +10,7 @@ import { consolidateScope } from "./ai-more-client";
 import type { PageInput } from "./drawing-flip";
 import type { ManualSection } from "./manual-sections";
 import type { TradePackage } from "./procurement";
-import type { RegisterRow, StoredDocument, StoredSection } from "./project-files";
+import type { RegisterRow, VolumeSection } from "./project-files";
 import { readPageTextBoxes, readStoredText, renderStoredPage } from "./project-files-client";
 import { pinFindings, type TextBox } from "./text-anchor";
 
@@ -26,23 +26,35 @@ export const mergeRuns = (a: ScopeRunResult, b: ScopeRunResult): ScopeRunResult 
 };
 
 /**
- * Reads a trade: `sections` from `manual`, then `sheets`. `addFlipPages` puts the sheets that carry a
- * highlight on Drawing Flip (it returns why it couldn't, or null). Resolves to the run to record, or
- * throws when the trade has nothing to read.
+ * Reads a trade: its `sections`, each from the specification volume it is in (lib/project-files
+ * specificationSections), then `sheets`. `addFlipPages` puts the sheets that carry a highlight on Drawing
+ * Flip (it returns why it couldn't, or null). Resolves to the run to record, or throws when the trade has
+ * nothing to read.
  */
 export async function readTradeScope(args: {
-  pkg: Pick<TradePackage, "id" | "name" | "code">; manual: StoredDocument | null; sections: StoredSection[]; sheets: RegisterRow[];
+  pkg: Pick<TradePackage, "id" | "name" | "code">; sections: VolumeSection[]; sheets: RegisterRow[];
   signal: AbortSignal; onProgress: (progress: TradeReadProgress) => void; addFlipPages: (pages: PageInput[]) => string | null;
 }): Promise<ScopeRunResult> {
-  const { pkg, manual, sections: stored, sheets, signal, onProgress } = args;
+  const { pkg, sections: stored, sheets, signal, onProgress } = args;
   onProgress({ note: stored.length ? "Loading section text…" : "Reading drawing sheets…", done: 0, total: 0 });
   let outcome: ScopeRunResult | null = null;
-  if (stored.length && manual) {
-    const text = await readStoredText(manual, { first: Math.min(...stored.map(s => s.first)), last: Math.max(...stored.map(s => s.last)) });
-    const sections: ManualSection[] = stored.map(s => ({ section: s.section, title: s.title, firstPage: s.first, lastPage: s.last, pages: text.filter(p => p.page >= s.first && p.page <= s.last && p.text.trim()) })).filter(s => s.pages.length);
-    const total = sections.reduce((n, s) => n + chunkPages(s.pages).length, 0);
+  if (stored.length) {
+    // One reading per volume, so every finding cites the file its words are in.
+    const volumes = await Promise.all([...Map.groupBy(stored, s => s.doc.id).values()].map(async group => {
+      const doc = group[0].doc;
+      const text = await readStoredText(doc, { first: Math.min(...group.map(s => s.first)), last: Math.max(...group.map(s => s.last)) });
+      const sections: ManualSection[] = group.map(s => ({ section: s.section, title: s.title, firstPage: s.first, lastPage: s.last, pages: text.filter(p => p.page >= s.first && p.page <= s.last && p.text.trim()) })).filter(s => s.pages.length);
+      return { doc, sections, chunks: sections.reduce((n, s) => n + chunkPages(s.pages).length, 0) };
+    }));
+    const total = volumes.reduce((n, v) => n + v.chunks, 0);
     onProgress({ note: "", done: 0, total });
-    outcome = await extractTradeScope({ pkg, manual: { name: manual.name, pageCount: manual.pageCount }, sections, signal, onProgress: (done, all) => onProgress({ note: "", done, total: all }) });
+    let before = 0;
+    for (const { doc, sections, chunks } of volumes) {
+      if (!sections.length || signal.aborted) continue;
+      const read = await extractTradeScope({ pkg, manual: { name: doc.name, pageCount: doc.pageCount }, sections, signal, onProgress: done => onProgress({ note: "", done: before + done, total }) });
+      before += chunks;
+      outcome = outcome ? mergeRuns(outcome, read) : read;
+    }
   }
   // One finding per paragraph → one line per thing the subcontractor prices. Specification findings
   // only: drawing findings are already one per item, and their highlights point at their keys.

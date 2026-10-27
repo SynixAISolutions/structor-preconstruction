@@ -45,6 +45,20 @@ const stopped = { trades: [{ packageId: proc.packages[0].id, status: "done" }, {
 assert.deepEqual(A.stillToRead(reads, stopped).map(t => t.pkg.name), ["Integrated Automation Facility Controls", "Rail Tracks"], "Finished trades aren't read twice");
 assert.equal(A.stillToRead(reads, null).length, 3);
 
+// A manual in volumes (Marcel, 24 Oct: "Project manual V1, project manual V2", not combined): every volume is read.
+const F = await import("../lib/project-files.ts");
+const vol1 = doc("Project manual Vol 1", "manual", { sections: [sec("00 01 10", "Table of contents", 1), sec("09 29 00", "Gypsum Board", 5)] });
+const vol2 = doc("Project manual Vol 2", "manual", { sections: [sec("09 51 13", "Acoustical Panel Ceilings", 3), sec("25 50 00", "Integrated Automation Facility Controls", 9), { section: "09 29 00", title: "Gypsum Board", first: 30, last: 30 }] });
+assert.equal(A.runTarget([vol2, vol1, drawings]).key, "Project manual Vol 1|Project manual Vol 2|arch", "Both volumes are in the run");
+const specs = F.specificationSections([vol2, vol1]);
+assert.deepEqual(specs.map(s => [s.section, s.doc.id, s.first]), [["00 01 10", "Project manual Vol 1", 1], ["09 29 00", "Project manual Vol 1", 5], ["09 51 13", "Project manual Vol 2", 3], ["25 50 00", "Project manual Vol 2", 9]], "Vol 1 then Vol 2; a section listed in both counts once, where it runs longer");
+const volReads = A.tradesToRead(proc.packages, [vol2, vol1, drawings]);
+assert.deepEqual(volReads.map(t => [t.pkg.name, t.sections.map(s => `${s.section} in ${s.doc.id}`)]), [["Drywall", ["09 29 00 in Project manual Vol 1", "09 51 13 in Project manual Vol 2"]], ["Integrated Automation Facility Controls", ["25 50 00 in Project manual Vol 2"]]], "A trade reads its sections from whichever volume holds them");
+assert.deepEqual(S.tradesToAdd([], { sections: specs, sheets: [] }).map(t => t.code), ["09 29 00", "25 50 00"], "Trades are suggested from every volume");
+assert.deepEqual([F.findSection([vol1, vol2], "25 50 00")?.doc.id, F.findSection([vol1, vol2], "25 50 00")?.section.first], ["Project manual Vol 2", 9], "A section source opens the volume it is in");
+const vol1rev = doc("Vol 1 rev 2", "manual", { series: "Project manual Vol 1", revision: 2, sections: [sec("09 29 00", "Gypsum Board", 7)] });
+assert.deepEqual(F.specificationSections([vol1, vol2, vol1rev]).filter(s => s.section === "09 29 00").map(s => [s.doc.id, s.first]), [["Vol 1 rev 2", 7]], "A volume's newest revision replaces it");
+
 // Findings go straight into the bid forms as drafts to approve; lines already there are set aside.
 const drywall = proc.packages[0].id;
 proc = freeze(P.addScope(proc, { packageId: drywall, title: "Gypsum board, Type X", origin: "estimator" }, "Sadie", at));

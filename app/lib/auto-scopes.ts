@@ -11,7 +11,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { addRunToBidForms, recordRun, type ExtractionState } from "./extraction";
 import { addPage, DrawingFlipRuleError, type DrawingFlipState } from "./drawing-flip";
 import { addPackage, type Procurement } from "./procurement";
-import { findManual, drawingRegister, type StoredDocument } from "./project-files";
+import { drawingRegister, specificationSections, type StoredDocument } from "./project-files";
 import { useProjectDocuments } from "./project-files-client";
 import { tradesToAdd } from "./project-scopes";
 import { readTradeScope } from "./scope-reading";
@@ -68,13 +68,12 @@ export function ensureRun(projectId: string, documents: StoredDocument[]) {
 async function start(projectId: string, documents: StoredDocument[], target: { key: string; documents: StoredDocument[] }, previous: AutoRun | null) {
   active = projectId;
   window.addEventListener("beforeunload", holdTab);
-  const manual = findManual(documents);
   const at = () => new Date().toISOString();
 
   // 1. The bid packages the files call for, standard trades and Marcel's CSI groups, added as found.
   let procurement = readDraft<Procurement>(projectId, "procurement", sampleProcurement);
   const newTrades: string[] = [];
-  for (const trade of tradesToAdd(procurement.packages, { sections: manual?.sections ?? [], sheets: drawingRegister(documents) })) {
+  for (const trade of tradesToAdd(procurement.packages, { sections: specificationSections(documents), sheets: drawingRegister(documents) })) {
     try { procurement = addPackage(procurement, trade); newTrades.push(trade.name); } catch { /* a trade of that name exists */ }
   }
   if (newTrades.length) writeDraft(projectId, "procurement", procurement);
@@ -99,7 +98,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
       setTrade(pkg.id, { status: "reading", note: "" });
       try {
         const outcome = await readTradeScope({
-          pkg, manual, sections, sheets, signal: controller.signal,
+          pkg, sections, sheets, signal: controller.signal,
           onProgress: p => { const note = p.total ? `Reading part ${Math.min(p.done + 1, p.total)} of ${p.total}` : p.note; if (run.trades.find(t => t.packageId === pkg.id)?.note !== note) setTrade(pkg.id, { note }); },
           addFlipPages: pages => {
             try {

@@ -2,7 +2,7 @@
 // as it finds something new it should just add it to the scope list"): which upload starts a run, which trades
 // it reads, and how a run is told. Pure; lib/auto-scopes runs it in the browser.
 
-import { drawingRegister, findManual, latestDocuments, type StoredDocument, type StoredSection } from "./project-files";
+import { drawingRegister, latestDocuments, specificationSections, type StoredDocument, type VolumeSection } from "./project-files";
 import type { TradePackage } from "./procurement";
 import { sectionsByTrade, sheetsForTrade } from "./project-scopes";
 
@@ -35,11 +35,11 @@ export function runTarget(docs: StoredDocument[], from = AUTO_SCOPES_FROM): { ke
   return { key: latest.map(d => d.id).sort().join("|"), documents: latest };
 }
 
-export type TradeToRead<P> = { pkg: P; sections: StoredSection[]; sheets: ReturnType<typeof drawingRegister> };
-/** Every trade with specification sections or drawing sheets to read, in bid-package order. */
+export type TradeToRead<P> = { pkg: P; sections: VolumeSection[]; sheets: ReturnType<typeof drawingRegister> };
+/** Every trade with specification sections (from every specification volume) or drawing sheets to read, in bid-package order. */
 export function tradesToRead<P extends Pick<TradePackage, "id" | "division" | "code">>(packages: P[], docs: StoredDocument[]): TradeToRead<P>[] {
-  const manual = findManual(docs), register = drawingRegister(docs);
-  const assigned = manual ? sectionsByTrade(manual.sections, packages) : new Map<string, StoredSection[]>();
+  const register = drawingRegister(docs);
+  const assigned = sectionsByTrade(specificationSections(docs), packages);
   return packages.map(pkg => ({ pkg, sections: assigned.get(pkg.id) ?? [], sheets: sheetsForTrade(register, pkg.code) })).filter(t => t.sections.length || t.sheets.length);
 }
 
