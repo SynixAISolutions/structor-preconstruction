@@ -5,12 +5,13 @@
 // open-source OCR engine, runs in this browser on the sheet rendered at 300 dpi in tiles (lib/text-anchor
 // ocrTiles) and gives every word with its box, the same TextBox shape as a text layer (sheetWords). It reads
 // tile by tile and stops once the quotes are found; what it read is kept for the session, so the next quote
-// on the sheet starts from there. The sheet never leaves the browser; only the OCR engine and its English
-// model are downloaded once, from jsDelivr.
+// on the sheet starts from there. The AI scope run uses it too, to check the quotes the AI read from a sheet's
+// image (lib/scope-reading). The sheet never leaves the browser; only the OCR engine and its English model are
+// downloaded once, from jsDelivr.
 
 import type { StoredDocument } from "./project-files";
 import { openStoredPdf, renderStoredRegion } from "./project-files-client";
-import { findOnSheet, MAX_TAG_MARKS, ocrTiles, sheetWords, type Box, type OcrTile } from "./text-anchor";
+import { findOnSheet, MAX_TAG_MARKS, ocrTiles, sheetWords, type Box, type OcrTile, type TextBox } from "./text-anchor";
 
 export type OcrProgress = { done: number; total: number };
 
@@ -53,17 +54,17 @@ function sheetRead(doc: StoredDocument, page: number): Promise<SheetRead> {
 }
 
 /**
- * Where the quotes are printed on a stored page, read by OCR: the marks found, and whether the whole sheet was
- * read (true when a quote isn't there, so "not found" means it isn't printed on the sheet).
+ * Where the quotes are printed on a stored page, read by OCR: the marks found, the words read so far, and whether
+ * the whole sheet was read (true when a quote isn't there, so "not found" means it isn't printed on the sheet).
  */
-export async function findInSheetImage(doc: StoredDocument, page: number, quotes: string[], onProgress?: (progress: OcrProgress) => void): Promise<{ marks: Box[]; wholeSheet: boolean }> {
+export async function findInSheetImage(doc: StoredDocument, page: number, quotes: string[], onProgress?: (progress: OcrProgress) => void, signal?: AbortSignal): Promise<{ marks: Box[]; words: TextBox[]; wholeSheet: boolean }> {
   const read = await sheetRead(doc, page);
   const run = read.queue.then(async () => {
     const look = () => { const words = sheetWords(read.tiles); return quotes.map(q => findOnSheet(words, q, MAX_TAG_MARKS, { fuzzy: true })); };
     let found = look();
     if (found.every(m => m.length)) return found;
     const ocr = await ocrWorker();
-    while (read.tiles.length < read.boxes.length && found.some(m => !m.length)) {
+    while (read.tiles.length < read.boxes.length && found.some(m => !m.length) && !signal?.aborted) {
       onProgress?.({ done: read.tiles.length, total: read.boxes.length });
       const box = read.boxes[read.tiles.length];
       const image = await renderStoredRegion(doc, page, [box.x, box.y, box.width, box.height], read.size);
@@ -76,5 +77,5 @@ export async function findInSheetImage(doc: StoredDocument, page: number, quotes
   });
   read.queue = run.catch(() => {});
   const found = await run;
-  return { marks: found.flat(), wholeSheet: read.tiles.length === read.boxes.length };
+  return { marks: found.flat(), words: sheetWords(read.tiles), wholeSheet: read.tiles.length === read.boxes.length };
 }

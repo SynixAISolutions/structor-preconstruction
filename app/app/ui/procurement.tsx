@@ -60,6 +60,7 @@ import { ScopeSourceDialog } from "./scope-source-dialog";
 import { InlineScopeDrafts } from "./inline-scope-drafts";
 import { ScopeViewTabs, SectionCoverage } from "./section-coverage";
 import { inlineDrafts } from "../../lib/scope-review";
+import { notOnSheet } from "../../lib/extraction";
 import { GeneralScopes } from "./general-scopes";
 import { AiScopeWriter } from "./ai-scope-writer";
 import { ProposalWorkspace } from "./proposal-review";
@@ -166,14 +167,17 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
   }
 
   function approveAll() {
-    const proposals = pendingScopes.filter(d => d.kind === "scope" && d.title.toLowerCase().includes(query.toLowerCase()));
+    const shown = pendingScopes.filter(d => d.kind === "scope" && d.title.toLowerCase().includes(query.toLowerCase()));
+    // A proposal whose quoted words aren't printed on its sheet is accepted on its own, once someone has checked the sheet.
+    const proposals = shown.filter(d => !notOnSheet(d)), flagged = shown.length - proposals.length;
     for (const proposal of proposals) { const message = review.accept(proposal.id, CURRENT_USER); if (message) { notify(message); return; } }
     const drafts = visible.filter(item => item.status === "draft");
     for (const item of drafts) {
       const message = run(current => approveScope(current, item.id, CURRENT_USER));
       if (message) { notify(message); return; }
     }
-    notify(drafts.length + proposals.length ? `${drafts.length + proposals.length} scope items approved.` : "Every visible item is already approved.");
+    const left = flagged ? ` ${flagged} not printed on ${flagged === 1 ? "its" : "their"} sheet left for you to check.` : "";
+    notify((drafts.length + proposals.length ? `${drafts.length + proposals.length} scope items approved.` : "Every visible item is already approved.") + left);
   }
 
   if (!activePackage) return <div className="proc-view"><PageHeader eyebrow={`${projectName} / Project intelligence`} title="Scopes & bid forms" description="Review scope requirements before they reach subcontractors." actions={<><TradePackageControls state={state} run={run} notify={notify}/><AiScopeWriter review={review} notify={notify} onOpenFiles={() => navigate("documents")}/></>}/><ScopeViewTabs value={scopeTab} onChange={setScopeTab}/><div role="tabpanel" id="scope-tab-panel" aria-labelledby={scopeTab === "Section coverage" ? "scope-tab-1" : "scope-tab-0"}>{scopeTab === "Section coverage" ? coverage : <Empty title="No bid packages yet" description="Write scopes with AI suggests trades from your drawings or project manual. Confirm them before reading scopes, or add a trade package yourself."/>}</div></div>;

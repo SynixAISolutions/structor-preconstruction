@@ -5,6 +5,13 @@ import { scopeSources, type ScopeSources } from "../../lib/scope-sources";
 
 export const findingTitle = (draft: Draft): string => draft.kind === "scope" ? draft.title : draft.kind === "region" ? draft.label : draft.item;
 
+/** What the check of a quote the AI read from a sheet image found (lib/text-anchor checkImageQuotes). */
+export const IMAGE_CHECK_NOTES: Record<NonNullable<Citation["verification"]>, string> = {
+  image: "Read from the sheet image and not checked on it: verify the wording, location and dimensions on the sheet.",
+  printed: "Read from the sheet image. Structor found these words printed on the sheet.",
+  "not-printed": "Not printed on the sheet: Structor read the whole sheet image and these words aren't on it. Check this finding against the sheet before accepting it.",
+};
+
 export function findingCitationSources(draft: Draft, citation: Citation, flip: DrawingFlipState, sections: SpecSection[]): ScopeSources {
   const source = draft.kind === "scope" ? draft.source : citation.sheet ?? "";
   const scopeId = draft.kind === "scope" ? draft.acceptedId ?? draft.id : draft.id;

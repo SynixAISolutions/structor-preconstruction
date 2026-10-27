@@ -32,9 +32,18 @@ export type Citation = {
   sheet: string | null;
   /** The words on the page the finding relies on, as read. */
   quote: string;
-  /** Image-only sheets have no text layer to verify the OCR quote automatically. */
-  verification?: "image";
+  /**
+   * A quote the AI read from the sheet image, not its text layer: "image" not yet checked, "printed" found by
+   * OCR on the sheet image, "not-printed" not on it anywhere (OCR read the whole sheet; lib/text-anchor
+   * checkImageQuotes).
+   */
+  verification?: ImageCheck;
 };
+export type ImageCheck = "image" | "printed" | "not-printed";
+const IMAGE_CHECKS: ImageCheck[] = ["image", "printed", "not-printed"];
+
+/** A finding whose every quote Structor looked for on its sheet image and couldn't find: held for a person to check. */
+export const notOnSheet = (draft: { citations: Citation[] }): boolean => draft.citations.length > 0 && draft.citations.every(c => c.verification === "not-printed");
 
 export type DraftKind = "scope" | "region" | "quantity";
 export type DraftStatus = "pending-review" | "accepted" | "rejected";
@@ -150,7 +159,7 @@ export function cleanCitations(citations: unknown, documents: { name: string; pa
       if (page > doc.pages) fail(`${what}: ${document} has ${doc.pages} pages, not ${page}.`);
     }
     const sheet = text(c?.sheet ?? "", "sheet", `${what}: the sheet`, true) || null;
-    return { document, page, sheet, quote: text(c?.quote, "quote", `${what}: the quoted words`), ...(c.verification === "image" ? { verification: "image" as const } : {}) };
+    return { document, page, sheet, quote: text(c?.quote, "quote", `${what}: the quoted words`), ...(IMAGE_CHECKS.includes(c.verification!) ? { verification: c.verification } : {}) };
   });
 }
 
@@ -339,13 +348,16 @@ const sameLine = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, "
  * The automatic run's step after reading (Marcel, 24 Oct: whatever the AI finds goes straight into the scope
  * list, and the team approves it): each of the run's scope findings becomes a draft line in its trade's bid
  * form, for Approve scopes. A line the bid form already has (same words, in that trade or every trade) is
- * set aside as a duplicate, so a new revision only adds what is new. Regions and quantities stay for review.
+ * set aside as a duplicate, so a new revision only adds what is new. A finding whose quoted words aren't printed
+ * on its sheet (notOnSheet) is held: it waits in its trade, flagged, for a person to accept or reject. Regions
+ * and quantities stay for review.
  */
-export function addRunToBidForms(records: Pick<ReviewRecords, "extraction" | "procurement">, runId: string, at = now()): Pick<ReviewRecords, "extraction" | "procurement"> & { added: number; duplicates: number } {
+export function addRunToBidForms(records: Pick<ReviewRecords, "extraction" | "procurement">, runId: string, at = now()): Pick<ReviewRecords, "extraction" | "procurement"> & { added: number; duplicates: number; held: number } {
   let { extraction, procurement } = records;
-  let added = 0, duplicates = 0;
+  let added = 0, duplicates = 0, held = 0;
   for (const draft of records.extraction.drafts) {
     if (draft.runId !== runId || draft.kind !== "scope" || draft.status !== "pending-review") continue;
+    if (notOnSheet(draft)) { held++; continue; }
     const there = procurement.scopes.filter(s => s.packageId === draft.packageId || s.allTrades).map(s => sameLine(s.title));
     if (there.includes(sameLine(draft.title))) {
       extraction = rejectDraft(extraction, draft.id, "duplicate", "Already in the bid form.", AI_ACTOR, at);
@@ -358,7 +370,7 @@ export function addRunToBidForms(records: Pick<ReviewRecords, "extraction" | "pr
     extraction = putDraft(extraction, { ...draft, status: "accepted", reviewedBy: AI_ACTOR, reviewedAt: at, acceptedId, history: [...draft.history, { kind: "accepted", at, by: AI_ACTOR }] });
     added++;
   }
-  return { extraction, procurement, added, duplicates };
+  return { extraction, procurement, added, duplicates, held };
 }
 
 /** Puts a rejected finding back in the review queue. An accepted one can't come back: change it where it now lives. */

@@ -2,8 +2,9 @@
 // places; "it should go for the information", the keynotes and notes, not the drawing itself). A drawing PDF
 // has a text layer with the exact position of every word, so a finding's quote is looked up there: a keynote
 // or tag ("SF-4", "09 29 00.A1") is marked everywhere it is printed, a sentence or note where it is written.
-// What isn't in the text layer (a scanned sheet, words read from the image) keeps the AI's outline, marked
-// approximate. Pure: the boxes come from lib/project-files-client readPageTextBoxes.
+// What isn't in the text layer (a scanned sheet, words read from the image) is looked up in the words OCR read
+// off the sheet image (lib/sheet-ocr); what neither holds keeps the AI's outline, marked approximate. Pure: the
+// boxes come from lib/project-files-client readPageTextBoxes and sheetWords.
 
 import { rectangle, type Point } from "./drawing-flip";
 import type { DraftInput } from "./extraction";
@@ -207,17 +208,33 @@ export function sheetWords(tiles: OcrTile[], minConfidence = 40): TextBox[] {
 export const boxPolygon = (b: Box): Point[] => rectangle(b.x, b.y, b.width, b.height);
 
 /**
+ * The image quotes on one page of a drawing reading, checked against the words OCR read on that sheet image
+ * (27 Oct, live: about half of what the AI quoted from A12.1's image isn't printed on it): "printed" where the
+ * words are found, "not-printed" where they aren't and OCR read the `wholeSheet`. Otherwise they stay "image".
+ */
+export function checkImageQuotes(drafts: DraftInput[], at: { document: string; page: number }, words: TextBox[], wholeSheet: boolean): DraftInput[] {
+  return drafts.map(draft => !draft.citations.some(c => c.verification === "image" && c.document === at.document && c.page === at.page) ? draft : {
+    ...draft,
+    citations: draft.citations.map(c => c.verification !== "image" || c.document !== at.document || c.page !== at.page ? c
+      : findOnSheet(words, c.quote, 1, { fuzzy: true }).length ? { ...c, verification: "printed" as const }
+      : wholeSheet ? { ...c, verification: "not-printed" as const } : c),
+  });
+}
+
+/**
  * A drawing reading's findings with their marks pinned to the text: each scope finding whose quote is on its
  * sheet gets a mark wherever it's printed (one per place for a tag), replacing the AI's outline for it; an
- * outline left for a finding the text doesn't hold is kept as approximate. `boxes` holds each sheet's text.
+ * outline left for a finding the text doesn't hold is kept as approximate. `boxes` holds each sheet's text;
+ * `ocr` the words read off a sheet's image (sheetWords), looked up allowing OCR's letter slips.
  */
-export function pinFindings(drafts: DraftInput[], boxes: Map<string, TextBox[]>): DraftInput[] {
+export function pinFindings(drafts: DraftInput[], boxes: Map<string, TextBox[]>, ocr: Map<string, TextBox[]> = new Map()): DraftInput[] {
   const pinned = new Set<string>(), marks: DraftInput[] = [];
   for (const draft of drafts) {
     if (draft.kind !== "scope") continue;
-    const cite = draft.citations[0], sheet = cite?.sheet, onSheet = sheet ? boxes.get(sheet) : undefined;
-    if (!sheet || !onSheet?.length || !cite.quote) continue;
-    const found = findOnSheet(onSheet, cite.quote);
+    const cite = draft.citations[0], sheet = cite?.sheet;
+    if (!sheet || !cite.quote) continue;
+    const inText = findOnSheet(boxes.get(sheet) ?? [], cite.quote);
+    const found = inText.length ? inText : findOnSheet(ocr.get(sheet) ?? [], cite.quote, MAX_TAG_MARKS, { fuzzy: true });
     if (!found.length) continue;
     pinned.add(draft.key);
     found.forEach((box, i) => marks.push({

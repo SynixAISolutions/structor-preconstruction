@@ -98,4 +98,38 @@ assert(wall[0].x < 0.44 + (900 / 1120) * 0.56 + 0.001 && wall[0].y < 0.8 && wall
 assert.equal(T.findOnSheet(read, "CERAMIC TILE", 12, { fuzzy: true })[0].y < 0.2, true, "CERAMIC TILE where it is printed");
 assert.deepEqual(T.findOnSheet(read, "MEMBRANE WATERPROOFING", 12, { fuzzy: true }), [], "Words not on the sheet still place nothing");
 
-console.log("Text anchors checked: tags everywhere printed (whole codes only), notes across wrapped lines, opening-words fallback, pinned findings replace AI outlines, leftovers approximate, anchor kept on the accepted highlight.");
+// The AI run checks the quotes it read from a sheet's image (27 Oct, live: about half of A12.1's weren't printed on it).
+const imageCite = (quote, page = 12) => [{ document: "set.pdf", page, sheet: "A12.1", quote, verification: "image" }];
+const read12 = [
+  { kind: "scope", key: "t1", packageId: "drywall", title: "Wall tile", detail: "", source: "A12.1", citations: imageCite("WALL TILE") },
+  { kind: "region", key: "t1-region", packageId: "drywall", label: "Wall tile", sheet: "A12.1", polygon: outline, confidence: 0.5, scopeKeys: ["t1"], citations: imageCite("WALL TILE") },
+  { kind: "scope", key: "t2", packageId: "drywall", title: "Membrane waterproofing", detail: "", source: "A12.1", citations: imageCite("MEMBRANE WATERPROOFING") },
+  { kind: "scope", key: "t3", packageId: "drywall", title: "Glass mosaic tile", detail: "", source: "A12.3", citations: imageCite("GLASS MOSAIC TILE", 13) },
+  { kind: "scope", key: "t4", packageId: "drywall", title: "Ceramic tile", detail: "", source: "A12.1", citations: [{ document: "set.pdf", page: 12, sheet: "A12.1", quote: "CERAMIC TILE" }] },
+];
+const checked = T.checkImageQuotes(read12, { document: "set.pdf", page: 12 }, read, true);
+const check = key => checked.find(d => d.key === key).citations[0].verification;
+assert.equal(check("t1"), "printed", "Words OCR read on the sheet, a letter off (TlLE): printed");
+assert.equal(check("t1-region"), "printed", "Its highlight carries the same check");
+assert.equal(check("t2"), "not-printed", "The whole sheet was read and the words aren't on it");
+assert.equal(check("t3"), "image", "A quote on another page isn't checked against this sheet");
+assert.equal(check("t4"), undefined, "A quote from the text layer needs no check");
+assert.equal(checked[4], read12[4], "Findings with nothing to check pass through unchanged");
+assert.equal(T.checkImageQuotes(read12, { document: "set.pdf", page: 12 }, read, false)[2].citations[0].verification, "image", "Not found in the part read so far: still unchecked");
+
+// No text layer: the marks go on the words OCR read, replacing the AI's outline.
+const ocrMarks = T.pinFindings(checked, new Map(), new Map([["A12.1", read]])).filter(d => d.kind === "region");
+assert.deepEqual(ocrMarks.map(r => [r.key, r.anchor]), [["t1-text-1", "text"], ["t4-text-1", "text"]]);
+assert(Math.abs(ocrMarks[0].polygon[0].y - 0.8) < 0.01, "On WALL TlLE, where OCR read it");
+
+// Recorded with the run; the automatic run holds the unprinted finding back from the bid form.
+const ocrRun = E.recordRun(E.EMPTY_EXTRACTION, proc, { ...run, drafts: checked });
+const ocrScopes = ocrRun.drafts.filter(d => d.kind === "scope");
+assert.deepEqual(ocrScopes.map(d => d.citations[0].verification), ["printed", "not-printed", "image", undefined], "Each quote's check is kept with the finding");
+assert.deepEqual(ocrScopes.map(E.notOnSheet), [false, true, false, false]);
+const toForms = E.addRunToBidForms({ extraction: ocrRun, procurement: proc }, ocrRun.runs[0].id);
+assert.deepEqual([toForms.added, toForms.held], [3, 1], "Printed and unchecked findings go to the bid form; the unprinted one is held");
+assert.equal(toForms.extraction.drafts.find(d => d.title === "Membrane waterproofing").status, "pending-review", "It waits in its trade for a person to accept or reject");
+assert(!toForms.procurement.scopes.some(s => s.title === "Membrane waterproofing"));
+
+console.log("Text anchors checked: tags everywhere printed (whole codes only), notes across wrapped lines, opening-words fallback, pinned findings replace AI outlines, leftovers approximate, anchor kept on the accepted highlight, image quotes checked by OCR and unprinted findings held back.");

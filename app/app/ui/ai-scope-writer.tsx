@@ -5,7 +5,7 @@ import { Sparkles } from "lucide-react";
 import type { ScopeRunResult } from "../../lib/ai-client";
 import { addPage } from "../../lib/drawing-flip";
 import { addPackage } from "../../lib/procurement";
-import { recordRun } from "../../lib/extraction";
+import { notOnSheet, recordRun } from "../../lib/extraction";
 import { drawingRegister, latestDocuments, specificationSections } from "../../lib/project-files";
 import { useProjectDocuments } from "../../lib/project-files-client";
 import { sectionsByTrade, sheetsForTrade, tradesToAdd as packagesToAdd, uncoveredSections } from "../../lib/project-scopes";
@@ -78,7 +78,9 @@ export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnT
     });
     const message = record(outcome);
     if (message) throw new Error(message);
-    update(id, { status: outcome.input.error && !outcome.input.drafts.length ? "failed" : "done", found: outcome.input.drafts.filter(d => d.kind === "scope").length, note: outcome.input.error ?? (outcome.failures.length ? `${outcome.failures.length} request(s) failed; the run notes list the pages.` : "") });
+    const held = outcome.input.drafts.filter(d => d.kind === "scope" && notOnSheet(d)).length;
+    const notes = [outcome.failures.length ? `${outcome.failures.length} request(s) failed; the run notes list the pages.` : "", held ? `${held} flagged: the words they quote aren't printed on the sheet.` : ""].filter(Boolean).join(" ");
+    update(id, { status: outcome.input.error && !outcome.input.drafts.length ? "failed" : "done", found: outcome.input.drafts.filter(d => d.kind === "scope").length, note: outcome.input.error ?? notes });
   }
 
   async function start() {

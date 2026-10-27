@@ -22,3 +22,6 @@
 .pkg-source-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border: 1px solid #f3c3ad; border-radius: 999px; background: #fff3ec; color: #b4441a; font-size: 11px; font-weight: 650; cursor: pointer; }
 .pkg-source-chip:hover, .pkg-source-chip:focus-visible, .pkg-source-chip.active { border-color: #f05a22; background: #f05a22; color: white; }
 .pkg-source-view { display: grid; gap: 10px; }
+/* A finding whose quoted words aren't printed on its sheet (lib/extraction notOnSheet): held for a person to check. */
+.proc-modal-note.warning,.proc-scope-copy>.proc-ai-flag{color:#a4501b}
+.proc-ai-flag{display:block;font-size:11px;line-height:1.5;margin-top:3px}

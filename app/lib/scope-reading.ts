@@ -2,8 +2,9 @@
 
 // Reading one trade's scope with the AI (Marcel, 15 Oct: from the project manual and the drawings): its
 // specification sections, merged into bid-form lines when the findings run long, then up to six of its
-// drawing sheets with their highlights. Shared by Write scopes with AI and the automatic run after an
-// upload (lib/auto-scopes), so both read a trade the same way.
+// drawing sheets with their highlights, the quotes the AI read from a sheet's image checked on it with OCR.
+// Shared by Write scopes with AI and the automatic run after an upload (lib/auto-scopes), so both read a
+// trade the same way.
 
 import { extractDrawingScope, extractTradeScope, chunkPages, type ScopeRunResult } from "./ai-client";
 import { consolidateScope } from "./ai-more-client";
@@ -12,7 +13,8 @@ import type { ManualSection } from "./manual-sections";
 import type { TradePackage } from "./procurement";
 import type { RegisterRow, VolumeSection } from "./project-files";
 import { readPageTextBoxes, readStoredText, renderStoredPage } from "./project-files-client";
-import { pinFindings, type TextBox } from "./text-anchor";
+import { findInSheetImage } from "./sheet-ocr";
+import { checkImageQuotes, pinFindings, type TextBox } from "./text-anchor";
 
 export type TradeReadProgress = { note: string; done: number; total: number };
 
@@ -79,10 +81,24 @@ export async function readTradeScope(args: {
         render: page => renderStoredPage(doc, page, 2000).then(r => { aspects.set(page, r.aspect); return { image: r.image }; }),
       });
       done += rows.length;
+      // Quotes the AI read from a sheet's image, not its text layer, are looked for on the image with OCR: one
+      // that isn't printed there holds its finding back from the bid form (lib/extraction notOnSheet).
+      const ocr = new Map<string, TextBox[]>();
+      for (const p of drawn.drawingPages ?? []) {
+        const quotes = [...new Set(drawn.input.drafts.flatMap(d => d.citations).filter(c => c.verification === "image" && c.document === doc.name && c.page === p.page).map(c => c.quote))];
+        if (!quotes.length || signal.aborted) continue;
+        try {
+          const read = await findInSheetImage(doc, p.page, quotes, r => onProgress({ note: `Checking the AI's quotes on sheet ${p.sheet}: reading the image, part ${r.done + 1} of ${r.total}`, done: 0, total: 0 }), signal);
+          ocr.set(p.sheet, read.words);
+          drawn.input = { ...drawn.input, drafts: checkImageQuotes(drawn.input.drafts, { document: doc.name, page: p.page }, read.words, read.wholeSheet) };
+        } catch (error) {
+          drawn.dropped.push({ what: `Quotes read from sheet ${p.sheet}'s image`, reason: `Not checked on the sheet (${error instanceof Error ? error.message : "OCR failed"}); check them against the sheet yourself.` });
+        }
+      }
       // Marks go where the cited words are printed; the AI's own outlines stay only where the text can't place them.
       const boxes = new Map<string, TextBox[]>();
       await Promise.all((drawn.drawingPages ?? []).map(async p => { try { boxes.set(p.sheet, await readPageTextBoxes(doc, p.page)); } catch { /* no text layer: outlines stay approximate */ } }));
-      drawn.input = { ...drawn.input, drafts: pinFindings(drawn.input.drafts, boxes) };
+      drawn.input = { ...drawn.input, drafts: pinFindings(drawn.input.drafts, boxes, ocr) };
       const highlighted = new Set(drawn.input.drafts.filter(d => d.kind === "region").map(d => (d as { sheet: string }).sheet));
       const flipError = args.addFlipPages((drawn.drawingPages ?? []).filter(p => highlighted.has(p.sheet)).map(p => ({ sheet: p.sheet, title: rows.find(r => r.page === p.page)?.title ?? p.sheet, discipline: rows.find(r => r.page === p.page)?.discipline ?? "", revision: "", documentId: doc.id, documentName: doc.name, pageNumber: p.page, aspect: aspects.get(p.page) })));
       if (flipError) drawn.dropped.push({ what: "Drawing highlights", reason: flipError });
