@@ -4,6 +4,7 @@
 
 import { drawingRegister, latestDocuments, type StoredDocument, type StoredSection } from "./project-files";
 import { STANDARD_TRADES, type TradePackage } from "./procurement";
+import { CSI_GROUPS } from "./data/csi-groups";
 
 const digits = (code: string) => code.replace(/\D/g, "").padEnd(6, "0").slice(0, 6);
 // Work a contractor carries with another group's trade, from Marcel's Jelleff bid forms: "Drywall &
@@ -89,16 +90,41 @@ export type TradeSuggestion = TradePackage & { sections: string[]; sheets: strin
  * reads by) or when sheets carry its most telling title or its discipline. Trades the project
  * already has are skipped. Each suggestion lists what it came from, for the estimator to confirm.
  */
-export function suggestTrades(packages: Pick<TradePackage, "id" | "name">[], input: { sections: StoredSection[]; sheets: (SheetRow & { sheet: string })[] }): TradeSuggestion[] {
+export function suggestTrades(packages: Pick<TradePackage, "id" | "name" | "division" | "code">[], input: { sections: StoredSection[]; sheets: (SheetRow & { sheet: string })[] }): TradeSuggestion[] {
   const candidates = STANDARD_TRADES.filter(t => !packages.some(p => p.id === t.id || p.name.toLowerCase() === t.name.toLowerCase()))
     .map(t => ({ ...t, division: t.code.slice(0, 2), owner: "", due: "" }));
-  const bySection = sectionsByTrade(input.sections, candidates);
+  // Sections are shared out among the project's trades and the candidates together: a candidate is only
+  // suggested for sections an existing trade wouldn't carry (ceilings stay with an existing Drywall).
+  const bySection = sectionsByTrade(input.sections, [...packages, ...candidates]);
   return candidates.flatMap(t => {
     const rule = ruleFor(t.code);
     const sheets = input.sheets.filter(s => rule && (rule.titles[0].test(s.title.toUpperCase()) || rule.disciplines?.includes(s.discipline ?? ""))).map(s => s.sheet);
     const sections = (bySection.get(t.id) ?? []).map(s => s.section);
     return sections.length || sheets.length ? [{ ...t, sections, sheets }] : [];
   });
+}
+
+/**
+ * Every bid package the files call for (Marcel, 24 Oct: the AI determines the bid packages, and no scope is
+ * left out): the standard trades suggestTrades finds, then, for each manual section still in no trade, its
+ * CSI group from Marcel's list (09 29 00 Gypsum Board), so every section is read. Names stay unique.
+ */
+export function tradesToAdd(packages: Pick<TradePackage, "id" | "name" | "division" | "code">[], input: { sections: StoredSection[]; sheets: (SheetRow & { sheet: string })[] }): TradeSuggestion[] {
+  const standard = suggestTrades(packages, input);
+  const taken = [...packages, ...standard];
+  const groups = new Map<string, StoredSection[]>();
+  for (const section of uncoveredSections(input.sections, taken)) {
+    const code = `${digits(section.section).slice(0, 2)} ${digits(section.section).slice(2, 4)} 00`;
+    groups.set(code, [...(groups.get(code) ?? []), section]);
+  }
+  const names = new Set(taken.map(p => p.name.toLowerCase()));
+  const byCsi = [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([code, sections]): TradeSuggestion => {
+    const listed = CSI_GROUPS.find(([c]) => c === code)?.[1] ?? sections[0].title ?? `Section ${code}`;
+    const name = names.has(listed.toLowerCase()) ? `${listed} (${code})` : listed;
+    names.add(name.toLowerCase());
+    return { id: `csi-${digits(code)}`, name, code, division: code.slice(0, 2), owner: "", due: "", sections: sections.map(s => s.section), sheets: [] };
+  });
+  return [...standard, ...byCsi];
 }
 
 /** Sections no trade covers (outside Division 00/01): shown so the estimator can add a trade or move work. */

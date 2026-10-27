@@ -332,6 +332,35 @@ export function rejectDraft(state: ExtractionState, draftId: string, reason: Rej
   return putDraft(state, { ...draft, status: "rejected", reviewedBy: by.trim(), reviewedAt: at, rejection: { reason, note: n }, history: [...draft.history, { kind: "rejected", at, by: by.trim(), reason, note: n }] });
 }
 
+/** Words only, for telling whether two scope lines say the same thing ("Gypsum board, Type X." = "gypsum board type x"). */
+const sameLine = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/**
+ * The automatic run's step after reading (Marcel, 24 Oct: whatever the AI finds goes straight into the scope
+ * list, and the team approves it): each of the run's scope findings becomes a draft line in its trade's bid
+ * form, for Approve scopes. A line the bid form already has (same words, in that trade or every trade) is
+ * set aside as a duplicate, so a new revision only adds what is new. Regions and quantities stay for review.
+ */
+export function addRunToBidForms(records: Pick<ReviewRecords, "extraction" | "procurement">, runId: string, at = now()): Pick<ReviewRecords, "extraction" | "procurement"> & { added: number; duplicates: number } {
+  let { extraction, procurement } = records;
+  let added = 0, duplicates = 0;
+  for (const draft of records.extraction.drafts) {
+    if (draft.runId !== runId || draft.kind !== "scope" || draft.status !== "pending-review") continue;
+    const there = procurement.scopes.filter(s => s.packageId === draft.packageId || s.allTrades).map(s => sameLine(s.title));
+    if (there.includes(sameLine(draft.title))) {
+      extraction = rejectDraft(extraction, draft.id, "duplicate", "Already in the bid form.", AI_ACTOR, at);
+      duplicates++;
+      continue;
+    }
+    try { procurement = addScope(procurement, { packageId: draft.packageId, title: draft.title, detail: draft.detail, source: draft.source, origin: "ai" }, AI_ACTOR, at); }
+    catch (error) { if (error instanceof ProcurementRuleError) continue; throw error; }
+    const acceptedId = procurement.scopes.at(-1)!.id;
+    extraction = putDraft(extraction, { ...draft, status: "accepted", reviewedBy: AI_ACTOR, reviewedAt: at, acceptedId, history: [...draft.history, { kind: "accepted", at, by: AI_ACTOR }] });
+    added++;
+  }
+  return { extraction, procurement, added, duplicates };
+}
+
 /** Puts a rejected finding back in the review queue. An accepted one can't come back: change it where it now lives. */
 export function reopenDraft(state: ExtractionState, draftId: string, by: string, at = now()): ExtractionState {
   needBy(by);

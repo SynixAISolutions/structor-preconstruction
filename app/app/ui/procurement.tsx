@@ -15,7 +15,7 @@ import {
   LocateFixed,
   Mail,
   MessageSquareText,
-  MoveRight,
+  Copy, MoveRight,
   Pencil,
   Phone,
   Plus,
@@ -34,7 +34,7 @@ import {
   inviteCandidates,
   logOutreach,
   markNotificationsRead,
-  moveScope,
+  copyScope, moveScope,
   outreachLog,
   packageStatus,
   publishBlockers,
@@ -123,6 +123,7 @@ function ScopeEditor({ draft, packages, onClose, onSave }: {
 
 function historyLabel(event: ScopeItem["history"][number], packages: Procurement["packages"]) {
   if (event.kind === "moved") return `Moved from ${packages.find(pkg => pkg.id === event.from)?.name ?? event.from} to ${packages.find(pkg => pkg.id === event.to)?.name ?? event.to}`;
+  if (event.kind === "copied") return `Copied from ${packages.find(pkg => pkg.id === event.from)?.name ?? event.from}`;
   if (event.kind === "applied-to-all") return "Applied to every trade";
   return event.kind === "created" ? "Created" : event.kind === "approved" ? "Approved" : event.kind === "reopened" ? "Reopened for review" : "Edited";
 }
@@ -188,7 +189,7 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
         <div className="proc-scope-list"><InlineScopeDrafts key={activePackage.id} review={review} packageId={activePackage.id} query={query} sections={specSections} colors={sourceColors} by={CURRENT_USER} notify={notify} onMove={setPackageId}/>{visible.map((item, index) => <article className={`proc-scope-row ${selected?.id === item.id ? "selected" : ""}`} key={item.id}>
           <button className={`proc-approval ${item.status}`} aria-label={`${item.status === "approved" ? "Reopen" : "Approve"} ${item.title}`} onClick={() => runAndNotify(run, current => item.status === "approved" ? reopenScope(current, item.id, CURRENT_USER) : approveScope(current, item.id, CURRENT_USER), notify, item.status === "approved" ? "Scope item reopened for review." : "Scope item approved.")}>{item.status === "approved" ? <Check size={14}/> : <span/>}</button>
           <button className="proc-scope-copy" onClick={() => setSelectedId(item.id)}><span className="proc-scope-meta"><b>{String(index + 1).padStart(2, "0")}</b><Badge tone={item.status === "approved" ? "green" : "amber"}>{item.status === "approved" ? "Approved" : "Needs review"}</Badge>{item.allTrades && <Badge tone="blue">All trades</Badge>}</span><strong>{item.title}</strong><small><FileText size={12}/>{item.source || "Source not linked"} · {item.origin}</small></button>
-          <button className="ui-icon-btn" aria-label={`Move ${item.title}`} title="Move trade" onClick={() => { setMoveItem(item); setMoveTo(state.packages.find(p => p.id !== item.packageId)?.id || ""); }}><MoveRight size={15}/></button>
+          <button className="ui-icon-btn" aria-label={`Move ${item.title}`} title="Move or copy to another trade" onClick={() => { setMoveItem(item); setMoveTo(state.packages.find(p => p.id !== item.packageId)?.id || ""); }}><MoveRight size={15}/></button>
           <button className="ui-icon-btn" aria-label={`Delete ${item.title}`} title={item.allTrades ? "Delete from every trade" : "Delete scope"} onClick={() => { const message = review.removeScope(item.id,CURRENT_USER); notify(message || "Scope item removed from the current bid form."); if(!message) setSelectedId(""); }}><Trash2 size={15}/></button>
           <button className="ui-icon-btn" aria-label={`Edit ${item.title}`} onClick={() => setEditor({ id: item.id, packageId: item.packageId, title: item.title, detail: item.detail, source: item.source, origin: item.origin })}><Pencil size={15}/></button>
         </article>)}</div>
@@ -206,7 +207,7 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
     <PreviewNote>The scope checklist is the bidder’s bid form. Only approved items can be published.</PreviewNote></>}</div>
     {sourceKind && selected && sources && <ScopeSourceDialog key={selected.id + sourceKind} title={selected.title} sources={sources} kind={sourceKind} colors={sourceColors} onClose={() => setSourceKind(null)}/>}
     {editor && <ScopeEditor draft={editor} packages={state.packages} onClose={() => setEditor(null)} onSave={saveScope}/>}
-    {moveItem && <Modal title={moveItem.allTrades ? "Assign to one trade" : "Move scope item"} subtitle={moveItem.title} onClose={() => setMoveItem(null)}><label className="ui-field">Destination trade<select value={moveTo} onChange={event => setMoveTo(event.target.value)}>{state.packages.filter(pkg => pkg.id !== moveItem.packageId || moveItem.allTrades).map(pkg => <option key={pkg.id} value={pkg.id}>{pkg.code} · {pkg.name} · {pkg.owner}</option>)}</select></label><p className="proc-modal-note">The item returns to draft and the receiving estimator is tagged for review.</p><div className="proc-form-actions"><Button onClick={() => setMoveItem(null)}>Cancel</Button><Button variant="primary" disabled={!moveTo} onClick={() => { if (runAndNotify(run, current => moveScope(current, moveItem.id, moveTo, CURRENT_USER), notify, "Scope item moved and the receiving estimator was tagged.")) { setPackageId(moveTo); setSelectedId(moveItem.id); setMoveItem(null); } }}><MoveRight size={15}/>Move item</Button></div></Modal>}
+    {moveItem && <Modal title={moveItem.allTrades ? "Assign to one trade" : "Move or copy scope item"} subtitle={moveItem.title} onClose={() => setMoveItem(null)}><label className="ui-field">Destination trade<select value={moveTo} onChange={event => setMoveTo(event.target.value)}>{state.packages.filter(pkg => pkg.id !== moveItem.packageId || moveItem.allTrades).map(pkg => <option key={pkg.id} value={pkg.id}>{pkg.code} · {pkg.name} · {pkg.owner}</option>)}</select></label><p className="proc-modal-note">{moveItem.allTrades ? "The item returns to draft and the receiving estimator is tagged for review." : "Move takes the item out of this trade; Copy keeps it here and adds a draft to the other trade. Either way the receiving estimator is tagged for review."}</p><div className="proc-form-actions"><Button onClick={() => setMoveItem(null)}>Cancel</Button>{!moveItem.allTrades && <Button disabled={!moveTo} onClick={() => { if (runAndNotify(run, current => copyScope(current, moveItem.id, moveTo, CURRENT_USER), notify, "Scope item copied; the receiving estimator was tagged.")) { setPackageId(moveTo); setMoveItem(null); } }}><Copy size={15}/>Copy item</Button>}<Button variant="primary" disabled={!moveTo} onClick={() => { if (runAndNotify(run, current => moveScope(current, moveItem.id, moveTo, CURRENT_USER), notify, "Scope item moved and the receiving estimator was tagged.")) { setPackageId(moveTo); setSelectedId(moveItem.id); setMoveItem(null); } }}><MoveRight size={15}/>Move item</Button></div></Modal>}
     {notificationsOpen && <Modal title="Your notifications" subtitle={`${unread.length} unread for ${CURRENT_USER}`} onClose={() => setNotificationsOpen(false)}><div className="proc-notifications">{unread.map(item => <div key={item.id}><Bell size={15}/><span>{item.text}</span></div>)}</div><div className="proc-form-actions"><Button onClick={() => setNotificationsOpen(false)}>Close</Button><Button variant="primary" onClick={() => { run(current => markNotificationsRead(current, unread.map(item => item.id))); setNotificationsOpen(false); notify("Notifications marked read."); }}>Mark all read</Button></div></Modal>}
   </div>;
 }

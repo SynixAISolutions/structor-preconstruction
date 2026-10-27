@@ -1,0 +1,18 @@
+/* The automatic scope run's progress card: bottom left of the work area, clear of the sidebar, the toast
+   (bottom centre) and the help and feedback buttons (bottom right). */
+.ai-run-card { position: fixed; left: calc(238px + 24px); bottom: max(22px, env(safe-area-inset-bottom)); z-index: 140; display: flex; gap: 12px; width: min(360px, calc(100vw - 238px - 48px)); padding: 14px 16px; border: 1px solid #46625f; border-radius: 12px; background: #213b42; color: #eff7ef; box-shadow: 0 10px 34px #152d3833; animation: modal-arrive .2s; }
+.ai-run-icon { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 50%; background: #ed6a36; color: white; animation: ai-run-pulse 1.6s ease-in-out infinite; }
+.ai-run-copy { display: grid; gap: 4px; min-width: 0; }
+.ai-run-copy strong { font-size: 12px; overflow-wrap: anywhere; }
+.ai-run-copy small { font-size: 11px; color: #c4d4cf; overflow-wrap: anywhere; }
+.ai-run-bar { position: relative; height: 5px; margin: 4px 0 2px; border-radius: 999px; background: #3a5559; overflow: hidden; }
+.ai-run-bar i { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: #ed6a36; transition: width .4s ease; }
+.ai-run-now { color: #eff7ef !important; }
+.ai-run-keep { color: #f2b79c !important; }
+.ai-run-leave { margin-bottom: 14px; line-height: 1.6; }
+.notification-popover .activity-point.ai { display: grid; place-items: center; width: 18px; height: 18px; background: #fdf0e9; color: #c4521f; }
+@keyframes ai-run-pulse { 50% { box-shadow: 0 0 0 6px #ed6a3633; } }
+@media (prefers-reduced-motion: reduce) { .ai-run-icon, .ai-run-card { animation: none; } .ai-run-bar i { transition: none; } }
+@media (max-width: 1200px) { .ai-run-card { left: calc(216px + 20px); width: min(340px, calc(100vw - 216px - 40px)); } }
+@media (max-width: 950px) { .ai-run-card { left: calc(190px + 16px); width: min(320px, calc(100vw - 190px - 32px)); } }
+@media (max-width: 700px) { .ai-run-card { left: 12px; right: 12px; width: auto; bottom: calc(max(22px, env(safe-area-inset-bottom)) + 120px); } }
