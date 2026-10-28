@@ -9,6 +9,7 @@
 import { AiJobError, quoteOnPage, type ChatMessage } from "./ai-jobs";
 import { textModel } from "./deepseek";
 import { AI_BUDGET_MS, readJson } from "./drawing-reader";
+import { SCANNED_PAGE_TEXT } from "./project-files";
 
 export type SheetReferenceJob = {
   packages: { id: string; name: string; code: string; sections: string[] }[];
@@ -31,6 +32,14 @@ export function referenceBatches<T extends { text: string }>(sheets: T[], limits
   }
   if (current.length) out.push(current);
   return out;
+}
+
+/** What an AI pass over these sheets sends, for lib/ai-cost estimateCost: every sheet with text, and the package list with each request. */
+export function referenceWork(sheets: { text: string }[], packages: { name: string; sections: string[] }[]): { requests: number; chars: number } {
+  const readable = sheets.filter(s => s.text.trim().length >= SCANNED_PAGE_TEXT);
+  const requests = referenceBatches(readable).length;
+  const listChars = packages.reduce((n, p) => n + p.name.length + 20 + p.sections.reduce((m, s) => m + s.length + 2, 0), 0);
+  return { requests, chars: readable.reduce((n, s) => n + Math.min(s.text.length, SHEET_REFERENCE_LIMITS.sheetChars), 0) + requests * listChars };
 }
 
 export function parseSheetReferenceJob(raw: unknown): SheetReferenceJob {

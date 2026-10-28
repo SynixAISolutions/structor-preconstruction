@@ -3,13 +3,15 @@
 // Runs the AI over every sheet of the open project (lib/sheet-reference-ai), a few sheets per request, and saves
 // what it found for each bid package in the project's "drawing-references-ai" draft, so every package's "On the
 // drawings" list and its highlights come from it. One run per tab; the estimator starts it, since it reads the
-// whole drawing set (a few dollars of AI for a large set).
+// whole drawing set (a few dollars of AI for a large set), or the run after an upload does, when reading the whole
+// upload costs under $2 (lib/auto-scopes).
 
 import { useSyncExternalStore } from "react";
 import type { DrawingReference, SheetText } from "./drawing-references";
 import type { TradePackage } from "./procurement";
 import { referenceBatches, type SheetReferenceAnswer } from "./sheet-reference-ai";
-import { SCANNED_PAGE_TEXT } from "./project-files";
+import { drawingRegister, SCANNED_PAGE_TEXT, type StoredDocument } from "./project-files";
+import { readStoredText } from "./project-files-client";
 import { writeDraft } from "./use-local-draft";
 
 export const AI_REFERENCES_KEY = "drawing-references-ai";
@@ -32,6 +34,18 @@ async function post(input: unknown, signal: AbortSignal): Promise<SheetReference
   const body = await response.json().catch(() => ({ error: `The AI request failed (${response.status}).` }));
   if (!response.ok) throw new Error(body.error ?? `The AI request failed (${response.status}).`);
   return body;
+}
+
+/** The text of every current sheet in register order, and the key naming them, as useDrawingReferences reads them. */
+export async function loadSheetTexts(documents: StoredDocument[]): Promise<{ key: string; sheets: SheetText[] }> {
+  const register = drawingRegister(documents);
+  const docs = [...new Map(register.map(r => [r.doc.id, r.doc])).values()];
+  const texts = await Promise.all(docs.map(d => readStoredText(d)));
+  const byDoc = new Map(docs.map((d, i) => [d.id, new Map(texts[i].map(p => [p.page, p.text]))]));
+  return {
+    key: register.map(r => `${r.doc.id}:${r.page}`).join("|"),
+    sheets: register.map(r => ({ docId: r.doc.id, page: r.page, sheet: r.sheet, title: r.title, discipline: r.discipline, text: byDoc.get(r.doc.id)?.get(r.page) ?? "" })),
+  };
 }
 
 /** Reads every sheet with printed text and saves what the AI found; `key` names this set of sheets. */

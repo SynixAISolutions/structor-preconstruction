@@ -13,13 +13,16 @@ import { addPage, DrawingFlipRuleError, type DrawingFlipState } from "./drawing-
 import { addPackage, type Procurement } from "./procurement";
 import { drawingRegister, specificationSections, type StoredDocument } from "./project-files";
 import { useProjectDocuments } from "./project-files-client";
-import { tradesToAdd } from "./project-scopes";
+import { sectionsByTrade, tradesToAdd } from "./project-scopes";
 import { applyBidPackagePlan } from "./bid-package-ai";
 import { planBidPackages } from "./bid-package-client";
 import { aiReader } from "./ai-reader-client";
+import { AUTO_READ_UNDER, estimateCost } from "./ai-cost";
+import { findReferencesWithAi, loadSheetTexts } from "./sheet-reference-client";
+import { referenceWork } from "./sheet-reference-ai";
 import { readTradeScope } from "./scope-reading";
 import { readDraft, writeDraft } from "./use-local-draft";
-import { MAX_SAVED_RUNS, NO_RUNS, runTarget, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns } from "./auto-scope-plan";
+import { MAX_SAVED_RUNS, NO_RUNS, readingWork, runTarget, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns } from "./auto-scope-plan";
 import { sampleProcurement } from "./data/procurement";
 import { sampleExtraction } from "./data/extraction";
 import { sampleDrawingFlip } from "./data/drawing-flip";
@@ -97,15 +100,25 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
     writeDraft(projectId, "procurement", procurement);
   }
 
-  // 2. Every trade with sections or sheets, skipping those a stopped run already finished. With Claude, each trade
-  // is read when the estimator picks it in Write scopes instead (Danial, 28 Oct: "be smart with how we use this
-  // limited credits"): reading every trade of a large manual costs real money.
-  const scopesLater = !(await aiReader().then(r => r.autoScopes, () => true));
-  const readable = scopesLater ? [] : tradesToRead(procurement.packages, documents);
+  // 2. Every trade with sections or sheets, skipping those a stopped run already finished. With Claude, the upload is
+  // read in full only when that costs under $2 (Danial, 28 Oct: "be smart with how we use this limited credits";
+  // "Yes, under $2"), like Wyre reading a small set: two drawings and two specification sections. A larger set waits
+  // for the estimator to pick trades in Write scopes.
+  const reader = await aiReader().catch(() => null);
+  const all = tradesToRead(procurement.packages, documents);
+  const assigned = sectionsByTrade(specificationSections(documents), procurement.packages);
+  const refPackages = procurement.packages.map(p => ({ id: p.id, name: p.name, code: p.code, sections: (assigned.get(p.id) ?? []).map(s => `${s.section} ${s.title}`) }));
+  let sheetTexts: Awaited<ReturnType<typeof loadSheetTexts>> | null = null, fullCost: number | undefined;
+  if (reader && !reader.autoScopes) {
+    sheetTexts = await loadSheetTexts(documents).catch(() => null);
+    fullCost = (estimateCost(reader.model, readingWork(all)) ?? 0) + (sheetTexts ? estimateCost(reader.model, referenceWork(sheetTexts.sheets, refPackages)) ?? 0 : 0);
+  }
+  const scopesLater = fullCost !== undefined && fullCost >= AUTO_READ_UNDER;
+  const readable = scopesLater ? [] : all;
   const queued = (t: (typeof readable)[number]): AutoTrade => ({ packageId: t.pkg.id, name: t.pkg.name, status: "queued", added: 0, note: "" });
   let run: AutoRun = previous
-    ? { ...previous, status: "running", newTrades: [...new Set([...previous.newTrades, ...newTrades])], trades: readable.map(t => previous.trades.find(x => x.packageId === t.pkg.id && x.status === "done") ?? queued(t)), scopesLater }
-    : { id: crypto.randomUUID(), projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades, packagesBy, trades: readable.map(queued), added: 0, duplicates: 0, scopesLater };
+    ? { ...previous, status: "running", newTrades: [...new Set([...previous.newTrades, ...newTrades])], trades: readable.map(t => previous.trades.find(x => x.packageId === t.pkg.id && x.status === "done") ?? queued(t)), scopesLater, fullCost }
+    : { id: crypto.randomUUID(), projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades, packagesBy, trades: readable.map(queued), added: 0, duplicates: 0, scopesLater, fullCost };
   save(run);
   const setTrade = (packageId: string, change: Partial<AutoTrade>, totals: Partial<Pick<AutoRun, "added" | "duplicates">> = {}) => {
     run = { ...run, ...totals, trades: run.trades.map(t => t.packageId === packageId ? { ...t, ...change } : t) };
@@ -144,6 +157,12 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
       }
     }
   }));
+
+  // 3. Where each package is on the drawings, when the run read everything (lib/sheet-reference-client).
+  if (!scopesLater && refPackages.length) {
+    const texts = sheetTexts ?? await loadSheetTexts(documents).catch(() => null);
+    if (texts?.sheets.some(s => s.text.trim())) await findReferencesWithAi(projectId, texts.key, texts.sheets, refPackages).catch(() => {});
+  }
 
   run = { ...run, status: "done", finishedAt: at() };
   save(run);

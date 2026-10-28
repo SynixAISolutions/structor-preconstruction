@@ -5,6 +5,7 @@
 import { drawingRegister, latestDocuments, specificationSections, type StoredDocument, type VolumeSection } from "./project-files";
 import type { TradePackage } from "./procurement";
 import { sectionsByTrade, sheetsForTrade } from "./project-scopes";
+import { dollars } from "./ai-cost";
 
 /**
  * Files uploaded from this moment start a run by themselves. Drawings and manuals stored before it were
@@ -22,8 +23,10 @@ export type AutoRun = {
   newTrades: string[];
   /** Who set the bid packages: the AI's model, or why the CSI list stood in for it. */
   packagesBy?: string;
-  /** The run set the bid packages only: with Claude, trades are read when the estimator picks them in Write scopes. */
+  /** The run set the bid packages only: reading everything with Claude cost too much, so trades are read when the estimator picks them in Write scopes. */
   scopesLater?: boolean;
+  /** What reading everything was estimated to cost, in dollars, when Claude reads. */
+  fullCost?: number;
   trades: AutoTrade[];
   /** Scope lines added to bid forms for approval, and lines skipped as already there. */
   added: number; duplicates: number;
@@ -47,6 +50,19 @@ export function tradesToRead<P extends Pick<TradePackage, "id" | "division" | "c
   return packages.map(pkg => ({ pkg, sections: assigned.get(pkg.id) ?? [], sheets: sheetsForTrade(register, pkg) })).filter(t => t.sections.length || t.sheets.length);
 }
 
+/**
+ * What reading these trades sends to the AI, for lib/ai-cost estimateCost: a request for every five manual pages of
+ * a trade and one for each of its sheets, which sends the sheet's image and text.
+ */
+export function readingWork(trades: Pick<TradeToRead<unknown>, "sections" | "sheets">[]): { requests: number; chars: number; images: number } {
+  let requests = 0, pages = 0, sheets = 0;
+  for (const t of trades) {
+    const n = t.sections.reduce((sum, s) => sum + s.last - s.first + 1, 0);
+    pages += n; sheets += t.sheets.length; requests += Math.ceil(n / 5) + t.sheets.length;
+  }
+  return { requests, chars: pages * 3_500 + sheets * 4_000, images: sheets };
+}
+
 /** Trades a run still has to read: a run stopped by a closed tab picks up after the trades it finished. */
 export const stillToRead = <T extends { pkg: { id: string } }>(trades: T[], previous: AutoRun | null): T[] =>
   trades.filter(t => !previous?.trades.some(x => x.packageId === t.pkg.id && x.status === "done"));
@@ -61,7 +77,7 @@ export function runSummary(run: AutoRun): string {
   const failed = run.trades.filter(t => t.status === "failed").length;
   const scoped = run.trades.filter(t => t.added > 0).length;
   return [
-    run.scopesLater ? "Bid packages set; read each trade's scope from Write scopes with AI" : run.added ? `${plural(run.added, "scope item")} added to ${plural(scoped, "trade")} for approval` : "No new scope items",
+    run.scopesLater ? `Bid packages set; reading every trade would cost about ${dollars(run.fullCost ?? 0)}, so choose trades in Write scopes with AI` : run.added ? `${plural(run.added, "scope item")} added to ${plural(scoped, "trade")} for approval` : "No new scope items",
     run.newTrades.length ? `${plural(run.newTrades.length, "new bid package")}` : "",
     run.packagesBy && !run.packagesBy.startsWith("AI ") ? run.packagesBy : "",
     run.duplicates ? `${run.duplicates} already in the bid forms` : "",

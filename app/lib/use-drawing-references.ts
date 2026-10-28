@@ -8,7 +8,7 @@ import type { TradePackage } from "./procurement";
 import { sectionsByTrade } from "./project-scopes";
 import { useSheetOcr } from "./sheet-text-ocr";
 import { AI_REFERENCES_KEY, findReferencesWithAi, type AiReferences } from "./sheet-reference-client";
-import { referenceBatches } from "./sheet-reference-ai";
+import { referenceWork } from "./sheet-reference-ai";
 import { useActiveProject } from "./project-scope";
 import { useLocalDraft } from "./use-local-draft";
 
@@ -59,12 +59,7 @@ export function useDrawingReferences(packages: Pick<TradePackage, "id" | "name" 
   // Ready once this set of sheets is loaded; a reload after an OCR save keeps showing the last results meanwhile.
   const ready = filesReady && (!register.length || sheets.key.startsWith(`${base}#`));
   // How much an AI pass would send: every sheet with printed text, and the package list with each request.
-  const aiWork = useMemo(() => {
-    const readable = sheets.list.filter(s => s.text.trim().length >= SCANNED_PAGE_TEXT);
-    const requests = referenceBatches(readable).length;
-    const listChars = packages.reduce((n, p) => n + p.name.length + 20 + (sections.get(p.id) ?? []).reduce((m, s) => m + s.title.length + 12, 0), 0);
-    return { requests, chars: readable.reduce((n, s) => n + Math.min(s.text.length, 40_000), 0) + requests * listChars };
-  }, [sheets.list, packages, sections]);
+  const aiWork = useMemo(() => referenceWork(sheets.list, packages.map(p => ({ name: p.name, sections: (sections.get(p.id) ?? []).map(s => `${s.section} ${s.title}`) }))), [sheets.list, packages, sections]);
   // The AI's results, and whether they were found on the sheets as they are now.
   const aiState = ai ? { model: ai.model, at: ai.at, current: ai.key === base, failed: ai.failed, read: ai.read, packages: ai.packages, cost: ai.cost } : null;
   return { ready, error: sheets.error, sheets: sheets.list.length, searchable: sheets.list.length - sheets.unread, referencesFor, ai: aiState, findWithAi, aiWork };

@@ -8,6 +8,7 @@ const B = await import("../lib/bid-package-ai.ts");
 const H = await import("../lib/sheet-reference-ai.ts");
 const P = await import("../lib/project-scopes.ts");
 const K = await import("../lib/ai-cost.ts");
+const A = await import("../lib/auto-scope-plan.ts");
 
 // ── Claude's answer as JSON ──
 assert.deepEqual(C.jsonFromText('{"a":1}'), { a: 1 });
@@ -164,5 +165,19 @@ assert.ok(est > 3 && est < 4, `205 drawing sheets' text in 40 requests is a few 
 assert.equal(K.estimateCost("claude-opus-5-5", { requests: 0, chars: 0 }), 0);
 assert.equal(K.estimateCost("deepseek-flash", { requests: 3, chars: 100 }), null);
 assert.deepEqual([K.dollars(0.004), K.dollars(0.426), K.dollars(3.456), K.dollars(23.6)], ["under $0.01", "$0.43", "$3.46", "$24"]);
+
+
+// ── An upload under $2 is read in full by itself ──
+const fourFiles = [
+  { sections: [{ first: 1, last: 8 }], sheets: [{}] },            // Tile: 8 manual pages, 1 sheet
+  { sections: [{ first: 9, last: 14 }, { first: 15, last: 16 }], sheets: [{}] }, // Drywall: 8 pages in two sections, 1 sheet
+];
+assert.deepEqual(A.readingWork(fourFiles), { requests: 6, chars: 16 * 3_500 + 2 * 4_000, images: 2 }, "A request per five pages of each trade, one per sheet");
+const small = K.estimateCost("claude-opus-5-5", A.readingWork(fourFiles)) + K.estimateCost("claude-opus-5-5", H.referenceWork([{ text: "x".repeat(8_000) }, { text: "y".repeat(9_000) }], [{ name: "Tile", sections: ["09 30 13 Tiling"] }]));
+assert.ok(small < K.AUTO_READ_UNDER, `Two drawings and two sections read by themselves (${small})`);
+const big = K.estimateCost("claude-opus-5-5", A.readingWork([{ sections: [{ first: 1, last: 1084 }], sheets: Array(120).fill({}) }]));
+assert.ok(big > 20, `Project 1's manual and drawings wait for the estimator (${big})`);
+assert.deepEqual(H.referenceWork([{ text: "  " }, { text: "A".repeat(50) }], [{ name: "Tile", sections: [] }]), { requests: 1, chars: 50 + 24 }, "Sheets without text aren't counted");
+assert.equal(A.runSummary({ trades: [], added: 0, duplicates: 0, newTrades: ["Tile"], scopesLater: true, fullCost: 31.2 }), "Bid packages set; reading every trade would cost about $31, so choose trades in Write scopes with AI · 1 new bid package");
 
 console.log("Claude, AI bid packages and AI drawing references: all checks passed");

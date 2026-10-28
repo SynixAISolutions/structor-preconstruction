@@ -35,6 +35,12 @@ export function estimateCost(model: string, work: { requests: number; chars: num
  */
 export const CONFIRM_ABOVE = 5;
 
+/**
+ * An upload whose full reading (every trade's scope and every package on the drawings) is estimated under this is
+ * read by itself, like Wyre reading a small set; a larger set waits for the estimator (Danial, 28 Oct: "Yes, under $2").
+ */
+export const AUTO_READ_UNDER = 2;
+
 /** "$0.42", "under $0.01", "$12": dollars as people read a cost. */
 export function dollars(amount: number): string {
   if (amount < 0.01) return "under $0.01";
