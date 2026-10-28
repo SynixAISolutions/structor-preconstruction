@@ -7,16 +7,23 @@ import { readStoredText, useProjectDocuments } from "./project-files-client";
 import type { TradePackage } from "./procurement";
 import { sectionsByTrade } from "./project-scopes";
 import { useSheetOcr } from "./sheet-text-ocr";
+import { AI_REFERENCES_KEY, findReferencesWithAi, type AiReferences } from "./sheet-reference-client";
+import { referenceBatches } from "./sheet-reference-ai";
+import { useActiveProject } from "./project-scope";
+import { useLocalDraft } from "./use-local-draft";
 
 /**
- * Where each bid package is on the open project's drawings, by their printed text (lib/drawing-references). The text
- * of every current sheet is loaded once from Project files; a scanned sheet is searchable once its OCR text is saved
- * (lib/sheet-text-ocr).
+ * Where each bid package is on the open project's drawings. Once the AI has read the sheets
+ * (lib/sheet-reference-client), its lines; before that, the printed CSI numbers and section titles
+ * (lib/drawing-references). The text of every current sheet is loaded once from Project files; a scanned sheet is
+ * searchable once its OCR text is saved (lib/sheet-text-ocr).
  *
- *   const { ready, referencesFor } = useDrawingReferences(packages);
+ *   const { ready, referencesFor, ai, findWithAi } = useDrawingReferences(packages);
  *   referencesFor(pkg.id)   // sheets in order, each with the lines that place the package there
  */
-export function useDrawingReferences(packages: Pick<TradePackage, "id" | "name" | "code" | "division">[]) {
+export function useDrawingReferences(packages: Pick<TradePackage, "id" | "name" | "code" | "division" | "sections">[]) {
+  const projectId = useActiveProject();
+  const [ai] = useLocalDraft<AiReferences | null>(AI_REFERENCES_KEY, null);
   const { documents, ready: filesReady } = useProjectDocuments();
   const register = useMemo(() => drawingRegister(documents), [documents]);
   const ocr = useSheetOcr();
@@ -38,15 +45,27 @@ export function useDrawingReferences(packages: Pick<TradePackage, "id" | "name" 
     return () => { live = false; };
   }, [key, filesReady]); // eslint-disable-line react-hooks/exhaustive-deps
   const sections = useMemo(() => sectionsByTrade(specificationSections(documents), packages), [documents, packages]);
-  const cache = useMemo(() => new Map<string, DrawingReference[]>(), [sheets, sections]);
+  const cache = useMemo(() => new Map<string, DrawingReference[]>(), [sheets, sections, ai]);
   const referencesFor = useCallback((packageId: string): DrawingReference[] => {
+    if (ai?.packages.includes(packageId)) return ai.refs[packageId] ?? [];
     if (!cache.has(packageId)) {
       const pkg = packages.find(p => p.id === packageId);
       cache.set(packageId, pkg ? findDrawingReferences(sheets.list, packageTerms(pkg, sections.get(packageId) ?? [])) : []);
     }
     return cache.get(packageId)!;
-  }, [cache, packages, sheets.list, sections]);
+  }, [cache, packages, sheets.list, sections, ai]);
+  /** Has the AI read every sheet for every package, and saves what it finds for this project. */
+  const findWithAi = useCallback(() => void findReferencesWithAi(projectId, base, sheets.list, packages.map(p => ({ id: p.id, name: p.name, code: p.code, sections: (sections.get(p.id) ?? []).map(s => `${s.section} ${s.title}`) }))), [projectId, base, sheets.list, packages, sections]);
   // Ready once this set of sheets is loaded; a reload after an OCR save keeps showing the last results meanwhile.
   const ready = filesReady && (!register.length || sheets.key.startsWith(`${base}#`));
-  return { ready, error: sheets.error, sheets: sheets.list.length, searchable: sheets.list.length - sheets.unread, referencesFor };
+  // How much an AI pass would send: every sheet with printed text, and the package list with each request.
+  const aiWork = useMemo(() => {
+    const readable = sheets.list.filter(s => s.text.trim().length >= SCANNED_PAGE_TEXT);
+    const requests = referenceBatches(readable).length;
+    const listChars = packages.reduce((n, p) => n + p.name.length + 20 + (sections.get(p.id) ?? []).reduce((m, s) => m + s.title.length + 12, 0), 0);
+    return { requests, chars: readable.reduce((n, s) => n + Math.min(s.text.length, 40_000), 0) + requests * listChars };
+  }, [sheets.list, packages, sections]);
+  // The AI's results, and whether they were found on the sheets as they are now.
+  const aiState = ai ? { model: ai.model, at: ai.at, current: ai.key === base, failed: ai.failed, read: ai.read, packages: ai.packages, cost: ai.cost } : null;
+  return { ready, error: sheets.error, sheets: sheets.list.length, searchable: sheets.list.length - sheets.unread, referencesFor, ai: aiState, findWithAi, aiWork };
 }

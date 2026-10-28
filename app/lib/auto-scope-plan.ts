@@ -18,8 +18,12 @@ export type AutoTrade = { packageId: string; name: string; status: AutoTradeStat
 export type AutoRun = {
   id: string; projectId: string; key: string; documents: string[];
   status: "running" | "done"; startedAt: string; finishedAt: string | null;
-  /** Bid packages the run created (from the files and Marcel's CSI list). */
+  /** Bid packages the run created: the AI's (lib/bid-package-ai), or Marcel's CSI list when the AI couldn't be asked. */
   newTrades: string[];
+  /** Who set the bid packages: the AI's model, or why the CSI list stood in for it. */
+  packagesBy?: string;
+  /** The run set the bid packages only: with Claude, trades are read when the estimator picks them in Write scopes. */
+  scopesLater?: boolean;
   trades: AutoTrade[];
   /** Scope lines added to bid forms for approval, and lines skipped as already there. */
   added: number; duplicates: number;
@@ -37,10 +41,10 @@ export function runTarget(docs: StoredDocument[], from = AUTO_SCOPES_FROM): { ke
 
 export type TradeToRead<P> = { pkg: P; sections: VolumeSection[]; sheets: ReturnType<typeof drawingRegister> };
 /** Every trade with specification sections (from every specification volume) or drawing sheets to read, in bid-package order. */
-export function tradesToRead<P extends Pick<TradePackage, "id" | "division" | "code">>(packages: P[], docs: StoredDocument[]): TradeToRead<P>[] {
+export function tradesToRead<P extends Pick<TradePackage, "id" | "division" | "code" | "sections" | "sheets">>(packages: P[], docs: StoredDocument[]): TradeToRead<P>[] {
   const register = drawingRegister(docs);
   const assigned = sectionsByTrade(specificationSections(docs), packages);
-  return packages.map(pkg => ({ pkg, sections: assigned.get(pkg.id) ?? [], sheets: sheetsForTrade(register, pkg.code) })).filter(t => t.sections.length || t.sheets.length);
+  return packages.map(pkg => ({ pkg, sections: assigned.get(pkg.id) ?? [], sheets: sheetsForTrade(register, pkg) })).filter(t => t.sections.length || t.sheets.length);
 }
 
 /** Trades a run still has to read: a run stopped by a closed tab picks up after the trades it finished. */
@@ -57,8 +61,9 @@ export function runSummary(run: AutoRun): string {
   const failed = run.trades.filter(t => t.status === "failed").length;
   const scoped = run.trades.filter(t => t.added > 0).length;
   return [
-    run.added ? `${plural(run.added, "scope item")} added to ${plural(scoped, "trade")} for approval` : "No new scope items",
+    run.scopesLater ? "Bid packages set; read each trade's scope from Write scopes with AI" : run.added ? `${plural(run.added, "scope item")} added to ${plural(scoped, "trade")} for approval` : "No new scope items",
     run.newTrades.length ? `${plural(run.newTrades.length, "new bid package")}` : "",
+    run.packagesBy && !run.packagesBy.startsWith("AI ") ? run.packagesBy : "",
     run.duplicates ? `${run.duplicates} already in the bid forms` : "",
     failed ? `${plural(failed, "trade")} could not be read` : "",
   ].filter(Boolean).join(" · ");

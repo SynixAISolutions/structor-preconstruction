@@ -1,27 +1,41 @@
 import { AiJobError, parseProposalJob, parseScopeJob, proposalMessages, scopeMessages, screenProposal, screenScope } from "../../../lib/ai-jobs";
-import { deepseekJson, DeepSeekError, textModel } from "../../../lib/deepseek";
+import { DeepSeekError, textModel } from "../../../lib/deepseek";
 import { parseDrawingJob, drawingMessages, screenDrawing } from "../../../lib/drawing-ai";
 import { contractScopeJob } from "../../../lib/contract-scope-ai";
 import { veJob } from "../../../lib/ve-ai";
 import { gapCostJob } from "../../../lib/gap-cost-ai";
 import { EXTRA_JOBS } from "../../../lib/ai-jobs-more";
 import { assistantStep } from "../../../lib/assistant-agent";
-import { readJson } from "../../../lib/drawing-reader";
+import { AI_BUDGET_MS, readJson, usesClaude } from "../../../lib/drawing-reader";
+import { ClaudeError, claudeModel } from "../../../lib/claude";
+import { bidPackagesJob } from "../../../lib/bid-package-ai";
+import { sheetReferencesJob } from "../../../lib/sheet-reference-ai";
 import { OpenAiError } from "../../../lib/openai";
 
 // Structor's AI: one fixed job per request (scope from specification pages, or a proposal reading),
 // never free-form prompts. Ask Structor ("assistant-agent") is the one conversation: a question, then
 // rounds of project tools the browser runs (reads, and changes it only proposes for the user to
-// apply). The demo password (proxy.ts) guards this route like every page.
+// apply). The demo password (proxy.ts) guards this route like every page. Claude (lib/claude) thinks before it
+// answers, so a job may take a few minutes.
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const MAX_BODY = 3_200_000;
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
+/**
+ * Which AI the server reads with, for screens that show a reading's cost before it starts. With Claude, the run
+ * after an upload sets the bid packages but leaves each trade's scope reading to the estimator (Danial, 28 Oct:
+ * "be smart with how we use this limited credits"), unless CLAUDE_AUTO_SCOPES=on.
+ */
+export function GET() {
+  const claude = usesClaude();
+  return json({ reader: claude ? "claude" : "deepseek", model: claude ? claudeModel() : textModel(), autoScopes: !claude || process.env.CLAUDE_AUTO_SCOPES?.trim().toLowerCase() === "on" });
+}
+
 export async function POST(request: Request) {
-  const key = process.env.DEEPSEEK_API_KEY?.trim();
-  if (!key) return json({ error: "Structor's AI isn't set up on this server: DEEPSEEK_API_KEY is missing." }, 503);
+  const key = process.env.DEEPSEEK_API_KEY?.trim() ?? "";
+  if (!key && !usesClaude()) return json({ error: "Structor's AI isn't set up on this server: add ANTHROPIC_API_KEY (Claude) or DEEPSEEK_API_KEY." }, 503);
   if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY) return json({ error: "Too much text in one request; send fewer pages." }, 413);
   const raw = await request.text();
   if (raw.length > MAX_BODY) return json({ error: "Too much text in one request; send fewer pages." }, 413);
@@ -31,7 +45,12 @@ export async function POST(request: Request) {
 
   const model = body.job === "drawing" ? "deepseek-flash" : textModel(body.job === "proposal" ? "deepseek-v4-pro" : "deepseek-flash");
   try {
-    if (body.job === "assistant-agent") return json(await assistantStep(body.input, key, request.signal));
+    if (body.job === "assistant-agent") {
+      if (!key) return json({ error: "Ask Structor still runs on DeepSeek: DEEPSEEK_API_KEY is missing on this server." }, 503);
+      return json(await assistantStep(body.input, key, request.signal));
+    }
+    if (body.job === "bid-packages") return await bidPackagesJob(body.input, key, request.signal);
+    if (body.job === "sheet-references") return await sheetReferencesJob(body.input, key, request.signal);
     if (body.job === "contract-scope") return await contractScopeJob(body.input, key, request.signal);
     if (body.job === "value-engineering") return await veJob(body.input, key, request.signal);
     if (body.job === "gap-cost") return await gapCostJob(body.input, key, request.signal);
@@ -39,28 +58,28 @@ export async function POST(request: Request) {
     // Jobs that send a drawing image go to the drawing reader the server is set to (lib/drawing-reader).
     if (extra) {
       const input = extra.parse(body.input);
-      const { output, model: used } = await readJson(extra.messages(input), { deepseekKey: key, model: extra.model, maxTokens: extra.maxTokens, budgetMs: 55_000, signal: request.signal });
-      return json({ model: used, ...extra.screen(output, input) });
+      const { output, model: used, cost } = await readJson(extra.messages(input), { deepseekKey: key, model: extra.model, maxTokens: extra.maxTokens, budgetMs: AI_BUDGET_MS, signal: request.signal });
+      return json({ model: used, cost, ...extra.screen(output, input) });
     }
     if (body.job === "drawing") {
       const job = parseDrawingJob(body.input);
-      const { output, model: used } = await readJson(drawingMessages(job), { deepseekKey: key, model, maxTokens: 6000, budgetMs: 55_000, signal: request.signal });
-      return json({ model: used, ...screenDrawing(output, job) });
+      const { output, model: used, cost } = await readJson(drawingMessages(job), { deepseekKey: key, model, maxTokens: 6000, budgetMs: AI_BUDGET_MS, signal: request.signal });
+      return json({ model: used, cost, ...screenDrawing(output, job) });
     }
     if (body.job === "scope") {
       const job = parseScopeJob(body.input);
-      const output = await deepseekJson(key, scopeMessages(job), { model, maxTokens: 6000, budgetMs: 55_000, signal: request.signal });
-      return json({ model, ...screenScope(output, job) });
+      const { output, model: used, cost } = await readJson(scopeMessages(job), { deepseekKey: key, model, maxTokens: 6000, budgetMs: AI_BUDGET_MS, signal: request.signal });
+      return json({ model: used, cost, ...screenScope(output, job) });
     }
     if (body.job === "proposal") {
       const job = parseProposalJob(body.input);
-      const output = await deepseekJson(key, proposalMessages(job), { model, maxTokens: 8000, budgetMs: 55_000, signal: request.signal });
-      return json({ model, ...screenProposal(output, job) });
+      const { output, model: used, cost } = await readJson(proposalMessages(job), { deepseekKey: key, model, maxTokens: 8000, budgetMs: AI_BUDGET_MS, signal: request.signal });
+      return json({ model: used, cost, ...screenProposal(output, job) });
     }
     return json({ error: "Unknown AI job." }, 400);
   } catch (error) {
     if (error instanceof AiJobError) return json({ error: error.message }, 400);
-    if (error instanceof DeepSeekError || error instanceof OpenAiError) return json({ error: error.message }, 502);
+    if (error instanceof DeepSeekError || error instanceof OpenAiError || error instanceof ClaudeError) return json({ error: error.message }, 502);
     console.error("AI route failed", error);
     return json({ error: "Structor's AI failed unexpectedly." }, 500);
   }

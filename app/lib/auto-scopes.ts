@@ -14,6 +14,9 @@ import { addPackage, type Procurement } from "./procurement";
 import { drawingRegister, specificationSections, type StoredDocument } from "./project-files";
 import { useProjectDocuments } from "./project-files-client";
 import { tradesToAdd } from "./project-scopes";
+import { applyBidPackagePlan } from "./bid-package-ai";
+import { planBidPackages } from "./bid-package-client";
+import { aiReader } from "./ai-reader-client";
 import { readTradeScope } from "./scope-reading";
 import { readDraft, writeDraft } from "./use-local-draft";
 import { MAX_SAVED_RUNS, NO_RUNS, runTarget, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns } from "./auto-scope-plan";
@@ -70,20 +73,39 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   window.addEventListener("beforeunload", holdTab);
   const at = () => new Date().toISOString();
 
-  // 1. The bid packages the files call for, standard trades and Marcel's CSI groups, added as found.
+  // 1. The bid packages, set by the AI from the manual's sections and the drawing index (Danial, 28 Oct: "YOU CANT
+  // WRITE THE WHOLE LIST U NEED AI"): which packages, and which sections and sheets each carries. A stopped run
+  // picking up keeps the packages it set. Only when the AI can't be asked do Marcel's CSI groups stand in, and the
+  // run says so.
+  const controller = new AbortController();
   let procurement = readDraft<Procurement>(projectId, "procurement", sampleProcurement);
-  const newTrades: string[] = [];
-  for (const trade of tradesToAdd(procurement.packages, { sections: specificationSections(documents), sheets: drawingRegister(documents) })) {
-    try { procurement = addPackage(procurement, trade); newTrades.push(trade.name); } catch { /* a trade of that name exists */ }
+  let newTrades: string[] = [], packagesBy = previous?.packagesBy;
+  if (!previous) {
+    emit({ run: { id: "", projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades: [], trades: [], added: 0, duplicates: 0 } });
+    try {
+      const plan = await planBidPackages(documents, procurement.packages, controller.signal);
+      // The latest copy: the team may have changed the packages while the AI read.
+      const applied = applyBidPackagePlan(readDraft<Procurement>(projectId, "procurement", sampleProcurement), plan);
+      procurement = applied.procurement; newTrades = applied.added;
+      packagesBy = `AI ${plan.model}${plan.unassigned.length ? `; ${plan.unassigned.length} section${plan.unassigned.length === 1 ? "" : "s"} in no package` : ""}`;
+    } catch (error) {
+      packagesBy = `The AI couldn't set the bid packages (${error instanceof Error ? error.message : "AI error"}), so they follow the CSI divisions`;
+      for (const trade of tradesToAdd(procurement.packages, { sections: specificationSections(documents), sheets: drawingRegister(documents) })) {
+        try { procurement = addPackage(procurement, trade); newTrades.push(trade.name); } catch { /* a trade of that name exists */ }
+      }
+    }
+    writeDraft(projectId, "procurement", procurement);
   }
-  if (newTrades.length) writeDraft(projectId, "procurement", procurement);
 
-  // 2. Every trade with sections or sheets, skipping those a stopped run already finished.
-  const readable = tradesToRead(procurement.packages, documents);
+  // 2. Every trade with sections or sheets, skipping those a stopped run already finished. With Claude, each trade
+  // is read when the estimator picks it in Write scopes instead (Danial, 28 Oct: "be smart with how we use this
+  // limited credits"): reading every trade of a large manual costs real money.
+  const scopesLater = !(await aiReader().then(r => r.autoScopes, () => true));
+  const readable = scopesLater ? [] : tradesToRead(procurement.packages, documents);
   const queued = (t: (typeof readable)[number]): AutoTrade => ({ packageId: t.pkg.id, name: t.pkg.name, status: "queued", added: 0, note: "" });
   let run: AutoRun = previous
-    ? { ...previous, status: "running", newTrades: [...new Set([...previous.newTrades, ...newTrades])], trades: readable.map(t => previous.trades.find(x => x.packageId === t.pkg.id && x.status === "done") ?? queued(t)) }
-    : { id: crypto.randomUUID(), projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades, trades: readable.map(queued), added: 0, duplicates: 0 };
+    ? { ...previous, status: "running", newTrades: [...new Set([...previous.newTrades, ...newTrades])], trades: readable.map(t => previous.trades.find(x => x.packageId === t.pkg.id && x.status === "done") ?? queued(t)), scopesLater }
+    : { id: crypto.randomUUID(), projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades, packagesBy, trades: readable.map(queued), added: 0, duplicates: 0, scopesLater };
   save(run);
   const setTrade = (packageId: string, change: Partial<AutoTrade>, totals: Partial<Pick<AutoRun, "added" | "duplicates">> = {}) => {
     run = { ...run, ...totals, trades: run.trades.map(t => t.packageId === packageId ? { ...t, ...change } : t) };
@@ -91,7 +113,6 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   };
 
   const queue = stillToRead(readable, previous);
-  const controller = new AbortController();
   await Promise.all(Array.from({ length: Math.min(PARALLEL_TRADES, queue.length) }, async () => {
     for (let next = queue.shift(); next; next = queue.shift()) {
       const { pkg, sections, sheets } = next;

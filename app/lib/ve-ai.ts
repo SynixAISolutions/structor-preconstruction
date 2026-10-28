@@ -1,5 +1,6 @@
 import { AiJobError, type ChatMessage } from "./ai-jobs";
-import { deepseekJson, textModel } from "./deepseek";
+import { textModel } from "./deepseek";
+import { AI_BUDGET_MS, readJson } from "./drawing-reader";
 export type VeEvidence = { id: string; packageId: string; item: string; unit: string; quantity: number; currentRate: number; alternativeRate: number; source: string; alternativeSource: string; productNotes?: string };
 export type VeSuggestion = { evidenceId: string; description: string; review: string; impact: number; math: string; packageId: string; source: string };
 export function parseVeEvidence(raw: unknown): VeEvidence[] {
@@ -16,4 +17,4 @@ export function screenVe(raw: unknown, rows: VeEvidence[]): VeSuggestion[] {
   const seen = new Set<string>();
   return suggestions.map(s => { const e = rows.find(r => r.id === s?.evidenceId); if (!e || seen.has(e.id) || e.alternativeRate >= e.currentRate || typeof s.description !== "string" || !s.description.trim() || s.description.length > 1500 || typeof s.review !== "string" || s.review.length > 3000) throw new AiJobError("The AI proposed an option without valid cost evidence. No idea was added."); seen.add(e.id); return { evidenceId:e.id, description:s.description.trim(), review:s.review, impact:Math.round(e.quantity*(e.alternativeRate-e.currentRate)*100)/100, math:`${e.quantity} ${e.unit} × ($${e.alternativeRate} − $${e.currentRate}) = $${(e.quantity*(e.alternativeRate-e.currentRate)).toFixed(2)}`, packageId:e.packageId, source:`${e.source} → ${e.alternativeSource}` }; });
 }
-export async function veJob(raw: unknown, key: string, signal: AbortSignal) { const rows=parseVeEvidence(raw),model=textModel(); return Response.json({ model, suggestions:screenVe(await deepseekJson(key,veMessages(rows),{model,maxTokens:4000,budgetMs:55_000,signal}),rows) }); }
+export async function veJob(raw: unknown, key: string, signal: AbortSignal) { const rows=parseVeEvidence(raw),model=textModel(); const { output, model: used } = await readJson(veMessages(rows),{deepseekKey:key,model,maxTokens:4000,budgetMs:AI_BUDGET_MS,signal}); return Response.json({ model: used, suggestions:screenVe(output,rows) }); }
