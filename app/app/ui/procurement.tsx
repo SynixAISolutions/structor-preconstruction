@@ -85,7 +85,9 @@ import {
 import "./procurement.css";
 import { EstimatorSubmissions } from "./submission-ui";
 import { AddScopeToEstimate } from "./scope-estimate-ui";
-import { PackageScopeSources } from "./package-scope-sources";
+import { OpenSourceButton, PackageScopeSources, ScopeSourceModal } from "./package-scope-sources";
+import { onDrawing } from "../../lib/scope-evidence";
+import { useScopeEvidence } from "../../lib/use-scope-evidence";
 
 const CURRENT_USER = "Marcel Khoury";
 
@@ -145,6 +147,8 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
   const [moveItem, setMoveItem] = useState<ScopeItem | null>(null);
   const [moveTo, setMoveTo] = useState("");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const evidenceOf = useScopeEvidence();
+  const [opened, setOpened] = useState<{ item: ScopeItem; index: number } | null>(null);
   const activePackage = state.packages.find(pkg => pkg.id === packageId) ?? state.packages[0];
   const form = activePackage ? bidForm(state, activePackage.id) : [];
   const visible = form.filter(item => `${item.title} ${item.detail} ${item.source}`.toLowerCase().includes(query.toLowerCase()));
@@ -194,6 +198,7 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
         <div className="proc-scope-list"><InlineScopeDrafts key={activePackage.id} review={review} packageId={activePackage.id} query={query} sections={specSections} colors={sourceColors} by={CURRENT_USER} notify={notify} onMove={setPackageId}/>{visible.map((item, index) => <article className={`proc-scope-row ${selected?.id === item.id ? "selected" : ""}`} key={item.id}>
           <button className={`proc-approval ${item.status}`} aria-label={`${item.status === "approved" ? "Reopen" : "Approve"} ${item.title}`} onClick={() => runAndNotify(run, current => item.status === "approved" ? reopenScope(current, item.id, CURRENT_USER) : approveScope(current, item.id, CURRENT_USER), notify, item.status === "approved" ? "Scope item reopened for review." : "Scope item approved.")}>{item.status === "approved" ? <Check size={14}/> : <span/>}</button>
           <button className="proc-scope-copy" onClick={() => setSelectedId(item.id)}><span className="proc-scope-meta"><b>{String(index + 1).padStart(2, "0")}</b><Badge tone={item.status === "approved" ? "green" : "amber"}>{item.status === "approved" ? "Approved" : "Needs review"}</Badge>{item.allTrades && <Badge tone="blue">All trades</Badge>}</span><strong>{item.title}</strong><small><FileText size={12}/>{item.source || "Source not linked"} · {item.origin}</small></button>
+          <OpenSourceButton evidence={evidenceOf(item)} onOpen={index => setOpened({ item, index })}/>
           <button className="ui-icon-btn" aria-label={`Move ${item.title}`} title="Move or copy to another trade" onClick={() => { setMoveItem(item); setMoveTo(state.packages.find(p => p.id !== item.packageId)?.id || ""); }}><MoveRight size={15}/></button>
           <button className="ui-icon-btn" aria-label={`Delete ${item.title}`} title={item.allTrades ? "Delete from every trade" : "Delete scope"} onClick={() => { const message = review.removeScope(item.id,CURRENT_USER); notify(message || "Scope item removed from the current bid form."); if(!message) setSelectedId(""); }}><Trash2 size={15}/></button>
           <button className="ui-icon-btn" aria-label={`Edit ${item.title}`} onClick={() => setEditor({ id: item.id, packageId: item.packageId, title: item.title, detail: item.detail, source: item.source, origin: item.origin })}><Pencil size={15}/></button>
@@ -203,13 +208,14 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
       </Panel>
       <div className="proc-detail-column">{selected ? <Panel title="Requirement detail" action={<Badge>{selected.origin}</Badge>}><div className="proc-detail">
         <span className="proc-label">SOURCE REFERENCE</span>{sources?.spec ? <button className="proc-spec-link" onClick={() => setSourceKind("spec")}><FileText size={14}/>{selected.source}<ArrowRight size={13}/></button> : <strong>{selected.source || "No source linked"}</strong>}<p>{selected.detail || "No coordination notes recorded."}</p>
-        <div className="proc-detail-actions"><Button onClick={() => { if (sources?.drawings.some(d => d.regions.length)) { sessionStorage.setItem("drawing-flip-scope", selected.id); navigate("drawing-flip"); } else setSourceKind("drawings"); }}><LocateFixed size={14}/>View on drawings</Button><Button onClick={() => { setMoveItem(selected); setMoveTo(state.packages.find(pkg => pkg.id !== selected.packageId)?.id ?? ""); }}><MoveRight size={14}/>{selected.allTrades ? "Assign to one trade" : "Move trade"}</Button>{!selected.allTrades && <Button onClick={() => runAndNotify(run, current => applyScopeToAllTrades(current, selected.id, CURRENT_USER), notify, "Scope item applied to every trade for review.")}><Share2 size={14}/>Apply to all trades</Button>}</div>
+        <div className="proc-detail-actions"><Button onClick={() => { const drawing = evidenceOf(selected).findIndex(onDrawing); if (drawing >= 0) setOpened({ item: selected, index: drawing }); else if (sources?.drawings.some(d => d.regions.length)) { sessionStorage.setItem("drawing-flip-scope", selected.id); navigate("drawing-flip"); } else setSourceKind("drawings"); }}><LocateFixed size={14}/>View on drawings</Button><Button onClick={() => { setMoveItem(selected); setMoveTo(state.packages.find(pkg => pkg.id !== selected.packageId)?.id ?? ""); }}><MoveRight size={14}/>{selected.allTrades ? "Assign to one trade" : "Move trade"}</Button>{!selected.allTrades && <Button onClick={() => runAndNotify(run, current => applyScopeToAllTrades(current, selected.id, CURRENT_USER), notify, "Scope item applied to every trade for review.")}><Share2 size={14}/>Apply to all trades</Button>}</div>
         <div className="proc-detail-actions"><AddScopeToEstimate procurement={state} scope={selected} packageId={activePackage.id} notify={notify} navigate={navigate}/></div>
         <div className="proc-history"><span className="proc-label"><History size={12}/>HISTORY</span>{selected.history.slice().reverse().map((event, index) => <div key={`${event.at}-${index}`}><i/><span><strong>{historyLabel(event, state.packages)}</strong><small>{event.by} · {eventTime(event.at)}</small></span></div>)}</div>
       </div></Panel> : <Panel><Empty title="Select a scope item" description="Choose an item to see its source, notes, and history."/></Panel>}</div>
       </>}
     </div>
     <PreviewNote>The scope checklist is the bidder’s bid form. Only approved items can be published.</PreviewNote></>}</div>
+    {opened && <ScopeSourceModal title={opened.item.title} evidence={evidenceOf(opened.item)} index={opened.index} onClose={() => setOpened(null)}/>}
     {sourceKind && selected && sources && <ScopeSourceDialog key={selected.id + sourceKind} title={selected.title} sources={sources} kind={sourceKind} colors={sourceColors} onClose={() => setSourceKind(null)}/>}
     {editor && <ScopeEditor draft={editor} packages={state.packages} onClose={() => setEditor(null)} onSave={saveScope}/>}
     {moveItem && <Modal title={moveItem.allTrades ? "Assign to one trade" : "Move or copy scope item"} subtitle={moveItem.title} onClose={() => setMoveItem(null)}><label className="ui-field">Destination trade<select value={moveTo} onChange={event => setMoveTo(event.target.value)}>{state.packages.filter(pkg => pkg.id !== moveItem.packageId || moveItem.allTrades).map(pkg => <option key={pkg.id} value={pkg.id}>{pkg.code} · {pkg.name} · {pkg.owner}</option>)}</select></label><p className="proc-modal-note">{moveItem.allTrades ? "The item returns to draft and the receiving estimator is tagged for review." : "Move takes the item out of this trade; Copy keeps it here and adds a draft to the other trade. Either way the receiving estimator is tagged for review."}</p><div className="proc-form-actions"><Button onClick={() => setMoveItem(null)}>Cancel</Button>{!moveItem.allTrades && <Button disabled={!moveTo} onClick={() => { if (runAndNotify(run, current => copyScope(current, moveItem.id, moveTo, CURRENT_USER), notify, "Scope item copied; the receiving estimator was tagged.")) { setPackageId(moveTo); setMoveItem(null); } }}><Copy size={15}/>Copy item</Button>}<Button variant="primary" disabled={!moveTo} onClick={() => { if (runAndNotify(run, current => moveScope(current, moveItem.id, moveTo, CURRENT_USER), notify, "Scope item moved and the receiving estimator was tagged.")) { setPackageId(moveTo); setSelectedId(moveItem.id); setMoveItem(null); } }}><MoveRight size={15}/>Move item</Button></div></Modal>}
