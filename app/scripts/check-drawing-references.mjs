@@ -31,8 +31,22 @@ assert.deepEqual(refs.map(r => [r.sheet, r.lines]), [
   ["S-101", ["1. ALL CONCRETE SHALL BE 4000 PSI.", "GRID 03 30 00"]],
 ], "The callout and its number as one line; the trade's name in a note; a lone number with no words beside it places nothing");
 assert.deepEqual(R.byDiscipline(refs).map(g => [g.discipline, g.refs.length]), [["Architectural", 1], ["Structural", 1]]);
-assert.deepEqual(R.findDrawingReferences(sheets, { codes: [], phrases: [] }), []);
+assert.deepEqual(R.findDrawingReferences(sheets, { codes: [], phrases: [], disciplines: () => true }), []);
+
+// 28 Oct, Project 1: each trade on the sheets of the disciplines that carry it, and never an abbreviation list's entry.
+const demo = R.packageTerms({ code: "02 41 19", name: "Demolition" }, [{ section: "02 41 19", title: "Selective Demolition" }]);
+const project = [
+  { docId: "d", page: 3, sheet: "G0.2", title: "Abbreviations", discipline: "General", text: "DEMO DEMOLISH OR DEMOLITION\n" },
+  { docId: "d", page: 8, sheet: "CIV0102", title: "Demolition plan", discipline: "Civil", text: "DEMOLITION KEYNOTES:\nDEMO DEMOLISH OR DEMOLITION\n1 EXISTING BUILDING TO BE REMOVED. SEE ARCHITECTURAL DEMOLITION\n" },
+  { docId: "d", page: 150, sheet: "ED1.1", title: "Electrical demolition site plan", discipline: "Electrical", text: "GENERAL DEMOLITION NOTES\nELECTRICAL CONTRACTOR TO DISCONNECT\n" },
+  { docId: "d", page: 9, sheet: "A1.1", title: "Floor plan", discipline: "Architectural", text: "ELECTRICAL PANEL BY OTHERS\n" },
+];
+assert.deepEqual(R.findDrawingReferences(project, demo).map(r => [r.sheet, r.lines]), [["CIV0102", ["DEMOLITION KEYNOTES:", "1 EXISTING BUILDING TO BE REMOVED. SEE ARCHITECTURAL DEMOLITION"]]],
+  "The civil keynotes; not the abbreviation list, nor the electrician's own demolition notes");
+const electrical = R.packageTerms({ code: "26 51 00", name: "Electrical" }, [{ section: "26 05 19", title: "Low-Voltage Electrical Power Conductors and Cables" }]);
+assert.deepEqual(R.findDrawingReferences(project, electrical).map(r => r.sheet), ["ED1.1"], "The electrician on its own sheets; an architectural note naming electrical work is not its sheet");
+assert(R.tradeDisciplines("26 51 00")("Electrical") && !R.tradeDisciplines("26 51 00")("Architectural") && R.tradeDisciplines("09 30 13")("Aquatics") && !R.tradeDisciplines("09 30 13")("Plumbing") && !R.tradeDisciplines("07 54 23")("General"));
 const many = R.findDrawingReferences([{ ...sheets[0], text: Array.from({ length: 40 }, (_, i) => `CONCRETE PAD ${i}`).join("\n") }], concrete);
 assert.equal(many[0].lines.length, 20, "At most 20 lines from one sheet");
 
-console.log("Drawing references checked: CSI numbers however printed, section titles as whole words, callouts joined to their number, generic words ignored, grouped by discipline.");
+console.log("Drawing references checked: CSI numbers however printed, section titles as whole words, callouts joined to their number, generic words and abbreviation lists ignored, each trade on its own disciplines, grouped by discipline.");

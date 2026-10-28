@@ -7,8 +7,27 @@
 
 /** One current sheet's printed text, as stored when the drawings were uploaded. */
 export type SheetText = { docId: string; page: number; sheet: string; title: string; discipline: string; text: string };
-/** What a package is looked for by: its CSI numbers and its section titles. */
-export type PackageTerms = { codes: RegExp[]; phrases: RegExp[] };
+/** What a package is looked for by: its CSI numbers and its section titles, on the sheets of the disciplines that carry it. */
+export type PackageTerms = { codes: RegExp[]; phrases: RegExp[]; disciplines: (discipline: string) => boolean };
+
+const MEP = ["Mechanical", "Electrical", "Plumbing", "Fire protection", "Technology"];
+/** Sheet indexes, abbreviation lists and code analysis: every trade's word is listed there, none is shown. */
+const LISTS = ["General", "Code"];
+const MEP_TRADES: [RegExp, string[]][] = [[/^21/, ["Fire protection"]], [/^22/, ["Plumbing"]], [/^23/, ["Mechanical"]], [/^2[5-8]/, ["Electrical", "Technology"]]];
+
+/**
+ * The sheets a trade is looked for on (28 Oct, Project 1: "GENERAL DEMOLITION NOTES" on an electrical sheet is the
+ * electrician's demolition, and "BUR BUILT UP ROOFING" on a plumbing legend is a word list): an MEP trade on its own
+ * discipline's sheets, every other trade on the architectural, structural, civil and site sheets.
+ */
+export function tradeDisciplines(code: string): (discipline: string) => boolean {
+  const digits = code.replace(/\D/g, "");
+  const only = MEP_TRADES.find(([re]) => re.test(digits))?.[1];
+  return only ? d => only.includes(d) : d => !MEP.includes(d) && !LISTS.includes(d);
+}
+
+/** An abbreviation list's entry ("BUR BUILT UP ROOFING", "CT CERAMIC TILE"): a short code and the words it stands for. */
+const ABBREVIATION = /^[A-Z&]{2,5} [A-Z][A-Z ,/&-]{2,48}$/;
 /** A sheet the package is on, and the printed lines that place it there. */
 export type DrawingReference = { docId: string; page: number; sheet: string; title: string; discipline: string; lines: string[] };
 
@@ -41,7 +60,7 @@ function phrasePattern(title: string): RegExp | null {
 export function packageTerms(pkg: { code: string; name: string }, sections: { section: string; title: string }[]): PackageTerms {
   const codes = [...new Set([pkg.code, ...sections.map(s => s.section)])].map(csiPattern).filter((r): r is RegExp => !!r);
   const titles = [...new Set([...sections.map(s => s.title), ...(/[&,/]/.test(pkg.name) ? [] : [pkg.name])].map(t => t.trim().toUpperCase()).filter(Boolean))];
-  return { codes: dedupe(codes), phrases: dedupe(titles.map(phrasePattern).filter((r): r is RegExp => !!r)) };
+  return { codes: dedupe(codes), phrases: dedupe(titles.map(phrasePattern).filter((r): r is RegExp => !!r)), disciplines: tradeDisciplines(pkg.code) };
 }
 const dedupe = (patterns: RegExp[]) => [...new Map(patterns.map(p => [p.source, p])).values()];
 
@@ -54,13 +73,14 @@ export function findDrawingReferences(sheets: SheetText[], terms: PackageTerms):
   if (!terms.codes.length && !terms.phrases.length) return [];
   const refs: DrawingReference[] = [];
   for (const s of sheets) {
+    if (!terms.disciplines(s.discipline)) continue;
     const lines: string[] = [];
     const raw = s.text.split("\n").map(l => l.replace(/\s+/g, " ").trim());
     for (let i = 0; i < raw.length; i++) {
       let line = raw[i];
       if (/^[\d .-]{6,12}$/.test(line) && /[A-Za-z]{3}/.test(raw[i + 1] ?? "")) line = `${line} ${raw[++i]}`;
       const upper = line.toUpperCase();
-      if (!line || lines.includes(line)) continue;
+      if (!line || lines.includes(line) || (ABBREVIATION.test(line) && line.split(" ").length <= 6)) continue;
       const byCode = /[A-Z]{3}/.test(upper) && terms.codes.some(r => r.test(upper));
       if (byCode || terms.phrases.some(r => r.test(upper))) lines.push(line.slice(0, 160));
       if (lines.length >= MAX_LINES) break;
