@@ -58,6 +58,8 @@ export type BudgetLine = {
   inHouseSource?: InHouseSource | null;
   /** The trade package this line budgets, once linked or confirmed (estimate.ts budgetLinesForTrade). */
   packageId?: string | null;
+  /** In the cost plan only: accepted VE ideas already taken off `budget` (lib/ve-budget). Never stored on a typed line. */
+  veApplied?: { ideaId: string; number: string; amount: number }[];
   updatedAt: string;
 };
 
@@ -334,6 +336,19 @@ export function totalsByCostCenter(state: BudgetState): { costCenter: string; sq
 /** Cost per square foot, to the cent; null when the area is unknown or zero. Marcel's summary divides by the project's gross area. */
 export const costPerSquareFoot = (amount: number, squareFeet: number | null | undefined): number | null =>
   squareFeet && squareFeet > 0 ? Math.round((amount / squareFeet) * 100) / 100 : null;
+
+/** A Budget summary total row: what its lines cost, their lowest subcontractor prices (where a bid exists) and what is committed. */
+export type SectionTotal = { lines: number; total: number; lowSub: number; withLowSub: number; committed: number };
+
+/**
+ * The total of a section of budget lines (Marcel, 24 Oct: "total trades costs" after the direct lines, then the
+ * indirect costs and their total, "for every single one"). `lowSub` and `committed` are the line's values as the
+ * Budget summary shows them; a line with no bid yet adds nothing to the low sub total and is counted out of `withLowSub`.
+ */
+export function sectionTotal(lines: BudgetLine[], lowSub: (line: BudgetLine) => number | null, committed: (line: BudgetLine) => number): SectionTotal {
+  const lows = lines.map(lowSub).filter((value): value is number => value !== null);
+  return { lines: lines.length, total: sum(lines.map(l => l.budget)), lowSub: sum(lows), withLowSub: lows.length, committed: sum(lines.map(committed)) };
+}
 
 /** Direct lines grouped by CSI division, ascending; lines without a code are grouped last under "". */
 export function totalsByDivision(state: BudgetState): { division: string; name: string; budget: number; forecast: number; committed: number; variance: number; lines: number }[] {

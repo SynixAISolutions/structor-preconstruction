@@ -23,3 +23,9 @@
 @media(max-width:1000px){.todo-progress-banner{grid-template-columns:100px 1fr}.todo-progress-count{grid-column:2;text-align:left;padding:0;border:0;display:flex;align-items:center;gap:12px}.todo-progress-count strong{font-size:25px}.todo-status-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.todo-task-card{flex-wrap:wrap}.todo-task-action{margin-left:51px}.todo-complete-word{display:none}}
 @media(max-width:700px){.todo-progress-banner{padding:20px;gap:17px;grid-template-columns:82px minmax(0,1fr)}.todo-progress-banner h2{font-size:18px;letter-spacing:-.4px}.todo-progress-banner p{font-size:10px}.todo-progress-banner .health-ring-number strong{font-size:24px}.todo-progress-banner .health-ring-number small{font-size:11px}.todo-progress-banner .health-ring-number>span{font-size:7px}.todo-progress-count{grid-column:1/-1;border-top:1px solid #ffffff26;padding-top:15px}.todo-status-summary{gap:10px}.todo-status-summary>div{padding:13px 15px}.todo-status-summary strong{font-size:25px}.todo-work-list{padding:0 16px}.todo-task-card{gap:12px;padding:19px 0}.todo-task-copy{flex-basis:calc(100% - 47px)}.todo-task-action{margin-left:47px}.todo-task-copy h3{font-size:12px}.todo-task-copy p{font-size:10px}.todo-workspace .ui-header-actions>.ui-btn{white-space:normal;font-size:11px}.todo-workspace .ui-header-actions svg{flex:none}}
 @media(prefers-reduced-motion:reduce){.todo-scanning{animation:none}}.motion-off .todo-scanning{animation:none}
+/* Budget summary without Margin over sub and Forecast (Marcel, 24 Oct), and its total rows (lib/budget sectionTotal). */
+.cm-budget-table{min-width:960px!important}
+.budget-section-total td{background:#f6f4ef;border-top:2px solid #e2ddd3}
+.budget-section-total strong{color:#2f3f48}
+.budget-section-total.grand td{background:#efebe3;border-top:2px solid #cfc7b8;font-size:12px}
+.cm-ve-applied{color:#2f7a52!important;font-weight:600}
