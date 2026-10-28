@@ -37,7 +37,7 @@ import { useValueEngineering } from "../../lib/use-value-engineering";
 import { veLevelingBidders } from "../../lib/ve-bids";
 import { templateFor } from "../../lib/company-forms";
 import type { CompanyForm } from "../../lib/contract-files";
-import { setContractFiles } from "../../lib/contract-files";
+import { EXHIBITS, missingContractFiles, setContractFiles } from "../../lib/contract-files";
 import { assetUrl } from "../../lib/document-assets";
 import "./award-ui.css";
 
@@ -130,6 +130,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
   const [agreementParty, setAgreementParty] = useState<Party>("subcontractor");
   const [agreementName, setAgreementName] = useState("");
   const [contractorOpen, setContractorOpen] = useState(false);
+  const [packageOpen, setPackageOpen] = useState(false);
   const [company] = useLocalDraft<CompanyForm>("company-form", { name: "General contractor" });
   const [contractorName, setContractorName] = useState("General contractor");
   const [signatureParty, setSignatureParty] = useState<Party | null>(null);
@@ -318,7 +319,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
           </Panel>}
 
           {tab === "Subcontract" && <>
-            {award.exhibit.status !== "agreed" ? <Panel><Empty title="Agree Exhibit A first" description="The subcontract incorporates the agreed Exhibit A revision. Resolve comments and record agreement before generating it." action={<Button onClick={() => setTab("Exhibit A")}>Review Exhibit A<ArrowRight size={15}/></Button>}/></Panel> : !award.subcontract ? <Panel><Empty title="Exhibit A is agreed" description="Generate the complete subcontract using the agreed scope and selected award amount." action={<Button variant="primary" onClick={() => { setContractorName(company.name || "General contractor"); setContractorOpen(true); setErrors({}); }}>Generate subcontract<FileText size={15}/></Button>}/></Panel> : <div className="award-document-layout">
+            {award.exhibit.status !== "agreed" ? <Panel><Empty title="Agree Exhibit A first" description="The subcontract incorporates the agreed Exhibit A revision. Resolve comments and record agreement before generating it." action={<Button onClick={() => setTab("Exhibit A")}>Review Exhibit A<ArrowRight size={15}/></Button>}/></Panel> : !award.subcontract ? <Panel><Empty title="Exhibit A is agreed" description="Generate the complete subcontract using the agreed scope and selected award amount." action={<Button variant="primary" onClick={() => { setContractorName(company.name || "General contractor"); setPackageOpen(true); setErrors({}); }}>Package subcontract<Send size={15}/></Button>}/></Panel> : <div className="award-document-layout">
               <Panel title="Subcontract agreement" subtitle={`${award.subcontract.template.name} · Exhibit A revision ${award.subcontract.exhibitRevision}`} action={<Badge tone={award.subcontract.status === "executed" ? "green" : "amber"}>{award.subcontract.status.replaceAll("-", " ")}</Badge>}>
                 <div className="award-document-actions">
                   <Button onClick={() => downloadText(`${slug(award.snapshot.packageName)}-${award.subcontract!.status === "executed" ? "executed-" : ""}subcontract.txt`, award.subcontract!.executedCopy ?? renderDocumentText(award.subcontract!.content))}><Download size={15}/>Download {award.subcontract.status === "executed" ? "executed copy" : "draft"}</Button>
@@ -365,6 +366,30 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
       <ErrorSummary errors={errors}/><div className="award-modal-actions"><Button onClick={() => setAgreementOpen(false)}>Cancel</Button><Button type="submit" variant="primary">Agree revision</Button></div>
     </form></Modal>}
 
+    {packageOpen && award && (() => {
+      // Marcel (24 Oct): "click package subcontract … it shows the total amount, this is the Exhibit A, all the other
+      // exhibits, subcontract … and then we just click send." One step: generate the subcontract and send it for signature.
+      const exhibit = award.exhibit.revisions.find(r => r.number === award.exhibit.agreement?.revisionNumber) ?? award.exhibit.revisions.at(-1);
+      const files = award.contractFiles;
+      const missing = files ? missingContractFiles(files) : [];
+      const template = award.subcontract?.template ?? templateFor(company, "subcontract", DEFAULT_SUBCONTRACT_TEMPLATE);
+      const generate = (current: AwardState) => generateSubcontract(current, award.id, contractorName, actor, undefined, undefined, template);
+      return <Modal title="Package subcontract" subtitle={`${award.snapshot.company.name} · ${usd(award.amount)}`} wide onClose={() => setPackageOpen(false)}>
+        {!files ? <Empty title="Prepare All other exhibits first" description="The package attaches Exhibit B and Exhibits C to G. Prepare them, then come back to send it." action={<Button onClick={() => { setPackageOpen(false); setTab("All other exhibits"); }}>Open All other exhibits<ArrowRight size={15}/></Button>}/> : <form onSubmit={event => { event.preventDefault(); perform(current => sendSubcontract(generate(current), award.id), "Subcontract package sent for signature with Exhibit A and the other exhibits attached. No email was sent.", () => setPackageOpen(false)); }}>
+          <ul className="award-package-list">
+            <li><strong>Subcontract total</strong><span>{usd(award.amount)}</span></li>
+            <li><strong>Exhibit A · Scope of work</strong><span>Revision {exhibit?.number ?? "—"}{award.exhibit.agreement ? ` · agreed by ${award.exhibit.agreement.by}` : ""}</span></li>
+            <li><strong>Exhibit B · List of documents</strong><span>{missing.includes("Exhibit B") ? "Not provided" : "Attached"}</span></li>
+            {(Object.keys(EXHIBITS) as (keyof typeof EXHIBITS)[]).map(code => <li key={code}><strong>Exhibit {code} · {EXHIBITS[code]}</strong><span>{files.files[code]?.name ?? "Not provided"}</span></li>)}
+            <li><strong>Agreement form</strong><span>{files.company.form?.name ?? "Not provided"}</span></li>
+          </ul>
+          {missing.length > 0 && <p className="award-package-missing" role="note">Not provided yet: {missing.join(", ")}. The subcontract lists them as NOT PROVIDED; add them in All other exhibits first if they belong in this package.</p>}
+          <label className="ui-field"><span>General contractor legal name</span><input required value={contractorName} onChange={event => setContractorName(event.target.value)}/></label>
+          <ErrorSummary errors={errors}/>
+          <div className="award-modal-actions"><Button onClick={() => setPackageOpen(false)}>Cancel</Button><Button onClick={() => perform(generate, "Subcontract draft generated. Review it, then send it for signature.", () => setPackageOpen(false))}>Generate draft only</Button><Button type="submit" variant="primary"><Send size={15}/>Send package</Button></div>
+        </form>}
+      </Modal>;
+    })()}
     {contractorOpen && award && <Modal title={award.subcontract ? "Regenerate subcontract" : "Generate subcontract"} subtitle="The agreed Exhibit A revision and award value will be attached." onClose={() => setContractorOpen(false)}><form onSubmit={event => { event.preventDefault(); if (!award.contractFiles) { setErrors({ subcontract: "Prepare All other exhibits before generating the subcontract." }); setContractorOpen(false); setTab("All other exhibits"); return; } perform(current => generateSubcontract(current, award.id, contractorName, actor, undefined, undefined, award.subcontract?.template ?? templateFor(company, "subcontract", DEFAULT_SUBCONTRACT_TEMPLATE)), "Subcontract draft generated.", () => setContractorOpen(false)); }}>
       <label className="ui-field"><span>General contractor legal name</span><input required value={contractorName} onChange={event => setContractorName(event.target.value)}/></label>
       <div className="award-modal-note"><FileText size={17}/><span>The current template is identified inside the generated document. Review every term before signature.</span></div>
