@@ -38,9 +38,16 @@ export function jsonFromText(text: string): unknown {
   return JSON.parse(bare.slice(start, end + 1));
 }
 
-/** Structor's chat messages as a Claude request: system messages become `system`, data-URL images base64 blocks. */
-export function claudeRequest(messages: ChatMessage[]): { system: string; messages: Anthropic.MessageParam[] } {
-  const system = messages.filter(m => m.role === "system").map(m => typeof m.content === "string" ? m.content : m.content.map(p => p.type === "text" ? p.text : "").join("\n")).join("\n\n");
+/**
+ * Structor's chat messages as a Claude request: system messages become `system`, data-URL images base64 blocks.
+ * The system prompt is a job's fixed instructions (and, for the drawing search, the run's package list), the same on
+ * every request of that job, so it carries a cache breakpoint (Danial, 28 Oct: prompt caching): the requests after
+ * the first read it from Claude's cache at a tenth of the input price or less. A prompt shorter than the model's
+ * minimum (512 tokens on the 5.5 models) simply isn't cached.
+ */
+export function claudeRequest(messages: ChatMessage[]): { system?: Anthropic.TextBlockParam[]; messages: Anthropic.MessageParam[] } {
+  const text = messages.filter(m => m.role === "system").map(m => typeof m.content === "string" ? m.content : m.content.map(p => p.type === "text" ? p.text : "").join("\n")).join("\n\n");
+  const system = text ? [{ type: "text" as const, text, cache_control: { type: "ephemeral" as const } }] : undefined;
   const turns = messages.filter(m => m.role === "user").map((m): Anthropic.MessageParam => ({
     role: "user",
     content: typeof m.content === "string" ? m.content : m.content.map((part): Anthropic.ContentBlockParam => {

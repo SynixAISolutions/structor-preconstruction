@@ -3,14 +3,15 @@
 // Pure; DeepSeek's cost is too small to show and isn't tracked.
 
 /**
- * US dollars per million tokens (Claude API prices, Oct 2026). `measured` scales an estimate to what the model really
- * cost on Project 1 (28 Oct): Haiku's newer tokenizer counts about 30% more tokens and it writes longer answers, so it
- * cost about a twentieth of Opus on the same readings, not the fortieth its prices suggest.
+ * US dollars per million tokens (Claude API prices, Oct 2026). `cacheRead` is what a token read from the prompt cache
+ * costs as a share of the input price (a cache write costs 1.25 times it). `measured` scales an estimate to what the
+ * model really cost on Project 1 (28 Oct): Haiku's newer tokenizer counts about 30% more tokens and it writes longer
+ * answers, so it cost about a twentieth of Opus on the same readings, not the fortieth its prices suggest.
  */
-export const CLAUDE_PRICES: Record<string, { input: number; output: number; measured?: number }> = {
-  "claude-opus-5-5": { input: 4, output: 20 },
-  "claude-sonnet-5-5": { input: 2, output: 10 },
-  "claude-haiku-5-5": { input: 0.1, output: 0.5, measured: 2 },
+export const CLAUDE_PRICES: Record<string, { input: number; output: number; cacheRead: number; measured?: number }> = {
+  "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.05 },
+  "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.05 },
+  "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheRead: 0.1, measured: 2 },
 };
 export type TokenUsage = { input: number; output: number; cacheWrite?: number; cacheRead?: number };
 
@@ -18,7 +19,7 @@ export type TokenUsage = { input: number; output: number; cacheWrite?: number; c
 export function costOf(model: string, usage: TokenUsage | undefined): number | null {
   const price = CLAUDE_PRICES[model];
   if (!price || !usage) return null;
-  return (usage.input * price.input + (usage.cacheWrite ?? 0) * price.input * 1.25 + (usage.cacheRead ?? 0) * price.input * 0.1 + usage.output * price.output) / 1e6;
+  return (usage.input * price.input + (usage.cacheWrite ?? 0) * price.input * 1.25 + (usage.cacheRead ?? 0) * price.input * price.cacheRead + usage.output * price.output) / 1e6;
 }
 
 // For estimates: about 3.5 characters a token in specification and drawing text, a sheet image rendered at 2000 px

@@ -69,10 +69,9 @@ export function sheetReferenceMessages(job: SheetReferenceJob): ChatMessage[] {
       "Reply with JSON only, in exactly this format:",
       "{\"sheets\":[{\"sheet\":\"A1.1\",\"packages\":[{\"id\":\"drywall\",\"lines\":[\"5/8\\\" TYPE X GYPSUM BOARD EACH SIDE OF METAL STUDS TO DECK\"]}]}]}",
     ].join("\n") },
-    { role: "user", content: [
-      `Bid packages:\n${job.packages.map(p => `- id ${p.id}: ${p.name}${p.code ? ` (${p.code})` : ""}${p.sections.length ? `; sections ${p.sections.join("; ")}` : ""}`).join("\n")}`,
-      ...job.sheets.map(s => `[[sheet ${s.sheet} | ${s.discipline || "-"} | ${s.title}]]\n${s.text}`),
-    ].join("\n\n") },
+    // The package list is the same for every batch of a run, so it goes with the instructions Claude caches (lib/claude).
+    { role: "system", content: `Bid packages:\n${job.packages.map(p => `- id ${p.id}: ${p.name}${p.code ? ` (${p.code})` : ""}${p.sections.length ? `; sections ${p.sections.join("; ")}` : ""}`).join("\n")}` },
+    { role: "user", content: job.sheets.map(s => `[[sheet ${s.sheet} | ${s.discipline || "-"} | ${s.title}]]\n${s.text}`).join("\n\n") },
   ];
 }
 

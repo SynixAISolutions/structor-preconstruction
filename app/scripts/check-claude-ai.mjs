@@ -21,7 +21,8 @@ assert.deepEqual([C.claudeEffort({}), C.claudeEffort({ CLAUDE_EFFORT: "HIGH" }),
 
 const drawing = [{ role: "system", content: "Read this." }, { role: "system", content: "As JSON." }, { role: "user", content: [{ type: "text", text: "Sheet A1.1" }, { type: "image_url", image_url: { url: "data:image/jpeg;base64,/9j/AA==", detail: "original" } }] }];
 const req = C.claudeRequest(drawing);
-assert.equal(req.system, "Read this.\n\nAs JSON.", "System messages become Claude's system prompt");
+assert.deepEqual(req.system, [{ type: "text", text: "Read this.\n\nAs JSON.", cache_control: { type: "ephemeral" } }], "System messages become Claude's system prompt, cached: it is the same on every request of a job");
+assert.equal(C.claudeRequest([{ role: "user", content: "x" }]).system, undefined, "No system prompt, nothing to cache");
 assert.deepEqual(req.messages, [{ role: "user", content: [{ type: "text", text: "Sheet A1.1" }, { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "/9j/AA==" } }] }], "A data-URL image becomes a base64 image block");
 
 // ── Claude through the SDK, with a fake API ──
@@ -53,7 +54,7 @@ assert.ok(Math.abs(r.cost - (10 * 0.1 + 5 * 0.5) / 1e6) < 1e-12, "The answer car
 assert.match(calls[0].url, /api\.anthropic\.com\/v1\/messages/);
 assert.ok(calls[0].key === "sk-ant-test" || calls[0].auth === "Bearer sk-ant-test", "The Anthropic key is sent");
 assert.equal(calls[0].body.model, "claude-haiku-5-5");
-assert.equal(calls[0].body.system, "Read this.");
+assert.deepEqual(calls[0].body.system, [{ type: "text", text: "Read this.", cache_control: { type: "ephemeral" } }], "The instructions are sent with a cache breakpoint");
 assert.equal(calls[0].body.stream, true, "Streamed, so a long thinking answer doesn't hit the request time limit");
 assert.deepEqual(calls[0].body.output_config, { effort: "low" });
 assert.ok(calls[0].body.max_tokens > 1000, "max_tokens leaves room for Claude's thinking");
@@ -141,7 +142,10 @@ const sheetJob = H.parseSheetReferenceJob({
   sheets: [{ sheet: "A8.1", title: "PARTITION TYPES", discipline: "Architectural", text: "PARTITION TYPES\n5/8\" TYPE X GYPSUM BOARD EACH SIDE OF 3-5/8\" METAL STUDS TO DECK\nPROVIDE ACOUSTICAL SEALANT AT HEAD AND SILL\nDOOR TYPE A: HOLLOW METAL" }, { sheet: "A9.1", title: "BLANK", discipline: "", text: "  " }],
 });
 assert.deepEqual(sheetJob.sheets.map(s => s.sheet), ["A8.1"], "Sheets with no text aren't sent");
-assert.match(H.sheetReferenceMessages(sheetJob)[1].content, /\[\[sheet A8\.1 \| Architectural \| PARTITION TYPES\]\]/);
+const refMessages = H.sheetReferenceMessages(sheetJob);
+assert.match(refMessages.at(-1).content, /\[\[sheet A8\.1 \| Architectural \| PARTITION TYPES\]\]/);
+assert.match(C.claudeRequest(refMessages).system[0].text, /id drywall: Drywall \(09 29 00\); sections 09 21 16/, "The package list goes in the cached instructions, the same for every batch");
+assert.doesNotMatch(refMessages.at(-1).content, /Bid packages:/, "Only the sheets vary from batch to batch");
 const found = H.screenSheetReferences({ sheets: [
   { sheet: "A8.1", packages: [
     { id: "drywall", lines: ["5/8\" TYPE X GYPSUM BOARD EACH SIDE OF 3-5/8\" METAL STUDS TO DECK", "PROVIDE ACOUSTICAL SEALANT AT HEAD AND SILL", "INSTALL LEVEL 5 FINISH THROUGHOUT", "PROVIDE ACOUSTICAL SEALANT AT HEAD AND SILL"] },
@@ -159,7 +163,8 @@ assert.throws(() => H.parseSheetReferenceJob({ packages: [], sheets: [] }), /bid
 assert.equal(K.costOf("claude-opus-5-5", { input: 1_000_000, output: 100_000 }), 6, "$4 a million in, $20 a million out");
 assert.equal(K.costOf("claude-sonnet-5-5", { input: 1_000_000, output: 100_000 }), 3);
 assert.equal(K.costOf("deepseek-flash", { input: 1, output: 1 }), null, "DeepSeek's cost isn't tracked");
-assert.ok(Math.abs(K.costOf("claude-opus-5-5", { input: 0, output: 0, cacheWrite: 1_000_000, cacheRead: 1_000_000 }) - 5.4) < 1e-9, "Cache writes at 1.25x, reads at 0.1x");
+assert.ok(Math.abs(K.costOf("claude-opus-5-5", { input: 0, output: 0, cacheWrite: 1_000_000, cacheRead: 1_000_000 }) - 5.2) < 1e-9, "Opus: cache writes at 1.25x, reads at 0.05x");
+assert.ok(Math.abs(K.costOf("claude-haiku-5-5", { input: 0, output: 0, cacheWrite: 1_000_000, cacheRead: 1_000_000 }) - 0.135) < 1e-9, "Haiku: cache writes at 1.25x, reads at 0.1x");
 const est = K.estimateCost("claude-opus-5-5", { requests: 40, chars: 1_400_000 });
 assert.ok(est > 3 && est < 4, `205 drawing sheets' text in 40 requests is a few dollars (${est})`);
 assert.equal(K.estimateCost("claude-opus-5-5", { requests: 0, chars: 0 }), 0);
