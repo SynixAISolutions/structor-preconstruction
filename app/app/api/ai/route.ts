@@ -46,7 +46,7 @@ export async function POST(request: Request) {
 
   const model = body.job === "drawing" ? "deepseek-flash" : textModel(body.job === "proposal" ? "deepseek-v4-pro" : "deepseek-flash");
   // A request may name the Claude model to read with (Danial, 28 Oct: compare Haiku, Sonnet and Opus on the same
-  // reading and use the cheapest that holds up); without it, CLAUDE_MODEL or Opus 5.5.
+  // reading and use the cheapest that holds up); without it, CLAUDE_MODEL or Haiku 5.5 (lib/claude).
   let env: Record<string, string | undefined> = process.env;
   if (body.model !== undefined) {
     if (typeof body.model !== "string" || !Object.hasOwn(CLAUDE_PRICES, body.model)) return json({ error: `Choose a Claude model: ${Object.keys(CLAUDE_PRICES).join(", ")}.` }, 400);

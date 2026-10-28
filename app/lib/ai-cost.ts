@@ -2,11 +2,15 @@
 // prices, an estimate shown before a large reading starts, and what a finished request cost from its token counts.
 // Pure; DeepSeek's cost is too small to show and isn't tracked.
 
-/** US dollars per million tokens (Claude API prices, Oct 2026). */
-export const CLAUDE_PRICES: Record<string, { input: number; output: number }> = {
+/**
+ * US dollars per million tokens (Claude API prices, Oct 2026). `measured` scales an estimate to what the model really
+ * cost on Project 1 (28 Oct): Haiku's newer tokenizer counts about 30% more tokens and it writes longer answers, so it
+ * cost about a twentieth of Opus on the same readings, not the fortieth its prices suggest.
+ */
+export const CLAUDE_PRICES: Record<string, { input: number; output: number; measured?: number }> = {
   "claude-opus-5-5": { input: 4, output: 20 },
   "claude-sonnet-5-5": { input: 2, output: 10 },
-  "claude-haiku-5-5": { input: 0.1, output: 0.5 },
+  "claude-haiku-5-5": { input: 0.1, output: 0.5, measured: 2 },
 };
 export type TokenUsage = { input: number; output: number; cacheWrite?: number; cacheRead?: number };
 
@@ -26,7 +30,7 @@ export function estimateCost(model: string, work: { requests: number; chars: num
   const price = CLAUDE_PRICES[model];
   if (!price || work.requests <= 0) return price ? 0 : null;
   const input = work.chars / ESTIMATE.charsPerToken + (work.images ?? 0) * ESTIMATE.imageTokens + work.requests * ESTIMATE.promptPerRequest;
-  return (input * price.input + work.requests * ESTIMATE.outputPerRequest * price.output) / 1e6;
+  return (price.measured ?? 1) * (input * price.input + work.requests * ESTIMATE.outputPerRequest * price.output) / 1e6;
 }
 
 /**

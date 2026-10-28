@@ -1,11 +1,13 @@
-// Anthropic's Claude, asked for JSON (Danial, 28 Oct: "Use Claude Opus 5.5", the AI that reads the project's
-// specifications and drawings and decides its bid packages). Server only: the key comes from ANTHROPIC_API_KEY
-// and never reaches the browser. Claude Opus 5.5 always thinks before it answers; `effort` sets how long, and
+// Anthropic's Claude, asked for JSON: the AI that reads the project's specifications and drawings and decides its
+// bid packages. Danial chose Claude Opus 5.5 (28 Oct), then Haiku 5.5 for everything once it read Project 1 as well
+// as Sonnet and Opus at a twentieth of Opus's cost ("if sonnet gets the same ... then use haikuu for all"; compared
+// on the bid packages, Tile's scope and the packages on two sheets). Server only: the key comes from
+// ANTHROPIC_API_KEY and never reaches the browser. Claude thinks before it answers; `effort` sets how long, and
 // max_tokens counts that thinking, so the answer's budget gets room on top. A busy service is retried by the SDK;
 // an empty or unparsable answer is asked once more while time allows, like deepseekJson.
 //
 //   ANTHROPIC_API_KEY  turns Claude on for every AI job (lib/drawing-reader readJson)
-//   CLAUDE_MODEL       default claude-opus-5-5
+//   CLAUDE_MODEL       default claude-haiku-5-5; claude-sonnet-5-5 or claude-opus-5-5 to read with a larger model
 //   CLAUDE_EFFORT      default "low": the jobs are many small readings that must answer within the route's time
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -18,7 +20,7 @@ export class ClaudeError extends Error {
   constructor(message: string, busy = false) { super(message); this.name = "ClaudeError"; this.busy = busy; }
 }
 
-export const DEFAULT_CLAUDE_MODEL = "claude-opus-5-5";
+export const DEFAULT_CLAUDE_MODEL = "claude-haiku-5-5";
 export type ClaudeEffort = "low" | "medium" | "high" | "xhigh" | "max";
 const EFFORTS: ClaudeEffort[] = ["low", "medium", "high", "xhigh", "max"];
 type Env = Record<string, string | undefined>;

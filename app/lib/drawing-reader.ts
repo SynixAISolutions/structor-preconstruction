@@ -1,5 +1,5 @@
 // Which AI reads (21 Oct, Danial: "deepseek flash isn't going to be as good as ChatGPT"; 28 Oct: "Use Claude
-// Opus 5.5"). With ANTHROPIC_API_KEY set, Claude (lib/claude) reads everything: specification text, proposals,
+// Opus 5.5", then Haiku 5.5: lib/claude). With ANTHROPIC_API_KEY set, Claude reads everything: specification text, proposals,
 // drawing images and the bid packages. When Claude is busy or down (not when it refuses the key or the request)
 // the job goes to DeepSeek instead, and the answer names the model that gave it. Without the key, every job runs
 // on DeepSeek, except that DRAWING_AI_PROVIDER=openai moves the jobs that send a drawing image (title blocks,

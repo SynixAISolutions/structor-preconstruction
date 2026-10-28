@@ -15,7 +15,7 @@ assert.deepEqual(C.jsonFromText('{"a":1}'), { a: 1 });
 assert.deepEqual(C.jsonFromText('```json\n{"a":[1,2]}\n```'), { a: [1, 2] }, "A fenced answer");
 assert.deepEqual(C.jsonFromText('Here are the packages:\n{"packages":[]}\nDone.'), { packages: [] }, "An answer with a sentence around the object");
 assert.throws(() => C.jsonFromText("No object here."), SyntaxError);
-assert.equal(C.claudeModel({}), "claude-opus-5-5");
+assert.equal(C.claudeModel({}), "claude-haiku-5-5", "Haiku 5.5 unless the server names another model");
 assert.equal(C.claudeModel({ CLAUDE_MODEL: " claude-sonnet-5-5 " }), "claude-sonnet-5-5");
 assert.deepEqual([C.claudeEffort({}), C.claudeEffort({ CLAUDE_EFFORT: "HIGH" }), C.claudeEffort({ CLAUDE_EFFORT: "fast" })], ["low", "high", "low"], "Effort defaults to low; an unknown value is ignored");
 
@@ -48,20 +48,20 @@ const claudeEnv = { ANTHROPIC_API_KEY: "sk-ant-test" };
 
 calls.length = 0;
 let r = await R.readJson(text, { deepseekKey: "ds-key", model: "deepseek-flash", maxTokens: 1000, budgetMs: 30_000, env: claudeEnv, fetchImpl: fake([{ text: '```json\n{"ok":1}\n```' }]) });
-assert.deepEqual([r.model, r.output], ["claude-opus-5-5", { ok: 1 }], "With the Anthropic key every job reads with Claude");
-assert.ok(Math.abs(r.cost - (10 * 4 + 5 * 20) / 1e6) < 1e-12, "The answer carries what it cost: 10 tokens in, 5 out at Opus 5.5's prices");
+assert.deepEqual([r.model, r.output], ["claude-haiku-5-5", { ok: 1 }], "With the Anthropic key every job reads with Claude");
+assert.ok(Math.abs(r.cost - (10 * 0.1 + 5 * 0.5) / 1e6) < 1e-12, "The answer carries what it cost: 10 tokens in, 5 out at Haiku 5.5's prices");
 assert.match(calls[0].url, /api\.anthropic\.com\/v1\/messages/);
 assert.ok(calls[0].key === "sk-ant-test" || calls[0].auth === "Bearer sk-ant-test", "The Anthropic key is sent");
-assert.equal(calls[0].body.model, "claude-opus-5-5");
+assert.equal(calls[0].body.model, "claude-haiku-5-5");
 assert.equal(calls[0].body.system, "Read this.");
 assert.equal(calls[0].body.stream, true, "Streamed, so a long thinking answer doesn't hit the request time limit");
 assert.deepEqual(calls[0].body.output_config, { effort: "low" });
 assert.ok(calls[0].body.max_tokens > 1000, "max_tokens leaves room for Claude's thinking");
-assert.equal(calls[0].body.thinking, undefined, "Opus 5.5 always thinks: no thinking setting is sent");
+assert.equal(calls[0].body.thinking, undefined, "Claude 5.5 models think by themselves: no thinking setting is sent");
 
 calls.length = 0;
 r = await R.readJson(drawing, { deepseekKey: "ds-key", model: "deepseek-flash", maxTokens: 1000, budgetMs: 30_000, env: { ...claudeEnv, CLAUDE_EFFORT: "medium" }, fetchImpl: fake([{ text: '{"tags":[]}' }]) });
-assert.equal(r.model, "claude-opus-5-5", "Drawing images go to Claude too");
+assert.equal(r.model, "claude-haiku-5-5", "Drawing images go to Claude too");
 assert.equal(calls[0].body.messages[0].content[1].type, "image");
 assert.deepEqual(calls[0].body.output_config, { effort: "medium" });
 
@@ -179,5 +179,10 @@ const big = K.estimateCost("claude-opus-5-5", A.readingWork([{ sections: [{ firs
 assert.ok(big > 20, `Project 1's manual and drawings wait for the estimator (${big})`);
 assert.deepEqual(H.referenceWork([{ text: "  " }, { text: "A".repeat(50) }], [{ name: "Tile", sections: [] }]), { requests: 1, chars: 50 + 24 }, "Sheets without text aren't counted");
 assert.equal(A.runSummary({ trades: [], added: 0, duplicates: 0, newTrades: ["Tile"], scopesLater: true, fullCost: 31.2 }), "Bid packages set; reading every trade would cost about $31, so choose trades in Write scopes with AI · 1 new bid package");
+
+
+// Haiku reads Project 1 in full for about what Opus charges for a few trades.
+const fullHaiku = K.estimateCost("claude-haiku-5-5", A.readingWork([{ sections: [{ first: 1, last: 1084 }], sheets: Array(120).fill({}) }]));
+assert.ok(fullHaiku < big / 15, `Haiku costs about a twentieth of Opus (${fullHaiku} vs ${big})`);
 
 console.log("Claude, AI bid packages and AI drawing references: all checks passed");
