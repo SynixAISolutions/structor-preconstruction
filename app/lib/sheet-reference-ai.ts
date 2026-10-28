@@ -102,8 +102,8 @@ export function screenSheetReferences(output: unknown, job: SheetReferenceJob): 
   return { sheets: sheets.filter(s => s.packages.length), dropped };
 }
 
-export async function sheetReferencesJob(raw: unknown, key: string, signal: AbortSignal) {
+export async function sheetReferencesJob(raw: unknown, key: string, signal: AbortSignal, env?: Record<string, string | undefined>) {
   const job = parseSheetReferenceJob(raw);
-  const { output, model, cost } = await readJson(sheetReferenceMessages(job), { deepseekKey: key, model: textModel(), maxTokens: 8_000, budgetMs: AI_BUDGET_MS, signal });
+  const { output, model, cost } = await readJson(sheetReferenceMessages(job), { deepseekKey: key, model: textModel(), maxTokens: 8_000, budgetMs: AI_BUDGET_MS, signal, env });
   return Response.json({ model, cost: cost ?? null, ...screenSheetReferences(output, job) });
 }

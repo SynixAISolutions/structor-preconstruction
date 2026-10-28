@@ -98,9 +98,9 @@ export function screenBidPackages(output: unknown, job: BidPackageJob): BidPacka
   return { packages: out, unassigned: job.sections.map(s => s.section).filter(s => !taken.has(s)), dropped };
 }
 
-export async function bidPackagesJob(raw: unknown, key: string, signal: AbortSignal) {
+export async function bidPackagesJob(raw: unknown, key: string, signal: AbortSignal, env?: Record<string, string | undefined>) {
   const job = parseBidPackageJob(raw);
-  const { output, model, cost } = await readJson(bidPackageMessages(job), { deepseekKey: key, model: textModel("deepseek-v4-pro"), maxTokens: 12_000, budgetMs: AI_BUDGET_MS, signal });
+  const { output, model, cost } = await readJson(bidPackageMessages(job), { deepseekKey: key, model: textModel("deepseek-v4-pro"), maxTokens: 12_000, budgetMs: AI_BUDGET_MS, signal, env });
   return Response.json({ model, cost: cost ?? null, ...screenBidPackages(output, job) });
 }
 
