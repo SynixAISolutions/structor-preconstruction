@@ -14,7 +14,7 @@ const { ExtractionReview } = require("./extraction-review") as typeof import("./
 const { DrawingCanvas, DrawingFlipWorkspace } = require("./drawing-flip-ui") as typeof import("./drawing-flip-ui");
 const region = sampleExtraction.drafts.find(d => d.kind === "region")!;
 const scope = sampleExtraction.drafts.find(d => d.kind === "scope" && d.status === "pending-review")!;
-const render = (extraction: ExtractionState, packageId = "drywall") => renderToStaticMarkup(<ExtractionReview review={{ extraction, procurement: sampleProcurement, flip: sampleDrawingFlip, run: () => null, accept: () => null, runProcurement: () => null, runFlip: () => null, removeScope: () => null } as ReturnType<typeof useExtraction>} packageId={packageId} sections={[]} colors={new Map()} by="Reviewer" notify={() => {}} onOpenScope={() => {}}/>);
+const render = (extraction: ExtractionState, packageId = "drywall") => renderToStaticMarkup(<ExtractionReview review={{ extraction, procurement: sampleProcurement, flip: sampleDrawingFlip, run: () => null, accept: () => null, runProcurement: () => null, runFlip: () => null, removeScope: () => null, approveScopeItem: () => null } as ReturnType<typeof useExtraction>} packageId={packageId} sections={[]} colors={new Map()} by="Reviewer" notify={() => {}} onOpenScope={() => {}}/>);
 
 test("citations match document, PDF page and sheet together", () => {
   const cite = region.citations[0];

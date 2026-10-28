@@ -8,7 +8,7 @@ import type { useExtraction } from "../../lib/use-extraction";
 import { deleteDraft, type ExtractionState } from "../../lib/extraction";
 require.extensions[".css"] = () => {};
 const { InlineScopeDrafts } = require("./inline-scope-drafts") as typeof import("./inline-scope-drafts");
-const review=(extraction:ExtractionState)=>({extraction,procurement:sampleProcurement,flip:sampleDrawingFlip,run:()=>null,runProcurement:()=>null,runFlip:()=>null,accept:()=>null,removeScope:()=>null}) as ReturnType<typeof useExtraction>;
+const review=(extraction:ExtractionState)=>({extraction,procurement:sampleProcurement,flip:sampleDrawingFlip,run:()=>null,runProcurement:()=>null,runFlip:()=>null,accept:()=>null,removeScope:()=>null,approveScopeItem:()=>null}) as ReturnType<typeof useExtraction>;
 const render=(state:ExtractionState)=>renderToStaticMarkup(<InlineScopeDrafts review={review(state)} packageId="drywall" query="" sections={[]} colors={new Map()} by="Reviewer" notify={()=>{}} onMove={()=>{}}/>);
 test("AI proposals expose inline decisions and page citations without a second upload",()=>{
  const html=render(sampleExtraction);

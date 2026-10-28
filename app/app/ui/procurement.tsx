@@ -177,8 +177,9 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
     const proposals = shown.filter(d => !notOnSheet(d)), flagged = shown.length - proposals.length;
     for (const proposal of proposals) { const message = review.accept(proposal.id, CURRENT_USER); if (message) { notify(message); return; } }
     const drafts = visible.filter(item => item.status === "draft");
-    for (const item of drafts) {
-      const message = run(current => approveScope(current, item.id, CURRENT_USER));
+    // Approving a line places the highlights the AI proposed with it; already-approved lines place any still waiting.
+    for (const item of visible.filter(item => item.status === "draft" || item.origin === "ai")) {
+      const message = review.approveScopeItem(item.id, CURRENT_USER);
       if (message) { notify(message); return; }
     }
     const left = flagged ? ` ${flagged} not printed on ${flagged === 1 ? "its" : "their"} sheet left for you to check.` : "";
@@ -198,7 +199,7 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
         <div className="ui-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search this bid form…"/><Button onClick={approveAll}><CheckCheck size={15}/>Approve visible form</Button></div>
         <PackageDrawingReferences key={activePackage.id} pkg={activePackage} packages={state.packages} colors={sourceColors}/>
         <div className="proc-scope-list"><InlineScopeDrafts key={activePackage.id} review={review} packageId={activePackage.id} query={query} sections={specSections} colors={sourceColors} by={CURRENT_USER} notify={notify} onMove={setPackageId}/>{visible.map((item, index) => <article className={`proc-scope-row ${selected?.id === item.id ? "selected" : ""}`} key={item.id}>
-          <button className={`proc-approval ${item.status}`} aria-label={`${item.status === "approved" ? "Reopen" : "Approve"} ${item.title}`} onClick={() => runAndNotify(run, current => item.status === "approved" ? reopenScope(current, item.id, CURRENT_USER) : approveScope(current, item.id, CURRENT_USER), notify, item.status === "approved" ? "Scope item reopened for review." : "Scope item approved.")}>{item.status === "approved" ? <Check size={14}/> : <span/>}</button>
+          <button className={`proc-approval ${item.status}`} aria-label={`${item.status === "approved" ? "Reopen" : "Approve"} ${item.title}`} onClick={() => item.status === "approved" ? runAndNotify(run, current => reopenScope(current, item.id, CURRENT_USER), notify, "Scope item reopened for review.") : notify(review.approveScopeItem(item.id, CURRENT_USER) ?? "Scope item approved.")}>{item.status === "approved" ? <Check size={14}/> : <span/>}</button>
           <button className="proc-scope-copy" onClick={() => setSelectedId(item.id)}><span className="proc-scope-meta"><b>{String(index + 1).padStart(2, "0")}</b><Badge tone={item.status === "approved" ? "green" : "amber"}>{item.status === "approved" ? "Approved" : "Needs review"}</Badge>{item.allTrades && <Badge tone="blue">All trades</Badge>}</span><strong>{item.title}</strong><small><FileText size={12}/>{item.source || "Source not linked"} · {item.origin}</small></button>
           <OpenSourceButton evidence={evidenceOf(item)} onOpen={index => setOpened({ item, index })}/>
           <button className="ui-icon-btn" aria-label={`Move ${item.title}`} title="Move or copy to another trade" onClick={() => { setMoveItem(item); setMoveTo(state.packages.find(p => p.id !== item.packageId)?.id || ""); }}><MoveRight size={15}/></button>
