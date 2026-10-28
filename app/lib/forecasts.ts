@@ -21,6 +21,7 @@ import { usd } from "./format";
 import type { Procurement } from "./procurement";
 import type { Submission } from "./submissions";
 import { EMPTY_VE, type VeState } from "./value-engineering";
+import { withAcceptedVe } from "./ve-budget";
 
 export type AutoForecastKind = "award" | "leveled-low" | "estimate";
 export type ForecastKind = "manual" | AutoForecastKind | "none";
@@ -105,7 +106,9 @@ export function withForecasts(budget: BudgetState, forecasts: Forecasts): Budget
 
 /** Committed (lib/commitments) and forecast together: what the Budget page, to-do and Ask Structor total. */
 export function costPlan(budget: BudgetState, input: CostPlanInput) {
-  const commitments = budgetCommitments(budget, input.awards, input.procurement);
-  const forecasts = budgetForecasts(budget, commitments, input);
-  return { commitments, forecasts, budget: withForecasts(withCommitments(budget, commitments), forecasts) };
+  // Accepted VE first (lib/ve-budget): the lowered trade budgets are what commitments and forecasts compare with.
+  const ve = withAcceptedVe(budget, input.ve ?? EMPTY_VE, input.procurement);
+  const commitments = budgetCommitments(ve.budget, input.awards, input.procurement);
+  const forecasts = budgetForecasts(ve.budget, commitments, input);
+  return { commitments, forecasts, veUnplaced: ve.unplaced, budget: withForecasts(withCommitments(ve.budget, commitments), forecasts) };
 }

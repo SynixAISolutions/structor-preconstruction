@@ -18,6 +18,9 @@ import type { DocumentAsset } from "./document-assets";
 
 export type VeOrigin = "team" | "ai" | "subcontractor";
 export type VeStatus = "idea" | "pricing" | "priced" | "accepted" | "rejected";
+/** Who has to act next on a VE item (Marcel, 24 Oct: "ball in court"). */
+export type BallInCourt = "owner" | "architect" | "subcontractor" | "contractor";
+export const BALL_IN_COURT: Record<BallInCourt, string> = { owner: "Owner", architect: "Architect", subcontractor: "Subcontractor", contractor: "Us" };
 
 export type VePricingRequest = {
   id: string; bidderId: string; company: string; requestedAt: string; requestedBy: string;
@@ -43,6 +46,10 @@ export type VeIdea = {
   /** The team's estimate. Negative = saving, positive = added cost. */
   costImpact: number;
   notes: string;
+  /** The date the owner has to decide by ("the owner has till November…"), YYYY-MM-DD; null when none was given. Older ideas have none. */
+  ownerDeadline?: string | null;
+  /** Who acts next; older ideas count as "contractor". */
+  ballInCourt?: BallInCourt;
   status: VeStatus;
   pricing: VePricingRequest[];
   decision: { outcome: "accepted" | "rejected"; by: string; at: string; note: string; acceptedImpact: number | null; ownerApproved?: boolean } | null;
@@ -64,8 +71,8 @@ export type VeState = {
 
 export const EMPTY_VE: VeState = { target: { ownerBudget: null, reduction: null }, markupFactor: 1, lastNumber: 0, ideas: [], notifications: [] };
 
-export type VeIdeaInput = { description: string; category?: string; csiCode?: string | null; packageId?: string | null; source?: string; origin?: VeOrigin; costImpact: number; notes?: string };
-export type VeErrors = Partial<Record<"description" | "costImpact" | "ownerBudget" | "reduction" | "markupFactor" | "bidders" | "quote" | "decision" | "idea", string>>;
+export type VeIdeaInput = { description: string; category?: string; csiCode?: string | null; packageId?: string | null; source?: string; origin?: VeOrigin; costImpact: number; notes?: string; ownerDeadline?: string | null; ballInCourt?: BallInCourt };
+export type VeErrors = Partial<Record<"description" | "costImpact" | "ownerDeadline" | "ballInCourt" | "ownerBudget" | "reduction" | "markupFactor" | "bidders" | "quote" | "decision" | "idea", string>>;
 
 export class VeRuleError extends Error {
   readonly errors: VeErrors;
@@ -90,6 +97,16 @@ function findIdea(state: VeState, id: string): VeIdea {
 }
 const replace = (state: VeState, idea: VeIdea): VeState => ({ ...state, ideas: state.ideas.map(i => i.id === idea.id ? idea : i) });
 const open = (idea: VeIdea) => (idea.decision ? fail({ decision: `${idea.number} is ${idea.decision.outcome}; reopen it first.` }) : idea);
+/** The owner deadline and ball in court as typed, checked into `errors`. */
+function tracking(input: { ownerDeadline?: string | null; ballInCourt?: BallInCourt }, errors: VeErrors): { ownerDeadline: string | null; ballInCourt: BallInCourt } {
+  const deadline = input.ownerDeadline?.trim() || null;
+  if (deadline && !(/^\d{4}-\d{2}-\d{2}$/.test(deadline) && !Number.isNaN(Date.parse(`${deadline}T00:00:00Z`)))) errors.ownerDeadline = "Enter the owner's deadline as a date.";
+  const ball = input.ballInCourt ?? "contractor";
+  if (!(ball in BALL_IN_COURT)) errors.ballInCourt = "Choose who has the ball in court.";
+  return { ownerDeadline: deadline, ballInCourt: ball };
+}
+/** An undecided idea past its owner deadline on `today` (YYYY-MM-DD). */
+export const veOverdue = (idea: VeIdea, today: string): boolean => !idea.decision && !!idea.ownerDeadline && idea.ownerDeadline < today;
 
 // ── Target and markups ──────────────────────────────────────────────────────
 
@@ -118,11 +135,12 @@ export function addVeIdea(state: VeState, input: VeIdeaInput, by: string, at = n
   if (!input.description?.trim()) errors.description = "Describe the idea.";
   const impact = money(input.costImpact, "cost impact", false);
   if (impact) errors.costImpact = impact;
+  const tracked = tracking(input, errors);
   if (Object.keys(errors).length) fail(errors);
   const idea: VeIdea = {
     id: newId(), number: nextVeNumber(state), category: input.category?.trim() ?? "", description: input.description.trim(),
     csiCode: input.csiCode?.trim() || null, packageId: input.packageId || null, source: input.source?.trim() ?? "", origin: input.origin ?? "team",
-    costImpact: input.costImpact, notes: input.notes?.trim() ?? "", status: "idea", pricing: [], decision: null, createdAt: at, createdBy: by, updatedAt: at,
+    costImpact: input.costImpact, notes: input.notes?.trim() ?? "", ...tracked, status: "idea", pricing: [], decision: null, createdAt: at, createdBy: by, updatedAt: at,
   };
   return { ...state, lastNumber: lastNumber(state) + 1, ideas: [...state.ideas, idea] };
 }
@@ -135,10 +153,11 @@ export function editVeIdea(state: VeState, id: string, patch: Partial<VeIdeaInpu
   if (!merged.description?.trim()) errors.description = "Describe the idea.";
   const impact = money(merged.costImpact, "cost impact", false);
   if (impact) errors.costImpact = impact;
+  const tracked = tracking(merged, errors);
   if (Object.keys(errors).length) fail(errors);
   return replace(state, {
     ...idea, category: merged.category?.trim() ?? "", description: merged.description.trim(), csiCode: merged.csiCode?.trim() || null,
-    packageId: merged.packageId || null, source: merged.source?.trim() ?? "", origin: merged.origin ?? idea.origin, costImpact: merged.costImpact, notes: merged.notes?.trim() ?? "", updatedAt: at,
+    packageId: merged.packageId || null, source: merged.source?.trim() ?? "", origin: merged.origin ?? idea.origin, costImpact: merged.costImpact, notes: merged.notes?.trim() ?? "", ...tracked, updatedAt: at,
   });
 }
 

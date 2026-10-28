@@ -58,6 +58,8 @@ export type BudgetLine = {
   inHouseSource?: InHouseSource | null;
   /** The trade package this line budgets, once linked or confirmed (estimate.ts budgetLinesForTrade). */
   packageId?: string | null;
+  /** In the cost plan only: accepted VE ideas already taken off `budget` (lib/ve-budget). Never stored on a typed line. */
+  veApplied?: { ideaId: string; number: string; amount: number }[];
   updatedAt: string;
 };
 
