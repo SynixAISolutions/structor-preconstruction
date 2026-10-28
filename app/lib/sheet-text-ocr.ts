@@ -3,7 +3,8 @@
 // Making scanned sheets searchable (Danial, 28 Oct: 43 of Project 1's 205 sheets have no text layer, so the drawing
 // references, search and the AI couldn't see them). Each such sheet is read once with OCR (lib/sheet-ocr: the whole
 // sheet at 300 dpi) and its text saved in Project files beside the other pages, marked `ocr`, so every screen reads
-// it like any sheet, for everyone. The estimator starts it (it works the computer hard, about a minute a sheet); every
+// it like any sheet, for everyone. The run after an upload starts it by itself (Danial, 28 Oct: "Make it automatic"),
+// and the estimator can start it for files stored earlier; it works the computer hard, about a minute a sheet. Every
 // sheet is saved as soon as it is read, so a stopped or closed run picks up where it was.
 
 import { useSyncExternalStore } from "react";
@@ -29,9 +30,14 @@ export async function scannedSheets(documents: StoredDocument[]): Promise<Regist
   return register.filter(r => { const p = pages.get(r.doc.id)?.get(r.page); return !p?.ocr && (p?.text.trim().length ?? 0) < SCANNED_PAGE_TEXT; });
 }
 
-/** Reads and saves every scanned sheet's text, one at a time, until done or stopped. One run per tab. */
-export async function ocrScannedSheets(documents: StoredDocument[]): Promise<void> {
-  if (snapshot.running) return;
+let current: Promise<void> | null = null;
+/** Reads and saves every scanned sheet's text, one at a time, until done or stopped. One run per tab: asked again while it runs, it answers with the run in progress. */
+export function ocrScannedSheets(documents: StoredDocument[]): Promise<void> {
+  current ??= readScannedSheets(documents).finally(() => { current = null; });
+  return current;
+}
+
+async function readScannedSheets(documents: StoredDocument[]): Promise<void> {
   controller = new AbortController();
   const signal = controller.signal;
   window.addEventListener("beforeunload", holdTab);

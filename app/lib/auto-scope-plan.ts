@@ -27,6 +27,8 @@ export type AutoRun = {
   scopesLater?: boolean;
   /** What reading everything was estimated to cost, in dollars, when Claude reads. */
   fullCost?: number;
+  /** What the run is doing after the trades, for the progress card ("Making the scanned sheets searchable…"). */
+  stage?: string;
   trades: AutoTrade[];
   /** Scope lines added to bid forms for approval, and lines skipped as already there. */
   added: number; duplicates: number;

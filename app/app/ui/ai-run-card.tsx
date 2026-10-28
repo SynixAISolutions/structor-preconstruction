@@ -36,7 +36,7 @@ export function AiRunCard({ projectId }: { projectId: string }) {
         <strong>AI is reading {runFiles(run)}</strong>
         <small>{total ? `${done} of ${total} trades · ${run.added} scope item${run.added === 1 ? "" : "s"} added` : "Setting up the bid packages…"}{run.newTrades.length ? ` · ${run.newTrades.length} new bid package${run.newTrades.length === 1 ? "" : "s"}` : ""}</small>
         <span className="ai-run-bar" aria-hidden><i style={{ width: `${Math.max(4, percent)}%` }}/></span>
-        {reading.length > 0 && <small className="ai-run-now">Now: {reading.map(t => t.name).join(", ")}</small>}
+        {reading.length > 0 ? <small className="ai-run-now">Now: {reading.map(t => t.name).join(", ")}</small> : run.stage && <small className="ai-run-now">{run.stage}</small>}
         <small className="ai-run-keep">Keep this tab open until it finishes.</small>
       </div>
     </section>}

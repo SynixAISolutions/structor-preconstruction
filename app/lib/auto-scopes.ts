@@ -19,6 +19,7 @@ import { planBidPackages } from "./bid-package-client";
 import { aiReader } from "./ai-reader-client";
 import { AUTO_READ_UNDER, estimateCost } from "./ai-cost";
 import { findReferencesWithAi, loadSheetTexts } from "./sheet-reference-client";
+import { ocrScannedSheets } from "./sheet-text-ocr";
 import { referenceWork } from "./sheet-reference-ai";
 import { readTradeScope } from "./scope-reading";
 import { readDraft, writeDraft } from "./use-local-draft";
@@ -116,6 +117,10 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
     writeDraft(projectId, "procurement", procurement);
   }
 
+  // 1b. Scanned sheets have no text to search: each is read once with OCR in the background and saved for everyone
+  // (lib/sheet-text-ocr, free, about a minute a sheet), while the trades are read (Danial, 28 Oct: "Make it automatic").
+  const ocr = ocrScannedSheets(storedDocuments(projectId) ?? documents).catch(() => {});
+
   // 2. Every trade with sections or sheets, skipping those a stopped run already finished. With Claude, the upload is
   // read in full only when that costs under $2 (Danial, 28 Oct: "be smart with how we use this limited credits";
   // "Yes, under $2"), like Wyre reading a small set: two drawings and two specification sections. A larger set waits
@@ -174,9 +179,15 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
     }
   }));
 
-  // 3. Where each package is on the drawings, when the run read everything (lib/sheet-reference-client).
+  // 3. Where each package is on the drawings, when the run read everything (lib/sheet-reference-client), once the
+  // scanned sheets are searchable, so every sheet is looked at.
   if (!scopesLater && refPackages.length) {
-    const texts = sheetTexts ?? await loadSheetTexts(documents).catch(() => null);
+    run = { ...run, stage: "Making the scanned sheets searchable, then finding every package on the drawings" };
+    save(run);
+    await ocr;
+    run = { ...run, stage: "Finding every package on the drawings" };
+    save(run);
+    const texts = await loadSheetTexts(storedDocuments(projectId) ?? documents).catch(() => null) ?? sheetTexts;
     if (texts?.sheets.some(s => s.text.trim())) await findReferencesWithAi(projectId, texts.key, texts.sheets, refPackages).catch(() => {});
   }
 
