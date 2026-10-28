@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LocateFixed } from "lucide-react";
+import { BookOpen, LocateFixed, Map as MapIcon } from "lucide-react";
 import type { ScopeItem } from "../../lib/procurement";
 import { readStoredText } from "../../lib/project-files-client";
-import { findParagraph, type Evidence } from "../../lib/scope-evidence";
+import { findParagraph, onDrawing, type Evidence } from "../../lib/scope-evidence";
 import { useScopeEvidence } from "../../lib/use-scope-evidence";
 import { StoredDocumentViewer } from "./project-file-viewer";
 import { Empty, Modal } from "./shared";
@@ -23,10 +23,29 @@ export function PackageScopeSources({ items }: { items: ScopeItem[] }) {
         <span className="pkg-source-chips">{evidence.length ? evidence.map((e, index) => <button key={e.key} type="button" className="pkg-source-chip" title={`${e.documentName}, page ${e.page}${e.quotes.length ? `: ${e.quotes.map(q => `“${q}”`).join(" · ")}` : ""}`} onClick={() => setOpen({ item, index })}><LocateFixed size={12}/>{e.label}</button>) : <small>{item.source || "No source linked"}</small>}</span>
       </div></li>;
     })}</ol>
-    {open && <Modal title="Where this scope comes from" subtitle={open.item.title} wide onClose={() => setOpen(null)}>
-      <SourceView key={open.index} evidence={evidenceOf(open.item)} index={open.index} onIndex={index => setOpen({ ...open, index })}/>
-    </Modal>}
+    {open && <ScopeSourceModal title={open.item.title} evidence={evidenceOf(open.item)} index={open.index} onClose={() => setOpen(null)}/>}
   </>;
+}
+
+/** "Where this scope comes from": the item's sources, open on `index`; the others are a click away. */
+export function ScopeSourceModal({ title, evidence, index = 0, onClose }: { title: string; evidence: Evidence[]; index?: number; onClose: () => void }) {
+  const [shown, setShown] = useState(index);
+  return <Modal title="Where this scope comes from" subtitle={title} wide onClose={onClose}>
+    <SourceView key={shown} evidence={evidence} index={shown} onIndex={setShown}/>
+  </Modal>;
+}
+
+/**
+ * The button a scope item opens its source with (Danial, 27 Oct: "if clicked on open drawing, it should open that
+ * drawing"): its drawing when it has one, else its specification or other file. Nothing when it has no source.
+ */
+export function OpenSourceButton({ evidence, onOpen }: { evidence: Evidence[]; onOpen: (index: number) => void }) {
+  if (!evidence.length) return null;
+  const drawing = evidence.findIndex(onDrawing), index = Math.max(0, drawing), source = evidence[index];
+  const label = drawing >= 0 ? "Open drawing" : source.kind === "section" || source.doc?.kind === "manual" ? "Open spec" : "Open source";
+  return <button type="button" className="scope-open-source" aria-label={`${label}: ${source.label}`} title={`${source.label}${source.quotes.length ? `: ${source.quotes.map(q => `“${q}”`).join(" · ")}` : ""}`} onClick={() => onOpen(index)}>
+    {drawing >= 0 ? <MapIcon size={13}/> : <BookOpen size={13}/>}<span>{label}</span>
+  </button>;
 }
 
 function SourceView({ evidence, index, onIndex }: { evidence: Evidence[]; index: number; onIndex: (index: number) => void }) {

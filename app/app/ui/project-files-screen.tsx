@@ -14,6 +14,7 @@ import { useProjectContent } from "../../lib/project-content-client";
 import { ContentViewer, type ContentLocation } from "./content-viewer";
 import { CONTENT_ACTOR, ContentLinks, useContentRecords, type SaveContent } from "./project-content-links";
 import { DrawingLogView, UploadCheck, VersionPills } from "./drawing-log";
+import { BidDocumentsPanel, type BidUpload } from "./bid-documents";
 import "./project-files.css";
 import "./project-content.css";
 
@@ -30,7 +31,7 @@ const itemKey = (item: Item) => item.kind === "file" ? `file:${item.row.doc.seri
 const folderName = (content: ProjectContent, id: string) => id === ROOT ? "Project files" : findFolder(content, id)?.name ?? "Project files";
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
-export function ProjectFilesScreen({ projectName, notify }: ViewProps) {
+export function ProjectFilesScreen({ projectName, notify, navigate }: ViewProps) {
   const projectId = useActiveProject();
   const { documents, ready } = useProjectDocuments();
   const { content, ready: contentReady, change, refresh } = useProjectContent();
@@ -93,13 +94,15 @@ export function ProjectFilesScreen({ projectName, notify }: ViewProps) {
   }
 
   // ── Upload ──
-  const uploadInto = (target: string, files: File[] = []) => {
+  const uploadInto = (target: string, files: File[] = [], type?: string) => {
     const system = SYSTEM_FOLDERS.find(f => f.id === target || f.id === folderPath(content, target)[0]?.id);
-    const category = system?.upload ?? uploadCategory;
+    const category = type ?? system?.upload ?? uploadCategory;
     setUploadCategory(category);
     setPending(files.map(file => ({ file, category })));
     setUpload({ folder: target });
   };
+  /** The Bid documents slots: drawings and specifications go to Project Drawings, an addendum to the RFP folder. */
+  const uploadBid = (what: BidUpload, files: File[] = []) => what === "addendum" ? uploadInto("rfp", files, "Addenda") : uploadInto("drawings", files, what === "specifications" ? "Specifications" : "Drawings");
   function choose(files: File[]) {
     if (busy) return;
     if ((upload?.revisionOf || upload?.sheet) && files.length > 1) { notify("Choose one PDF for a new revision."); return; }
@@ -282,6 +285,7 @@ export function ProjectFilesScreen({ projectName, notify }: ViewProps) {
     <div role="status" aria-live="polite" className="cm-save-status">{saving ? "Saving changes..." : !ready || !contentReady ? "Loading project content..." : `${plural(totalFiles, "file")} / ${content.markups.length} markups`}</div>
     {error && <p className="cm-error" role="alert">{error}</p>}
     <div className="dl-view-switch" role="group" aria-label="Project files view">{["Files", "Sheets"].map(name => <button key={name} aria-pressed={view === name} onClick={() => setView(name)}>{name === "Files" ? <FileText size={17}/> : <LayoutGrid size={17}/>} {name}<span>{name === "Files" ? totalFiles : log.sheets.length}</span></button>)}</div>
+    {view === "Files" && folder === ROOT && !searching && <BidDocumentsPanel documents={documents} ready={ready} busy={busy} onUpload={uploadBid} onOpen={doc => setPreview({ docId: doc.id, page: 1 })} onRevision={beginRevision} navigate={navigate}/>}
     {view === "Sheets" ? <DrawingLogView log={log} ready={ready} onOpen={setPreview} onRevision={sheet => { setPending([]); setUpload({ sheet }); }} onUpload={() => uploadInto("drawings")} onReview={id => setCheckIds([id])}/> : <Panel className="cm-library-main pf-explorer">
       <div className="ui-toolbar cm-library-toolbar">
         <nav className="pf-crumbs" aria-label="Folder path">{crumbs.map((c, i) => <span key={c.id} className="pf-crumb-wrap">{i > 0 && <ChevronRight size={14} aria-hidden/>}<button className={`pf-crumb ${dropFolder === c.id ? "pf-drop-active" : ""}`} aria-current={i === crumbs.length - 1 && !searching ? "page" : undefined} onClick={() => { setFolder(c.id); setQuery(""); setTag(""); }} {...dropZone(c.id)}>{i === 0 ? <FolderOpen size={14}/> : null}{c.name}</button></span>)}</nav>

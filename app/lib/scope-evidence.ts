@@ -1,5 +1,5 @@
 // Where a bid-form item came from, so the estimator can click it and land on the words (Danial, 27 Oct, after
-// the app Marcel showed: the source opens on the page, zoomed in, the mention highlighted orange).
+// the app Marcel showed: the source opens on the page, zoomed in, the mention highlighted; green since 28 Oct).
 //
 // An item's evidence, best first:
 // - the quotes the AI read it from (the accepted finding behind the item: file, page, exact words);
@@ -9,7 +9,7 @@
 // Pure: the caller passes the project's findings, Drawing Flip and stored files.
 
 import type { DrawingFlipState, Point } from "./drawing-flip";
-import type { ExtractionState } from "./extraction";
+import type { Citation, ExtractionState } from "./extraction";
 import type { ScopeItem } from "./procurement";
 import { findSection, findSheet, latestDocuments, type PageText, type StoredDocument } from "./project-files";
 
@@ -51,25 +51,31 @@ export function storedByName(documents: StoredDocument[], name: string): StoredD
   return latestDocuments(documents).find(d => d.name === name) ?? documents.find(d => d.name === name) ?? null;
 }
 
+/** The pages a finding's citations are on, one source per file and page with every quote there, added to `into`. */
+export function citationEvidence(citations: Citation[], documents: StoredDocument[], into: Evidence[] = []): Evidence[] {
+  for (const c of citations) {
+    const key = `quote:${c.document}:${c.page}`, there = into.find(e => e.key === key);
+    if (there) {
+      if (!there.quotes.includes(c.quote)) there.quotes.push(c.quote);
+      there.fromImage ||= !!c.verification;
+      continue;
+    }
+    const doc = storedByName(documents, c.document);
+    into.push({ key, kind: "quote", label: c.sheet ? `${c.sheet} · p. ${c.page}` : `${shortName(c.document, doc)} p. ${c.page}`,
+      documentName: c.document, doc, missing: doc ? null : "file", page: c.page, quotes: [c.quote], fromImage: !!c.verification, outline: null, paragraph: null });
+  }
+  return into;
+}
+
+/** A source on a drawing sheet, rather than in the project manual or another file: it opens with "Open drawing". */
+export const onDrawing = (e: Evidence): boolean => e.kind === "region" || e.kind === "sheet" || (e.doc ? e.doc.kind === "drawings" : /drawing/i.test(e.documentName));
+
 export function scopeEvidence(item: Pick<ScopeItem, "id" | "source">, records: { extraction: ExtractionState; flip: DrawingFlipState }, documents: StoredDocument[]): Evidence[] {
   const evidence: Evidence[] = [];
   const [head, ...rest] = item.source.split("·").map(part => part.trim());
 
   // 1. What the AI read: every citation of the accepted finding that became this item, one source per page.
-  for (const draft of records.extraction.drafts) {
-    if (draft.kind !== "scope" || draft.acceptedId !== item.id) continue;
-    for (const c of draft.citations) {
-      const key = `quote:${c.document}:${c.page}`, there = evidence.find(e => e.key === key);
-      if (there) {
-        if (!there.quotes.includes(c.quote)) there.quotes.push(c.quote);
-        there.fromImage ||= !!c.verification;
-        continue;
-      }
-      const doc = storedByName(documents, c.document);
-      evidence.push({ key, kind: "quote", label: c.sheet ? `${c.sheet} · p. ${c.page}` : `${shortName(c.document, doc)} p. ${c.page}`,
-        documentName: c.document, doc, missing: doc ? null : "file", page: c.page, quotes: [c.quote], fromImage: !!c.verification, outline: null, paragraph: null });
-    }
-  }
+  for (const draft of records.extraction.drafts) if (draft.kind === "scope" && draft.acceptedId === item.id) citationEvidence(draft.citations, documents, evidence);
 
   // 2. Regions marked for it in Drawing Flip.
   for (const region of records.flip.regions) {
