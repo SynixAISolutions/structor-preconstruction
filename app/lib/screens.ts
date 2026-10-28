@@ -4,8 +4,8 @@
 //
 // Structure is Marcel's 20 September review as reordered on 7 October: global workspace tools,
 // then two project groups — Preconstruction and Operations. Inside Preconstruction the to-do
-// list comes first and the 3D model studio last; Subcontractor outreach, Preconstruction budget
-// and Compliance and contracts are sections. The Subcontractor portal is what an invited company
+// list comes first and the 3D model studio last; Subcontractor outreach and Preconstruction budget are
+// sections (24 Oct: Compliance and contracts folded into outreach, "one flow"). The Subcontractor portal is what an invited company
 // sees, so it sits in its own SUBCONTRACTOR VIEW group outside the contractor's sidebar.
 
 export type Screen =
@@ -35,7 +35,6 @@ export const DEFAULT_SCREEN: Screen = "projects";
 
 const OUTREACH = "Subcontractor outreach";
 const BUDGET = "Preconstruction budget";
-const COMPLIANCE = "Compliance and contracts";
 const MODEL = "3D model studio";
 
 export const SCREEN_GROUPS: ScreenGroup[] = [
@@ -57,14 +56,14 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "leveling", label: "Bid leveling", icon: "Gauge", section: OUTREACH },
     // Marcel, 22 Oct: after leveling, scope reviews, best and final, award and contract, tracked per trade.
     { id: "buyout", label: "Scope review & buyout", icon: "UserCheck", section: OUTREACH, keywords: ["buyout log", "buyout tracker", "scope review", "best and final", "bafo", "meeting minutes", "ball in court", "award"] },
+    { id: "contracts", label: "Contracts & exhibits", icon: "FileCheck2", section: OUTREACH, keywords: ["exhibit a", "award"] },
+    { id: "drawings", label: "List of drawings", icon: "FileText", section: OUTREACH, keywords: ["drawing register", "sheets"] },
+    { id: "specifications", label: "List of specifications", icon: "FileText", section: OUTREACH, keywords: ["spec register", "project manual", "specification sections"] },
     { id: "checks", label: "Structor Check & RFIs", icon: "ShieldCheck", keywords: ["rfi", "rfi log", "issues", "issue review", "questions", "design team"] },
     { id: "takeoffs", label: "Quantity takeoffs", icon: "Ruler", section: BUDGET, keywords: ["estimate", "in-house estimate", "mcn estimate"] },
     { id: "budget", label: "Budget summary", icon: "Wallet", section: BUDGET },
     { id: "allowances", label: "Allowances", icon: "ClipboardList", section: BUDGET },
     { id: "value-engineering", label: "Value engineering", icon: "Wallet", section: BUDGET, keywords: ["VE", "savings", "target reduction", "cost reduction"] },
-    { id: "contracts", label: "Contracts & exhibits", icon: "FileCheck2", section: COMPLIANCE, keywords: ["exhibit a", "award"] },
-    { id: "drawings", label: "List of drawings", icon: "FileText", section: COMPLIANCE, keywords: ["drawing register", "sheets"] },
-    { id: "specifications", label: "List of specifications", icon: "FileText", section: COMPLIANCE, keywords: ["spec register", "project manual", "specification sections"] },
     { id: "model", label: "Interior finishes", icon: "Box", section: MODEL, keywords: ["3d model studio", "3d model", "interiors", "finishes", "doors", "walkthrough"] },
     { id: "model-mep", label: "MEP coordination", icon: "Box", section: MODEL, keywords: ["3d mep", "mechanical", "electrical", "plumbing", "fire protection", "bim", "clash"] },
     { id: "model-structural", label: "Structural model", icon: "Box", section: MODEL, keywords: ["3d structure", "concrete", "steel", "framing", "columns"] },

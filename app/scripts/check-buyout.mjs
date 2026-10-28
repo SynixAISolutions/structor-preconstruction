@@ -60,4 +60,19 @@ assert.deepEqual(todo(scheduled), [["buyout:review:thermal", "todo", "buyout"]])
 assert.deepEqual(todo(Y.markScopeReviewHeld(scheduled, sampleProcurement, "thermal", "Victor", at)), [["buyout:bafo:thermal", "waiting", "buyout"]]);
 assert.deepEqual(todo(s), [["award:select:thermal", "todo", "contracts"]], "With a best and final in, choose the subcontractor");
 
-console.log("Buyout checked: rows per trade, status and ball in court from bids and awards, scope review, minutes, best and final, plan, rules, and the to-do's scope review step.");
+// The best and final pulled from the subcontractor's revised proposal (Marcel, 24 Oct), not typed.
+{
+  const revision = (number, baseBid, submittedAt) => ({ number, baseBid, submittedAt, formVersion: 1, submitter: { name: "Pat Roofer", email: "pat@example.com" }, responses: [], exclusions: [], alternates: [], clarifications: [], attachments: [] });
+  const sub = (id, bidderId, revisions) => ({ id, projectId: "jelleff", packageId: "thermal", invitationId: `inv-${id}`, bidderId, status: revisions.length > 1 ? "revised" : "submitted", draft: revisions.at(-1), revisions, updatedAt: at });
+  const directory = [{ id: "roof-a", company: "Alpha Roofing" }, { id: "roof-b", company: "Beta Roofing" }];
+  const subs = [sub("s1", "roof-a", [revision(1, 500000, "2026-10-20T00:00:00Z"), revision(2, 470000, "2026-10-25T00:00:00Z")]), sub("s2", "roof-b", [revision(1, 480000, "2026-10-20T00:00:00Z")])];
+  const held = { date: "2026-10-24", attendees: "", held: { at: "2026-10-24T15:00:00Z", by: "Victor" }, minutes: [] };
+  const pulled = Y.proposalBafos(subs, "thermal", held, directory);
+  assert.deepEqual(pulled.map(b => [b.company, b.amount, b.revision, b.source]), [["Alpha Roofing", 470000, 2, "proposal"]], "V2 after the scope review is Alpha's best and final; Beta never resubmitted");
+  assert.deepEqual(Y.proposalBafos(subs, "thermal", { ...held, held: { at: "2026-10-26T00:00:00Z", by: "Victor" } }, directory), [], "A revision sent before the review was held is not the best and final");
+  assert.equal(Y.proposalBafos(subs, "thermal", null, directory).length, 1, "Without a held review, any resubmission counts");
+  const typed = [{ id: "t1", bidderId: null, company: "Beta Roofing", amount: 465000, note: "By email", receivedAt: "2026-10-26T00:00:00Z", by: "Victor", source: "typed" }, { id: "t0", bidderId: "roof-a", company: "Alpha Roofing", amount: 490000, note: "Phone", receivedAt: "2026-10-24T16:00:00Z", by: "Victor" }];
+  assert.deepEqual(Y.currentBafos(typed, pulled).map(b => [b.company, b.amount]), [["Beta Roofing", 465000], ["Alpha Roofing", 470000]], "Each company's latest best and final, lowest first: Alpha's V2 replaces its earlier phone number");
+}
+
+console.log("Buyout checked: rows per trade, status and ball in court from bids and awards, scope review, minutes, best and final (typed or from a revised proposal), plan, rules, and the to-do's scope review step.");

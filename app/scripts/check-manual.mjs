@@ -84,9 +84,9 @@ const precon = SCREEN_GROUPS.find(group => group.label === "PRECONSTRUCTION").it
 assert.equal(precon[0].id, "turnover", "Preconstruction to-do opens the Preconstruction group");
 assert.deepEqual(precon.slice(-4).map(item => item.id), ["model", "model-mep", "model-structural", "model-exterior"], "The 3D model studio closes the Preconstruction group");
 const sectionIds = section => precon.filter(item => item.section === section).map(item => item.id);
-assert.deepEqual(sectionIds("Subcontractor outreach"), ["packages", "leveling", "buyout"]);
+assert.deepEqual(sectionIds("Subcontractor outreach"), ["packages", "leveling", "buyout", "contracts", "drawings", "specifications"], "Marcel, 24 Oct: Compliance and contracts folded into one outreach flow");
 assert.deepEqual(sectionIds("Preconstruction budget"), ["takeoffs", "budget", "allowances", "value-engineering"]);
-assert.deepEqual(sectionIds("Compliance and contracts"), ["contracts", "drawings", "specifications"]);
+assert.deepEqual(sectionIds("Compliance and contracts"), [], "That section is gone");
 assert(!SCREEN_GROUPS.some(group => group.items.some(item => item.id === "portal")), "The Subcontractor portal is not in the contractor's sidebar");
 assert.equal(SUBCONTRACTOR_VIEW.scope, "subcontractor");
 assert.equal(PORTAL_PREVIEW_SCREEN.id, "portal");
