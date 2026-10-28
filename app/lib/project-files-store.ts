@@ -2,7 +2,7 @@
 // byte ranges of the original PDFs. Only reached through /api/project-files, behind the demo password.
 
 import { del, get, put } from "@vercel/blob";
-import { emptyIndex, indexPath, MAX_RANGE_BYTES, renameSeries, textPath, upsertDocument, type PageText, type ProjectFileIndex, type StoredDocument } from "./project-files";
+import { emptyIndex, hashPath, indexPath, MAX_RANGE_BYTES, renameSeries, textPath, textSource, upsertDocument, type DocKind, type PageText, type ProjectFileIndex, type StoredDocument } from "./project-files";
 
 async function readJson<T>(pathname: string): Promise<T | null> {
   const result = await get(pathname, { access: "private", useCache: false }).catch(() => null);
@@ -31,7 +31,26 @@ async function writeIndex(index: ProjectFileIndex) {
 }
 
 // ponytail: read-modify-write without a lock; two uploads finishing in the same instant could drop one entry.
-export const registerDocument = async (doc: StoredDocument) => writeIndex(upsertDocument(await readIndex(doc.projectId, true), doc));
+export async function registerDocument(doc: StoredDocument) {
+  const index = await writeIndex(upsertDocument(await readIndex(doc.projectId, true), doc));
+  // A newly stored PDF is remembered by its fingerprint, so an identical upload can reuse it (findCopy).
+  if (doc.hash && !doc.textFrom) await writeJson(hashPath(doc.hash), { projectId: doc.projectId, docId: doc.id }).catch(() => null);
+  return index;
+}
+
+/**
+ * The stored copy of a PDF with this fingerprint, size and kind, if it is still there: its upload is still in its
+ * project's files and its page text can be read. Null when the copy was removed or never stored.
+ */
+export async function findCopy(hash: string, size: number, kind: DocKind): Promise<StoredDocument | null> {
+  const at = await readJson<{ projectId: string; docId: string }>(hashPath(hash));
+  if (!at) return null;
+  const copy = (await readIndex(at.projectId, true)).documents.find(d => d.id === at.docId);
+  if (!copy || copy.hash !== hash || copy.size !== size || copy.kind !== kind) return null;
+  const text = textSource(copy);
+  if (copy.textChunks && !(await readText(text.projectId, text.docId, 0))) return null;
+  return copy;
+}
 /** Renames every revision of a file (lib/project-files renameSeries). */
 export const renameDocument = async (projectId: string, series: string, name: unknown) => writeIndex(renameSeries(await readIndex(projectId, true), series, name));
 
@@ -47,7 +66,8 @@ export async function removeDocument(projectId: string, docId: string) {
   const doc = index.documents.find(d => d.id === docId);
   if (!doc) return index;
   const next = await writeIndex({ ...index, documents: index.documents.filter(d => d.id !== docId), updatedAt: new Date().toISOString() });
-  await del([doc.sourceUrl, ...Array.from({ length: doc.textChunks }, (_, n) => textPath(projectId, docId, n))]).catch(() => {});
+  // A fingerprinted PDF may be reused by other uploads (findCopy), so its stored copy stays; only the entry goes.
+  if (!doc.hash && !doc.textFrom) await del([doc.sourceUrl, ...Array.from({ length: doc.textChunks }, (_, n) => textPath(projectId, docId, n))]).catch(() => {});
   return next;
 }
 

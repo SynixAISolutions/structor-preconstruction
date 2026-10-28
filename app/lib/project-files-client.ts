@@ -13,7 +13,7 @@ import { useActiveProject } from "./project-scope";
 import { pageTextBoxes, type TextBox } from "./text-anchor";
 import {
   chunkFor, emptyIndex, kindForCategory, MAX_RANGE_BYTES, sourcePath, TEXT_CHUNK,
-  type PageText, type ProjectFileIndex, type StoredDocument, type StoredSheet,
+  textSource, type PageText, type ProjectFileIndex, type StoredDocument, type StoredSheet,
 } from "./project-files";
 
 // ── Index (one shared copy per project) ─────────────────────────────────────
@@ -42,6 +42,12 @@ export function loadIndex(projectId: string, fresh = false): Promise<ProjectFile
 }
 
 const setIndex = (index: ProjectFileIndex) => { indexes.set(index.projectId, index); notify(); return index; };
+
+/** A PDF's SHA-256, in hex. */
+async function fingerprint(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
 
 /** A project's stored documents as last loaded in this tab, or null before the first load. */
 export const storedDocuments = (projectId: string): StoredDocument[] | null => indexes.get(projectId)?.documents ?? null;
@@ -119,6 +125,13 @@ async function storePdf(args: Parameters<typeof uploadProjectPdf>[0]): Promise<S
   if (!/\.pdf$/i.test(file.name) || !header.includes("%PDF-")) throw new Error(`${file.name} is not a PDF.`);
   const id = crypto.randomUUID().replace(/-/g, "").slice(0, 24);
   const kind = revisionOf?.kind ?? kindForCategory(category);
+  // The same PDF stored before (the same drawing set uploaded to another project) is reused, not stored again.
+  const hash = await fingerprint(file);
+  const reused = await api<{ reused: boolean; document?: StoredDocument; index?: ProjectFileIndex }>("/api/project-files", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+    op: "reuse", projectId, hash, size: file.size, kind,
+    document: { id, name: file.name, category: revisionOf?.category ?? category, series: revisionOf?.series ?? id, revision: (revisionOf?.revision ?? 0) + 1 },
+  }) }).catch(() => null);
+  if (reused?.reused && reused.document && reused.index) { setIndex(reused.index); return reused.document; }
   const stored = await upload(sourcePath(projectId, id), file, {
     access: "private", handleUploadUrl: "/api/project-files/upload", contentType: "application/pdf", multipart: file.size > 20 * 1024 * 1024,
     onUploadProgress: event => args.onProgress?.({ stage: "uploading", done: event.loaded, total: event.total }),
@@ -132,7 +145,7 @@ async function storePdf(args: Parameters<typeof uploadProjectPdf>[0]): Promise<S
   const document: StoredDocument = {
     id, projectId, name: file.name, category: revisionOf?.category ?? category, kind, series: revisionOf?.series ?? id, revision: (revisionOf?.revision ?? 0) + 1,
     size: file.size, pageCount: pages.length, uploadedAt: new Date().toISOString(), sourcePath: stored.pathname, sourceUrl: stored.url,
-    textChunk: TEXT_CHUNK, textChunks: chunks, sheets,
+    textChunk: TEXT_CHUNK, textChunks: chunks, sheets, hash,
     sections: kind === "manual" ? manualSections(pages).map(s => ({ section: s.section, title: s.title, first: s.firstPage, last: s.lastPage })) : [],
   };
   setIndex(await api<ProjectFileIndex>("/api/project-files", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "register", projectId, document }) }));
@@ -210,7 +223,8 @@ export async function readStoredText(doc: StoredDocument, pages?: { first: numbe
   const chunks = await Promise.all(Array.from({ length: last - first + 1 }, (_, i) => {
     const key = `${doc.id}:${first + i}`;
     const version = textVersion.get(doc.id);
-    if (!textCache.has(key)) textCache.set(key, api<PageText[]>(`/api/project-files/text?project=${doc.projectId}&doc=${doc.id}&chunk=${first + i}${version ? `&v=${version}` : ""}`).catch(error => { textCache.delete(key); throw error; }));
+    const at = textSource(doc);
+    if (!textCache.has(key)) textCache.set(key, api<PageText[]>(`/api/project-files/text?project=${at.projectId}&doc=${at.docId}&chunk=${first + i}${version ? `&v=${version}` : ""}`).catch(error => { textCache.delete(key); throw error; }));
     return textCache.get(key)!;
   }));
   return chunks.flat().filter(p => !pages || (p.page >= pages.first && p.page <= pages.last));
@@ -222,7 +236,8 @@ export async function readStoredText(doc: StoredDocument, pages?: { first: numbe
  */
 export async function savePageOcrText(doc: StoredDocument, page: number, text: string): Promise<void> {
   const chunk = chunkFor(page, doc.textChunk);
-  await api("/api/project-files/text", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ projectId: doc.projectId, docId: doc.id, chunk, page, text }) });
+  const at = textSource(doc);
+  await api("/api/project-files/text", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ projectId: at.projectId, docId: at.docId, chunk, page, text }) });
   textVersion.set(doc.id, (textVersion.get(doc.id) ?? 0) + 1);
   textCache.delete(`${doc.id}:${chunk}`);
 }
