@@ -8,7 +8,7 @@
 //   project manual at that paragraph, a sheet ("CIV0102 · Keynote 1") opens the sheet.
 // Pure: the caller passes the project's findings, Drawing Flip and stored files.
 
-import type { DrawingFlipState, Point } from "./drawing-flip";
+import { onPrintedWords, type DrawingFlipState, type Point } from "./drawing-flip";
 import type { Citation, ExtractionState } from "./extraction";
 import type { ScopeItem } from "./procurement";
 import { findSection, findSheet, latestDocuments, type PageText, type StoredDocument } from "./project-files";
@@ -78,8 +78,9 @@ export function scopeEvidence(item: Pick<ScopeItem, "id" | "source">, records: {
   for (const draft of records.extraction.drafts) if (draft.kind === "scope" && draft.acceptedId === item.id) citationEvidence(draft.citations, documents, evidence);
 
   // 2. Regions marked for it in Drawing Flip.
+  // Only highlights on printed words or drawn by the team: an AI outline from the picture alone is a guess (onPrintedWords).
   for (const region of records.flip.regions) {
-    if (!region.scopeIds.includes(item.id)) continue;
+    if (!region.scopeIds.includes(item.id) || !onPrintedWords(region)) continue;
     const page = records.flip.pages.find(p => p.id === region.pageId);
     if (!page) continue;
     const byId = documents.find(d => d.id === page.documentId);

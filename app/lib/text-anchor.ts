@@ -227,7 +227,7 @@ export function checkImageQuotes(drafts: DraftInput[], at: { document: string; p
  * outline left for a finding the text doesn't hold is kept as approximate. `boxes` holds each sheet's text;
  * `ocr` the words read off a sheet's image (sheetWords), looked up allowing OCR's letter slips.
  */
-export function pinFindings(drafts: DraftInput[], boxes: Map<string, TextBox[]>, ocr: Map<string, TextBox[]> = new Map()): DraftInput[] {
+export function pinFindings(drafts: DraftInput[], boxes: Map<string, TextBox[]>, ocr: Map<string, TextBox[]> = new Map(), keepApproximate = true): DraftInput[] {
   const pinned = new Set<string>(), marks: DraftInput[] = [];
   for (const draft of drafts) {
     if (draft.kind !== "scope") continue;
@@ -242,6 +242,6 @@ export function pinFindings(drafts: DraftInput[], boxes: Map<string, TextBox[]>,
       label: (found.length > 1 ? `${draft.title} (${i + 1} of ${found.length})` : draft.title).slice(0, 200), confidence: 0.9, scopeKeys: [draft.key], citations: draft.citations,
     }));
   }
-  const kept = drafts.flatMap((draft): DraftInput[] => draft.kind !== "region" ? [draft] : (draft.scopeKeys ?? []).some(key => pinned.has(key)) ? [] : [{ ...draft, anchor: "image" }]);
+  const kept = drafts.flatMap((draft): DraftInput[] => draft.kind !== "region" ? [draft] : (draft.scopeKeys ?? []).some(key => pinned.has(key)) || !keepApproximate ? [] : [{ ...draft, anchor: "image" }]);
   return [...kept, ...marks];
 }

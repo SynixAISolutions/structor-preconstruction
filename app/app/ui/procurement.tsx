@@ -86,6 +86,7 @@ import "./procurement.css";
 import { EstimatorSubmissions } from "./submission-ui";
 import { AddScopeToEstimate } from "./scope-estimate-ui";
 import { OpenSourceButton, PackageScopeSources, ScopeSourceModal } from "./package-scope-sources";
+import { PackageDrawingReferences } from "./drawing-references";
 import { onDrawing } from "../../lib/scope-evidence";
 import { useScopeEvidence } from "../../lib/use-scope-evidence";
 
@@ -195,6 +196,7 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
       {generalOpen ? <GeneralScopes review={review} by={CURRENT_USER} notify={notify} onEdit={item => setEditor({...item})} onAdd={() => setEditor({packageId:activePackage.id,title:"",detail:"",source:"",origin:"estimator"})}/> : <>
       <Panel title={activePackage.name} subtitle={`${activePackage.code} · Owner: ${activePackage.owner} · Due ${displayDate(activePackage.due)}`} action={<Badge tone={statusTone(packageState)}>{statusLabels[packageState]}{activePackage.published ? ` · v${activePackage.published.version}` : ""}</Badge>} className="proc-scope-panel">
         <div className="ui-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search this bid form…"/><Button onClick={approveAll}><CheckCheck size={15}/>Approve visible form</Button></div>
+        <PackageDrawingReferences key={activePackage.id} pkg={activePackage} packages={state.packages} colors={sourceColors}/>
         <div className="proc-scope-list"><InlineScopeDrafts key={activePackage.id} review={review} packageId={activePackage.id} query={query} sections={specSections} colors={sourceColors} by={CURRENT_USER} notify={notify} onMove={setPackageId}/>{visible.map((item, index) => <article className={`proc-scope-row ${selected?.id === item.id ? "selected" : ""}`} key={item.id}>
           <button className={`proc-approval ${item.status}`} aria-label={`${item.status === "approved" ? "Reopen" : "Approve"} ${item.title}`} onClick={() => runAndNotify(run, current => item.status === "approved" ? reopenScope(current, item.id, CURRENT_USER) : approveScope(current, item.id, CURRENT_USER), notify, item.status === "approved" ? "Scope item reopened for review." : "Scope item approved.")}>{item.status === "approved" ? <Check size={14}/> : <span/>}</button>
           <button className="proc-scope-copy" onClick={() => setSelectedId(item.id)}><span className="proc-scope-meta"><b>{String(index + 1).padStart(2, "0")}</b><Badge tone={item.status === "approved" ? "green" : "amber"}>{item.status === "approved" ? "Approved" : "Needs review"}</Badge>{item.allTrades && <Badge tone="blue">All trades</Badge>}</span><strong>{item.title}</strong><small><FileText size={12}/>{item.source || "Source not linked"} · {item.origin}</small></button>

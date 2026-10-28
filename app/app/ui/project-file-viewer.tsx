@@ -69,6 +69,24 @@ function usePageMarks(doc: StoredDocument, page: number, quotes: string[], readI
   return { key, boxes, searched: !quotes.length || !!current, fromText: words.length > 0, via: current?.via ?? null, reading, onMarkPage };
 }
 
+/** Other packages' printed words on the page, each in its package's colour (Wyre's "Highlight all scope packages"). */
+export type MarkLayer = { key: string; label: string; color: string; quotes: string[] };
+
+/** Where each layer's words are printed on the page: its text layer only (a scanned sheet shows none). */
+function useLayerMarks(doc: StoredDocument, page: number, layers?: MarkLayer[]) {
+  const key = `${doc.id}:${page}:${(layers ?? []).map(l => `${l.key}=${l.quotes.join("|")}`).join(",")}`;
+  const [state, setState] = useState<{ key: string; marks: (Box & { color: string; label: string })[] }>({ key: "", marks: [] });
+  useEffect(() => {
+    if (!layers?.length) return;
+    let live = true;
+    readPageTextBoxes(doc, page).then(
+      text => { if (live) setState({ key, marks: layers.flatMap(l => l.quotes.flatMap(q => findOnSheet(text, q).map(b => ({ ...b, color: l.color, label: l.label })))) }); },
+      () => { if (live) setState({ key, marks: [] }); });
+    return () => { live = false; };
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  return layers?.length && state.key === key ? state.marks : [];
+}
+
 /** Furthest zoom: four times the frame's width (the sheet is rendered 3600 px wide from 1.5×). */
 const ZOOM_MAX = 4;
 /** Slow at both ends, for the glide in to the marks. */
@@ -83,12 +101,13 @@ type Spot = { x: number; y: number };
  * already zoomed in picture"); `outline` marks a Drawing Flip region on `markPage`. Drag to move around; the
  * mouse wheel (on a drawing; Ctrl + wheel on other pages), a trackpad pinch or two fingers zoom where they point.
  */
-export function StoredDocumentViewer({ doc, page, onPageChange, range, highlight, readImage = false, outline, markPage }: { doc: StoredDocument; page: number; onPageChange: (page: number) => void; range?: { first: number; last: number } | null; highlight?: string | string[]; readImage?: boolean; outline?: Point[]; markPage?: number }) {
+export function StoredDocumentViewer({ doc, page, onPageChange, range, highlight, readImage = false, outline, markPage, layers }: { doc: StoredDocument; page: number; onPageChange: (page: number) => void; range?: { first: number; last: number } | null; highlight?: string | string[]; readImage?: boolean; outline?: Point[]; markPage?: number; layers?: MarkLayer[] }) {
   const [zoom, setZoom] = useState(1);
   const [aspect, setAspect] = useState<number | null>(null);
   const [dragging, setDragging] = useState(false);
   const quotes = (Array.isArray(highlight) ? highlight : highlight ? [highlight] : []).filter(q => q.trim());
   const marks = usePageMarks(doc, page, quotes, readImage, outline, markPage);
+  const layerMarks = useLayerMarks(doc, page, layers);
   const frame = useRef<HTMLDivElement>(null), sheet = useRef<HTMLDivElement>(null);
   const zoomNow = useRef(zoom);
   zoomNow.current = zoom;
@@ -204,13 +223,14 @@ export function StoredDocumentViewer({ doc, page, onPageChange, range, highlight
         <button className="ui-icon-btn" aria-label="Fit the whole page" title="Fit the whole page" disabled={fitted} onClick={() => { cancelAnimationFrame(glide.current); zoomAt(fit(), middle(), { x: 0.5, y: 0.5 }); }}><Maximize size={15}/></button>
       </span>
     </div>
-    {quotes.length > 0 && <blockquote className="stored-viewer-quote"><strong>{marks.fromText ? marks.via === "image" ? "Highlighted (read from the sheet image)" : "Highlighted" : "Look for"}</strong> {quotes.map(q => `“${q}”`).join(" · ")}</blockquote>}
+    {quotes.length > 0 && <blockquote className="stored-viewer-quote"><strong>{marks.fromText ? marks.via === "image" ? "Highlighted (read from the sheet image)" : "Highlighted" : "Look for"}</strong> {quotes.slice(0, 3).map(q => `“${q}”`).join(" · ")}{quotes.length > 3 ? ` and ${quotes.length - 3} more` : ""}</blockquote>}
     {marks.reading && <p className="stored-viewer-status" role="status">This sheet has no text layer, so Structor is reading the words off the image at 300 dpi… {marks.reading.done} of {marks.reading.total} parts</p>}
     {quotes.length > 0 && marks.searched && !marks.fromText && marks.onMarkPage && <p className={`stored-viewer-status${marks.via === "not-printed" ? " warning" : ""}`} role="status">{marks.boxes.length ? "These exact words aren't on the page, so the green box is the area marked in Drawing Flip."
       : marks.via === "not-printed" ? "These words aren't printed on this sheet: Structor read the whole sheet image and they aren't on it. The AI described the sheet in its own words here, so check this scope item against the sheet."
       : "These words weren't found on this page. Look for them on the page."}</p>}
     <div className={`stored-viewer-frame${dragging ? " dragging" : ""}`} ref={frame} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}><div className="stored-viewer-sheet" ref={sheet} style={{ width: `${zoom * 100}%`, aspectRatio: aspect ?? undefined }}>
       <StoredPage doc={doc} page={page} size={zoom > 1.5 ? 3600 : 2000} onAspect={setAspect}/>
+      {aspect && layerMarks.map((b, i) => <span key={`layer-${i}`} className="stored-viewer-mark layer" title={b.label} style={{ left: `${b.x * 100}%`, top: `${b.y * 100}%`, width: `${b.width * 100}%`, height: `${b.height * 100}%`, borderColor: b.color, background: `${b.color}2e` }}/>)}
       {aspect && marks.boxes.map((b, i) => <span key={i} className="stored-viewer-mark" style={{ left: `${b.x * 100}%`, top: `${b.y * 100}%`, width: `${b.width * 100}%`, height: `${b.height * 100}%` }} aria-hidden="true"/>)}
     </div></div>
   </div>;

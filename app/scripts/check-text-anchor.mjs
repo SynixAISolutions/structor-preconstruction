@@ -50,6 +50,10 @@ assert.deepEqual(regions.map(r => [r.key, r.anchor, r.scopeKeys[0]]), [["d2-regi
 assert.equal(regions[1].label, "Storefront SF-4 (1 of 3)");
 assert.equal(pinned.filter(d => d.kind === "scope").length, 3, "Scope findings are untouched");
 assert.deepEqual(T.pinFindings(drafts, new Map()).filter(d => d.kind === "region").map(r => r.anchor), ["image", "image"], "No text layer: the AI's outlines stay, approximate");
+// Text-first (28 Oct, Wyre): the scope run keeps only marks on printed words; an outline the text can't place is dropped.
+assert.deepEqual(T.pinFindings(drafts, new Map([["A1.1", sheet]]), new Map(), false).filter(d => d.kind === "region").map(r => r.anchor), ["text", "text", "text", "text"]);
+assert.deepEqual(T.pinFindings(drafts, new Map(), new Map(), false).filter(d => d.kind === "region"), []);
+assert.deepEqual([{ origin: "ai", anchor: "text" }, { origin: "ai", anchor: "image" }, { origin: "ai" }, { origin: "estimator" }].map(F.onPrintedWords), [true, false, false, true], "AI outlines from the picture alone are guesses; drawn regions and pinned marks are highlights");
 
 // The anchor travels with the finding to the Drawing Flip highlight.
 const proc = { packages: [{ id: "glazing", name: "Aluminum & glazing", division: "08", code: "08 40 00", owner: "", due: "" }, { id: "drywall", name: "Drywall", division: "09", code: "09 29 00", owner: "", due: "" }], scopes: [], invitations: [], outreach: [], notifications: [] };

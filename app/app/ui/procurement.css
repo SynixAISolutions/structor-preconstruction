@@ -29,3 +29,17 @@
 .scope-open-source{display:inline-flex;align-items:center;gap:5px;flex:none;margin-top:17px;padding:5px 10px;border:1px solid #b7e0c4;border-radius:999px;background:#effaf3;color:#15703a;font:inherit;font-size:11px;font-weight:600;white-space:nowrap;cursor:pointer}
 .scope-open-source:hover,.scope-open-source:focus-visible{border-color:#16a34a;background:#16a34a;color:#fff}
 @media (max-width:640px){.scope-open-source{padding:6px}.scope-open-source span{display:none}}
+/* Where a trade is on the drawings, by printed text (drawing-references.tsx). */
+.pkg-drawing-refs{display:grid;gap:8px;margin:0 16px 12px;padding:10px 12px;border:1px solid #e3e8e3;border-radius:9px;background:#fbfcfa}
+.pkg-drawing-refs header{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;color:#3c4d5c}
+.pkg-drawing-refs header svg{color:#16a34a}
+.pkg-drawing-refs header small{color:#7d8a92;font-size:11px}
+.pkg-drawing-groups{display:flex;flex-wrap:wrap;gap:6px 14px}
+.pkg-drawing-groups summary{cursor:pointer;font-size:12px;font-weight:600;color:#15703a}
+.pkg-drawing-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;max-width:100%}
+.pkg-drawing-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin-bottom:10px;font-size:12px}
+.pkg-drawing-bar label{display:inline-flex;align-items:center;gap:6px}
+.pkg-drawing-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin:0 0 10px;font-size:11px;color:#5c6b72}
+.pkg-drawing-legend span{display:inline-flex;align-items:center;gap:5px}
+.pkg-drawing-legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.pkg-drawing-legend i.selected{background:#16a34a}

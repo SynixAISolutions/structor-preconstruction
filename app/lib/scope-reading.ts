@@ -98,7 +98,8 @@ export async function readTradeScope(args: {
       // Marks go where the cited words are printed; the AI's own outlines stay only where the text can't place them.
       const boxes = new Map<string, TextBox[]>();
       await Promise.all((drawn.drawingPages ?? []).map(async p => { try { boxes.set(p.sheet, await readPageTextBoxes(doc, p.page)); } catch { /* no text layer: outlines stay approximate */ } }));
-      drawn.input = { ...drawn.input, drafts: pinFindings(drawn.input.drafts, boxes, ocr) };
+      // Text-first, like Wyre (28 Oct): a highlight sits on the printed words or isn't made; the AI's outline alone is dropped.
+      drawn.input = { ...drawn.input, drafts: pinFindings(drawn.input.drafts, boxes, ocr, false) };
       const highlighted = new Set(drawn.input.drafts.filter(d => d.kind === "region").map(d => (d as { sheet: string }).sheet));
       const flipError = args.addFlipPages((drawn.drawingPages ?? []).filter(p => highlighted.has(p.sheet)).map(p => ({ sheet: p.sheet, title: rows.find(r => r.page === p.page)?.title ?? p.sheet, discipline: rows.find(r => r.page === p.page)?.discipline ?? "", revision: "", documentId: doc.id, documentName: doc.name, pageNumber: p.page, aspect: aspects.get(p.page) })));
       if (flipError) drawn.dropped.push({ what: "Drawing highlights", reason: flipError });

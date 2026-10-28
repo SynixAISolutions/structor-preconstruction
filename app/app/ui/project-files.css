@@ -105,3 +105,5 @@
 .bid-docs-link { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
 @media (max-width: 900px) { .bid-docs-slots { grid-template-columns: 1fr; padding: 0 12px; } .bid-docs-ai { margin: 12px; } }
 @media (prefers-reduced-motion: reduce) { .bid-docs-slot { transition: none; } }
+/* Another package's words on the sheet, in its colour; the selected package stays green on top. */
+.stored-viewer-mark.layer { box-shadow: none; animation: none; }
