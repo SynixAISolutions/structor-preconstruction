@@ -5,3 +5,9 @@
 @media(prefers-reduced-motion:reduce){.award-view *{scroll-behavior:auto!important;transition:none!important}}
 
 .contract-file-row{padding:18px 0;border-top:1px solid var(--line,#dde3e0);overflow-wrap:anywhere}.contract-file-row h3{margin-bottom:8px}.contract-file-row .ui-field{margin-top:12px}.award-document-actions{flex-wrap:wrap}
+/* Package subcontract (Marcel, 24 Oct): what goes out with the subcontract, then one Send. */
+.award-package-list{list-style:none;margin:0 0 14px;padding:0;border:1px solid #e3e8e3;border-radius:9px;overflow:hidden}
+.award-package-list li{display:flex;justify-content:space-between;gap:16px;padding:11px 14px;border-top:1px solid #edf0ec;font-size:12px}
+.award-package-list li:first-child{border-top:0;background:#fafbf9}
+.award-package-list span{color:#6f7f78;text-align:right;overflow-wrap:anywhere}
+.award-package-missing{margin:0 0 14px;padding:10px 12px;border-radius:8px;background:#fff6e5;color:#7a4b00;font-size:11px;line-height:1.6}
