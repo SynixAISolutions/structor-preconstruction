@@ -10,7 +10,7 @@ import { useProjectDocuments } from "../../lib/project-files-client";
 import { sectionsByTrade, sheetsForTrade, uncoveredSections } from "../../lib/project-scopes";
 import { applyBidPackagePlan, type BidPackagePlan } from "../../lib/bid-package-ai";
 import { planBidPackages } from "../../lib/bid-package-client";
-import { dollars, estimateCost } from "../../lib/ai-cost";
+import { CONFIRM_ABOVE, dollars, estimateCost } from "../../lib/ai-cost";
 import { useAiReader } from "../../lib/ai-reader-client";
 import { readTradeScope } from "../../lib/scope-reading";
 import { getActiveProjectId } from "../../lib/project-scope";
@@ -67,7 +67,10 @@ export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnT
   const latest = useRef(review);
   latest.current = review;
   useEffect(() => () => controller.current?.abort(), []);
-  useEffect(() => { if (open && !busy && !chosen.length) setChosen(packages.filter(p => (assigned.get(p.id)?.length ?? 0) > 0 || sheetsFor(p.id).length > 0).map(p => p.id)); }, [open, assigned]);
+  // Every trade starts ticked on DeepSeek; with Claude, which costs money per page, the estimator picks the trades.
+  useEffect(() => { if (open && !busy && !chosen.length && reader && reader.reader !== "claude") setChosen(packages.filter(p => (assigned.get(p.id)?.length ?? 0) > 0 || sheetsFor(p.id).length > 0).map(p => p.id)); }, [open, assigned, reader]);
+  const [confirming, setConfirming] = useState(false);
+  useEffect(() => setConfirming(false), [chosen]);
 
   const pages = (id: string) => (assigned.get(id) ?? []).reduce((n: number, s: { first: number; last: number }) => n + s.last - s.first + 1, 0);
   const update = (id: string, change: Partial<TradeState>) => setStates(prev => ({ ...prev, [id]: { ...(prev[id] ?? { status: "queued", done: 0, total: 0, found: 0, note: "" }), ...change } }));
@@ -152,7 +155,11 @@ export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnT
         </div>
         {uncovered.length > 0 && <details><summary>{uncovered.length} section{uncovered.length === 1 ? "" : "s"} have no trade package yet</summary><p>{uncovered.map(s => `${s.section} ${s.title}`).join(" · ")}</p></details>}
         <p className="ai-privacy">Selected section text goes to Structor's AI (Claude when it is set up on the server), about five pages per request ({Math.ceil(totalPages / 5)} requests for {totalPages} pages){totalSheets ? `, and ${totalSheets} drawing sheets, one image each` : ""}. Every proposal keeps its page and the exact words it relied on.{estimate !== null && <> <strong>Estimated cost with {reader!.model}: about {dollars(estimate)}.</strong> Pick fewer trades to spend less.</>}</p>
-        <div className="proc-form-actions">{busy ? <Button onClick={() => controller.current?.abort()}>Stop and keep finished trades</Button> : <Button onClick={() => setOpen(false)}>Close</Button>}<Button variant="primary" disabled={busy || !chosen.length} onClick={() => void start()}>{busy ? "Reading…" : `Read ${chosen.length} trade${chosen.length === 1 ? "" : "s"}`}</Button></div>
+        <div className="proc-form-actions">{busy ? <Button onClick={() => controller.current?.abort()}>Stop and keep finished trades</Button> : <Button onClick={() => setOpen(false)}>Close</Button>}<Button variant="primary" disabled={busy || !chosen.length || confirming} onClick={() => { if (estimate !== null && estimate > CONFIRM_ABOVE) setConfirming(true); else void start(); }}>{busy ? "Reading…" : `Read ${chosen.length} trade${chosen.length === 1 ? "" : "s"}${estimate !== null ? ` · about ${dollars(estimate)}` : ""}`}</Button></div>
+        {confirming && !busy && <div className="ai-cost-confirm" role="alertdialog" aria-label="Confirm the AI reading">
+          <p><strong>This reading costs about {dollars(estimate ?? 0)} of Claude credits</strong> for {chosen.length} trade{chosen.length === 1 ? "" : "s"}. Read them?</p>
+          <div className="proc-form-actions"><Button onClick={() => setConfirming(false)}>Cancel</Button><Button variant="primary" onClick={() => { setConfirming(false); void start(); }}>Yes, read them</Button></div>
+        </div>}
       </div>}
     </Modal>}
   </>;

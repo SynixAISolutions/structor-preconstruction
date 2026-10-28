@@ -29,6 +29,12 @@ export function estimateCost(model: string, work: { requests: number; chars: num
   return (input * price.input + work.requests * ESTIMATE.outputPerRequest * price.output) / 1e6;
 }
 
+/**
+ * A reading estimated above this asks before it starts (28 Oct: a click meant for another button started a $30
+ * reading of every trade).
+ */
+export const CONFIRM_ABOVE = 5;
+
 /** "$0.42", "under $0.01", "$12": dollars as people read a cost. */
 export function dollars(amount: number): string {
   if (amount < 0.01) return "under $0.01";

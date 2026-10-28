@@ -19,3 +19,5 @@
  .ai-drawing-choice label { flex: 1; }
  .ai-drawing-choice > input { width: 110px; max-width: 40%; padding: 8px; border: 1px solid var(--border, #d6ddd7); border-radius: 6px; }
  .flip-source-needed { min-height: 180px; padding: 24px; background: #f5f7f4; }
+.ai-cost-confirm { margin-top:12px; padding:12px; border:1px solid #e0b25c; border-radius:7px; background:#fff8ea; }
+.ai-cost-confirm p { margin:0 0 10px; }

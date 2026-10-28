@@ -8,7 +8,7 @@ import type { TradePackage } from "../../lib/procurement";
 import { useDrawingReferences } from "../../lib/use-drawing-references";
 import { ocrScannedSheets, stopSheetOcr, useSheetOcr } from "../../lib/sheet-text-ocr";
 import { stopReferences, useReferenceRun } from "../../lib/sheet-reference-client";
-import { dollars, estimateCost } from "../../lib/ai-cost";
+import { CONFIRM_ABOVE, dollars, estimateCost } from "../../lib/ai-cost";
 import { useAiReader } from "../../lib/ai-reader-client";
 import { StoredDocumentViewer, type MarkLayer } from "./project-file-viewer";
 import { Button, Modal } from "./shared";
@@ -25,6 +25,8 @@ export function PackageDrawingReferences({ pkg, packages, colors }: { pkg: Trade
   const reader = useAiReader();
   // Claude costs money per page: the button says about how much before it runs (Danial, 28 Oct).
   const estimate = reader?.reader === "claude" ? estimateCost(reader.model, aiWork) : null;
+  const [confirming, setConfirming] = useState(false);
+  const askFirst = () => { if (estimate !== null && estimate > CONFIRM_ABOVE) setConfirming(true); else findWithAi(); };
   const { documents } = useProjectDocuments();
   const [index, setIndex] = useState<number | null>(null);
   const [all, setAll] = useState(false);
@@ -46,7 +48,9 @@ export function PackageDrawingReferences({ pkg, packages, colors }: { pkg: Trade
     {ready && !error && searchable > 0 && <p className="pkg-drawing-ocr" role="status">
       {aiRun.running
         ? <>The AI is reading the sheets for every package: request {Math.min(aiRun.done + 1, aiRun.total)} of {aiRun.total}{aiRun.cost ? `, ${dollars(aiRun.cost)} so far` : ""}. Keep this tab open. <Button onClick={stopReferences}>Stop</Button></>
-        : <>{byAi ? `${ai!.cost ? `That reading cost ${dollars(ai!.cost)}. ` : ""}${ai!.current ? "" : "The drawings changed since the AI read them. "}` : "These are found by printed numbers and titles only. "}<Button onClick={findWithAi}>{byAi ? "Have the AI read the sheets again" : "Find every package on the drawings with AI"}{estimate !== null ? ` (about ${dollars(estimate)}, ${aiWork.requests} requests)` : ""}</Button>{(aiRun.failed.length > 0 ? aiRun.failed : ai?.failed ?? []).length > 0 && ` Not read: ${(aiRun.failed.length > 0 ? aiRun.failed : ai!.failed).slice(0, 3).join("; ")}.`}</>}
+        : <>{byAi ? `${ai!.cost ? `That reading cost ${dollars(ai!.cost)}. ` : ""}${ai!.current ? "" : "The drawings changed since the AI read them. "}` : "These are found by printed numbers and titles only. "}{confirming
+          ? <>This reading costs about {dollars(estimate ?? 0)} of Claude credits. <Button onClick={() => setConfirming(false)}>Cancel</Button> <Button onClick={() => { setConfirming(false); findWithAi(); }}>Yes, read the sheets</Button></>
+          : <Button onClick={askFirst}>{byAi ? "Have the AI read the sheets again" : "Find every package on the drawings with AI"}{estimate !== null ? ` (about ${dollars(estimate)}, ${aiWork.requests} requests)` : ""}</Button>}{(aiRun.failed.length > 0 ? aiRun.failed : ai?.failed ?? []).length > 0 && ` Not read: ${(aiRun.failed.length > 0 ? aiRun.failed : ai!.failed).slice(0, 3).join("; ")}.`}</>}
     </p>}
     {ready && (ocr.running || unsearched > 0 || ocr.failed.length > 0) && <p className="pkg-drawing-ocr" role="status">
       {ocr.running
