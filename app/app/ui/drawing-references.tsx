@@ -6,8 +6,9 @@ import { byDiscipline } from "../../lib/drawing-references";
 import { useProjectDocuments } from "../../lib/project-files-client";
 import type { TradePackage } from "../../lib/procurement";
 import { useDrawingReferences } from "../../lib/use-drawing-references";
+import { ocrScannedSheets, stopSheetOcr, useSheetOcr } from "../../lib/sheet-text-ocr";
 import { StoredDocumentViewer, type MarkLayer } from "./project-file-viewer";
-import { Modal } from "./shared";
+import { Button, Modal } from "./shared";
 
 /**
  * Where a trade is on the drawings, found by printed text on every sheet (lib/drawing-references), grouped by
@@ -19,6 +20,7 @@ export function PackageDrawingReferences({ pkg, packages, colors }: { pkg: Trade
   const { documents } = useProjectDocuments();
   const [index, setIndex] = useState<number | null>(null);
   const [all, setAll] = useState(false);
+  const ocr = useSheetOcr();
   if (ready && !sheets) return null;
   const refs = ready ? referencesFor(pkg.id) : [];
   const open = index === null ? null : refs[index] ?? null;
@@ -27,8 +29,13 @@ export function PackageDrawingReferences({ pkg, packages, colors }: { pkg: Trade
   const unsearched = sheets - searchable;
   return <section className="pkg-drawing-refs" aria-label={`${pkg.name} on the drawings`}>
     <header><MapIcon size={14}/><strong>On the drawings</strong>
-      <small role="status">{!ready ? "Searching the printed text of every sheet…" : error || (refs.length ? `${refs.length} sheet${refs.length === 1 ? "" : "s"}, found by their printed text: CSI numbers and section titles` : `Not in the printed text of the ${searchable} searchable sheets`)}{ready && unsearched > 0 ? ` · ${unsearched} scanned sheet${unsearched === 1 ? "" : "s"} can't be searched yet` : ""}</small>
+      <small role="status">{!ready ? "Searching the printed text of every sheet…" : error || (refs.length ? `${refs.length} sheet${refs.length === 1 ? "" : "s"}, found by their printed text: CSI numbers and section titles` : `Not in the printed text of the ${searchable} searchable sheets`)}</small>
     </header>
+    {ready && (ocr.running || unsearched > 0 || ocr.failed.length > 0) && <p className="pkg-drawing-ocr" role="status">
+      {ocr.running
+        ? <>Reading scanned sheet {ocr.sheet} ({Math.min(ocr.done + 1, ocr.total)} of {ocr.total}){ocr.part ? `, part ${ocr.part.done + 1} of ${ocr.part.total}` : ""}. Each sheet is saved as soon as it is read; keep this tab open. <Button onClick={stopSheetOcr}>Stop</Button></>
+        : <>{unsearched > 0 && <>{unsearched} scanned sheet{unsearched === 1 ? " has" : "s have"} no text to search. Structor can read {unsearched === 1 ? "it" : "them"} once with OCR in this tab (about a minute a sheet) and save the text for everyone. <Button onClick={() => void ocrScannedSheets(documents)}>Make {unsearched === 1 ? "it" : "them"} searchable</Button></>}{ocr.saved > 0 && ` ${ocr.saved} sheet${ocr.saved === 1 ? "" : "s"} made searchable.`}{ocr.failed.length > 0 && ` Not read: ${ocr.failed.join("; ")}.`}</>}
+    </p>}
     {refs.length > 0 && <div className="pkg-drawing-groups">{byDiscipline(refs).map(g => <details key={g.discipline}>
       <summary>{g.discipline} ({g.refs.length})</summary>
       <div className="pkg-drawing-chips">{g.refs.map(r => <button key={`${r.docId}:${r.page}`} type="button" className="pkg-source-chip" title={r.lines.slice(0, 3).join(" · ")} onClick={() => setIndex(refs.indexOf(r))}>{r.sheet}{r.title ? ` · ${r.title}` : ""}</button>)}</div>

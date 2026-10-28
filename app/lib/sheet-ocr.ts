@@ -58,24 +58,32 @@ function sheetRead(doc: StoredDocument, page: number): Promise<SheetRead> {
  * the whole sheet was read (true when a quote isn't there, so "not found" means it isn't printed on the sheet).
  */
 export async function findInSheetImage(doc: StoredDocument, page: number, quotes: string[], onProgress?: (progress: OcrProgress) => void, signal?: AbortSignal): Promise<{ marks: Box[]; words: TextBox[]; wholeSheet: boolean }> {
+  const look = (words: TextBox[]) => quotes.map(q => findOnSheet(words, q, MAX_TAG_MARKS, { fuzzy: true }));
+  const { words, wholeSheet } = await readTiles(doc, page, read => look(read).every(m => m.length), onProgress, signal);
+  return { marks: look(words).flat(), words, wholeSheet };
+}
+
+/** Every word on a page, the whole sheet read: Project files' one-off OCR of scanned sheets (lib/sheet-text-ocr). */
+export const readWholeSheet = (doc: StoredDocument, page: number, onProgress?: (progress: OcrProgress) => void, signal?: AbortSignal) =>
+  readTiles(doc, page, () => false, onProgress, signal);
+
+/** Reads a page's tiles in order until `enough` holds for the words read or every tile is read; one reading per page at a time. */
+async function readTiles(doc: StoredDocument, page: number, enough: (words: TextBox[]) => boolean, onProgress?: (progress: OcrProgress) => void, signal?: AbortSignal): Promise<{ words: TextBox[]; wholeSheet: boolean }> {
   const read = await sheetRead(doc, page);
   const run = read.queue.then(async () => {
-    const look = () => { const words = sheetWords(read.tiles); return quotes.map(q => findOnSheet(words, q, MAX_TAG_MARKS, { fuzzy: true })); };
-    let found = look();
-    if (found.every(m => m.length)) return found;
+    if (enough(sheetWords(read.tiles))) return;
     const ocr = await ocrWorker();
-    while (read.tiles.length < read.boxes.length && found.some(m => !m.length) && !signal?.aborted) {
+    while (read.tiles.length < read.boxes.length && !signal?.aborted) {
       onProgress?.({ done: read.tiles.length, total: read.boxes.length });
       const box = read.boxes[read.tiles.length];
       const image = await renderStoredRegion(doc, page, [box.x, box.y, box.width, box.height], read.size);
       const [{ width, height }, { data }] = await Promise.all([imageSize(image), ocr.recognize(image, {}, { blocks: true })]);
       const words = (data.blocks ?? []).flatMap(b => b.paragraphs.flatMap(p => p.lines.flatMap(l => l.words)));
       read.tiles.push({ box, width, height, words: words.map(word => ({ text: word.text, confidence: word.confidence, bbox: word.bbox })) });
-      found = look();
+      if (enough(sheetWords(read.tiles))) break;
     }
-    return found;
   });
   read.queue = run.catch(() => {});
-  const found = await run;
-  return { marks: found.flat(), words: sheetWords(read.tiles), wholeSheet: read.tiles.length === read.boxes.length };
+  await run;
+  return { words: sheetWords(read.tiles), wholeSheet: read.tiles.length === read.boxes.length };
 }

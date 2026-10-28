@@ -35,7 +35,21 @@ export type StoredDocument = {
 };
 
 export type ProjectFileIndex = { projectId: string; documents: StoredDocument[]; updatedAt: string };
-export type PageText = { page: number; text: string };
+/** `ocr`: read off the page image by OCR because the page has no text layer (a scanned sheet), saved once for everyone. */
+export type PageText = { page: number; text: string; ocr?: boolean };
+/** A page with less text than this has no real text layer: a scanned or drawn-only sheet. */
+export const SCANNED_PAGE_TEXT = 20;
+
+/**
+ * A stored chunk with one scanned page's OCR text put in (or replaced), the other pages as they were; null when that
+ * page has its own text layer, which OCR text never replaces.
+ */
+export function withOcrPage(pages: PageText[], page: number, text: string): PageText[] | null {
+  const there = pages.find(p => p.page === page);
+  if (there && !there.ocr && there.text.trim().length >= SCANNED_PAGE_TEXT) return null;
+  const entry: PageText = { page, text: text.slice(0, 200_000), ocr: true };
+  return there ? pages.map(p => p.page === page ? entry : p) : [...pages, entry].sort((a, b) => a.page - b.page);
+}
 
 export const TEXT_CHUNK = 100;
 export const MAX_SOURCE_BYTES = 600 * 1024 * 1024;

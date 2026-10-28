@@ -184,16 +184,30 @@ export async function updateProjectDocument(doc: StoredDocument) {
 // ── Reading stored documents ────────────────────────────────────────────────
 
 const textCache = new Map<string, Promise<PageText[]>>();
+/** Bumped when a document's stored text changes (OCR saved), so the next read skips the browser's cached copy. */
+const textVersion = new Map<string, number>();
 
 /** Page text of a stored document; only the chunks covering `pages` are fetched. */
 export async function readStoredText(doc: StoredDocument, pages?: { first: number; last: number }): Promise<PageText[]> {
   const first = chunkFor(pages?.first ?? 1, doc.textChunk), last = chunkFor(Math.min(pages?.last ?? doc.pageCount, doc.pageCount), doc.textChunk);
   const chunks = await Promise.all(Array.from({ length: last - first + 1 }, (_, i) => {
     const key = `${doc.id}:${first + i}`;
-    if (!textCache.has(key)) textCache.set(key, api<PageText[]>(`/api/project-files/text?project=${doc.projectId}&doc=${doc.id}&chunk=${first + i}`).catch(error => { textCache.delete(key); throw error; }));
+    const version = textVersion.get(doc.id);
+    if (!textCache.has(key)) textCache.set(key, api<PageText[]>(`/api/project-files/text?project=${doc.projectId}&doc=${doc.id}&chunk=${first + i}${version ? `&v=${version}` : ""}`).catch(error => { textCache.delete(key); throw error; }));
     return textCache.get(key)!;
   }));
   return chunks.flat().filter(p => !pages || (p.page >= pages.first && p.page <= pages.last));
+}
+
+/**
+ * Saves the text OCR read off a scanned page into Project files, once for everyone (the server merges it into the
+ * stored chunk and refuses a page that has its own text layer). The next read of that chunk fetches it fresh.
+ */
+export async function savePageOcrText(doc: StoredDocument, page: number, text: string): Promise<void> {
+  const chunk = chunkFor(page, doc.textChunk);
+  await api("/api/project-files/text", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ projectId: doc.projectId, docId: doc.id, chunk, page, text }) });
+  textVersion.set(doc.id, (textVersion.get(doc.id) ?? 0) + 1);
+  textCache.delete(`${doc.id}:${chunk}`);
 }
 
 type PdfDoc = { getPage: (n: number) => Promise<any>; numPages: number };

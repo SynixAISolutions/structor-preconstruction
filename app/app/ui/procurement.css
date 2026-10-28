@@ -43,3 +43,4 @@
 .pkg-drawing-legend span{display:inline-flex;align-items:center;gap:5px}
 .pkg-drawing-legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
 .pkg-drawing-legend i.selected{background:#16a34a}
+.pkg-drawing-ocr{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:0;font-size:11px;color:#5c6b72;line-height:1.6}
