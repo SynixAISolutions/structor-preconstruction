@@ -10,7 +10,7 @@ const render = (screen: Screen, projectOpen: boolean) => renderToStaticMarkup(<S
 test("workspace navigation shows only the four global tools", () => {
   const html = render("projects", false);
   assert.equal((html.match(/<button/g) ?? []).length, 4);
-  for (const label of ["All projects", "Subcontractor directory", "Subcontractor ratings", "Subcontractor prequalification"]) assert.ok(html.includes(label));
+  for (const label of ["All projects", "Subcontractor directory", "Subcontractor ratings", "Subcontractor aggregate limits"]) assert.ok(html.includes(label));
   assert.ok(!html.includes("PRECONSTRUCTION"));
   assert.ok(!html.includes("Preview as subcontractor"));
 });

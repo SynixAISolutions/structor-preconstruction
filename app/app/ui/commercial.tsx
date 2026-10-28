@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { ArrowRight, Building2, Check, CheckCircle2, Clock3, Download, Pencil, Plus, RefreshCw, Star, UserCheck } from "lucide-react";
+import { ArrowRight, Building2, Check, CheckCircle2, Clock3, Download, Pencil, Plus, RefreshCw, Star } from "lucide-react";
 import { Badge, Button, Empty, ExportButton, Modal, PageHeader, Panel, PreviewNote, SearchBox, Stats, Tabs, downloadText, exportRows, type Screen, type ViewProps } from "./shared";
 import "./commercial.css";
 import { useLocalDraft } from "../../lib/use-local-draft";
@@ -14,6 +14,7 @@ import { ScheduleView } from "./schedule-ui";
 import { AllowancesView, BudgetView } from "./budget-ui";
 import { AwardView } from "./award-ui";
 import { ValueEngineeringView } from "./value-engineering-ui";
+import { AggregateLimitsView } from "./aggregate-limits";
 
 // Local drafts make every preview screen useful without an account or external service.
 function statusTone(status: string) { return /approved|qualified|complete|submitted/i.test(status) ? "green" : /review|provisional|draft|invited/i.test(status) ? "amber" : "blue"; }
@@ -36,10 +37,6 @@ function RatingsView({ navigate }: ViewProps) {
   return <div className="cm-view"><PageHeader eyebrow="PARTNER NETWORK" title={screenLabel("ratings")} description="Build a consistent record of subcontractor performance across projects." actions={<Button onClick={() => navigate("bidders")}>Open directory<ArrowRight size={15}/></Button>}/><PreviewNote>Placeholder · Rating criteria and scoring rules still need Marcel’s approval.</PreviewNote><Panel title="Rating framework" subtitle="The first review will agree the criteria, scale, and who can submit a rating."><div className="cm-placeholder-grid">{ratingCriteria.map(item => <article key={item}><span><Star size={18}/></span><strong>{item}</strong><p>Score and written evidence will appear here once the rating framework is agreed.</p></article>)}</div></Panel><Panel><Empty title="No ratings recorded" description="Ratings will show the score, project context, review count, and supporting notes for each subcontractor." action={<Button onClick={() => navigate("bidders")}>Review subcontractor directory</Button>}/></Panel></div>;
 }
 
-function PrequalificationView({ navigate }: ViewProps) {
-  return <div className="cm-view"><PageHeader eyebrow="PARTNER NETWORK" title={screenLabel("prequalification")} description="Track which invited subcontractors are cleared to bid and what remains outstanding." actions={<Button onClick={() => navigate("packages")}>Open bid packages<ArrowRight size={15}/></Button>}/><PreviewNote>Placeholder · The questionnaire and required-document list have not been supplied yet.</PreviewNote><Panel title="Planned qualification workflow" subtitle="One status from invitation through approval."><div className="cm-placeholder-grid">{[["1","Questionnaire","Company details and project-specific questions"],["2","Documents","Licences, insurance, safety and financial files"],["3","Review","Outstanding items and reviewer decisions"],["4","Bid eligibility","Clear status beside every invited company"]].map(([step,title,detail]) => <article key={step}><span><UserCheck size={18}/></span><strong>{step}. {title}</strong><p>{detail}</p></article>)}</div></Panel><Panel><Empty title="Prequalification setup is waiting" description="Once the real questionnaire is provided, this screen will track submissions, missing documents, reviewer notes, and approval status." action={<Button onClick={() => navigate("bidders")}>Open subcontractor directory</Button>}/></Panel></div>;
-}
-
 export function CommercialView(props: ViewProps & { screen: Screen; project: Project }) {
-  switch(props.screen){case "packages":return <ProcurementPackagesView {...props}/>;case "bidders":return <BiddersView {...props}/>;case "ratings":return <RatingsView {...props}/>;case "prequalification":return <PrequalificationView {...props}/>;case "portal":return <SubmissionPortalView {...props}/>;case "budget":return <BudgetView {...props}/>;case "allowances":return <AllowancesView {...props}/>;case "value-engineering":return <ValueEngineeringView {...props}/>;case "contracts":return <AwardView {...props}/>;case "schedule":return <ScheduleView {...props}/>;default:return null;}
+  switch(props.screen){case "packages":return <ProcurementPackagesView {...props}/>;case "bidders":return <BiddersView {...props}/>;case "ratings":return <RatingsView {...props}/>;case "prequalification":return <AggregateLimitsView {...props}/>;case "portal":return <SubmissionPortalView {...props}/>;case "budget":return <BudgetView {...props}/>;case "allowances":return <AllowancesView {...props}/>;case "value-engineering":return <ValueEngineeringView {...props}/>;case "contracts":return <AwardView {...props}/>;case "schedule":return <ScheduleView {...props}/>;default:return null;}
 }
