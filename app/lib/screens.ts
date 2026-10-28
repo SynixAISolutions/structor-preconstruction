@@ -43,7 +43,7 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "projects", label: "All projects", icon: "FolderOpen" },
     { id: "bidders", label: "Subcontractor directory", icon: "Users", keywords: ["bidder directory", "companies", "trade partners"] },
     { id: "ratings", label: "Subcontractor ratings", icon: "Gauge", keywords: ["rate subcontractors", "reviews", "scorecard"] },
-    { id: "prequalification", label: "Subcontractor prequalification", icon: "ClipboardCheck", keywords: ["prequal", "qualified subcontractors", "questionnaire"] },
+    { id: "prequalification", label: "Subcontractor aggregate limits", icon: "ClipboardCheck", keywords: ["aggregate limit", "single project limit", "open contract value", "Textura", "bonding capacity", "Subcontractor prequalification", "prequal"] },
   ]},
   { label: "PRECONSTRUCTION", scope: "project", items: [
     { id: "turnover", label: "Preconstruction to-do", icon: "ClipboardCheck", keywords: ["project turnover", "percent complete", "checklist", "overview", "dashboard", "project health", "progress", "project setup", "getting started", "onboarding", "missing documents", "upload"] },

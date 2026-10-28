@@ -321,17 +321,20 @@ export const pageGuides = [
   {
     id: "prequalification",
     group: "Workspace",
-    title: "Subcontractor prequalification",
-    purpose: "Check whether invited subcontractors are prequalified with your company, and let the ones who are not fill in the prequalification form and upload the required documents.",
+    title: "Subcontractor aggregate limits",
+    purpose: "Keep each subcontractor within the amount of work your company will trust it with: a limit for any one project and an aggregate limit across all of them, against the open value of its contracts.",
     steps: [
-      "See which companies invited to a project are already prequalified.",
-      "Send a company that is not yet prequalified the prequalification form and the list of documents it must upload.",
+      "The contracts team enters each subcontractor's single-project limit and aggregate limit.",
+      "Structor adds up the open value of every awarded contract the subcontractor holds, on every project: the contract amount less the share already complete.",
+      "Record each contract's percent complete; a subcontractor over either limit is flagged before it is awarded more work.",
     ],
     terms: [
-      { name: "Prequalification", meaning: "Reviewing a subcontractor's finances, safety, insurance, experience, and capacity before it can be awarded work." },
+      { name: "Aggregate limit", meaning: "The most open contract value one subcontractor may hold across all of your projects at once." },
+      { name: "Single-project limit", meaning: "The most open contract value one subcontractor may hold on any one project." },
+      { name: "Open contract value", meaning: "What is left to bill on a subcontractor's contracts: each amount less its percent complete." },
     ],
-    example: "A new drywall company is invited to bid; it is not prequalified yet, so it completes the questionnaire and uploads its insurance certificate and safety record through Structor.",
-    reality: "This is a placeholder so the feature is not forgotten. The real questionnaire and document list have not been provided yet, so nothing is collected or stored.",
+    example: "A drywall company has a $2,000,000 aggregate limit and $1,600,000 open on two projects; a new $500,000 award would put it over, so the team sees the flag before awarding.",
+    reality: "Limits and percent complete are entered by hand and kept in this browser. Percent complete is meant to come from Textura; that connection needs a Textura account and isn't set up yet.",
     related: ["bidders", "ratings"],
   },
   {

@@ -29,3 +29,8 @@
 .budget-section-total strong{color:#2f3f48}
 .budget-section-total.grand td{background:#efebe3;border-top:2px solid #cfc7b8;font-size:12px}
 .cm-ve-applied{color:#2f7a52!important;font-weight:600}
+/* Subcontractor aggregate limits (lib/aggregate-limits). */
+.cm-limits-table{min-width:980px!important}
+.cm-limit-over,.cm-limit-over .cm-text-button{color:#b4441a!important;font-weight:650}
+.cm-limit-percent{display:flex;align-items:center;gap:6px}
+.cm-limit-percent input{width:72px;padding:6px 8px;border:1px solid #dfe5e1;border-radius:6px;font:inherit}
