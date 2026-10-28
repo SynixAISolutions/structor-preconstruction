@@ -12,7 +12,7 @@ import { addRunToBidForms, recordRun, type ExtractionState } from "./extraction"
 import { addPage, DrawingFlipRuleError, type DrawingFlipState } from "./drawing-flip";
 import { addPackage, type Procurement } from "./procurement";
 import { drawingRegister, specificationSections, type StoredDocument } from "./project-files";
-import { useProjectDocuments } from "./project-files-client";
+import { storedDocuments, uploadsSettleIn, useProjectDocuments } from "./project-files-client";
 import { sectionsByTrade, tradesToAdd } from "./project-scopes";
 import { applyBidPackagePlan } from "./bid-package-ai";
 import { planBidPackages } from "./bid-package-client";
@@ -60,13 +60,29 @@ export function answerLeave(leave: boolean) {
   answer?.(leave); answer = null; emit({ leave: false });
 }
 
-/** Starts the run for a project's files when they hold a new upload and haven't been read yet. */
+let settleTimer: ReturnType<typeof setTimeout> | null = null;
+/** Looks again at the projects waiting for uploads to settle, with their latest files. */
+function retryWaiting(ms: number) {
+  if (settleTimer) clearTimeout(settleTimer);
+  settleTimer = setTimeout(() => {
+    settleTimer = null;
+    if (active) return; // the run in progress picks up the waiting projects when it ends
+    for (const [projectId, docs] of [...waiting]) { waiting.delete(projectId); ensureRun(projectId, storedDocuments(projectId) ?? docs); }
+  }, Math.min(ms, 15_000));
+}
+
+/**
+ * Starts the run for a project's files when they hold a new upload and haven't been read yet, once every upload in
+ * this tab has finished (title blocks included) and a minute has passed for the next file, so the AI reads the whole set.
+ */
 export function ensureRun(projectId: string, documents: StoredDocument[]) {
   const target = runTarget(documents);
   if (!target) return;
   if (active === projectId && snapshot.run?.key === target.key) return;
   const previous = savedRuns(projectId).runs.find(r => r.key === target.key) ?? null;
   if (previous?.status === "done") return;
+  const settle = uploadsSettleIn();
+  if (settle > 0) { waiting.set(projectId, documents); retryWaiting(settle); return; }
   if (active) { waiting.set(projectId, documents); return; }
   void start(projectId, documents, target, previous);
 }
@@ -170,7 +186,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   window.removeEventListener("beforeunload", holdTab);
   if (answer) answerLeave(false);
   const [nextProject, nextDocs] = waiting.entries().next().value ?? [];
-  if (nextProject) { waiting.delete(nextProject); ensureRun(nextProject, nextDocs!); }
+  if (nextProject) { waiting.delete(nextProject); ensureRun(nextProject, storedDocuments(nextProject) ?? nextDocs!); }
 }
 
 /**

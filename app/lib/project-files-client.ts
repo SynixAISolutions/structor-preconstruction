@@ -43,6 +43,18 @@ export function loadIndex(projectId: string, fresh = false): Promise<ProjectFile
 
 const setIndex = (index: ProjectFileIndex) => { indexes.set(index.projectId, index); notify(); return index; };
 
+/** A project's stored documents as last loaded in this tab, or null before the first load. */
+export const storedDocuments = (projectId: string): StoredDocument[] | null => indexes.get(projectId)?.documents ?? null;
+
+// ── Uploads in progress ──
+// The AI run after an upload (lib/auto-scopes) waits for every upload in this tab to finish, title blocks included,
+// and a pause after the last one for the next file (28 Oct: a run that started mid-upload saw 51 of 205 sheets, none
+// titled, and no project manual, so it set 4 bid packages).
+export const UPLOAD_SETTLE_MS = 60_000;
+let uploading = 0, lastUploadAt = 0;
+/** Milliseconds until this tab's uploads have settled: Infinity while one runs, 0 once the last ended a pause ago. */
+export const uploadsSettleIn = (now = Date.now()): number => uploading ? Infinity : Math.max(0, lastUploadAt + UPLOAD_SETTLE_MS - now);
+
 /** The open project's stored documents; `ready` is false until the first load answers. */
 export function useProjectDocuments(projectId?: string) {
   const active = useActiveProject();
@@ -97,6 +109,11 @@ async function readPages(file: File, kind: StoredDocument["kind"], onPage: (done
  * its page text, then the index entry. `revisionOf` makes it the next revision of that document.
  */
 export async function uploadProjectPdf(args: { projectId: string; file: File; category: string; revisionOf?: StoredDocument; onProgress?: (progress: UploadProgress) => void }): Promise<StoredDocument> {
+  uploading++;
+  try { return await storePdf(args); } finally { uploading--; lastUploadAt = Date.now(); notify(); }
+}
+
+async function storePdf(args: Parameters<typeof uploadProjectPdf>[0]): Promise<StoredDocument> {
   const { projectId, file, category, revisionOf } = args;
   const header = await file.slice(0, 1024).text();
   if (!/\.pdf$/i.test(file.name) || !header.includes("%PDF-")) throw new Error(`${file.name} is not a PDF.`);
