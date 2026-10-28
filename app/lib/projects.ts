@@ -282,6 +282,46 @@ export function parseProjectForm(form: FormData, existing?: Project): { project?
   };
 }
 
+// ── Demo projects ───────────────────────────────────────────────────────────
+// "Create a demo project" (Danial, 28 Oct: a button that fills in random info, for testing uploads and the AI
+// without typing the form). Made-up details of the kind the form asks for, read through parseProjectForm so a
+// demo project is exactly what the form would have created.
+const DEMO_PLACES = ["Maple Street", "Riverside", "Oak Hill", "Harbor View", "Cedar Park", "Brookside", "Summit", "Lakeview"];
+const DEMO_CITIES = ["Washington, DC", "Arlington, VA", "Alexandria, VA", "Silver Spring, MD", "Baltimore, MD", "Richmond, VA"];
+const DEMO_BUILDINGS: Record<string, string> = {
+  "Community & recreation": "Recreation Center", Education: "Elementary School", Commercial: "Office Building", "Mixed-use": "Mixed-Use Building",
+  Residential: "Apartments", Healthcare: "Health Clinic", Civic: "Public Library", Industrial: "Distribution Warehouse",
+};
+
+/** A project with random, realistic details, as the New project form would create it. `random` returns [0, 1). */
+export function demoProject(random: () => number = Math.random, today = new Date()): Project {
+  const pick = <T,>(list: readonly T[]): T => list[Math.floor(random() * list.length) % list.length];
+  const between = (low: number, high: number, step = 1) => Math.round((low + random() * (high - low)) / step) * step;
+  const day = (offset: number) => new Date(today.getTime() + offset * 86_400_000).toISOString().slice(0, 10);
+  const type = pick(PROJECT_TYPES), workType = pick(WORK_TYPES).value;
+  const area = between(12_000, 90_000, 100), due = between(21, 60), start = due + between(60, 120);
+  const f = PROJECT_FORM_FIELDS, form = new FormData();
+  const set = (name: string, value: string | number) => form.set(name, String(value));
+  set(f.name, `Demo · ${pick(DEMO_PLACES)} ${DEMO_BUILDINGS[type] ?? "Building"}`);
+  set(f.location, pick(DEMO_CITIES));
+  set(f.type, type);
+  set(f.workType, workType);
+  if (workType === "both") { const renovation = between(0.3 * area, 0.7 * area, 100); set(f.renovationSquareFeet, renovation); set(f.additionSquareFeet, area - renovation); }
+  else set(f.squareFeet, area);
+  set(f.value, area * between(350, 650, 5));
+  set(f.taxStatus, pick(TAX_STATUSES).value);
+  set(f.estimateStage, pick(ESTIMATE_STAGES).value);
+  set(f.deliveryMethod, pick(DELIVERY_METHODS).value);
+  set(f.architect, "Demo Design Studio");
+  set(f.description, `A demo ${pick(WORK_TYPES).label.toLowerCase()} project for trying Structor: upload a drawing set and a project manual and the AI sets the bid packages.`);
+  set(f.due, day(due)); set(f.rfi, day(due - 10)); set(f.start, day(start)); set(f.finish, day(start + between(420, 720)));
+  if (random() < 0.5) form.append(f.certifications, pick(CERTIFICATION_PROGRAMS));
+  form.append(f.teamName, "Marcel Khoury"); form.append(f.teamRole, "Estimator");
+  const { project, errors } = parseProjectForm(form);
+  if (!project) throw new Error(`The demo project didn't pass the form's checks: ${Object.values(errors).join(" ")}`);
+  return project;
+}
+
 export function filterProjects(projects: Project[], query: string, tab: string): Project[] {
   const q = query.trim().toLowerCase();
   return projects.filter(p =>
