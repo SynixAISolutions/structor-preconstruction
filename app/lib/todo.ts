@@ -19,7 +19,7 @@ import { bidderTotals } from "./leveling.mjs";
 import type { BidProvenance, LevelingBidder, LevelingScopeItem } from "./leveling-import";
 import { bidForm, packageStatus, type Procurement } from "./procurement";
 import type { Project } from "./projects";
-import type { BuyoutState } from "./buyout";
+import { currentBafos, proposalBafos, type BuyoutState } from "./buyout";
 import type { StructorCheckState } from "./rfi";
 import type { Screen } from "./screens";
 import type { SetupSummary } from "./project-setup";
@@ -76,6 +76,8 @@ export type TodoInput = {
   documents: unknown[];
   procurement: Procurement;
   submissions: Submission[];
+  /** Company names, for best and final offers pulled from revised proposals (lib/buyout proposalBafos). */
+  directory?: { id: string; company: string }[];
   leveling: LevelingSnapshot | null;
   budget: BudgetState;
   awards: AwardState;
@@ -214,10 +216,11 @@ export function deriveTodo(input: TodoInput): TodoSummary {
       const open = leveled.reduce((n, l) => n + l.totals.exceptions, 0);
       if (open) add({ ...p, id: `leveling:exceptions:${pkg.id}`, group: "leveling", title: `Resolve ${plural(open, "leveling exception")} for ${pkg.name}`, detail: "Exclusions, partial answers and unanswered rows keep bids out of the ranking.", status: "todo", priority: "high", screen: "leveling", count: open });
       const review = input.buyout?.entries.find(e => e.packageId === pkg.id)?.scopeReview;
-      const bafos = input.buyout?.entries.find(e => e.packageId === pkg.id)?.bafos ?? [];
+      // Typed or pulled from a proposal resubmitted after the review (Marcel, 24 Oct), as Scope review & buyout shows them.
+      const bafos = currentBafos(input.buyout?.entries.find(e => e.packageId === pkg.id)?.bafos ?? [], proposalBafos(submissions, pkg.id, review ?? null, input.directory ?? []));
       if (review && !review.held) add({ ...p, id: `buyout:review:${pkg.id}`, group: "scope-review", title: `Hold the ${pkg.name} scope review`, detail: `Scheduled for ${review.date}${review.attendees ? ` with ${review.attendees}` : ""}. Take the minutes in Scope review & buyout.`, status: "todo", priority: "normal", screen: "buyout" });
       else if (review && !bafos.length) add({ ...p, id: `buyout:bafo:${pkg.id}`, group: "scope-review", title: `Waiting for best and final offers on ${pkg.name}`, detail: `Scope review held ${review.held!.at.slice(0, 10)}.`, status: "waiting", priority: "low", screen: "buyout" });
-      if (anyEligible || bafos.length) add({ ...p, id: `award:select:${pkg.id}`, group: "scope-review", title: bafos.length ? `Choose the ${pkg.name} subcontractor` : `Hold the ${pkg.name} scope review and choose the subcontractor`, detail: bafos.length ? `Best and final: ${[...bafos].sort((a, b) => a.amount - b.amount).map(b => `${b.company} $${b.amount.toLocaleString("en-US")}`).join(", ")}.` : "At least one bid is fully leveled. Go through the scope and drawings with the low bidder, take their best and final offer, then award.", status: "todo", priority: "high", screen: bafos.length ? "contracts" : "buyout" });
+      if (anyEligible || bafos.length) add({ ...p, id: `award:select:${pkg.id}`, group: "scope-review", title: bafos.length ? `Choose the ${pkg.name} subcontractor` : `Hold the ${pkg.name} scope review and choose the subcontractor`, detail: bafos.length ? `Best and final: ${bafos.map(b => `${b.company} $${b.amount.toLocaleString("en-US")}`).join(", ")}.` : "At least one bid is fully leveled. Go through the scope and drawings with the low bidder, take their best and final offer, then award.", status: "todo", priority: "high", screen: bafos.length ? "contracts" : "buyout" });
     }
 
     if (award && stage) {

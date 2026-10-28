@@ -25,7 +25,7 @@ test("project navigation closes each section before the next standalone tool", (
   assert.ok(html.includes("Back to All projects"));
   assert.ok(!html.includes("Subcontractor directory"));
   assert.ok(html.includes('aria-label="Preconstruction budget"'));
-  assert.ok(html.includes('aria-label="Compliance and contracts"'));
+  assert.ok(!html.includes('aria-label="Compliance and contracts"'), "Folded into Subcontractor outreach (24 Oct)");
   assert.ok(html.includes('aria-label="3D model studio"'));
 });
 
