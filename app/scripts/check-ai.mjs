@@ -5,6 +5,7 @@ register("./ts-resolver.mjs", import.meta.url);
 const J = await import("../lib/ai-jobs.ts");
 const D = await import("../lib/deepseek.ts");
 const C = await import("../lib/ai-client.ts");
+const Pool = await import("../lib/ai-pool.ts");
 const M = await import("../lib/manual-sections.ts");
 const W = await import("../lib/demo-password.ts");
 const X = await import("../lib/extraction.ts");
@@ -199,6 +200,44 @@ try {
   const failed = await C.extractTradeScope({ pkg: { id: "drywall", name: "Drywall", code: "" }, manual: { name: "M.pdf", pageCount: 2074 }, sections: [section] });
   assert.deepEqual([failed.input.drafts, failed.input.error], [[], "Structor's AI isn't set up on this server: DEEPSEEK_API_KEY is missing."]);
   assert.equal(X.recordRun(X.EMPTY_EXTRACTION, sampleProcurement, failed.input).runs[0].status, "failed", "Every request failed: recorded as a failed run");
+
+  // ── The tab's shared pool of requests (lib/ai-pool): a trade read alone uses every slot; trades read together share them ──
+  const pending = new Set(); let peak = 0;
+  const inFlightBy = new Map(), overlap = new Set();
+  globalThis.fetch = async (_url, init) => {
+    const body = JSON.parse(init.body), who = body.input.pkg.id, page = body.input.page ?? body.input.pages[0].page;
+    const token = {}; pending.add(token); peak = Math.max(peak, pending.size);
+    inFlightBy.set(who, (inFlightBy.get(who) ?? 0) + 1);
+    if ([...inFlightBy.values()].filter(n => n > 0).length > 1) overlap.add("both");
+    await new Promise(r => setTimeout(r, 3 + (page % 4)));
+    pending.delete(token); inFlightBy.set(who, inFlightBy.get(who) - 1);
+    if (body.job === "drawing") return page === 13 ? Response.json({ error: "Claude took too long." }, { status: 502 }) : Response.json({ model: "claude-haiku-5-5", sheet: `A${page}`, drafts: [{ kind: "scope", key: `d${page}`, packageId: who, title: `Sheet ${page}`, detail: "", source: "drawings", citations: [{ document: "D.pdf", page, sheet: `A${page}`, quote: "q" }] }], dropped: [] });
+    return Response.json({ model: "claude-haiku-5-5", drafts: [{ kind: "scope", key: "k", packageId: who, title: `From page ${page}`, detail: "", source: "22 11 16", citations: [{ document: "M.pdf", page, sheet: null, quote: "q" }] }], dropped: [] });
+  };
+  const bigSection = { section: "22 11 16", title: "DOMESTIC WATER PIPING", firstPage: 1, lastPage: 230, pages: Array.from({ length: 230 }, (_, i) => ({ page: i + 1, text: "b".repeat(100) })) };
+  const plumbing = await C.extractTradeScope({ pkg: { id: "plumbing", name: "Plumbing", code: "22 00 00" }, manual: { name: "M.pdf", pageCount: 230 }, sections: [bigSection] });
+  assert.deepEqual([peak, plumbing.input.drafts.length, plumbing.failures], [Pool.AI_REQUESTS_AT_ONCE, 46, []], "A trade read alone sends as many requests at once as the pool holds, not three");
+  assert.deepEqual(plumbing.input.drafts.map(d => d.citations[0].page), Array.from({ length: 46 }, (_, i) => i * 5 + 1), "Answers stay in page order");
+  peak = 0;
+  const [hvac, elec] = await Promise.all([
+    C.extractTradeScope({ pkg: { id: "hvac", name: "HVAC", code: "23 00 00" }, manual: { name: "M.pdf", pageCount: 230 }, sections: [bigSection] }),
+    C.extractTradeScope({ pkg: { id: "electrical", name: "Electrical", code: "26 00 00" }, manual: { name: "M.pdf", pageCount: 230 }, sections: [bigSection] }),
+  ]);
+  assert.deepEqual([peak, hvac.input.drafts.length, elec.input.drafts.length, overlap.has("both")], [Pool.AI_REQUESTS_AT_ONCE, 46, 46, true], "Two trades share the pool: never more than it holds at once, both reading at the same time");
+  assert.deepEqual(Pool.aiPoolLoad(), { busy: 0, waiting: 0 }, "Every slot is handed back");
+  peak = 0;
+  const sheets = Array.from({ length: 7 }, (_, i) => ({ page: 10 + i, text: "", sheet: `PDF ${10 + i}` }));
+  const drawn = await C.extractDrawingScope({ pkg: { id: "plumbing", name: "Plumbing", code: "22 00 00" }, document: "D.pdf", pageCount: 20, pages: sheets, render: async () => ({ image: "data:image/jpeg;base64,/9j/AAAA" }) });
+  assert.deepEqual([peak, drawn.drawingPages.map(p => p.sheet), drawn.input.drafts.map(d => d.key), drawn.failures], [3, ["A10", "A11", "A12", "A14", "A15", "A16"], ["d10", "d11", "d12", "d14", "d15", "d16"], [{ section: "PDF 13", pages: "13", error: "Claude took too long." }]], "Three sheets at once, kept in sheet order; a failed sheet is reported and the rest are read");
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; await new Promise(r => setTimeout(r, 2)); return Response.json({ error: "Structor's AI isn't set up on this server: ANTHROPIC_API_KEY is missing." }, { status: 503 }); };
+  const unset = await C.extractTradeScope({ pkg: { id: "plumbing", name: "Plumbing", code: "22 00 00" }, manual: { name: "M.pdf", pageCount: 230 }, sections: [bigSection] });
+  assert.ok(calls <= Pool.AI_REQUESTS_AT_ONCE && unset.failures.length === 46 && unset.input.error, "A missing key stops the trade after the requests already in flight");
+  assert.deepEqual(Pool.aiPoolLoad(), { busy: 0, waiting: 0 });
+  calls = 0;
+  const unsetSheets = await C.extractDrawingScope({ pkg: { id: "plumbing", name: "Plumbing", code: "22 00 00" }, document: "D.pdf", pageCount: 20, pages: sheets, render: async () => ({ image: "data:image/jpeg;base64,/9j/AAAA" }) });
+  assert.deepEqual([calls, unsetSheets.failures.length, unsetSheets.failures.at(-1).error], [3, 7, "Not attempted: reading canceled or stopped after repeated service failures. Retry this sheet."], "A missing key stops the sheets after those in flight");
+
   globalThis.fetch = async () => Response.json({ model: "deepseek-flash", reading: read.reading, dropped: [] });
   const proposal = await C.readProposal({ invitationId: "inv-2", form, proposal: { name: "DC proposal.pdf", size: 5000, pageCount: 3, pages: [...proposalPages, { page: 3, text: " " }], emptyPages: 1 } });
   assert.deepEqual([proposal.input.invitationId, proposal.input.formVersion, proposal.input.document, proposal.input.engine.mode, proposal.input.baseBid], ["inv-2", 1, { name: "DC proposal.pdf", pages: 3, size: 5000 }, "live", 1742000]);
@@ -227,4 +266,4 @@ try {
   globalThis.fetch = realFetch;
 }
 
-console.log("AI checked: demo password, manual sections, quote screening, scope and proposal jobs end to end into review, request splitting, DeepSeek client retries and errors, run assembly.");
+console.log("AI checked: demo password, manual sections, quote screening, scope and proposal jobs end to end into review, request splitting, DeepSeek client retries and errors, run assembly, the shared request pool.");

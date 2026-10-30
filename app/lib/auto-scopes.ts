@@ -23,7 +23,7 @@ import { ocrScannedSheets } from "./sheet-text-ocr";
 import { referenceWork } from "./sheet-reference-ai";
 import { readTradeScope } from "./scope-reading";
 import { readDraft, writeDraft } from "./use-local-draft";
-import { MAX_SAVED_RUNS, NO_RUNS, readingWork, runTarget, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns } from "./auto-scope-plan";
+import { biggestFirst, MAX_SAVED_RUNS, NO_RUNS, readingWork, runTarget, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns } from "./auto-scope-plan";
 import { sampleProcurement } from "./data/procurement";
 import { sampleExtraction } from "./data/extraction";
 import { sampleDrawingFlip } from "./data/drawing-flip";
@@ -146,7 +146,8 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
     save(run);
   };
 
-  const queue = stillToRead(readable, previous);
+  // The biggest trades start first; every request shares the tab's pool (lib/ai-pool), so the last trades use every slot.
+  const queue = biggestFirst(stillToRead(readable, previous));
   await Promise.all(Array.from({ length: Math.min(PARALLEL_TRADES, queue.length) }, async () => {
     for (let next = queue.shift(); next; next = queue.shift()) {
       const { pkg, sections, sheets } = next;

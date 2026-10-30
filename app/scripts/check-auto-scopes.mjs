@@ -44,6 +44,8 @@ assert.deepEqual(reads.map(t => [t.pkg.name, t.sections.map(s => s.section), t.s
 const stopped = { trades: [{ packageId: proc.packages[0].id, status: "done" }, { packageId: proc.packages[1].id, status: "reading" }] };
 assert.deepEqual(A.stillToRead(reads, stopped).map(t => t.pkg.name), ["Integrated Automation Facility Controls", "Rail Tracks"], "Finished trades aren't read twice");
 assert.equal(A.stillToRead(reads, null).length, 3);
+const sized = (name, pages, sheets = 0) => ({ pkg: { name }, sections: [{ first: 1, last: pages }], sheets: Array.from({ length: sheets }, (_, i) => ({ sheet: `S${i}` })) });
+assert.deepEqual(A.biggestFirst([sized("Small", 2), sized("Plumbing", 230), sized("Doors", 20, 2), sized("Signage", 3)]).map(t => t.pkg.name), ["Plumbing", "Doors", "Small", "Signage"], "The biggest trades start first; equal ones keep bid-package order");
 
 // A manual in volumes (Marcel, 24 Oct: "Project manual V1, project manual V2", not combined): every volume is read.
 const F = await import("../lib/project-files.ts");
