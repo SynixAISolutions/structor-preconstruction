@@ -19,6 +19,8 @@ import type { ReadingInput } from "./proposal-extraction";
 
 /** Pages per request: small enough to answer within the server's time limit. */
 export const PAGES_PER_CALL = 5;
+/** Requests one trade's reading sends at once. */
+const REQUESTS_AT_ONCE = 3;
 
 async function post<T>(job: "scope" | "proposal" | "drawing", input: unknown, signal?: AbortSignal): Promise<T & { model: string }> {
   const response = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job, input }), signal });
@@ -51,23 +53,31 @@ export async function extractTradeScope(args: { pkg: Pick<TradePackage, "id" | "
   const jobs = args.sections.flatMap(section => chunkPages(section.pages).map(pages => ({ section, pages })));
   const drafts: DraftInput[] = [], dropped: Dropped[] = [], failures: ScopeRunResult["failures"] = [];
   let model = "";
-  let consecutiveFailures = 0;
+  // Several requests at once (30 Oct: "at least 90% faster"); answers are put back in page order below.
+  const answers: ({ drafts: DraftInput[]; dropped: Dropped[] } | { error: string } | undefined)[] = new Array(jobs.length);
+  let next = 0, finished = 0, consecutiveFailures = 0, stop = false;
+  await Promise.all(Array.from({ length: Math.min(REQUESTS_AT_ONCE, jobs.length) }, async () => {
+    while (!stop && next < jobs.length) {
+      const i = next++, { section, pages } = jobs[i];
+      try {
+        const result = await post<{ drafts: DraftInput[]; dropped: Dropped[] }>("scope", { pkg: args.pkg, document: args.manual.name, section: { section: section.section, title: section.title }, pages, ...(args.brief ? { brief: args.brief } : {}) }, args.signal);
+        consecutiveFailures = 0;
+        model = result.model;
+        answers[i] = result;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        answers[i] = { error: message };
+        if (++consecutiveFailures >= 3 || /missing|401|402|not configured/i.test(message)) stop = true;
+      }
+      args.onProgress?.(++finished, jobs.length);
+      if (args.signal?.aborted) stop = true;
+    }
+  }));
   for (const [i, { section, pages }] of jobs.entries()) {
-    try {
-      const result = await post<{ drafts: DraftInput[]; dropped: Dropped[] }>("scope", { pkg: args.pkg, document: args.manual.name, section: { section: section.section, title: section.title }, pages, ...(args.brief ? { brief: args.brief } : {}) }, args.signal);
-      consecutiveFailures = 0;
-      model = result.model;
-      drafts.push(...result.drafts.map(d => ({ ...d, key: `${d.key}@${pages[0].page}` })));
-      dropped.push(...result.dropped);
-    } catch (error) {
-      consecutiveFailures++;
-      failures.push({ section: section.section, pages: `${pages[0].page}–${pages.at(-1)!.page}`, error: error instanceof Error ? error.message : String(error) });
-    }
-    args.onProgress?.(i + 1, jobs.length);
-    if (args.signal?.aborted || consecutiveFailures >= 3 || /missing|401|402|not configured/i.test(failures.at(-1)?.error ?? "")) {
-      failures.push(...jobs.slice(i + 1).map(job => ({ section: job.section.section, pages: `${job.pages[0].page}–${job.pages.at(-1)!.page}`, error: "Not attempted: reading canceled or stopped after repeated service failures. Retry the missing pages." })));
-      break;
-    }
+    const answer = answers[i], where = { section: section.section, pages: `${pages[0].page}–${pages.at(-1)!.page}` };
+    if (!answer) failures.push({ ...where, error: "Not attempted: reading canceled or stopped after repeated service failures. Retry the missing pages." });
+    else if ("error" in answer) failures.push({ ...where, error: answer.error });
+    else { drafts.push(...answer.drafts.map(d => ({ ...d, key: `${d.key}@${pages[0].page}` }))); dropped.push(...answer.dropped); }
   }
   const finishedAt = new Date().toISOString();
   const base = { packageIds: [args.pkg.id], engine: { mode: "live" as const, model: model || "unknown" }, documents: [{ name: args.manual.name, pages: args.manual.pageCount }], startedAt, finishedAt };

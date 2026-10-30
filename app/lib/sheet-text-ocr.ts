@@ -10,7 +10,7 @@
 import { useSyncExternalStore } from "react";
 import { drawingRegister, SCANNED_PAGE_TEXT, type RegisterRow, type StoredDocument } from "./project-files";
 import { readStoredText, savePageOcrText } from "./project-files-client";
-import { readWholeSheet, type OcrProgress } from "./sheet-ocr";
+import { OCR_WORKERS, readWholeSheet, type OcrProgress } from "./sheet-ocr";
 import { ocrText } from "./text-anchor";
 
 /** `version` counts sheets saved, for screens that show sheet text to read it again. */
@@ -45,18 +45,21 @@ async function readScannedSheets(documents: StoredDocument[]): Promise<void> {
   try {
     const todo = await scannedSheets(documents);
     set({ total: todo.length });
-    for (const [i, row] of todo.entries()) {
-      if (signal.aborted) break;
-      set({ sheet: row.sheet, done: i, part: null });
-      try {
-        const { words, wholeSheet } = await readWholeSheet(row.doc, row.page, part => set({ part }), signal);
-        if (!wholeSheet) break; // stopped mid-sheet: nothing is saved for it, it is read again next time
-        await savePageOcrText(row.doc, row.page, ocrText(words));
-        set({ saved: snapshot.saved + 1, done: i + 1, version: snapshot.version + 1 });
-      } catch (error) {
-        set({ done: i + 1, failed: [...snapshot.failed, `${row.sheet}: ${error instanceof Error ? error.message : "could not be read"}`] });
+    // As many sheets at once as there are OCR workers (lib/sheet-ocr); each is saved as soon as it is read.
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(OCR_WORKERS, todo.length) }, async () => {
+      for (let row = todo[next++]; row && !signal.aborted; row = todo[next++]) {
+        set({ sheet: row.sheet, part: null });
+        try {
+          const { words, wholeSheet } = await readWholeSheet(row.doc, row.page, part => set({ part }), signal);
+          if (!wholeSheet) break; // stopped mid-sheet: nothing is saved for it, it is read again next time
+          await savePageOcrText(row.doc, row.page, ocrText(words));
+          set({ saved: snapshot.saved + 1, done: snapshot.done + 1, version: snapshot.version + 1 });
+        } catch (error) {
+          set({ done: snapshot.done + 1, failed: [...snapshot.failed, `${row.sheet}: ${error instanceof Error ? error.message : "could not be read"}`] });
+        }
       }
-    }
+    }));
   } catch (error) {
     set({ failed: [...snapshot.failed, error instanceof Error ? error.message : "The scanned sheets could not be listed."] });
   } finally {

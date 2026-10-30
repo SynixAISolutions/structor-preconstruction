@@ -18,7 +18,7 @@ import type { useExtraction } from "../../lib/use-extraction";
 import { Button, Modal } from "./shared";
 
 type TradeState = { status: "queued" | "reading" | "done" | "failed" | "skipped"; done: number; total: number; found: number; note: string };
-const PARALLEL_TRADES = 3;
+const PARALLEL_TRADES = 6;
 // ponytail: creating the first trades swaps the empty Scopes page for the full one, which remounts
 // this button; the flag reopens the dialog there so the reading can start.
 let reopenAfterTrades = false;

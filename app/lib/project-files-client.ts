@@ -70,7 +70,7 @@ const subscribeActivity = (listener: () => void) => { activityListeners.add(list
 export const useUploads = (): UploadActivity[] => useSyncExternalStore(subscribeActivity, () => activity, () => activity);
 const holdTab = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
 /** What an upload is doing, as the window and the banner say it. */
-export const uploadProgressText = (p: UploadProgress) => p.stage === "uploading" ? `Uploading ${Math.round((p.done / Math.max(1, p.total)) * 100)}%` : p.stage === "reading" ? `Reading page ${p.done} of ${p.total}` : p.stage === "title-blocks" ? `Reading title blocks ${p.done} of ${p.total}` : `Saving page text ${p.done + 1} of ${p.total}`;
+export const uploadProgressText = (p: UploadProgress) => p.stage === "uploading" ? `Uploading ${Math.round((p.done / Math.max(1, p.total)) * 100)}%` : p.stage === "reading" ? `Reading page ${p.done} of ${p.total}${p.uploaded !== undefined && p.uploaded < 100 ? ` · uploading ${p.uploaded}%` : ""}` : p.stage === "title-blocks" ? `Reading title blocks ${p.done} of ${p.total}` : `Saving page text ${p.done + 1} of ${p.total}`;
 /** Milliseconds until this tab's uploads have settled: Infinity while one runs, 0 once the last ended a pause ago. */
 export const uploadsSettleIn = (now = Date.now()): number => uploading ? Infinity : Math.max(0, lastUploadAt + UPLOAD_SETTLE_MS - now);
 
@@ -86,7 +86,8 @@ export function useProjectDocuments(projectId?: string) {
 
 // ── Upload ──────────────────────────────────────────────────────────────────
 
-export type UploadProgress = { stage: "uploading" | "reading" | "saving" | "title-blocks"; done: number; total: number };
+/** `uploaded`: while pages are read during the upload, how much of the file has been sent, in percent. */
+export type UploadProgress = { stage: "uploading" | "reading" | "saving" | "title-blocks"; done: number; total: number; uploaded?: number };
 
 type TextItem = { str: string; transform: number[] };
 const SHEET = /^[A-Z]{1,3}[-.]?\d{1,3}(?:\.\d{1,3})?[A-Z]?$/;
@@ -103,24 +104,38 @@ function sheetFromItems(items: TextItem[], width: number, height: number): strin
   return best.text;
 }
 
+/**
+ * Every page's text, and for drawings the sheet number in each title block. Several pdf.js readers share the pages
+ * (Danial, 30 Oct: reading a 2,074-page manual on one core took 7–8 minutes); each holds its own copy of the file,
+ * so their number is kept to about a gigabyte of copies and to the computer's cores.
+ */
 async function readPages(file: File, kind: StoredDocument["kind"], onPage: (done: number, total: number) => void) {
   const pdfjs = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = (await import("./pdf-worker")).pdfWorkerSrc();
-  const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
-  const doc = await task.promise;
-  const pages: PageText[] = [], sheets: StoredSheet[] = [];
+  const data = await file.arrayBuffer();
+  const open = () => pdfjs.getDocument({ data: new Uint8Array(data.slice(0)) });
+  const first = open();
+  const total = (await first.promise).numPages;
+  const cores = typeof navigator === "undefined" ? 4 : navigator.hardwareConcurrency || 4;
+  const readers = Math.max(1, Math.min(6, cores - 2, Math.floor(1_000_000_000 / Math.max(1, file.size)), Math.ceil(total / 40)));
+  const tasks = [first, ...Array.from({ length: readers - 1 }, open)];
+  const pages: PageText[] = new Array(total), sheets: StoredSheet[] = new Array(total);
+  let next = 1, done = 0;
   try {
-    for (let i = 1; i <= doc.numPages; i++) {
-      const page = await doc.getPage(i);
-      const content = await page.getTextContent();
-      const items = content.items.filter((item): item is typeof item & TextItem => "str" in item);
-      pages.push({ page: i, text: items.map(item => item.str + ("hasEOL" in item && item.hasEOL ? "\n" : "")).join("") });
-      if (kind === "drawings") { const view = page.getViewport({ scale: 1 }); sheets.push({ page: i, sheet: sheetFromItems(items, view.width, view.height), title: "", date: "" }); }
-      page.cleanup();
-      onPage(i, doc.numPages);
-    }
-  } finally { await task.destroy(); }
-  return { pages, sheets };
+    await Promise.all(tasks.map(async task => {
+      const doc = await task.promise;
+      for (let i = next++; i <= total; i = next++) {
+        const page = await doc.getPage(i);
+        const content = await page.getTextContent();
+        const items = content.items.filter((item): item is typeof item & TextItem => "str" in item);
+        pages[i - 1] = { page: i, text: items.map(item => item.str + ("hasEOL" in item && item.hasEOL ? "\n" : "")).join("") };
+        if (kind === "drawings") { const view = page.getViewport({ scale: 1 }); sheets[i - 1] = { page: i, sheet: sheetFromItems(items, view.width, view.height), title: "", date: "" }; }
+        page.cleanup();
+        onPage(++done, total);
+      }
+    }));
+  } finally { await Promise.all(tasks.map(task => task.destroy())); }
+  return { pages, sheets: kind === "drawings" ? sheets : [] };
 }
 
 /**
@@ -154,16 +169,26 @@ async function storePdf(args: Parameters<typeof uploadProjectPdf>[0]): Promise<S
     document: { id, name: file.name, category: revisionOf?.category ?? category, series: revisionOf?.series ?? id, revision: (revisionOf?.revision ?? 0) + 1 },
   }) }).catch(() => null);
   if (reused?.reused && reused.document && reused.index) { setIndex(reused.index); return reused.document; }
-  const stored = await upload(sourcePath(projectId, id), file, {
-    access: "private", handleUploadUrl: "/api/project-files/upload", contentType: "application/pdf", multipart: file.size > 20 * 1024 * 1024,
-    onUploadProgress: event => args.onProgress?.({ stage: "uploading", done: event.loaded, total: event.total }),
-  });
-  const { pages, sheets } = await readPages(file, kind, (done, total) => args.onProgress?.({ stage: "reading", done, total }));
+  // The pages are read while the file uploads, not after it (30 Oct: "it needs to be at least 90% faster").
+  let sent = { done: 0, total: file.size }, read = { done: 0, total: 0 };
+  const report = () => args.onProgress?.(read.total && read.done < read.total
+    ? { stage: "reading", ...read, uploaded: Math.round((sent.done / Math.max(1, sent.total)) * 100) }
+    : { stage: "uploading", ...sent });
+  const [stored, { pages, sheets }] = await Promise.all([
+    upload(sourcePath(projectId, id), file, {
+      access: "private", handleUploadUrl: "/api/project-files/upload", contentType: "application/pdf", multipart: file.size > 20 * 1024 * 1024,
+      onUploadProgress: event => { sent = { done: event.loaded, total: event.total }; report(); },
+    }),
+    readPages(file, kind, (done, total) => { read = { done, total }; report(); }),
+  ]);
   const chunks = Math.ceil(pages.length / TEXT_CHUNK);
-  for (let n = 0; n < chunks; n++) {
-    args.onProgress?.({ stage: "saving", done: n, total: chunks });
-    await api("/api/project-files/text", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ projectId, docId: id, chunk: n, pages: pages.slice(n * TEXT_CHUNK, (n + 1) * TEXT_CHUNK) }) });
-  }
+  let saved = 0, nextChunk = 0;
+  await Promise.all(Array.from({ length: Math.min(6, chunks) }, async () => {
+    for (let n = nextChunk++; n < chunks; n = nextChunk++) {
+      await api("/api/project-files/text", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ projectId, docId: id, chunk: n, pages: pages.slice(n * TEXT_CHUNK, (n + 1) * TEXT_CHUNK) }) });
+      args.onProgress?.({ stage: "saving", done: Math.min(++saved, chunks - 1), total: chunks });
+    }
+  }));
   const document: StoredDocument = {
     id, projectId, name: file.name, category: revisionOf?.category ?? category, kind, series: revisionOf?.series ?? id, revision: (revisionOf?.revision ?? 0) + 1,
     size: file.size, pageCount: pages.length, uploadedAt: new Date().toISOString(), sourcePath: stored.pathname, sourceUrl: stored.url,

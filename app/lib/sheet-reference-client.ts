@@ -25,7 +25,7 @@ const listeners = new Set<() => void>();
 const set = (change: Partial<ReferenceRun>) => { snapshot = { ...snapshot, ...change }; listeners.forEach(l => l()); };
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 let controller: AbortController | null = null;
-const PARALLEL = 3;
+const PARALLEL = 6;
 
 type Pkg = Pick<TradePackage, "id" | "name" | "code"> & { sections: string[] };
 

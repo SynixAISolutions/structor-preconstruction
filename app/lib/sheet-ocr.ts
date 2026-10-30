@@ -16,18 +16,21 @@ import { findOnSheet, MAX_TAG_MARKS, ocrTiles, sheetWords, type Box, type OcrTil
 export type OcrProgress = { done: number; total: number };
 
 type Worker = Awaited<ReturnType<typeof import("tesseract.js")["createWorker"]>>;
-let worker: Promise<Worker> | null = null;
-/** One OCR worker for the session, made on first use. */
+/** OCR workers for the session, made on first use; sheets read at once share them in turn (30 Oct: one worker read 43 scanned sheets in about 40 minutes). */
+export const OCR_WORKERS = typeof navigator === "undefined" ? 2 : Math.max(1, Math.min(4, Math.floor((navigator.hardwareConcurrency || 4) / 3)));
+const workers: (Promise<Worker> | undefined)[] = [];
+let turn = 0;
 function ocrWorker(): Promise<Worker> {
-  worker ??= (async () => {
+  const i = turn++ % OCR_WORKERS;
+  const made = workers[i] ??= (async () => {
     const { createWorker, PSM } = await import("tesseract.js");
-    const made = await createWorker("eng");
+    const created = await createWorker("eng");
     // Drawings are labels and schedules scattered over a sheet, not paragraphs.
-    await made.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT });
-    return made;
+    await created.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT });
+    return created;
   })();
-  worker.catch(() => { worker = null; });
-  return worker;
+  made.catch(() => { workers[i] = undefined; });
+  return made;
 }
 
 const imageSize = (src: string) => new Promise<{ width: number; height: number }>((resolve, reject) => {
