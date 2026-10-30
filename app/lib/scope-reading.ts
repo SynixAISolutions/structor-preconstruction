@@ -82,11 +82,12 @@ export async function readTradeScope(args: {
       });
       done += rows.length;
       // Quotes the AI read from a sheet's image, not its text layer, are looked for on the image with OCR: one
-      // that isn't printed there holds its finding back from the bid form (lib/extraction notOnSheet).
+      // that isn't printed there holds its finding back from the bid form (lib/extraction notOnSheet). The sheets are
+      // checked side by side, spread over the OCR workers (lib/sheet-ocr).
       const ocr = new Map<string, TextBox[]>();
-      for (const p of drawn.drawingPages ?? []) {
+      await Promise.all((drawn.drawingPages ?? []).map(async p => {
         const quotes = [...new Set(drawn.input.drafts.flatMap(d => d.citations).filter(c => c.verification === "image" && c.document === doc.name && c.page === p.page).map(c => c.quote))];
-        if (!quotes.length || signal.aborted) continue;
+        if (!quotes.length || signal.aborted) return;
         try {
           const read = await findInSheetImage(doc, p.page, quotes, r => onProgress({ note: `Checking the AI's quotes on sheet ${p.sheet}: reading the image, part ${r.done + 1} of ${r.total}`, done: 0, total: 0 }), signal);
           ocr.set(p.sheet, read.words);
@@ -94,7 +95,7 @@ export async function readTradeScope(args: {
         } catch (error) {
           drawn.dropped.push({ what: `Quotes read from sheet ${p.sheet}'s image`, reason: `Not checked on the sheet (${error instanceof Error ? error.message : "OCR failed"}); check them against the sheet yourself.` });
         }
-      }
+      }));
       // Marks go where the cited words are printed; the AI's own outlines stay only where the text can't place them.
       const boxes = new Map<string, TextBox[]>();
       await Promise.all((drawn.drawingPages ?? []).map(async p => { try { boxes.set(p.sheet, await readPageTextBoxes(doc, p.page)); } catch { /* no text layer: outlines stay approximate */ } }));

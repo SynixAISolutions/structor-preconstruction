@@ -102,7 +102,8 @@ export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnT
     const signal = controller.current.signal;
     setBusy(true);
     setStates(Object.fromEntries(chosen.map(id => [id, { status: "queued", done: 0, total: 0, found: 0, note: "" } as TradeState])));
-    const queue = [...chosen];
+    // The biggest trades start first, so they don't finish the reading alone (lib/auto-scope-plan biggestFirst).
+    const queue = [...chosen].sort((a, b) => Math.ceil(pages(b) / 5) + sheetsFor(b).length - Math.ceil(pages(a) / 5) - sheetsFor(a).length);
     let found = 0, failed = 0;
     await Promise.all(Array.from({ length: Math.min(PARALLEL_TRADES, queue.length) }, async () => {
       while (queue.length && !signal.aborted && projectId === getActiveProjectId()) {

@@ -65,6 +65,13 @@ export function readingWork(trades: Pick<TradeToRead<unknown>, "sections" | "she
   return { requests, chars: pages * 3_500 + sheets * 4_000, images: sheets };
 }
 
+/**
+ * Trades with the most to read first (Danial, 30 Oct: "speed up the tail"): the big MEP trades, read last, kept the run
+ * going for minutes after the rest had finished. Started first, their long readings overlap the small trades'.
+ */
+export const biggestFirst = <T extends Pick<TradeToRead<unknown>, "sections" | "sheets">>(trades: T[]): T[] =>
+  trades.map(trade => ({ trade, requests: readingWork([trade]).requests })).sort((a, b) => b.requests - a.requests).map(x => x.trade);
+
 /** Trades a run still has to read: a run stopped by a closed tab picks up after the trades it finished. */
 export const stillToRead = <T extends { pkg: { id: string } }>(trades: T[], previous: AutoRun | null): T[] =>
   trades.filter(t => !previous?.trades.some(x => x.packageId === t.pkg.id && x.status === "done"));

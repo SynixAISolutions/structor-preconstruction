@@ -4,6 +4,7 @@
 
 import type { DraftInput } from "./extraction";
 import type { ConsolidatedLine, TitleBlock } from "./ai-jobs-more";
+import { AI_REQUESTS_AT_ONCE, inAiPool } from "./ai-pool";
 
 export async function aiJob<T>(job: string, input: unknown, signal?: AbortSignal): Promise<T & { model: string }> {
   const response = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job, input }), signal });
@@ -27,13 +28,14 @@ export async function consolidateScope(trade: string, drafts: DraftInput[], sign
   const groups = [...Map.groupBy(scopes, d => d.source.split(" · ")[0]).entries()];
   const results: DraftInput[][] = new Array(groups.length);
   let next = 0, used = 0;
-  await Promise.all(Array.from({ length: Math.min(4, groups.length) }, async () => {
+  // Each section's request in a slot of the tab's shared pool (lib/ai-pool): a big trade finishing alone uses them all.
+  await Promise.all(Array.from({ length: Math.min(AI_REQUESTS_AT_ONCE, groups.length) }, async () => {
     while (next < groups.length) {
       const i = next++;
       const [section, items] = groups[i];
       if (items.length <= 3) { results[i] = items; used += items.length; continue; }
       try {
-        const { lines } = await aiJob<{ lines: ConsolidatedLine[] }>("scope-consolidate", { trade, section: `${section} ${sectionTitles[section] ?? ""}`.trim(), maxLines: Math.min(12, Math.max(3, Math.ceil(items.length / 4))), findings: items.map(d => ({ title: d.title, source: d.source })) }, signal);
+        const { lines } = await inAiPool(() => aiJob<{ lines: ConsolidatedLine[] }>("scope-consolidate", { trade, section: `${section} ${sectionTitles[section] ?? ""}`.trim(), maxLines: Math.min(12, Math.max(3, Math.ceil(items.length / 4))), findings: items.map(d => ({ title: d.title, source: d.source })) }, signal));
         results[i] = lines.length ? lines.map((line, n) => {
           const members = line.members.map(m => items[m]);
           used += members.length;
