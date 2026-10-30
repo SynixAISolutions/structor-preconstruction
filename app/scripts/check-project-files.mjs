@@ -200,4 +200,23 @@ assert.equal(updated.due, "2026-03-01");
 assert.equal(updated.squareFeet, 26500, "Renovation + addition make the total, as in the project form");
 assert.equal(updated.id, sampleProjectRecords[0].id);
 
-console.log("Project files checked: sheet keys, revisions, drawing log (sets, sheet versions, partial sets, naming pages), sheet/manual/section lookup, stored-file validation, index upsert, sections by trade.");
+// An identical upload reuses the stored copy (28 Oct: a 290 MB drawing set stored once per test filled the free store).
+{
+  const hash = "a".repeat(64);
+  const stored = { id: "orig0001", projectId: "jelleff", name: "Drawings.pdf", category: "Drawings", kind: "drawings", series: "orig0001", revision: 1, size: 175_000_000, pageCount: 205, uploadedAt: "2026-10-28T10:00:00.000Z",
+    sourcePath: "project-files/jelleff/orig0001/source.pdf", sourceUrl: "https://abc.private.blob.vercel-storage.com/project-files/jelleff/orig0001/source.pdf", textChunk: 50, textChunks: 5,
+    sheets: [{ page: 1, sheet: "A1.1", title: "FLOOR PLAN", date: "" }], sections: [], hash };
+  assert.ok(F.isHash(hash) && !F.isHash("abc") && !F.isHash("A".repeat(64)), "A fingerprint is 64 lowercase hex characters");
+  assert.equal(F.hashPath(hash), `file-hashes/${hash}`.concat(".json"));
+  const reused = F.reuseDocument(stored, { id: "copy0001", projectId: "demo-1", name: "JRC Drawings.pdf", category: "Drawings", series: "copy0001", revision: 1, uploadedAt: "2026-10-29T09:00:00.000Z" });
+  assert.deepEqual([reused.id, reused.projectId, reused.name, reused.uploadedAt], ["copy0001", "demo-1", "JRC Drawings.pdf", "2026-10-29T09:00:00.000Z"], "The new upload keeps its own name, project, id and date");
+  assert.deepEqual([reused.sourceUrl, reused.textChunks, reused.sheets[0].title, reused.hash], [stored.sourceUrl, 5, "FLOOR PLAN", hash], "and takes the stored copy's PDF, text, titled sheets and fingerprint");
+  assert.deepEqual(F.textSource(reused), { projectId: "jelleff", docId: "orig0001" }, "Its page text is read where the copy stored it");
+  assert.deepEqual(F.textSource(stored), { projectId: "jelleff", docId: "orig0001" });
+  assert.deepEqual(F.textSource(F.reuseDocument(reused, { id: "copy0002", projectId: "demo-2", name: "x.pdf", category: "Drawings", series: "copy0002", revision: 1, uploadedAt: "" })), { projectId: "jelleff", docId: "orig0001" }, "A reuse of a reuse still reads the original text");
+  assert.equal(F.parseDocument({ ...stored, textFrom: { projectId: "elsewhere", docId: "x" } }, "jelleff").textFrom, undefined, "A browser can't point a document at another project's text");
+  assert.equal(F.parseDocument(stored, "jelleff").hash, hash, "The fingerprint is kept when a browser registers its upload");
+  assert.deepEqual(F.parseSheetsAndSections({ sheets: [{ page: 2, sheet: "A2.1", title: "T" }, { page: "x" }], sections: [{ section: "09 30 13", title: "Tiling", first: 3, last: 9 }] }), { sheets: [{ page: 2, sheet: "A2.1", title: "T", date: "" }], sections: [{ section: "09 30 13", title: "Tiling", first: 3, last: 9 }] });
+}
+
+console.log("Project files checked: identical uploads reuse the stored copy, sheet keys, revisions, drawing log (sets, sheet versions, partial sets, naming pages), sheet/manual/section lookup, stored-file validation, index upsert, sections by trade.");

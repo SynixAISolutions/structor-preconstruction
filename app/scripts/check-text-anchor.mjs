@@ -50,6 +50,10 @@ assert.deepEqual(regions.map(r => [r.key, r.anchor, r.scopeKeys[0]]), [["d2-regi
 assert.equal(regions[1].label, "Storefront SF-4 (1 of 3)");
 assert.equal(pinned.filter(d => d.kind === "scope").length, 3, "Scope findings are untouched");
 assert.deepEqual(T.pinFindings(drafts, new Map()).filter(d => d.kind === "region").map(r => r.anchor), ["image", "image"], "No text layer: the AI's outlines stay, approximate");
+// Text-first (28 Oct, Wyre): the scope run keeps only marks on printed words; an outline the text can't place is dropped.
+assert.deepEqual(T.pinFindings(drafts, new Map([["A1.1", sheet]]), new Map(), false).filter(d => d.kind === "region").map(r => r.anchor), ["text", "text", "text", "text"]);
+assert.deepEqual(T.pinFindings(drafts, new Map(), new Map(), false).filter(d => d.kind === "region"), []);
+assert.deepEqual([{ origin: "ai", anchor: "text" }, { origin: "ai", anchor: "image" }, { origin: "ai" }, { origin: "estimator" }].map(F.onPrintedWords), [true, false, false, true], "AI outlines from the picture alone are guesses; drawn regions and pinned marks are highlights");
 
 // The anchor travels with the finding to the Drawing Flip highlight.
 const proc = { packages: [{ id: "glazing", name: "Aluminum & glazing", division: "08", code: "08 40 00", owner: "", due: "" }, { id: "drywall", name: "Drywall", division: "09", code: "09 29 00", owner: "", due: "" }], scopes: [], invitations: [], outreach: [], notifications: [] };
@@ -97,6 +101,17 @@ assert.equal(wall.length, 1, "Fuzzy matching does");
 assert(wall[0].x < 0.44 + (900 / 1120) * 0.56 + 0.001 && wall[0].y < 0.8 && wall[0].y + wall[0].height > 0.83, "Over WALL TlLE, not CERAMIC TILE");
 assert.equal(T.findOnSheet(read, "CERAMIC TILE", 12, { fuzzy: true })[0].y < 0.2, true, "CERAMIC TILE where it is printed");
 assert.deepEqual(T.findOnSheet(read, "MEMBRANE WATERPROOFING", 12, { fuzzy: true }), [], "Words not on the sheet still place nothing");
+
+// A scanned sheet's OCR words saved as its text (28 Oct): printed lines in reading order, a far column on its own line.
+const w = (str, x, y, width = 0.04, h = 0.01) => ({ str, x, y, w: width, h });
+assert.equal(T.ocrText([w("TILE", 0.15, 0.1), w("WALL", 0.1, 0.1), w("KEYNOTES", 0.8, 0.1), w("QUARRY", 0.1, 0.2), w("TILE", 0.15, 0.2)]), "WALL TILE\nKEYNOTES\nQUARRY TILE");
+assert.equal(T.ocrText([]), "");
+const P = await import("../lib/project-files.ts");
+const chunk = [{ page: 1, text: "A1.1 FLOOR PLAN KEYNOTES WALL TILE AT RESTROOMS" }, { page: 2, text: "  " }, { page: 4, text: "QT OLD", ocr: true }];
+assert.equal(P.withOcrPage(chunk, 1, "OCR GUESS"), null, "Never over a page's own text layer");
+assert.deepEqual(P.withOcrPage(chunk, 2, "WALL TILE"), [chunk[0], { page: 2, text: "WALL TILE", ocr: true }, chunk[2]], "A scanned page gets its OCR text; the others stay exactly as stored");
+assert.deepEqual(P.withOcrPage(chunk, 4, "QUARRY TILE").at(-1), { page: 4, text: "QUARRY TILE", ocr: true }, "OCR text can be read again");
+assert.deepEqual(P.withOcrPage(chunk, 3, "A12.1").map(p => p.page), [1, 2, 3, 4], "A page missing from the chunk is added in order");
 
 // The AI run checks the quotes it read from a sheet's image (27 Oct, live: about half of A12.1's weren't printed on it).
 const imageCite = (quote, page = 12) => [{ document: "set.pdf", page, sheet: "A12.1", quote, verification: "image" }];

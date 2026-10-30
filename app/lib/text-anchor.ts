@@ -80,13 +80,29 @@ function findTag(boxes: TextBox[], tag: string, max: number): Box[] {
 const squeeze = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 /** Lines top to bottom (boxes whose middles are within half a line), each left to right. */
-function readingOrder(boxes: TextBox[]): TextBox[] {
+function readingLines(boxes: TextBox[]): TextBox[][] {
   const lines: TextBox[][] = [];
   for (const box of [...boxes].sort((a, b) => a.y + a.h / 2 - (b.y + b.h / 2) || a.x - b.x)) {
     const line = lines.at(-1), mid = box.y + box.h / 2;
     if (line && Math.abs(line[0].y + line[0].h / 2 - mid) < Math.max(line[0].h, box.h) / 2) line.push(box); else lines.push([box]);
   }
-  return lines.flatMap(line => line.sort((a, b) => a.x - b.x));
+  return lines.map(line => line.sort((a, b) => a.x - b.x));
+}
+const readingOrder = (boxes: TextBox[]): TextBox[] => readingLines(boxes).flat();
+
+/**
+ * The words OCR read on a sheet as the page's text: one line per printed line, top to bottom, a wide gap (another
+ * column, a note across the sheet) starting a new line, so a phrase is only found where it is written together.
+ */
+export function ocrText(words: TextBox[]): string {
+  return readingLines(words).flatMap(line => {
+    const parts: TextBox[][] = [];
+    for (const w of line) {
+      const last = parts.at(-1)?.at(-1);
+      if (last && w.x - (last.x + last.w) < Math.max(last.h, w.h) * 2.5) parts.at(-1)!.push(w); else parts.push([w]);
+    }
+    return parts.map(p => p.map(w => w.str).join(" "));
+  }).join("\n");
 }
 
 /**
@@ -227,7 +243,7 @@ export function checkImageQuotes(drafts: DraftInput[], at: { document: string; p
  * outline left for a finding the text doesn't hold is kept as approximate. `boxes` holds each sheet's text;
  * `ocr` the words read off a sheet's image (sheetWords), looked up allowing OCR's letter slips.
  */
-export function pinFindings(drafts: DraftInput[], boxes: Map<string, TextBox[]>, ocr: Map<string, TextBox[]> = new Map()): DraftInput[] {
+export function pinFindings(drafts: DraftInput[], boxes: Map<string, TextBox[]>, ocr: Map<string, TextBox[]> = new Map(), keepApproximate = true): DraftInput[] {
   const pinned = new Set<string>(), marks: DraftInput[] = [];
   for (const draft of drafts) {
     if (draft.kind !== "scope") continue;
@@ -242,6 +258,6 @@ export function pinFindings(drafts: DraftInput[], boxes: Map<string, TextBox[]>,
       label: (found.length > 1 ? `${draft.title} (${i + 1} of ${found.length})` : draft.title).slice(0, 200), confidence: 0.9, scopeKeys: [draft.key], citations: draft.citations,
     }));
   }
-  const kept = drafts.flatMap((draft): DraftInput[] => draft.kind !== "region" ? [draft] : (draft.scopeKeys ?? []).some(key => pinned.has(key)) ? [] : [{ ...draft, anchor: "image" }]);
+  const kept = drafts.flatMap((draft): DraftInput[] => draft.kind !== "region" ? [draft] : (draft.scopeKeys ?? []).some(key => pinned.has(key)) || !keepApproximate ? [] : [{ ...draft, anchor: "image" }]);
   return [...kept, ...marks];
 }

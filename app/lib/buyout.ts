@@ -18,7 +18,8 @@ import type { Procurement } from "./procurement";
 import type { Submission } from "./submissions";
 
 export type Minute = { id: string; text: string; at: string; by: string };
-export type Bafo = { id: string; bidderId: string | null; company: string; amount: number; note: string; receivedAt: string; by: string };
+/** `source` "proposal": pulled from the subcontractor's revised proposal in the portal (proposalBafos), at `revision`. */
+export type Bafo = { id: string; bidderId: string | null; company: string; amount: number; note: string; receivedAt: string; by: string; source?: "typed" | "proposal"; revision?: number };
 export type ScopeReview = { date: string; attendees: string; held: { at: string; by: string } | null; minutes: Minute[] };
 export type BuyoutEntry = {
   packageId: string;
@@ -53,6 +54,8 @@ export type BuyoutRow = {
   contractSent: boolean; executed: boolean;
   bids: number; low: { name: string; value: number } | null;
   bestAndFinal: Bafo | null;
+  /** Every company's current best and final, typed or from its revised proposal, lowest first. */
+  bafos: Bafo[];
   award: { company: string; amount: number; at: string } | null;
   /** The trade's in-house budget (its own budget lines; the GMP amount) minus the award, else the best and final, else the low bid: the purchasing contingency. Positive = under budget. */
   budget: number | null; delta: number | null;
@@ -129,6 +132,30 @@ export type BuyoutInput = {
   budget: BudgetState; awards: AwardState; buyout: BuyoutState;
 };
 
+/**
+ * Best and final offers pulled from the subcontractors' revised proposals (Marcel, 24 Oct: "the BAFO number is
+ * pulled in from the sub's revised proposal"): a proposal resubmitted in the portal (V2, V3…) after the scope review
+ * was held is that company's best and final, at its latest revision's base bid. Before a review is held, any
+ * resubmission counts.
+ */
+export function proposalBafos(submissions: Submission[], packageId: string, review: ScopeReview | null, directory: { id: string; company: string }[]): Bafo[] {
+  const since = review?.held?.at ?? "";
+  return submissions.filter(s => s.packageId === packageId && s.revisions.length > 1).flatMap((s): Bafo[] => {
+    const latest = s.revisions.at(-1)!;
+    if (latest.baseBid === null || latest.submittedAt < since) return [];
+    const company = directory.find(d => d.id === s.bidderId)?.company ?? s.bidderId;
+    return [{ id: `proposal:${s.id}:${latest.number}`, bidderId: s.bidderId, company, amount: latest.baseBid, note: `Revised proposal V${latest.number}, submitted in the portal`, receivedAt: latest.submittedAt, by: latest.submitter.name || company, source: "proposal", revision: latest.number }];
+  });
+}
+
+/** Each company's latest best and final, typed or from its proposal, lowest first. */
+export function currentBafos(typed: Bafo[], fromProposals: Bafo[]): Bafo[] {
+  const key = (b: Bafo) => b.bidderId ?? b.company.toLowerCase();
+  const latest = new Map<string, Bafo>();
+  for (const b of [...typed, ...fromProposals]) { const there = latest.get(key(b)); if (!there || b.receivedAt > there.receivedAt) latest.set(key(b), b); }
+  return [...latest.values()].sort((a, b) => a.amount - b.amount);
+}
+
 /** One row per trade, in procurement order: where its buyout stands and whose move it is. */
 export function buyoutRows(input: BuyoutInput): BuyoutRow[] {
   const { procurement, budget } = input;
@@ -139,8 +166,9 @@ export function buyoutRows(input: BuyoutInput): BuyoutRow[] {
     const bids = tradeBids(procurement, input.submissions, pkg.id, input.candidates, input.directory);
     const award = activeAward(input.awards, pkg.id);
     const stage = award ? awardStage(award) : null;
-    const bestAndFinal = entry?.bafos.length ? [...entry.bafos].sort((a, b) => a.amount - b.amount)[0] : null;
     const review = entry?.scopeReview ?? null;
+    const bafos = currentBafos(entry?.bafos ?? [], proposalBafos(input.submissions, pkg.id, review, input.directory));
+    const bestAndFinal = bafos[0] ?? null;
     let status: BuyoutStatus, ballInCourt: BallInCourt, next: string;
     if (stage === "executed") [status, ballInCourt, next] = ["executed", null, "Bought out"];
     else if (stage && stage !== "exhibit-draft" && stage !== "exhibit-agreed" && stage !== "cancelled") {
@@ -166,7 +194,7 @@ export function buyoutRows(input: BuyoutInput): BuyoutRow[] {
       : ballInCourt === "subcontractor" ? awarded?.company ?? (entry?.recommended || bestAndFinal?.company || bids[0]?.name || "Bidders") : null;
     return {
       packageId: pkg.id, trade: pkg.name, code: pkg.code, owner: pkg.owner, status, ballInCourt, next, bic, contractSent, executed,
-      bids: bids.length, low: bids[0] ? { name: bids[0].name, value: bids[0].value } : null, bestAndFinal, award: awarded,
+      bids: bids.length, low: bids[0] ? { name: bids[0].name, value: bids[0].value } : null, bestAndFinal, bafos, award: awarded,
       budget: own, delta: own !== null && basis !== null ? cents(own - basis) : null, entry,
     };
   });

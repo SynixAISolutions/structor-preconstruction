@@ -32,10 +32,31 @@ export type StoredDocument = {
   textChunks: number;
   sheets: StoredSheet[];
   sections: StoredSection[];
+  /** SHA-256 of the PDF, so an identical upload reuses this stored copy instead of storing it again. */
+  hash?: string;
+  /**
+   * Set by the server when this upload reuses an identical file stored for another upload: that upload's project and
+   * id, whose folder holds the page text (the PDF's sourcePath already points there). Never set by the browser.
+   */
+  textFrom?: { projectId: string; docId: string };
 };
 
 export type ProjectFileIndex = { projectId: string; documents: StoredDocument[]; updatedAt: string };
-export type PageText = { page: number; text: string };
+/** `ocr`: read off the page image by OCR because the page has no text layer (a scanned sheet), saved once for everyone. */
+export type PageText = { page: number; text: string; ocr?: boolean };
+/** A page with less text than this has no real text layer: a scanned or drawn-only sheet. */
+export const SCANNED_PAGE_TEXT = 20;
+
+/**
+ * A stored chunk with one scanned page's OCR text put in (or replaced), the other pages as they were; null when that
+ * page has its own text layer, which OCR text never replaces.
+ */
+export function withOcrPage(pages: PageText[], page: number, text: string): PageText[] | null {
+  const there = pages.find(p => p.page === page);
+  if (there && !there.ocr && there.text.trim().length >= SCANNED_PAGE_TEXT) return null;
+  const entry: PageText = { page, text: text.slice(0, 200_000), ocr: true };
+  return there ? pages.map(p => p.page === page ? entry : p) : [...pages, entry].sort((a, b) => a.page - b.page);
+}
 
 export const TEXT_CHUNK = 100;
 export const MAX_SOURCE_BYTES = 600 * 1024 * 1024;
@@ -51,6 +72,11 @@ export const blobRoot = (projectId: string) => `project-files/${projectId}`;
 export const indexPath = (projectId: string) => `${blobRoot(projectId)}/index.json`;
 export const sourcePath = (projectId: string, docId: string) => `${blobRoot(projectId)}/${docId}/source.pdf`;
 export const textPath = (projectId: string, docId: string, chunk: number) => `${blobRoot(projectId)}/${docId}/text-${chunk}.json`;
+/** Which stored copy a PDF's fingerprint points to (lib/project-files-store findCopy). */
+export const hashPath = (hash: string) => `file-hashes/${hash}.json`;
+export const isHash = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+/** Where a document's page text is stored: its own folder, or the upload whose identical file it reuses. */
+export const textSource = (doc: Pick<StoredDocument, "projectId" | "id" | "textFrom">) => doc.textFrom ?? { projectId: doc.projectId, docId: doc.id };
 
 export const kindForCategory = (category: string): DocKind => category === "Drawings" ? "drawings" : category === "Specifications" ? "manual" : "other";
 export const revisionLabel = (doc: Pick<StoredDocument, "revision">) => `V${doc.revision}`;
@@ -126,11 +152,30 @@ export function parseDocument(raw: unknown, projectId: string): StoredDocument {
     series: o.series, revision: int(o.revision, 1, 999), size: int(o.size, 1, MAX_SOURCE_BYTES), pageCount: int(o.pageCount, 1, 20_000),
     uploadedAt: text(o.uploadedAt, 40) || new Date().toISOString(), sourcePath: expected, sourceUrl: o.sourceUrl,
     textChunk: int(o.textChunk ?? TEXT_CHUNK, 1, 1000), textChunks: int(o.textChunks, 0, 20_000),
-    sheets: (Array.isArray(o.sheets) ? o.sheets : []).slice(0, 20_000).map((s: any) => ({ page: int(s?.page, 1, 20_000), sheet: text(s?.sheet, 40), title: text(s?.title, 200), date: text(s?.date, 40) })).filter((s: StoredSheet) => Number.isFinite(s.page)),
-    sections: (Array.isArray(o.sections) ? o.sections : []).slice(0, 5_000).map((s: any) => ({ section: text(s?.section, 20), title: text(s?.title, 200), first: int(s?.first, 1, 20_000), last: int(s?.last, 1, 20_000) })).filter((s: StoredSection) => s.section && Number.isFinite(s.first) && Number.isFinite(s.last)),
+    ...parseSheetsAndSections(o),
+    ...(isHash(o.hash) ? { hash: o.hash } : {}),
   };
   if (!doc.name || [doc.revision, doc.size, doc.pageCount, doc.textChunk, doc.textChunks].some(n => !Number.isFinite(n))) throw new Error("The document record is incomplete.");
   return doc;
+}
+
+/** A document record's sheets and manual sections, as a browser sends them (after upload, titles and sections may change). */
+export function parseSheetsAndSections(o: Record<string, any>): Pick<StoredDocument, "sheets" | "sections"> {
+  const text = (v: unknown, max: number) => typeof v === "string" ? v.trim().slice(0, max) : "";
+  const int = (v: unknown, min: number, max: number) => Number.isInteger(v) && (v as number) >= min && (v as number) <= max ? v as number : NaN;
+  return {
+    sheets: (Array.isArray(o.sheets) ? o.sheets : []).slice(0, 20_000).map((s: any) => ({ page: int(s?.page, 1, 20_000), sheet: text(s?.sheet, 40), title: text(s?.title, 200), date: text(s?.date, 40) })).filter((s: StoredSheet) => Number.isFinite(s.page)),
+    sections: (Array.isArray(o.sections) ? o.sections : []).slice(0, 5_000).map((s: any) => ({ section: text(s?.section, 20), title: text(s?.title, 200), first: int(s?.first, 1, 20_000), last: int(s?.last, 1, 20_000) })).filter((s: StoredSection) => s.section && Number.isFinite(s.first) && Number.isFinite(s.last)),
+  };
+}
+
+/**
+ * A new upload that reuses an identical stored file (Danial, 28 Oct: uploading the same 290 MB drawing set for each
+ * test filled the free 1 GB store and got it suspended). It takes the stored copy's PDF, page text, sheets and
+ * sections, and its own name, project, id and date; `textFrom` says where the text lives.
+ */
+export function reuseDocument(copy: StoredDocument, upload: Pick<StoredDocument, "id" | "projectId" | "name" | "category" | "series" | "revision" | "uploadedAt">): StoredDocument {
+  return { ...copy, ...upload, textFrom: textSource(copy) };
 }
 
 /** Adds or replaces a document in an index (pure). */

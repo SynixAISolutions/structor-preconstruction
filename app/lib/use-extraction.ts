@@ -6,7 +6,7 @@ import { acceptDraft, ExtractionRuleError, type ExtractionState } from "./extrac
 import { useDrawingFlip } from "./use-drawing-flip";
 import { useLocalDraft } from "./use-local-draft";
 import { useProcurement } from "./use-procurement";
-import { removeReviewedScope } from "./scope-review";
+import { removeReviewedScope, approveWithRegions } from "./scope-review";
 
 /**
  * The open project's AI findings and their review, in this browser (demo), under "extraction".
@@ -60,5 +60,21 @@ export function useExtraction() {
     } catch (error) { if (error instanceof ExtractionRuleError) return error.message; throw error; }
   }, [runProcurement, runFlip]);
 
-  return { extraction, procurement, runProcurement, flip, runFlip, run, accept, removeScope };
+  /** Approves a bid-form line and places the highlights the AI proposed with it (lib/scope-review approveWithRegions). */
+  const approveScopeItem = useCallback((id: string, by: string): string | null => {
+    try {
+      const next = approveWithRegions(latest.current, id, by);
+      latest.current = next;
+      setExtraction(next.extraction);
+      runProcurement(() => next.procurement);
+      runFlip(() => next.flip);
+      return null;
+    } catch (error) {
+      if (error instanceof ExtractionRuleError) return error.message;
+      if (error instanceof Error && error.name === "ProcurementRuleError") return error.message;
+      throw error;
+    }
+  }, [setExtraction, runProcurement, runFlip]);
+
+  return { extraction, procurement, runProcurement, flip, runFlip, run, accept, removeScope, approveScopeItem };
 }

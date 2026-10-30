@@ -12,11 +12,18 @@ import { addRunToBidForms, recordRun, type ExtractionState } from "./extraction"
 import { addPage, DrawingFlipRuleError, type DrawingFlipState } from "./drawing-flip";
 import { addPackage, type Procurement } from "./procurement";
 import { drawingRegister, specificationSections, type StoredDocument } from "./project-files";
-import { useProjectDocuments } from "./project-files-client";
-import { tradesToAdd } from "./project-scopes";
+import { storedDocuments, uploadsSettleIn, useProjectDocuments } from "./project-files-client";
+import { sectionsByTrade, tradesToAdd } from "./project-scopes";
+import { applyBidPackagePlan } from "./bid-package-ai";
+import { planBidPackages } from "./bid-package-client";
+import { aiReader } from "./ai-reader-client";
+import { AUTO_READ_UNDER, estimateCost } from "./ai-cost";
+import { findReferencesWithAi, loadSheetTexts } from "./sheet-reference-client";
+import { ocrScannedSheets } from "./sheet-text-ocr";
+import { referenceWork } from "./sheet-reference-ai";
 import { readTradeScope } from "./scope-reading";
 import { readDraft, writeDraft } from "./use-local-draft";
-import { MAX_SAVED_RUNS, NO_RUNS, runTarget, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns } from "./auto-scope-plan";
+import { MAX_SAVED_RUNS, NO_RUNS, readingWork, runTarget, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns } from "./auto-scope-plan";
 import { sampleProcurement } from "./data/procurement";
 import { sampleExtraction } from "./data/extraction";
 import { sampleDrawingFlip } from "./data/drawing-flip";
@@ -54,13 +61,29 @@ export function answerLeave(leave: boolean) {
   answer?.(leave); answer = null; emit({ leave: false });
 }
 
-/** Starts the run for a project's files when they hold a new upload and haven't been read yet. */
+let settleTimer: ReturnType<typeof setTimeout> | null = null;
+/** Looks again at the projects waiting for uploads to settle, with their latest files. */
+function retryWaiting(ms: number) {
+  if (settleTimer) clearTimeout(settleTimer);
+  settleTimer = setTimeout(() => {
+    settleTimer = null;
+    if (active) return; // the run in progress picks up the waiting projects when it ends
+    for (const [projectId, docs] of [...waiting]) { waiting.delete(projectId); ensureRun(projectId, storedDocuments(projectId) ?? docs); }
+  }, Math.min(ms, 15_000));
+}
+
+/**
+ * Starts the run for a project's files when they hold a new upload and haven't been read yet, once every upload in
+ * this tab has finished (title blocks included) and a minute has passed for the next file, so the AI reads the whole set.
+ */
 export function ensureRun(projectId: string, documents: StoredDocument[]) {
   const target = runTarget(documents);
   if (!target) return;
   if (active === projectId && snapshot.run?.key === target.key) return;
   const previous = savedRuns(projectId).runs.find(r => r.key === target.key) ?? null;
   if (previous?.status === "done") return;
+  const settle = uploadsSettleIn();
+  if (settle > 0) { waiting.set(projectId, documents); retryWaiting(settle); return; }
   if (active) { waiting.set(projectId, documents); return; }
   void start(projectId, documents, target, previous);
 }
@@ -70,20 +93,53 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   window.addEventListener("beforeunload", holdTab);
   const at = () => new Date().toISOString();
 
-  // 1. The bid packages the files call for, standard trades and Marcel's CSI groups, added as found.
+  // 1. The bid packages, set by the AI from the manual's sections and the drawing index (Danial, 28 Oct: "YOU CANT
+  // WRITE THE WHOLE LIST U NEED AI"): which packages, and which sections and sheets each carries. A stopped run
+  // picking up keeps the packages it set. Only when the AI can't be asked do Marcel's CSI groups stand in, and the
+  // run says so.
+  const controller = new AbortController();
   let procurement = readDraft<Procurement>(projectId, "procurement", sampleProcurement);
-  const newTrades: string[] = [];
-  for (const trade of tradesToAdd(procurement.packages, { sections: specificationSections(documents), sheets: drawingRegister(documents) })) {
-    try { procurement = addPackage(procurement, trade); newTrades.push(trade.name); } catch { /* a trade of that name exists */ }
+  let newTrades: string[] = [], packagesBy = previous?.packagesBy;
+  if (!previous) {
+    emit({ run: { id: "", projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades: [], trades: [], added: 0, duplicates: 0 } });
+    try {
+      const plan = await planBidPackages(documents, procurement.packages, controller.signal);
+      // The latest copy: the team may have changed the packages while the AI read.
+      const applied = applyBidPackagePlan(readDraft<Procurement>(projectId, "procurement", sampleProcurement), plan);
+      procurement = applied.procurement; newTrades = applied.added;
+      packagesBy = `AI ${plan.model}${plan.unassigned.length ? `; ${plan.unassigned.length} section${plan.unassigned.length === 1 ? "" : "s"} in no package` : ""}`;
+    } catch (error) {
+      packagesBy = `The AI couldn't set the bid packages (${error instanceof Error ? error.message : "AI error"}), so they follow the CSI divisions`;
+      for (const trade of tradesToAdd(procurement.packages, { sections: specificationSections(documents), sheets: drawingRegister(documents) })) {
+        try { procurement = addPackage(procurement, trade); newTrades.push(trade.name); } catch { /* a trade of that name exists */ }
+      }
+    }
+    writeDraft(projectId, "procurement", procurement);
   }
-  if (newTrades.length) writeDraft(projectId, "procurement", procurement);
 
-  // 2. Every trade with sections or sheets, skipping those a stopped run already finished.
-  const readable = tradesToRead(procurement.packages, documents);
+  // 1b. Scanned sheets have no text to search: each is read once with OCR in the background and saved for everyone
+  // (lib/sheet-text-ocr, free, about a minute a sheet), while the trades are read (Danial, 28 Oct: "Make it automatic").
+  const ocr = ocrScannedSheets(storedDocuments(projectId) ?? documents).catch(() => {});
+
+  // 2. Every trade with sections or sheets, skipping those a stopped run already finished. With Claude, the upload is
+  // read in full only when that costs under $2 (Danial, 28 Oct: "be smart with how we use this limited credits";
+  // "Yes, under $2"), like Wyre reading a small set: two drawings and two specification sections. A larger set waits
+  // for the estimator to pick trades in Write scopes.
+  const reader = await aiReader().catch(() => null);
+  const all = tradesToRead(procurement.packages, documents);
+  const assigned = sectionsByTrade(specificationSections(documents), procurement.packages);
+  const refPackages = procurement.packages.map(p => ({ id: p.id, name: p.name, code: p.code, sections: (assigned.get(p.id) ?? []).map(s => `${s.section} ${s.title}`) }));
+  let sheetTexts: Awaited<ReturnType<typeof loadSheetTexts>> | null = null, fullCost: number | undefined;
+  if (reader && !reader.autoScopes) {
+    sheetTexts = await loadSheetTexts(documents).catch(() => null);
+    fullCost = (estimateCost(reader.model, readingWork(all)) ?? 0) + (sheetTexts ? estimateCost(reader.model, referenceWork(sheetTexts.sheets, refPackages)) ?? 0 : 0);
+  }
+  const scopesLater = fullCost !== undefined && fullCost >= AUTO_READ_UNDER;
+  const readable = scopesLater ? [] : all;
   const queued = (t: (typeof readable)[number]): AutoTrade => ({ packageId: t.pkg.id, name: t.pkg.name, status: "queued", added: 0, note: "" });
   let run: AutoRun = previous
-    ? { ...previous, status: "running", newTrades: [...new Set([...previous.newTrades, ...newTrades])], trades: readable.map(t => previous.trades.find(x => x.packageId === t.pkg.id && x.status === "done") ?? queued(t)) }
-    : { id: crypto.randomUUID(), projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades, trades: readable.map(queued), added: 0, duplicates: 0 };
+    ? { ...previous, status: "running", newTrades: [...new Set([...previous.newTrades, ...newTrades])], trades: readable.map(t => previous.trades.find(x => x.packageId === t.pkg.id && x.status === "done") ?? queued(t)), scopesLater, fullCost }
+    : { id: crypto.randomUUID(), projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades, packagesBy, trades: readable.map(queued), added: 0, duplicates: 0, scopesLater, fullCost };
   save(run);
   const setTrade = (packageId: string, change: Partial<AutoTrade>, totals: Partial<Pick<AutoRun, "added" | "duplicates">> = {}) => {
     run = { ...run, ...totals, trades: run.trades.map(t => t.packageId === packageId ? { ...t, ...change } : t) };
@@ -91,7 +147,6 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   };
 
   const queue = stillToRead(readable, previous);
-  const controller = new AbortController();
   await Promise.all(Array.from({ length: Math.min(PARALLEL_TRADES, queue.length) }, async () => {
     for (let next = queue.shift(); next; next = queue.shift()) {
       const { pkg, sections, sheets } = next;
@@ -124,13 +179,25 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
     }
   }));
 
+  // 3. Where each package is on the drawings, when the run read everything (lib/sheet-reference-client), once the
+  // scanned sheets are searchable, so every sheet is looked at.
+  if (!scopesLater && refPackages.length) {
+    run = { ...run, stage: "Making the scanned sheets searchable, then finding every package on the drawings" };
+    save(run);
+    await ocr;
+    run = { ...run, stage: "Finding every package on the drawings" };
+    save(run);
+    const texts = await loadSheetTexts(storedDocuments(projectId) ?? documents).catch(() => null) ?? sheetTexts;
+    if (texts?.sheets.some(s => s.text.trim())) await findReferencesWithAi(projectId, texts.key, texts.sheets, refPackages).catch(() => {});
+  }
+
   run = { ...run, status: "done", finishedAt: at() };
   save(run);
   active = null;
   window.removeEventListener("beforeunload", holdTab);
   if (answer) answerLeave(false);
   const [nextProject, nextDocs] = waiting.entries().next().value ?? [];
-  if (nextProject) { waiting.delete(nextProject); ensureRun(nextProject, nextDocs!); }
+  if (nextProject) { waiting.delete(nextProject); ensureRun(nextProject, storedDocuments(nextProject) ?? nextDocs!); }
 }
 
 /**

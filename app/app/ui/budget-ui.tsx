@@ -3,16 +3,16 @@
 import { Fragment, useMemo, useState, type FormEvent } from "react";
 import { ArrowRight, Check, FileText, Link2, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import {
-  addAllowance, addBudgetLine, applyEstimateValue, applyLevelingValue, approveBudgetLine, budgetTotals, budgetRowsByTrade,
-  costPerSquareFoot, editAllowance, editBudgetLine, linkBudgetLine, parseAmount, removeAllowance,
-  removeBudgetLine, reopenBudgetLine, totalsByCostCenter, totalsByDivision,
-  type BudgetAllowance, type BudgetErrors, type BudgetLine, type LevelingBasis,
+  addAllowance, addBudgetLine, approveBudgetLine, budgetTotals, budgetRowsByTrade,
+  costPerSquareFoot, editAllowance, editBudgetLine, parseAmount, removeAllowance,
+  removeBudgetLine, reopenBudgetLine, sectionTotal, totalsByCostCenter, totalsByDivision,
+  type BudgetAllowance, type BudgetErrors, type BudgetLine, type SectionTotal,
 } from "../../lib/budget";
 import { useValueEngineering } from "../../lib/use-value-engineering";
 import { useBudget } from "../../lib/use-budget";
 import { useAward } from "../../lib/use-award";
 import type { LineCommitment } from "../../lib/commitments";
-import { costPlan as planCosts, FORECAST_LABEL, type LineForecast } from "../../lib/forecasts";
+import { costPlan as planCosts } from "../../lib/forecasts";
 import { estimateMoney } from "./estimate-format";
 import { useEstimate } from "../../lib/use-estimate";
 import { useSubmissions } from "../../lib/use-submissions";
@@ -21,9 +21,8 @@ import { initialBidders } from "../../lib/data/commercial";
 import { inHouseFromLowestSub, lowestTradeBid, lowestSubLineValue, tradeForBudgetLine, type LowBid } from "../../lib/budget-comparison";
 import type { TradePackage } from "../../lib/procurement";
 import { InHouseBudgetEditor, LowBidCell, LowBidSplitEditor } from "./budget-comparison";
-import { budgetLinesForTrade } from "../../lib/estimate";
 import { useLevelingComparison } from "./use-leveling-comparison";
-import { EstimateBasisLabel, EstimateBudgetChoice, estimateForecastError } from "./estimate-budget-choice";
+import { EstimateBasisLabel } from "./estimate-budget-choice";
 import { TradeVarianceReport } from "./trade-variance";
 import { ConceptBudgetView } from "./concept-budget";
 import { BudgetVersionsView } from "./budget-versions";
@@ -33,7 +32,6 @@ import { Badge, Button, Empty, ExportButton, Modal, PageHeader, Panel, PreviewNo
 
 const actor = "Marcel Khoury";
 const palette = ["#f47640", "#3e6a81", "#759283", "#c2a276", "#8996b2", "#6f8c72"];
-const basisLabels: Record<LevelingBasis, string> = { base: "Base bid", provisional: "Provisional total", reviewed: "Reviewed total" };
 const allowanceLabels = { review: "Needs review", included: "Included", excluded: "Excluded" } as const;
 const usdPerSquareFoot = (value: number | null) => value === null ? "—" : `${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value)}/SF`;
 
@@ -47,10 +45,8 @@ function amount(value: FormDataEntryValue | null, optional = false) {
   return Number.isFinite(numeric) ? numeric : Number.NaN;
 }
 
-function LineForm({ line, commitment, forecast, costCenters, errors, onSubmit, onCancel }: { line: BudgetLine | null; commitment?: LineCommitment; forecast?: LineForecast; costCenters: string[]; errors: BudgetErrors; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
+function LineForm({ line, commitment, costCenters, errors, onSubmit, onCancel }: { line: BudgetLine | null; commitment?: LineCommitment; costCenters: string[]; errors: BudgetErrors; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
   const fromAwards = !!commitment?.sources.length;
-  const auto = forecast?.automatic;
-  const overridden = line !== null && line.forecast !== null;
   return <form onSubmit={onSubmit}>
     <div className="ui-form-grid">
       <label className="ui-field full"><span>Description</span><input name="description" required defaultValue={line?.description ?? ""}/><FieldError error={errors.description}/></label>
@@ -58,10 +54,9 @@ function LineForm({ line, commitment, forecast, costCenters, errors, onSubmit, o
       <label className="ui-field"><span>Cost class</span><select name="classification" defaultValue={line?.classification ?? "direct"}><option value="direct">Direct construction</option><option value="indirect">Indirect cost</option></select><FieldError error={errors.classification}/></label>
       <label className="ui-field"><span>CSI division or section</span><input name="csiCode" placeholder="03 or 03 30 00" defaultValue={line?.csiCode ?? ""}/><FieldError error={errors.csiCode}/></label>
       <label className="ui-field"><span>Owner</span><input name="owner" defaultValue={line?.owner ?? ""}/></label>
-      <label className="ui-field"><span>In-house budget · USD</span><input name="budget" inputMode="decimal" required defaultValue={line?.budget ?? ""}/><FieldError error={errors.budget}/></label>
-      <label className="ui-field"><span>Forecast · USD</span><input name="forecast" inputMode="decimal" placeholder={auto ? `Automatic: ${usd(auto.value)}` : "Uses budget until entered"} defaultValue={line?.forecast ?? ""} aria-describedby="forecast-basis"/><small id="forecast-basis" className="cm-cell-note">{overridden
-        ? auto ? `Override. Clear it to use the automatic ${usd(auto.value)} (${FORECAST_LABEL[auto.kind].toLowerCase()} · ${auto.detail}).` : "Override. Clear it to count the line at its budget."
-        : auto ? `Automatic from the ${FORECAST_LABEL[auto.kind].toLowerCase()} (${auto.detail}). Type a value to override it.` : "Filled automatically from the award, leveled low bid or reviewed in-house estimate once there is one. Type a value to set it now."}</small><FieldError error={errors.forecast}/></label>
+      <label className="ui-field"><span>Total cost · USD</span><input name="budget" inputMode="decimal" required defaultValue={line?.budget ?? ""}/><FieldError error={errors.budget}/></label>
+      {/* Marcel (24 Oct) took the forecast off the Budget summary; a line keeps whatever forecast it had. */}
+      <input type="hidden" name="forecast" value={line?.forecast ?? ""}/>
       {fromAwards
         // The awards set this line's committed cost; the typed value is kept, unused, in case they are cancelled.
         ? <label className="ui-field"><span>Committed · USD</span><input value={usd(commitment!.committed)} readOnly aria-describedby="committed-from-awards"/><input type="hidden" name="committed" value={line?.committed ?? 0}/><small id="committed-from-awards" className="cm-cell-note">Set by {commitment!.sources.map(s => `${s.company}'s award (${s.stage})`).join(" and ")}. Change or cancel the award to change it.</small></label>
@@ -85,18 +80,6 @@ function CommittedCell({ line, commitment, onOpen }: { line: BudgetLine; commitm
   </>;
 }
 
-/** Forecast: an override, else the award, leveled low or reviewed estimate, else the budget baseline. */
-function ForecastCell({ line, forecast, onAutomatic }: { line: BudgetLine; forecast?: LineForecast; onAutomatic: () => void }) {
-  if (!forecast) return <strong>{usd(line.forecast ?? line.budget)}</strong>;
-  const auto = forecast.automatic;
-  return <>
-    <strong>{usd(forecast.value ?? line.budget)}</strong>
-    {forecast.kind === "none" ? <small className="cm-cell-note">Budget baseline{forecast.note ? ` · ${forecast.note}` : ""}</small>
-      : forecast.kind === "manual" ? <><small className="cm-cell-note">Override · {forecast.detail}</small><button type="button" className="cm-text-button" onClick={onAutomatic}>{auto ? `Use ${FORECAST_LABEL[auto.kind].toLowerCase()} ${usd(auto.value)}` : "Clear override"}</button></>
-      : <><small className="cm-budget-source"><Link2 size={11}/>{FORECAST_LABEL[forecast.kind]} · {forecast.detail}</small>{forecast.note && <small className="cm-cell-note">{forecast.note}</small>}</>}
-  </>;
-}
-
 export function BudgetView({ notify, navigate, project }: ViewProps & { project: Project }) {
   const { state, run } = useBudget();
   const { state: ve } = useValueEngineering();
@@ -115,16 +98,9 @@ export function BudgetView({ notify, navigate, project }: ViewProps & { project:
   const [centerFilter, setCenterFilter] = useState("All cost centers");
   const [edit, setEdit] = useState<BudgetLine | "new" | null>(null);
   const [errors, setErrors] = useState<BudgetErrors>({});
-  const [levelingLine, setLevelingLine] = useState<BudgetLine | null>(null);
-  const [candidateId, setCandidateId] = useState("");
-  const [basis, setBasis] = useState<LevelingBasis | "estimate">("reviewed");
-  const [estimatePackageId, setEstimatePackageId] = useState("");
-  const [linkEstimate, setLinkEstimate] = useState(false);
-  // Committed comes from the awards (lib/commitments), forecasts from the award, leveled low or reviewed
-  // estimate unless overridden (lib/forecasts); every total, export and saved version reads this plan.
-  const { commitments, forecasts, budget: costPlan } = useMemo(() => planCosts(state, { awards, procurement: submitted.procurement, submissions: submitted.submissions, candidates, directory, ve, estimates: estimate.byTrade.trades }), [state, awards, submitted.procurement, submitted.submissions, candidates, directory, ve, estimate.byTrade.trades]);
-  const forecastOf = (line: BudgetLine) => forecasts[line.id]?.value ?? null;
-  const forecastKinds = Object.values(forecasts).reduce<Record<string, number>>((n, f) => { n[f.kind] = (n[f.kind] ?? 0) + 1; return n; }, {});
+  // Committed comes from the awards (lib/commitments); every total, export and saved version reads this plan.
+  // Its forecasts still feed Budget versions and Trade variance, but the summary no longer shows them (Marcel, 24 Oct).
+  const { commitments, veUnplaced, budget: costPlan } = useMemo(() => planCosts(state, { awards, procurement: submitted.procurement, submissions: submitted.submissions, candidates, directory, ve, estimates: estimate.byTrade.trades }), [state, awards, submitted.procurement, submitted.submissions, candidates, directory, ve, estimate.byTrade.trades]);
   const totals = budgetTotals(costPlan);
   const centers = totalsByCostCenter(costPlan);
   const divisions = totalsByDivision(costPlan);
@@ -132,19 +108,21 @@ export function BudgetView({ notify, navigate, project }: ViewProps & { project:
   const costCenterNames = centers.map(item => item.costCenter);
   const selectedCenter = centerFilter === "All cost centers" || costCenterNames.includes(centerFilter) ? centerFilter : "All cost centers";
   const centerAreas = new Map(centers.map(item => [item.costCenter, item.squareFeet]));
-  const lines = state.lines.filter(line =>
+  // Rows show the cost plan (accepted VE taken off its trade, lib/ve-budget); edits always open the typed line.
+  const typed = (line: BudgetLine) => state.lines.find(l => l.id === line.id) ?? line;
+  const lines = costPlan.lines.filter(line =>
     (selectedCenter === "All cost centers" || line.costCenter === selectedCenter)
     && (tab === "All costs" || (tab === "Direct costs" ? line.classification === "direct" : line.classification === "indirect"))
   );
   const contractorLines = lines.filter(line => !line.byOwner);
   const ownerLines = lines.filter(line => line.byOwner);
   const approved = state.lines.filter(line => line.status === "approved").length;
-  const estimatePackage = estimate.procurement.packages.find(pkg => pkg.id === estimatePackageId);
-  const selectedEstimate = estimate.byTrade.trades.find(trade => trade.packageId === estimatePackageId);
-  const estimateMatch = estimatePackage ? budgetLinesForTrade(state, estimatePackage) : null;
-  const canLinkEstimate = !levelingLine?.packageId && (estimateMatch?.basis === "ambiguous" || estimateMatch?.basis === "none");
-  const estimateError = levelingLine ? estimateForecastError(state, levelingLine, estimatePackage, selectedEstimate, canLinkEstimate && linkEstimate) : null;
-  const selectedCandidate = candidates.find(candidate => candidate.levelingBidderId === candidateId) ?? candidates.find(candidate => candidate.eligible && !candidate.stale) ?? candidates[0];
+  /** A line's lowest subcontractor price (its share of the trade's low bid), or null while its trade has no bid. */
+  const lowSubOf = (line: BudgetLine) => {
+    const pkg = tradeForBudgetLine(state, submitted.procurement, line);
+    const low = pkg ? lowestTradeBid(submitted.procurement, submitted.submissions, pkg.id, candidates, directory, ve) : null;
+    return pkg && low ? lowestSubLineValue(state, pkg, line.id, low.value) : null;
+  };
 
   function closeLine() { setEdit(null); setErrors({}); }
   function saveLine(event: FormEvent<HTMLFormElement>) {
@@ -170,94 +148,79 @@ export function BudgetView({ notify, navigate, project }: ViewProps & { project:
     if (nextErrors) { setErrors(nextErrors); return; }
     closeLine(); notify("Budget line removed.");
   }
-  function openLeveling(line: BudgetLine) {
-    setLevelingLine(line); setCandidateId(""); setErrors({}); setLinkEstimate(false);
-    setBasis(line.estimateSource ? "estimate" : line.forecastSource?.basis ?? "reviewed");
-    const matches = estimate.procurement.packages.filter(pkg => budgetLinesForTrade(state, pkg).lines.some(l => l.id === line.id));
-    setEstimatePackageId(line.packageId ?? (matches.length === 1 ? matches[0].id : ""));
-    comparison.refresh();
-  }
-  function clearOverride(line: BudgetLine) {
-    const auto = forecasts[line.id]?.automatic;
-    const nextErrors = run(current => editBudgetLine(current, line.id, { forecast: null }, actor));
-    if (nextErrors) { setErrors(nextErrors); return; }
-    notify(auto ? `${line.description} now forecasts from the ${FORECAST_LABEL[auto.kind].toLowerCase()}.` : `Override cleared on ${line.description}.`);
-  }
-  function applyForecast() {
-    if (!levelingLine) return;
-    if (basis === "estimate") {
-      if (estimateError || !estimatePackage || !selectedEstimate) { setErrors({ forecast: estimateError ?? "Choose a trade." }); return; }
-      const nextErrors = run(current => applyEstimateValue(canLinkEstimate && linkEstimate ? linkBudgetLine(current, levelingLine.id, estimatePackage.id) : current, levelingLine.id, estimatePackage, selectedEstimate, actor));
-      if (nextErrors) { setErrors(nextErrors); return; }
-      setLevelingLine(null); setErrors({}); notify(`In-house estimate applied to ${levelingLine.description}'s forecast.`); return;
-    }
-    const candidate = selectedCandidate;
-    if (!candidate) { setErrors({ forecast: "Choose a bidder." }); return; }
-    const nextErrors = run(current => applyLevelingValue(current, levelingLine.id, candidate, basis, actor));
-    if (nextErrors) { setErrors(nextErrors); return; }
-    setLevelingLine(null); setErrors({}); notify(`${basisLabels[basis]} applied to ${levelingLine.description}'s forecast.`);
-  }
-
   function budgetRow(line: BudgetLine) {
     const pkg = tradeForBudgetLine(state, submitted.procurement, line);
     const low = pkg ? lowestTradeBid(submitted.procurement, submitted.submissions, pkg.id, candidates, directory, ve) : null;
-    const lowValue = pkg && low ? lowestSubLineValue(state,pkg,line.id,low.value) : null;
-    const margin = lowValue === null ? null : Math.round((line.budget-lowValue)*100)/100;
     const carried = state.allowances.filter(a => a.budgetLineId === line.id && a.status === "included");
     const perSquareFoot = costPerSquareFoot(line.budget, centerAreas.get(line.costCenter));
-    return <tr key={line.id}><td><div className="cm-table-primary"><strong>{line.description}</strong>{carried.map(a => <small key={a.id}><Badge tone="blue">Allowance · {a.name} · {usd(a.amount)}</Badge></small>)}<small>{line.classification === "direct" ? line.csiCode ? `CSI ${line.csiCode}` : "Direct · CSI not recorded" : "Indirect cost"}</small><EstimateBasisLabel line={line} trades={estimate.byTrade.trades}/></div></td><td>{line.costCenter}<small className="cm-cell-note">{line.owner || "No owner"}</small></td><td className="cm-money"><button className="cm-text-button" aria-label={`Set in-house budget for ${line.description}`} onClick={() => setInHouseLine(line)}>{usd(line.budget)} <Pencil size={11}/></button>{line.inHouseSource && <small className="cm-cell-note">From lowest sub · {line.inHouseSource.bidder}</small>}{pkg && low && <button type="button" className="cm-text-button" onClick={() => { const issues = run(s => inHouseFromLowestSub(s, line.id, pkg, low, actor)); if (issues) { setInHouseLine(line); notify(Object.values(issues).join(" ")); } else notify("In-house budget pulled from lowest sub."); }}>Pull lowest sub</button>}</td><td><LowBidCell bid={low} budget={state} pkg={pkg} lineId={line.id} onSplit={(pkg,bid) => setSplit({pkg,bid})}/></td><td>{margin===null?"—":<span className={margin>=0?"cm-positive":"cm-negative"}>{usd(margin)}</span>}</td><td className="cm-money">{usdPerSquareFoot(perSquareFoot)}</td><td className="cm-forecast-cell"><ForecastCell line={line} forecast={forecasts[line.id]} onAutomatic={() => clearOverride(line)}/></td><td className="cm-committed-cell"><CommittedCell line={line} commitment={commitments.lines[line.id]} onOpen={() => navigate("contracts")}/></td><td><Badge tone={line.status === "approved" ? "green" : "amber"}>{line.status === "approved" ? "Approved" : "Draft"}</Badge></td><td><div className="cm-budget-actions">{line.classification === "direct" && !line.byOwner && <button className="cm-text-button" onClick={() => void openLeveling(line)}>Choose forecast basis</button>}<button className="ui-icon-btn" aria-label={`Edit ${line.description}`} onClick={() => { setEdit(line); setErrors({}); }}><Pencil size={15}/></button></div></td></tr>;
+    return <tr key={line.id}><td><div className="cm-table-primary"><strong>{line.description}</strong>{carried.map(a => <small key={a.id}><Badge tone="blue">Allowance · {a.name} · {usd(a.amount)}</Badge></small>)}<small>{line.classification === "direct" ? line.csiCode ? `CSI ${line.csiCode}` : "Direct · CSI not recorded" : "Indirect cost"}</small><EstimateBasisLabel line={line} trades={estimate.byTrade.trades}/></div></td><td>{line.costCenter}<small className="cm-cell-note">{line.owner || "No owner"}</small></td><td className="cm-money"><button className="cm-text-button" aria-label={`Set total cost for ${line.description}`} onClick={() => setInHouseLine(typed(line))}>{usd(line.budget)} <Pencil size={11}/></button>{line.veApplied?.map(v => <small key={v.ideaId} className="cm-cell-note cm-ve-applied">VE applied · {v.number} {usd(v.amount)}</small>)}{line.veApplied && <small className="cm-cell-note">Before VE {usd(typed(line).budget)}</small>}{line.inHouseSource && <small className="cm-cell-note">From lowest sub · {line.inHouseSource.bidder}</small>}{pkg && low && <button type="button" className="cm-text-button" onClick={() => { const issues = run(s => inHouseFromLowestSub(s, line.id, pkg, low, actor)); if (issues) { setInHouseLine(typed(line)); notify(Object.values(issues).join(" ")); } else notify("Total cost pulled from the lowest sub."); }}>Pull lowest sub</button>}</td><td><LowBidCell bid={low} budget={state} pkg={pkg} lineId={line.id} onSplit={(pkg,bid) => setSplit({pkg,bid})}/></td><td className="cm-money">{usdPerSquareFoot(perSquareFoot)}</td><td className="cm-committed-cell"><CommittedCell line={line} commitment={commitments.lines[line.id]} onOpen={() => navigate("contracts")}/></td><td><Badge tone={line.status === "approved" ? "green" : "amber"}>{line.status === "approved" ? "Approved" : "Draft"}</Badge></td><td><div className="cm-budget-actions"><button className="ui-icon-btn" aria-label={`Edit ${line.description}`} onClick={() => { setEdit(typed(line)); setErrors({}); }}><Pencil size={15}/></button></div></td></tr>;
   }
 
-  const totalVariance = totals.totalBudget - totals.totalForecast;
+  // The total rows (Marcel, 24 Oct): "total trades costs" after the direct lines, then the indirect costs and
+  // theirs, then the total cost; each also adds up the low sub and committed columns.
+  const sections = (tab === "All costs" ? ["direct", "indirect"] : [tab === "Direct costs" ? "direct" : "indirect"]) as BudgetLine["classification"][];
+  const sectionNames: Record<BudgetLine["classification"], string> = { direct: "Total trades cost", indirect: "Total indirect costs" };
+  const allCenters = selectedCenter === "All cost centers";
+  const areaShown = allCenters ? (centers.length && centers.every(c => c.squareFeet) ? centers.reduce((n, c) => n + (c.squareFeet ?? 0), 0) : null) : centerAreas.get(selectedCenter) ?? null;
+  const allowancesAdded = allCenters ? totals.allowancesAdded : centers.find(c => c.costCenter === selectedCenter)?.totals.allowancesAdded ?? 0;
+  const trades = sectionTotal(costPlan.lines.filter(l => l.classification === "direct" && !l.byOwner), lowSubOf, committedOf);
+  // `bidLines`: the lines that can have a bid (only trades do), for "4 of 35 lines have a bid".
+  const totalRow = (key: string, label: string, total: SectionTotal, added = 0, bidLines = total.lines) => <tr key={key} className={`budget-section-total${key === "total" ? " grand" : ""}`}>
+    <td><strong>{label}</strong><small className="cm-cell-note">{added ? `Includes ${usd(added)} of allowances added once` : `${total.lines} line${total.lines === 1 ? "" : "s"}`}</small></td><td/>
+    <td className="cm-money"><strong>{usd(total.total + added)}</strong></td>
+    <td className="cm-money">{total.withLowSub ? <>{usd(total.lowSub)}{total.withLowSub < bidLines && <small className="cm-cell-note">{total.withLowSub} of {bidLines} trade lines have a bid</small>}</> : "—"}</td>
+    <td className="cm-money">{usdPerSquareFoot(costPerSquareFoot(total.total + added, areaShown))}</td>
+    <td className="cm-money"><strong>{usd(total.committed)}</strong></td><td colSpan={2}/>
+  </tr>;
+  const tradeRow = (row: ReturnType<typeof budgetRowsByTrade>[number]) => {
+    if (row.lines.length === 1) return budgetRow(row.lines[0]);
+    const expanded = expandedTrades.includes(row.key);
+    const pkg = tradeForBudgetLine(state, submitted.procurement, row.lines[0]);
+    const low = pkg ? lowestTradeBid(submitted.procurement, submitted.submissions, pkg.id, candidates, directory, ve) : null;
+    return <Fragment key={row.key}><tr className="budget-trade-total"><td><button className="cm-text-button" aria-expanded={expanded} onClick={() => setExpandedTrades(keys => expanded ? keys.filter(k => k !== row.key) : [...keys,row.key])}>{expanded ? "−" : "+"} <strong>{row.description}</strong></button><small className="cm-cell-note">CSI {row.csiCode}</small></td><td>{row.lines.length} cost centers</td><td>{usd(row.budget)}</td><td>{low ? <>{usd(low.value)}<small className="cm-cell-note">{low.name}</small></> : "No current bid"}</td><td>—</td><td>{usd(row.lines.reduce((n,l)=>n+committedOf(l),0))}</td><td colSpan={2}>Open to edit cost centers</td></tr>{expanded && row.lines.map(budgetRow)}</Fragment>;
+  };
+  const columns = <tr><th>Cost line</th><th>Cost center</th><th>Total cost</th><th>Low sub budget</th><th>Cost / SF</th><th>Committed</th><th>Status</th><th/></tr>;
   if (showBasis) return <BasisOfEstimateView project={project} budget={state} navigate={navigate} onBack={() => { setShowBasis(false); requestAnimationFrame(() => document.getElementById("basis-of-estimate-entry")?.focus()); }}/>;
   return <div className="cm-view">
-    <PageHeader eyebrow="COST CONTROL" title="Budget summary" description="Set your in-house budget beside the lowest subcontractor price, and review the margin on each line." actions={<><button id="basis-of-estimate-entry" type="button" className="ui-btn secondary" onClick={() => setShowBasis(true)}><FileText size={16}/>Basis of estimate</button><ExportButton onClick={() => exportRows("project-budget.csv", [["Cost center", "Class", "CSI", "Description", "Owner", "By owner", "In-house budget", "Lowest sub budget", "Lowest sub basis", "Cost / SF", "Forecast", "Forecast from", "Committed", "Committed from", "Pending commitment", "Variance", "Status"], ...state.lines.map(line => [line.costCenter, line.classification, line.csiCode ?? "", line.description, line.owner, line.byOwner ? "Yes" : "No", line.budget, (()=>{const p=tradeForBudgetLine(state,submitted.procurement,line);const b=p?lowestTradeBid(submitted.procurement,submitted.submissions,p.id,candidates,directory,ve):null;return p&&b?lowestSubLineValue(state,p,line.id,b.value)??"":"";})(), (()=>{const p=tradeForBudgetLine(state,submitted.procurement,line);return p?lowestTradeBid(submitted.procurement,submitted.submissions,p.id,candidates,directory,ve)?.basis??"":"";})(), costPerSquareFoot(line.budget, centerAreas.get(line.costCenter)) ?? "", forecastOf(line) ?? "", forecasts[line.id] ? `${FORECAST_LABEL[forecasts[line.id].kind]}${forecasts[line.id].kind === "none" ? "" : ` · ${forecasts[line.id].detail}`}` : "", committedOf(line), commitments.lines[line.id]?.sources.filter(s => s.counts === "committed").map(s => `${s.company} (executed)`).join("; ") || "Typed", commitments.lines[line.id]?.pending ?? 0, line.budget - (forecastOf(line) ?? line.budget), line.status])])}/><Button variant="primary" onClick={() => { setEdit("new"); setErrors({}); }}><Plus size={16}/>Add line</Button></>}/>
+    <PageHeader eyebrow="COST CONTROL" title="Budget summary" description="Each line's total cost beside the lowest subcontractor price and what is committed from awarded subcontracts. The low sub column is for your team, not the owner." actions={<><button id="basis-of-estimate-entry" type="button" className="ui-btn secondary" onClick={() => setShowBasis(true)}><FileText size={16}/>Basis of estimate</button><ExportButton onClick={() => exportRows("project-budget.csv", [["Cost center", "Class", "CSI", "Description", "Owner", "By owner", "Total cost", "Lowest sub budget", "Lowest sub basis", "Cost / SF", "Committed", "Committed from", "Pending commitment", "Status"], ...state.lines.map(line => [line.costCenter, line.classification, line.csiCode ?? "", line.description, line.owner, line.byOwner ? "Yes" : "No", line.budget, lowSubOf(line) ?? "", (()=>{const p=tradeForBudgetLine(state,submitted.procurement,line);return p?lowestTradeBid(submitted.procurement,submitted.submissions,p.id,candidates,directory,ve)?.basis??"":"";})(), costPerSquareFoot(line.budget, centerAreas.get(line.costCenter)) ?? "", committedOf(line), commitments.lines[line.id]?.sources.filter(s => s.counts === "committed").map(s => `${s.company} (executed)`).join("; ") || "Typed", commitments.lines[line.id]?.pending ?? 0, line.status])])}/><Button variant="primary" onClick={() => { setEdit("new"); setErrors({}); }}><Plus size={16}/>Add line</Button></>}/>
     <PreviewNote>{state.lines.length ? "Browser-only demo · Owner-carried costs stay visible and are excluded from contractor totals." : "Browser-only demo · This project starts with an empty budget and saves additions in this browser."}</PreviewNote>
     <p>Estimate stage: {estimateStageLabel(project.estimateStage)}</p>
-    <Panel title="In-house estimate" subtitle="Live priced takeoffs · Direct costs · Use an in-house estimate as a forecast basis or compare it in Trade variance."><strong>{estimate.rows.length ? estimateMoney(estimate.byTrade.total) : "Not estimated"}</strong><p>{estimate.rows.length} items · {estimate.rows.filter(r => !r.reviewed).length} need review</p><Button onClick={() => navigate("takeoffs")}>Open trade estimates</Button></Panel>
+    <Panel title="In-house estimate" subtitle="Live priced takeoffs · Direct costs · Compare it with the low sub in Trade variance."><strong>{estimate.rows.length ? estimateMoney(estimate.byTrade.total) : "Not estimated"}</strong><p>{estimate.rows.length} items · {estimate.rows.filter(r => !r.reviewed).length} need review</p><Button onClick={() => navigate("takeoffs")}>Open trade estimates</Button></Panel>
     <Tabs tabs={["Budget lines", "Trade variance", "Budget versions", "Historical concept budget"]} value={view} onChange={setView}/>
     {view === "Budget versions" ? <BudgetVersionsView key={project.id} budget={costPlan} project={project} notify={notify}/> : view === "Historical concept budget" ? <ConceptBudgetView key={project.id} project={project} budget={{ state, run }} notify={notify} navigate={navigate}/> : view === "Trade variance" ? <TradeVarianceReport estimate={estimate} budget={costPlan} candidates={candidates} loading={levelingLoading} message={levelingMessage} onRefresh={comparison.refresh}/> : <>
     {!state.lines.length && !state.allowances.length ? <Panel><Empty title="This project has no budget yet" description="Add the first direct or indirect cost line to start the cost plan." action={<Button variant="primary" onClick={() => setEdit("new")}><Plus size={16}/>Add budget line</Button>}/></Panel> : <>
       <Stats items={[
-        { label: "Total budget", value: usd(totals.totalBudget), detail: `${usd(totals.direct)} direct · ${usd(totals.indirect)} indirect` },
-        { label: "Current forecast", value: usd(totals.totalForecast), detail: [forecastKinds.award && `${forecastKinds.award} from awards`, forecastKinds["leveled-low"] && `${forecastKinds["leveled-low"]} leveled low`, forecastKinds.estimate && `${forecastKinds.estimate} in-house estimate`, forecastKinds.manual && `${forecastKinds.manual} overridden`, totals.unforecastLines ? `${totals.unforecastLines} at budget until forecasted` : "every line forecast"].filter(Boolean).join(" · ") },
-        { label: "Forecast variance", value: usd(totalVariance), detail: totalVariance >= 0 ? "Under the current cost plan" : "Over the current cost plan", tone: totalVariance >= 0 ? "green" : "red" },
+        { label: "Total cost", value: usd(totals.totalBudget), detail: `${usd(totals.direct)} trades · ${usd(totals.indirect)} indirect${totals.allowancesAdded ? ` · ${usd(totals.allowancesAdded)} allowances` : ""}` },
+        { label: "Total trades cost", value: usd(totals.direct), detail: "Direct construction, every trade" },
+        { label: "Low sub budget", value: trades.withLowSub ? usd(trades.lowSub) : "No bids yet", detail: `${trades.withLowSub} of ${trades.lines} trade lines have a bid` },
         { label: "Committed", value: usd(totals.committed), detail: `${commitments.pending ? `${usd(commitments.pending)} pending signature · ` : ""}${usd(totals.remaining)} remains · from executed subcontracts` },
       ]}/>
+      {veUnplaced.length > 0 && <Panel title="Accepted VE not in the budget yet" subtitle="An accepted VE item lowers its trade's budget once it is linked to a trade with a budget line." action={<Button onClick={() => navigate("value-engineering")}>Open value engineering<ArrowRight size={14}/></Button>}><div className="cm-rollup-list">{veUnplaced.map(v => <div key={v.ideaId}><span><strong>{v.number}</strong><small>{v.reason}</small></span></div>)}</div></Panel>}
       {commitments.unplaced.length > 0 && <Panel title="Awards not in the budget yet" subtitle="Their subcontract sums count nowhere until they reach a budget line." action={<Badge tone="amber">{commitments.unplaced.length}</Badge>}><div className="cm-rollup-list">{commitments.unplaced.map(a => <div key={a.awardId}><span><strong>{a.trade} · {a.company}</strong><small>{a.reason}</small></span><span><strong>{usd(a.amount)}</strong><Badge tone={a.counts === "committed" ? "green" : "amber"}>{a.stage}</Badge></span></div>)}</div></Panel>}
       <Tabs tabs={["All costs", "Direct costs", "Indirect costs"]} value={tab} onChange={setTab}/>
       {costCenterNames.length > 1 && <div className="cm-center-tabs"><span>Cost center</span><Tabs tabs={["All cost centers", ...costCenterNames]} value={selectedCenter} onChange={setCenterFilter}/></div>}
       <Panel title={selectedCenter === "All cost centers" ? tab : `${tab} · ${selectedCenter}`} subtitle={`${approved} of ${state.lines.length} lines approved · Editing scope, class, CSI, description, budget, or owner responsibility reopens approval.`} action={<Badge tone={approved === state.lines.length ? "green" : "amber"}>{approved} approved</Badge>}>
-        <div className="ui-table-wrap"><table className="ui-table cm-budget-table"><thead><tr><th>Cost line</th><th>Cost center</th><th>In-house budget</th><th>Lowest sub budget</th><th>Margin over sub</th><th>Cost / SF</th><th>Forecast</th><th>Committed</th><th>Status</th><th/></tr></thead><tbody>{selectedCenter !== "All cost centers" ? contractorLines.map(budgetRow) : budgetRowsByTrade(contractorLines).map(row => {
-          if (row.lines.length === 1) return budgetRow(row.lines[0]);
-          const expanded = expandedTrades.includes(row.key);
-          const pkg = tradeForBudgetLine(state, submitted.procurement, row.lines[0]);
-          const low = pkg ? lowestTradeBid(submitted.procurement, submitted.submissions, pkg.id, candidates, directory, ve) : null;
-          const forecast = row.lines.reduce((n,l) => n + (forecastOf(l) ?? l.budget), 0);
-          return <Fragment key={row.key}><tr className="budget-trade-total"><td><button className="cm-text-button" aria-expanded={expanded} onClick={() => setExpandedTrades(keys => expanded ? keys.filter(k => k !== row.key) : [...keys,row.key])}>{expanded ? "−" : "+"} <strong>{row.description}</strong></button><small className="cm-cell-note">CSI {row.csiCode}</small></td><td>{row.lines.length} cost centers</td><td>{usd(row.budget)}</td><td>{low ? <>{usd(low.value)}<small className="cm-cell-note">{low.name}</small></> : "No current bid"}</td><td>{low ? usd(row.budget-low.value) : "—"}</td><td>?</td><td>{usd(forecast)}</td><td>{usd(row.lines.reduce((n,l)=>n+committedOf(l),0))}</td><td colSpan={2}>Open to edit cost centers</td></tr>{expanded && row.lines.map(budgetRow)}</Fragment>;
-        })}</tbody></table></div>
+        <div className="ui-table-wrap"><table className="ui-table cm-budget-table"><thead>{columns}</thead><tbody>{sections.map(section => {
+          const sectionLines = contractorLines.filter(line => line.classification === section);
+          return <Fragment key={section}>{allCenters ? budgetRowsByTrade(sectionLines).map(tradeRow) : sectionLines.map(budgetRow)}{sectionLines.length > 0 && totalRow(section, sectionNames[section], sectionTotal(sectionLines, lowSubOf, committedOf))}</Fragment>;
+        })}{sections.length > 1 && contractorLines.length > 0 && totalRow("total", "Total cost", sectionTotal(contractorLines, lowSubOf, committedOf), allowancesAdded, contractorLines.filter(line => line.classification === "direct").length)}</tbody></table></div>
         {!contractorLines.length && <Empty title={`No contractor ${tab.toLowerCase()}`} description="Add a line or choose another cost section or cost center."/>}
       </Panel>
-      {ownerLines.length > 0 && <Panel title="By owner" subtitle="Shown for project visibility and excluded from contractor budget, forecast, committed, and leveling totals." action={<Badge>{ownerLines.length} excluded</Badge>}>
-        <div className="ui-table-wrap"><table className="ui-table cm-budget-table"><thead><tr><th>Cost line</th><th>Cost center</th><th>Budget</th><th>Cost / SF</th><th>Forecast</th><th>Committed</th><th>Variance</th><th>Status</th><th/></tr></thead><tbody>{ownerLines.map(budgetRow)}</tbody></table></div>
+      {ownerLines.length > 0 && <Panel title="By owner" subtitle="Shown for project visibility and excluded from contractor totals, committed, and leveling." action={<Badge>{ownerLines.length} excluded</Badge>}>
+        <div className="ui-table-wrap"><table className="ui-table cm-budget-table"><thead>{columns}</thead><tbody>{ownerLines.map(budgetRow)}</tbody></table></div>
       </Panel>}
       {state.allowances.length>0 && <Panel title="Allowances carried in this budget" subtitle="Linked allowances are already inside their budget line; unlinked included allowances are added once." action={<Button onClick={()=>navigate("allowances")}>Edit allowances<ArrowRight size={14}/></Button>}><div className="cm-rollup-list">{state.allowances.map(a=><div key={a.id}><span><strong>{a.name}</strong><small>{a.costCenter} · {a.budgetLineId ? "Carried in budget line" : a.status==="included" ? "Added once to budget" : "Not added to total"}</small></span><span><strong>{usd(a.amount)}</strong><Badge tone={a.status==="included"?"green":"amber"}>{allowanceLabels[a.status]}</Badge></span></div>)}</div></Panel>}
       <div className="cm-budget-rollups">
-        <Panel title="Cost centers" subtitle="Budget, forecast, area, and cost per square foot for each funding bucket."><div className="cm-rollup-list">{centers.map(({ costCenter, squareFeet, totals: item }, index) => { const perSquareFoot = costPerSquareFoot(item.totalBudget, squareFeet); return <div key={costCenter}><span><i style={{ background: palette[index % palette.length] }}/><span><strong>{costCenter}</strong><small>{squareFeet ? `${squareFeet.toLocaleString("en-US")} SF · ${usdPerSquareFoot(perSquareFoot)}` : "Area not recorded"}</small><small>{item.byOwnerLines ? `${item.byOwnerLines} owner-carried line${item.byOwnerLines === 1 ? "" : "s"} excluded` : item.allowancesAdded ? `${usd(item.allowancesAdded)} added allowance` : item.allowancesInLines ? `${usd(item.allowancesInLines)} carried in lines` : "No included allowances"}</small></span></span><span><span><strong>{usd(item.totalForecast)}</strong><small>of {usd(item.totalBudget)}</small></span></span></div>; })}</div></Panel>
-        <Panel title="Direct cost by CSI division" subtitle="Forecast share across direct construction work."><div className="cm-distribution">{divisions.map((division, index) => { const percent = totals.direct ? Math.round(division.forecast / totals.direct * 100) : 0; return <div key={division.division}><div><span><i style={{ background: palette[index % palette.length] }}/>{division.division ? `${division.division} · ${division.name}` : division.name}</span><strong>{usd(division.forecast)}</strong></div><div className="cm-distribution-bar"><i style={{ width: `${Math.min(100, percent)}%`, background: palette[index % palette.length] }}/></div></div>; })}<Button onClick={() => navigate("allowances")}>Review allowances<ArrowRight size={15}/></Button></div></Panel>
+        <Panel title="Cost centers" subtitle="Total cost, committed, area, and cost per square foot for each funding bucket."><div className="cm-rollup-list">{centers.map(({ costCenter, squareFeet, totals: item }, index) => { const perSquareFoot = costPerSquareFoot(item.totalBudget, squareFeet); return <div key={costCenter}><span><i style={{ background: palette[index % palette.length] }}/><span><strong>{costCenter}</strong><small>{squareFeet ? `${squareFeet.toLocaleString("en-US")} SF · ${usdPerSquareFoot(perSquareFoot)}` : "Area not recorded"}</small><small>{item.byOwnerLines ? `${item.byOwnerLines} owner-carried line${item.byOwnerLines === 1 ? "" : "s"} excluded` : item.allowancesAdded ? `${usd(item.allowancesAdded)} added allowance` : item.allowancesInLines ? `${usd(item.allowancesInLines)} carried in lines` : "No included allowances"}</small></span></span><span><span><strong>{usd(item.totalBudget)}</strong><small>{usd(item.committed)} committed</small></span></span></div>; })}</div></Panel>
+        <Panel title="Direct cost by CSI division" subtitle="Share of the total trades cost by CSI division."><div className="cm-distribution">{divisions.map((division, index) => { const percent = totals.direct ? Math.round(division.budget / totals.direct * 100) : 0; return <div key={division.division}><div><span><i style={{ background: palette[index % palette.length] }}/>{division.division ? `${division.division} · ${division.name}` : division.name}</span><strong>{usd(division.budget)}</strong></div><div className="cm-distribution-bar"><i style={{ width: `${Math.min(100, percent)}%`, background: palette[index % palette.length] }}/></div></div>; })}<Button onClick={() => navigate("allowances")}>Review allowances<ArrowRight size={15}/></Button></div></Panel>
       </div>
     </>}
     </>}
     {inHouseLine && <InHouseBudgetEditor line={inHouseLine} budget={{state,run}} pkg={tradeForBudgetLine(state, submitted.procurement, inHouseLine)} low={(() => { const pkg = tradeForBudgetLine(state, submitted.procurement, inHouseLine); return pkg ? lowestTradeBid(submitted.procurement, submitted.submissions, pkg.id, candidates, directory, ve) : null; })()} notify={notify} onClose={()=>setInHouseLine(null)}/>}
     {split && <LowBidSplitEditor budget={{state,run}} pkg={split.pkg} bid={split.bid} notify={notify} onClose={()=>setSplit(null)}/>}
     {edit && <Modal title={edit === "new" ? "Add budget line" : `Edit ${edit.description}`} subtitle={edit === "new" ? "Add a direct construction or indirect project cost." : `${edit.costCenter} · ${edit.status}`} onClose={closeLine} wide>
-      <LineForm line={edit === "new" ? null : edit} commitment={edit === "new" ? undefined : commitments.lines[edit.id]} forecast={edit === "new" ? undefined : forecasts[edit.id]} costCenters={costCenterNames} errors={errors} onSubmit={saveLine} onCancel={closeLine}/>
+      <LineForm line={edit === "new" ? null : edit} commitment={edit === "new" ? undefined : commitments.lines[edit.id]} costCenters={costCenterNames} errors={errors} onSubmit={saveLine} onCancel={closeLine}/>
       {edit !== "new" && <div className="cm-record-actions"><Button onClick={() => changeApproval(edit)}>{edit.status === "approved" ? <><RotateCcw size={15}/>Reopen approval</> : <><Check size={15}/>Approve line</>}</Button><Button onClick={() => deleteLine(edit)}><Trash2 size={15}/>Remove line</Button></div>}
-    </Modal>}
-    {levelingLine && <Modal title="Choose forecast basis" subtitle="Choose a bidder's value or the in-house estimate in place of the automatic forecast. Clear the override on the line to go back." onClose={() => { setLevelingLine(null); setErrors({}); }} wide>
-      <label className="ui-field"><span>Forecast basis</span><select value={basis} onChange={event => { setBasis(event.target.value as typeof basis); setErrors({}); }}><option value="estimate">In-house estimate</option>{(Object.keys(basisLabels) as LevelingBasis[]).map(value => <option key={value} value={value}>{basisLabels[value]}</option>)}</select></label>
-      {basis === "estimate" ? <EstimateBudgetChoice budget={state} line={levelingLine} packages={estimate.procurement.packages} trades={estimate.byTrade.trades} packageId={estimatePackageId} onPackage={id => { setEstimatePackageId(id); setLinkEstimate(false); setErrors({}); }} link={linkEstimate} onLink={setLinkEstimate}/> : levelingLoading ? <div className="cm-inline-empty" role="status">Reading the saved Bid leveling workspace…</div> : candidates.length ? <div className="cm-leveling-grid">{candidates.map(candidate => <label className={`cm-leveling-choice ${selectedCandidate?.levelingBidderId === candidate.levelingBidderId ? "selected" : ""}`} key={candidate.levelingBidderId}><input type="radio" name="candidate" value={candidate.levelingBidderId} checked={selectedCandidate?.levelingBidderId === candidate.levelingBidderId} onChange={() => setCandidateId(candidate.levelingBidderId)}/><span><strong>{candidate.bidderName}</strong><small>{candidate.submissionId ? `Portal submission · revision ${candidate.revisionNumber}` : "Workbook or demo bidder"}</small></span><Badge tone={candidate.stale || !candidate.eligible ? "amber" : "green"}>{candidate.stale ? "Older form" : candidate.eligible ? "Reviewed" : "Review open"}</Badge><div className="cm-leveling-values"><span>Base<strong>{candidate.baseBid === null ? "—" : usd(candidate.baseBid)}</strong></span><span>Provisional<strong>{candidate.provisionalTotal === null ? "—" : usd(candidate.provisionalTotal)}</strong></span><span>Reviewed<strong>{candidate.reviewedTotal === null ? "—" : usd(candidate.reviewedTotal)}</strong></span></div>{candidate.eligibilityReasons.length > 0 && <small className="cm-leveling-reasons">{candidate.eligibilityReasons.join(" · ")}</small>}</label>)}</div> : <div className="cm-inline-empty"><p>{levelingMessage}</p></div>}
-      <FieldError error={errors.forecast}/><FieldError error={errors.line}/><div className="cm-form-footer"><Button onClick={() => navigate(basis === "estimate" ? "takeoffs" : "leveling")}>{basis === "estimate" ? "Open trade estimates" : "Open Bid leveling"}</Button><Button variant="primary" disabled={basis === "estimate" ? !!estimateError : levelingLoading || !candidates.length} onClick={applyForecast}>Apply selected value</Button></div>
     </Modal>}
   </div>;
 }

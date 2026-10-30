@@ -1,5 +1,5 @@
 import { AiJobError, type ChatMessage } from "./ai-jobs";
-import { deepseekJson } from "./deepseek";
+import { AI_BUDGET_MS, readJson } from "./drawing-reader";
 import { gapCostAmount, type CostBasis, type GapReference } from "./bid-gap-cost";
 
 export type GapCostInput = { gaps: { id: string; description: string; status: "N" | "P"; note: string }[]; references: GapReference[] };
@@ -39,6 +39,6 @@ export function screenGapCosts(raw: unknown, input: GapCostInput): GapCostSugges
 }
 export async function gapCostJob(raw: unknown, key: string, signal: AbortSignal) {
   const input = parseGapCost(raw), model = "deepseek-flash";
-  const output = await deepseekJson(key, gapCostMessages(input), { model, maxTokens: 5000, budgetMs: 55000, signal });
-  return Response.json({ model, suggestions: screenGapCosts(output, input) });
+  const { output, model: used } = await readJson(gapCostMessages(input), { deepseekKey: key, model, maxTokens: 5000, budgetMs: AI_BUDGET_MS, signal });
+  return Response.json({ model: used, suggestions: screenGapCosts(output, input) });
 }

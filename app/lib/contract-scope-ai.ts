@@ -1,5 +1,6 @@
 import { AiJobError, type ChatMessage } from "./ai-jobs";
-import { deepseekJson, textModel } from "./deepseek";
+import { textModel } from "./deepseek";
+import { AI_BUDGET_MS, readJson } from "./drawing-reader";
 import type { AwardSnapshot } from "./award";
 export type ContractScopeInput = { trade: string; scope: AwardSnapshot["scope"] };
 /** `group`: the system heading the line sits under in Exhibit A section 3 ("Gypsum Board", "Acoustical Ceilings"), or "General". */
@@ -25,5 +26,6 @@ export function screenContractScope(raw: unknown, input: ContractScopeInput): Co
 }
 export async function contractScopeJob(raw: unknown, key: string, signal: AbortSignal) {
   const input = parseContractScope(raw), model = textModel();
-  return Response.json({ model, ...screenContractScope(await deepseekJson(key, contractMessages(input), { model, maxTokens: 8000, budgetMs: 55_000, signal }), input) });
+  const { output, model: used } = await readJson(contractMessages(input), { deepseekKey: key, model, maxTokens: 8000, budgetMs: AI_BUDGET_MS, signal });
+  return Response.json({ model: used, ...screenContractScope(output, input) });
 }

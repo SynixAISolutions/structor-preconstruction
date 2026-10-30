@@ -53,6 +53,13 @@ export type RegionOrigin = "ai" | "estimator";
  * estimator's region and for marks made before positions were checked.
  */
 export type RegionAnchor = "text" | "image";
+
+/**
+ * A region that is a highlight Structor stands behind (Danial and Marcel, 24 and 28 Oct: Wyre highlights only printed
+ * words; the AI's outlines read off the picture looked "random"): one an estimator drew, or an AI mark pinned to the
+ * words it cites. An AI outline from the picture alone is a guess, shown only when asked for.
+ */
+export const onPrintedWords = (region: { origin: RegionOrigin; anchor?: RegionAnchor }): boolean => region.origin !== "ai" || region.anchor === "text";
 export type RegionStatus = "pending-review" | "approved";
 
 export type RegionEvent =

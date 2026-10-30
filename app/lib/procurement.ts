@@ -53,6 +53,10 @@ export type TradePackage = {
   owner: string;
   due: string;
   published?: PublishedForm;
+  /** Specification sections this package carries, as the AI set them (lib/bid-package-ai); others follow the CSI rules. */
+  sections?: string[];
+  /** Drawing sheets that show this package's work, most telling first, as the AI set them. */
+  sheets?: string[];
 };
 
 export type InvitationStatus = "invited" | "bidding" | "declined" | "submitted";

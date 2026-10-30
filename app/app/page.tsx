@@ -6,6 +6,7 @@ import BidLevelingPage from "./leveling-workspace";
 import { IntelligenceView } from "./ui/intelligence";
 import { ActivityInbox } from "./ui/activity-inbox";
 import { AiRunCard } from "./ui/ai-run-card";
+import { UploadBanner } from "./ui/upload-banner";
 import { CommercialView } from "./ui/commercial";
 import { BuyoutView } from "./ui/buyout-ui";
 import { UserManual } from "./ui/user-manual";
@@ -14,7 +15,7 @@ import { TurnoverView } from "./ui/todo-ui";
 import { SidebarNavigation } from "./ui/sidebar-navigation";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, SearchBox, Tabs, usd, type Screen } from "./ui/shared";
 import { DEFAULT_SCREEN, resolveScreen, screenGroup, screenLabel, searchScreens } from "../lib/screens";
-import { PROJECT_TABS, filterProjects, loadProjects, sampleProjectRecords, saveProjects, squareFeetLabel, type Project } from "../lib/projects";
+import { PROJECT_TABS, demoProject, filterProjects, loadProjects, sampleProjectRecords, saveProjects, squareFeetLabel, type Project } from "../lib/projects";
 import { SAMPLE_PROJECT_ID, selectProject, useActiveProject } from "../lib/project-scope";
 import { useSampleRefresh } from "../lib/use-sample-refresh";
 import { CompanyForms } from "./ui/company-forms";
@@ -67,7 +68,7 @@ export default function StructorApp(){
       {activeId===SAMPLE_PROJECT_ID&&<SampleRefreshBanner refresh={sampleRefresh}/>}
      {screen==="turnover"&&<TurnoverView key={project.id} {...props} project={project} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Reviewed project information saved.");}}/>}
      {modelView&&<ModelStudio project={project} view={modelView} projectId={project.id} projectName={project.name} navigate={navigate} notify={notify} inspection={modelView==="interior"?modelInspection:null}/>}
-     {screen==="projects"&&<Projects projects={projects} onNew={()=>setNewProject(true)} onOpen={p=>{selectProject(p.id);navigate("information");}}/>}
+     {screen==="projects"&&<Projects projects={projects} onNew={()=>setNewProject(true)} onDemo={()=>{const p=demoProject();setProjects(v=>[...v,p]);selectProject(p.id);navigate("documents");notify(`${p.name} created with made-up details. Upload a drawing set and a project manual under Bid documents.`);}} onOpen={p=>{selectProject(p.id);navigate("information");}}/>}
      {screen==="architect"&&<ArchitectView {...props}/>}
      {screen==="information"&&<ProjectInformation project={project} cover={<BuildingModel/>} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Project information saved locally.");}} navigate={navigate}/>}
       {['documents','scopes','drawing-flip','takeoffs','specs','checks','drawings','specifications','revisions'].includes(screen)&&<IntelligenceView key={project.id} {...props} project={project} screen={screen} quantityFilters={quantityFilters} onQuantityFilters={setQuantityFilters} onInspectModel={inspectModel}/>}
@@ -81,14 +82,14 @@ export default function StructorApp(){
   </div>
   {toast&&<div className="product-toast" role="status"><CheckCheck size={18}/><span>{toast}</span><button onClick={()=>setToast("")} aria-label="Dismiss notification"><X size={16}/></button></div>}
    {searchOpen&&<Modal title="Find your next step" subtitle="Jump to any part of your workspace." onClose={()=>setSearchOpen(false)}><SearchBox value={search} onChange={setSearch} placeholder="Search scopes, budget, drawings…"/><div className="command-list">{searchScreens(search).map(s=><button key={s.id} onClick={()=>navigate(s.id)}><NavIcon id={s.id} name={s.icon} size={19}/>{s.label}<ArrowRight size={15}/></button>)}</div></Modal>}
-  <AiRunCard projectId={activeId}/>
+  <div className="work-status"><UploadBanner onOpenFiles={() => navigate("documents")}/><AiRunCard projectId={activeId}/></div>
   <UserManual open={helpOpen} onOpen={()=>setHelpOpen(true)} onClose={()=>setHelpOpen(false)} currentScreen={screen} onNavigate={id=>{const next=resolveScreen(id);if(next&&next!==screen)navigate(next);}}/>
   <PageVoiceFeedback page={{screen,projectId:projectOpen?project.id:null,projectName:projectOpen?project.name:null}} notify={notify} onOpenPage={message=>{if(message.projectId){if(!projects.some(p=>p.id===message.projectId)){notify(`The message is for ${message.projectName}. That project is not saved in this browser.`);return false;}selectProject(message.projectId);}navigate(message.screen);return true;}}/>
    {newProject&&<Modal title="A new project starts here" subtitle="Set up the workspace, then add your RFP and project documents." wide onClose={()=>{if(!newProjectBusy)setNewProject(false);}}><ProjectForm onBusyChange={setNewProjectBusy} onCancel={()=>setNewProject(false)} onSave={createProject}/></Modal>}
  </div>;
 }
 
-function Projects({projects,onOpen,onNew}:{projects:Project[];onOpen:(p:Project)=>void;onNew:()=>void}){const[q,setQ]=useState("");const[tab,setTab]=useState(PROJECT_TABS[0]);const shown=filterProjects(projects,q,tab);return <><PageHeader eyebrow="PORTFOLIO" title="Great projects start here." description="One workspace for every estimate, every team, and every decision." actions={<Button variant="primary" onClick={onNew}><Plus size={16}/>New project</Button>}/><div className="project-list-tools"><Tabs tabs={PROJECT_TABS} value={tab} onChange={setTab}/><SearchBox value={q} onChange={setQ} placeholder="Search projects…"/></div><div className="project-card-grid">{shown.map((p,i)=><button className={`portfolio-card card-${i%3}`} key={p.id} onClick={()=>onOpen(p)}><div className="portfolio-visual"><BuildingModel small/><Badge tone={p.status==="Bidding"?"orange":"green"}>{p.status}</Badge><span className="portfolio-arrow"><ArrowUpRight size={18}/></span></div><div className="portfolio-content"><small>{p.type}</small><h2>{p.name}</h2><p><MapPin size={13}/>{p.location}</p><div><strong>{usd(p.value)}</strong><span>{squareFeetLabel(p.squareFeet)}</span></div><footer><span className="mini-avatar">MK</span><span>Project workspace</span><ArrowRight size={15}/></footer></div></button>)}<button className="new-project-card" onClick={onNew}><span><Plus size={28}/></span><h3>Your next project</h3><p>Bring the whole team and workflow together.</p><strong>Create a project<ArrowRight size={15}/></strong></button></div>{!shown.length&&<Empty title="No matching projects" description="Try another project name or stage."/>}</>;}
+function Projects({projects,onOpen,onNew,onDemo}:{projects:Project[];onOpen:(p:Project)=>void;onNew:()=>void;onDemo:()=>void}){const[q,setQ]=useState("");const[tab,setTab]=useState(PROJECT_TABS[0]);const shown=filterProjects(projects,q,tab);return <><PageHeader eyebrow="PORTFOLIO" title="Great projects start here." description="One workspace for every estimate, every team, and every decision." actions={<><Button onClick={onDemo}><Sparkles size={16}/>Create a demo project</Button><Button variant="primary" onClick={onNew}><Plus size={16}/>New project</Button></>}/><div className="project-list-tools"><Tabs tabs={PROJECT_TABS} value={tab} onChange={setTab}/><SearchBox value={q} onChange={setQ} placeholder="Search projects…"/></div><div className="project-card-grid">{shown.map((p,i)=><button className={`portfolio-card card-${i%3}`} key={p.id} onClick={()=>onOpen(p)}><div className="portfolio-visual"><BuildingModel small/><Badge tone={p.status==="Bidding"?"orange":"green"}>{p.status}</Badge><span className="portfolio-arrow"><ArrowUpRight size={18}/></span></div><div className="portfolio-content"><small>{p.type}</small><h2>{p.name}</h2><p><MapPin size={13}/>{p.location}</p><div><strong>{usd(p.value)}</strong><span>{squareFeetLabel(p.squareFeet)}</span></div><footer><span className="mini-avatar">MK</span><span>Project workspace</span><ArrowRight size={15}/></footer></div></button>)}<button className="new-project-card" onClick={onNew}><span><Plus size={28}/></span><h3>Your next project</h3><p>Bring the whole team and workflow together.</p><strong>Create a project<ArrowRight size={15}/></strong></button></div>{!shown.length&&<Empty title="No matching projects" description="Try another project name or stage."/>}</>;}
 
 /** Ends this browser's sign-in (lib/demo-password) and shows the sign-in page. */
 async function signOut() {

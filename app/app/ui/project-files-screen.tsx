@@ -7,18 +7,19 @@ import { Button, Empty, Modal, PageHeader, Panel, SearchBox, type ViewProps } fr
 import { useActiveProject } from "../../lib/project-scope";
 import { displayDate } from "../../lib/format";
 import { DOCUMENT_CATEGORIES, drawingLog, revisionLabel, revisionsOf, withSheetNumbers, type LogSheet, type StoredDocument } from "../../lib/project-files";
-import { removeProjectDocument, removeProjectFile, renameProjectDocument, updateProjectDocument, uploadProjectPdf, useProjectDocuments, type UploadProgress } from "../../lib/project-files-client";
+import { removeProjectDocument, removeProjectFile, renameProjectDocument, updateProjectDocument, uploadProjectPdf, useProjectDocuments, type UploadProgress, uploadProgressText } from "../../lib/project-files-client";
 import { contentRows, fileMeta, TAG_COLORS, type ContentOp, type ContentRow, type ContentTag, type ProjectContent, type TagColor } from "../../lib/project-content";
 import { allFolders, defaultFolder, filesIn, findFolder, folderAndInside, folderOf, folderPath, ROOT, SYSTEM_FOLDERS, subfolders, type FolderEntry } from "../../lib/project-folders";
 import { useProjectContent } from "../../lib/project-content-client";
 import { ContentViewer, type ContentLocation } from "./content-viewer";
 import { CONTENT_ACTOR, ContentLinks, useContentRecords, type SaveContent } from "./project-content-links";
 import { DrawingLogView, UploadCheck, VersionPills } from "./drawing-log";
+import { BidDocumentsPanel, type BidUpload } from "./bid-documents";
 import "./project-files.css";
 import "./project-content.css";
 
 const megabytes = (bytes: number) => bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.ceil(bytes / 1024)} KB`;
-const progressText = (p: UploadProgress) => p.stage === "uploading" ? `Uploading ${Math.round((p.done / Math.max(1, p.total)) * 100)}%` : p.stage === "reading" ? `Reading page ${p.done} of ${p.total}` : p.stage === "title-blocks" ? `Reading title blocks ${p.done} of ${p.total}` : `Saving page text ${p.done + 1} of ${p.total}`;
+const progressText = uploadProgressText;
 type Pending = { file: File; category: string; progress?: UploadProgress; error?: string; done?: boolean; storedDoc?: StoredDocument };
 
 /** Something in the explorer: a file (its latest revision, with what the team added) or a folder. */
@@ -30,7 +31,7 @@ const itemKey = (item: Item) => item.kind === "file" ? `file:${item.row.doc.seri
 const folderName = (content: ProjectContent, id: string) => id === ROOT ? "Project files" : findFolder(content, id)?.name ?? "Project files";
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
-export function ProjectFilesScreen({ projectName, notify }: ViewProps) {
+export function ProjectFilesScreen({ projectName, notify, navigate }: ViewProps) {
   const projectId = useActiveProject();
   const { documents, ready } = useProjectDocuments();
   const { content, ready: contentReady, change, refresh } = useProjectContent();
@@ -93,13 +94,15 @@ export function ProjectFilesScreen({ projectName, notify }: ViewProps) {
   }
 
   // ── Upload ──
-  const uploadInto = (target: string, files: File[] = []) => {
+  const uploadInto = (target: string, files: File[] = [], type?: string) => {
     const system = SYSTEM_FOLDERS.find(f => f.id === target || f.id === folderPath(content, target)[0]?.id);
-    const category = system?.upload ?? uploadCategory;
+    const category = type ?? system?.upload ?? uploadCategory;
     setUploadCategory(category);
     setPending(files.map(file => ({ file, category })));
     setUpload({ folder: target });
   };
+  /** The Bid documents slots: drawings and specifications go to Project Drawings, an addendum to the RFP folder. */
+  const uploadBid = (what: BidUpload, files: File[] = []) => what === "addendum" ? uploadInto("rfp", files, "Addenda") : uploadInto("drawings", files, what === "specifications" ? "Specifications" : "Drawings");
   function choose(files: File[]) {
     if (busy) return;
     if ((upload?.revisionOf || upload?.sheet) && files.length > 1) { notify("Choose one PDF for a new revision."); return; }
@@ -282,6 +285,7 @@ export function ProjectFilesScreen({ projectName, notify }: ViewProps) {
     <div role="status" aria-live="polite" className="cm-save-status">{saving ? "Saving changes..." : !ready || !contentReady ? "Loading project content..." : `${plural(totalFiles, "file")} / ${content.markups.length} markups`}</div>
     {error && <p className="cm-error" role="alert">{error}</p>}
     <div className="dl-view-switch" role="group" aria-label="Project files view">{["Files", "Sheets"].map(name => <button key={name} aria-pressed={view === name} onClick={() => setView(name)}>{name === "Files" ? <FileText size={17}/> : <LayoutGrid size={17}/>} {name}<span>{name === "Files" ? totalFiles : log.sheets.length}</span></button>)}</div>
+    {view === "Files" && folder === ROOT && !searching && <BidDocumentsPanel documents={documents} ready={ready} busy={busy} onUpload={uploadBid} onOpen={doc => setPreview({ docId: doc.id, page: 1 })} onRevision={beginRevision} navigate={navigate}/>}
     {view === "Sheets" ? <DrawingLogView log={log} ready={ready} onOpen={setPreview} onRevision={sheet => { setPending([]); setUpload({ sheet }); }} onUpload={() => uploadInto("drawings")} onReview={id => setCheckIds([id])}/> : <Panel className="cm-library-main pf-explorer">
       <div className="ui-toolbar cm-library-toolbar">
         <nav className="pf-crumbs" aria-label="Folder path">{crumbs.map((c, i) => <span key={c.id} className="pf-crumb-wrap">{i > 0 && <ChevronRight size={14} aria-hidden/>}<button className={`pf-crumb ${dropFolder === c.id ? "pf-drop-active" : ""}`} aria-current={i === crumbs.length - 1 && !searching ? "page" : undefined} onClick={() => { setFolder(c.id); setQuery(""); setTag(""); }} {...dropZone(c.id)}>{i === 0 ? <FolderOpen size={14}/> : null}{c.name}</button></span>)}</nav>
@@ -309,7 +313,7 @@ export function ProjectFilesScreen({ projectName, notify }: ViewProps) {
       : <p>This deletes the file{deleting.row.revisions > 1 ? ` and all ${deleting.row.revisions} revisions` : ""} from the project, with any markups on it. It can't be undone.</p>}
       <Button variant="danger" disabled={saving} onClick={() => void removeItem(deleting)}>{deleting.kind === "folder" ? "Delete folder" : "Delete file"}</Button><Button onClick={() => setDeleting(null)}>Cancel</Button></div></Modal>}
 
-    {upload && <Modal title={upload.sheet ? `Add revision · ${upload.sheet.sheet}` : upload.revisionOf ? `Add revision ${revisionLabel({ revision: upload.revisionOf.revision + 1 })}` : `Upload to ${folderName(content, upload.folder ?? ROOT)}`} subtitle={upload.sheet ? `One PDF page becomes V${upload.sheet.versions.length + 1} of ${upload.sheet.sheet}. Its sheet number will be matched to this drawing.` : upload.revisionOf ? `New issue of ${upload.revisionOf.name}. ${revisionLabel(upload.revisionOf)} stays for comparison.` : "Upload PDF documents. Drawings and specifications are also read for the project's AI tools, whatever folder they are in."} onClose={() => { if (!busy) setUpload(null); }}>
+    {upload && <Modal title={upload.sheet ? `Add revision · ${upload.sheet.sheet}` : upload.revisionOf ? `Add revision ${revisionLabel({ revision: upload.revisionOf.revision + 1 })}` : `Upload to ${folderName(content, upload.folder ?? ROOT)}`} subtitle={upload.sheet ? `One PDF page becomes V${upload.sheet.versions.length + 1} of ${upload.sheet.sheet}. Its sheet number will be matched to this drawing.` : upload.revisionOf ? `New issue of ${upload.revisionOf.name}. ${revisionLabel(upload.revisionOf)} stays for comparison.` : "Upload PDF documents. Drawings and specifications are also read for the project's AI tools, whatever folder they are in."} onClose={() => { if (busy) notify("The upload continues in the background. Its progress shows at the bottom of the page."); setUpload(null); }}>
       <div className="intel-upload-zone" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); choose(Array.from(e.dataTransfer.files)); }}><CloudUpload size={34}/><h3>Drop your files here</h3><p>{upload.sheet ? "One PDF page: the next version of this sheet" : upload.revisionOf ? "One PDF: the new issue" : "Drawing sets, project manual, reports, RFP, contracts, budgets"}</p><Button disabled={busy} onClick={() => picker.current?.click()}>Browse files</Button><input ref={picker} type="file" multiple={!upload.revisionOf && !upload.sheet} accept=".pdf,application/pdf" hidden disabled={busy} aria-label="Choose PDF files" onChange={e => choose(Array.from(e.target.files || []))}/></div>
       {!upload.revisionOf && !upload.sheet && <label className="ui-field">File type<select disabled={busy} value={uploadCategory} onChange={e => { setUploadCategory(e.target.value); setPending(prev => prev.map(p => p.progress ? p : { ...p, category: e.target.value })); }}>{DOCUMENT_CATEGORIES.map(c => <option key={c}>{c}</option>)}</select></label>}
       {pending.length > 0 && <div className="pf-upload-list">{pending.map((p, i) => <div key={`${p.file.name}-${i}`} className="pf-upload-row">
@@ -319,7 +323,7 @@ export function ProjectFilesScreen({ projectName, notify }: ViewProps) {
         {p.error && <span className="pf-error" role="alert">{p.error}</span>}
       </div>)}</div>}
       <p className="intel-muted intel-small">Large drawing sets take a few minutes: the file is stored, then every page is read. Keep this page open until it finishes.</p>
-      <div className="intel-dialog-actions"><Button disabled={busy} onClick={() => setUpload(null)}>Cancel</Button><Button variant="primary" disabled={busy || !pending.some(p => !p.done)} onClick={() => void startUpload()}>{busy ? "Working…" : `Store ${pending.filter(p => !p.done).length || ""} file${pending.length === 1 ? "" : "s"}`}</Button></div>
+      <div className="intel-dialog-actions"><Button onClick={() => { if (busy) notify("The upload continues in the background. Its progress shows at the bottom of the page."); setUpload(null); }}>{busy ? "Continue in background" : "Cancel"}</Button><Button variant="primary" disabled={busy || !pending.some(p => !p.done)} onClick={() => void startUpload()}>{busy ? "Working…" : `Store ${pending.filter(p => !p.done).length || ""} file${pending.length === 1 ? "" : "s"}`}</Button></div>
     </Modal>}
 
     {!!checkIds.length && !upload && <Modal title="Upload check" subtitle="Review the sheet numbers and what this upload changed. Your upload is already saved." wide onClose={() => setCheckIds([])}><UploadCheck documents={documents} ids={checkIds} onDone={() => setCheckIds([])}/></Modal>}

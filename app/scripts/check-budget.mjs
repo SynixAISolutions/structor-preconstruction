@@ -5,7 +5,7 @@ register("./ts-resolver.mjs", import.meta.url);
 const {
   BudgetRuleError, addAllowance, addBudgetLine, applyLevelingValue, approveBudgetLine, budgetTotals, editAllowance, editBudgetLine,
   levelingCandidates, linkAllowance, parseAmount, removeAllowance, removeBudgetLine, reopenBudgetLine, setAllowanceStatus,
-  totalsByCostCenter, totalsByDivision, costPerSquareFoot,
+  totalsByCostCenter, totalsByDivision, costPerSquareFoot, sectionTotal,
 } = await import("../lib/budget.ts");
 const { sampleBudget } = await import("../lib/data/budget.ts");
 const { ruleFixtureBudget } = await import("./fixtures/budget-rules.mjs");
@@ -152,4 +152,13 @@ fails(() => addBudgetLine(budget, { ...valid, csiCode: "99000" }, "Sadie", at), 
 assert.deepEqual([costPerSquareFoot(1000, 3), costPerSquareFoot(1000, 0), costPerSquareFoot(1000, null)], [333.33, null, null]);
 assert.deepEqual(totalsByCostCenter({ ...budget, costCenters: [{ name: "Site work", squareFeet: 77978 }] }).map(c => c.costCenter).slice(0, 2), ["Site work", "Modernization"], "Declared cost centers come first");
 
-console.log(`Budget checked: real Jelleff DD Budget (${real.lines.length} lines, $${rt.budget.toLocaleString("en-US")}) matches the workbook; rules on the fixture; totals, cost centers, divisions, validation, allowance links, leveling roll-up through the real engine.`);
+// The Budget summary's total rows (Marcel, 24 Oct): total trades cost, then the indirect costs and theirs.
+{
+  const line = (id, classification, amount) => ({ id, classification, budget: amount });
+  const rows = [line("a", "direct", 1000.1), line("b", "direct", 2500.2), line("c", "direct", 400)];
+  const low = { a: 900, b: null, c: 399.99 }, committed = { a: 900, b: 0, c: 0 };
+  assert.deepEqual(sectionTotal(rows, l => low[l.id], l => committed[l.id]), { lines: 3, total: 3900.3, lowSub: 1299.99, withLowSub: 2, committed: 900 }, "To the cent; a line with no bid adds nothing to the low sub total");
+  assert.deepEqual(sectionTotal([], () => null, () => 0), { lines: 0, total: 0, lowSub: 0, withLowSub: 0, committed: 0 });
+}
+
+console.log(`Budget checked: real Jelleff DD Budget (${real.lines.length} lines, $${rt.budget.toLocaleString("en-US")}) matches the workbook; rules on the fixture; totals, section total rows, cost centers, divisions, validation, allowance links, leveling roll-up through the real engine.`);

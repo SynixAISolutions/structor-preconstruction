@@ -46,8 +46,7 @@ import {
   type FlipRegion,
   type Point,
   type RegionOrigin,
-  type RegionStatus,
-} from "../../lib/drawing-flip";
+  type RegionStatus, onPrintedWords } from "../../lib/drawing-flip";
 import { displayDate } from "../../lib/format";
 import { useDrawingFlip } from "../../lib/use-drawing-flip";
 import { useProcurement } from "../../lib/use-procurement";
@@ -331,6 +330,8 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
 
   const page = state.pages.find(item => item.id === pageId) ?? state.pages[0];
   const activePageId = page?.id ?? "";
+  const [showGuesses, setShowGuesses] = useState(false);
+  const guesses = state.regions.filter(r => r.pageId === activePageId && !onPrintedWords(r)).length;
   const visible = useMemo(() => filterRegions(state, procurement, {
     pageId: activePageId,
     query: filters.query || undefined,
@@ -338,7 +339,7 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
     status: filters.status || undefined,
     origin: filters.origin || undefined,
     corrected: filters.corrected || undefined,
-  }).filter(region => !owner || procurement.packages.find(pkg => pkg.id === region.packageId)?.owner === owner), [state, procurement, activePageId, filters, owner]);
+  }).filter(region => (showGuesses || onPrintedWords(region)) && (!owner || procurement.packages.find(pkg => pkg.id === region.packageId)?.owner === owner)), [state, procurement, activePageId, filters, owner, showGuesses]);
   const selected = visible.find(item => item.id === regionId) ?? visible[0] ?? null;
   const pageIndex = Math.max(0, state.pages.findIndex(item => item.id === activePageId));
   const summary = flipSummary(state);
@@ -434,7 +435,7 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
           <select aria-label="Filter by person" value={owner} onChange={event => setOwner(event.target.value)}><option value="">Everyone's trades</option>{owners.map(name => <option key={name} value={name}>{name}'s trades</option>)}</select>
           <select aria-label="Filter by review status" value={filters.status} onChange={event => setFilters({ ...filters, status: event.target.value as Filters["status"] })}><option value="">All review states</option><option value="pending-review">Awaiting review</option><option value="approved">Approved</option></select>
           <select aria-label="Filter by origin" value={filters.origin} onChange={event => setFilters({ ...filters, origin: event.target.value as Filters["origin"] })}><option value="">All origins</option><option value="ai">Structor AI</option><option value="estimator">Estimator</option></select>
-          <label className="flip-corrected"><input type="checkbox" checked={filters.corrected} onChange={event => setFilters({ ...filters, corrected: event.target.checked })}/>Corrections</label>
+          <label className="flip-corrected"><input type="checkbox" checked={filters.corrected} onChange={event => setFilters({ ...filters, corrected: event.target.checked })}/>Corrections</label>{guesses > 0 && <label className="flip-corrected" title="AI outlines read from the drawing picture, not pinned to printed words. Hidden by default: highlights sit on the words."><input type="checkbox" checked={showGuesses} onChange={event => setShowGuesses(event.target.checked)}/>Show AI area guesses ({guesses})</label>}
         </div>
         <div className="flip-legend" aria-label="Trade color legend">{legend.map(item => <button key={item.packageId} className={filters.packageId === item.packageId ? "active" : ""} onClick={() => setFilters({ ...filters, packageId: filters.packageId === item.packageId ? "" : item.packageId })}><i style={{ background: colors.get(item.packageId) }}/><span>{item.name}{ownerOf(item.packageId) ? ` · ${ownerOf(item.packageId)}` : ""}</span><small>{item.regions}</small></button>)}</div>
         <Button onClick={()=>setFullPage(true)}><Maximize2 size={15}/>Open full page</Button>

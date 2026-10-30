@@ -33,6 +33,11 @@ assert.equal(ai[0].doc.id, "man2", "The newest revision of the manual");
 assert.equal(ai[1].doc.id, "dwg");
 assert.equal(of("s-ai", "").length, 2, "The AI's quotes don't depend on the typed reference");
 
+// An AI proposal not yet in a bid form opens the same way, from its own citations (28 Oct: "Open drawing" on every item).
+const pending = S.citationEvidence(extraction.drafts[0].citations, documents);
+assert.deepEqual(pending.map(e => [e.label, e.quotes.length]), ai.map(e => [e.label, e.quotes.length]), "A proposal's sources are the ones its item will have");
+assert.deepEqual(ai.map(S.onDrawing), [false, true], "The sheet is the drawing; the manual page is the spec");
+
 // 2. A Drawing Flip region: its outline on the stored sheet with that number.
 const [region] = of("s-region", "CIV0102 · Keynote 1");
 assert.deepEqual([region.kind, region.label, region.doc.id, region.page, region.quotes], ["region", "CIV0102 · Keynote 1", "dwg", 12, []]);
@@ -44,6 +49,7 @@ assert.deepEqual([section.kind, section.doc.id, section.page, section.paragraph]
 assert.equal(of("s-spec", "02 41 19")[0].paragraph, null, "A whole section: its first page");
 const [sheet] = of("s-sheet", "A1.1 · Partition schedule");
 assert.deepEqual([sheet.kind, sheet.doc.id, sheet.page], ["sheet", "dwg", 46]);
+assert.deepEqual([region, sheet, section].map(S.onDrawing), [true, true, false], "Regions and sheets open with Open drawing, a section with Open spec");
 assert.deepEqual(of("s-x", "Owner's program"), [], "Nothing the project can open");
 assert.deepEqual(of("s-x", ""), []);
 

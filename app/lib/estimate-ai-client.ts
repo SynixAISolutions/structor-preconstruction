@@ -27,7 +27,7 @@ export async function draftTradeEstimate(args: { trade: TradePackage; project: P
   const { trade, project } = args;
   const scope = args.procurement.scopes.filter(s => s.packageId === trade.id).map(s => s.detail ? `${s.title}: ${s.detail}` : s.title);
   const quantities = args.extraction.drafts.flatMap(d => d.kind === "quantity" && d.status === "accepted" && d.packageId === trade.id ? [{ item: d.item, quantity: d.quantity, unit: d.unit, basis: d.basis }] : []);
-  const rows = sheetsForTrade(drawingRegister(args.documents), trade.code).slice(0, 4);
+  const rows = sheetsForTrade(drawingRegister(args.documents), trade).slice(0, 4);
   const sheets: EstimateDraftInput["sheets"] = [];
   for (const row of rows) {
     const [page] = await readStoredText(row.doc, { first: row.page, last: row.page });

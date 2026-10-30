@@ -10,7 +10,7 @@ const render = (screen: Screen, projectOpen: boolean) => renderToStaticMarkup(<S
 test("workspace navigation shows only the four global tools", () => {
   const html = render("projects", false);
   assert.equal((html.match(/<button/g) ?? []).length, 4);
-  for (const label of ["All projects", "Subcontractor directory", "Subcontractor ratings", "Subcontractor prequalification"]) assert.ok(html.includes(label));
+  for (const label of ["All projects", "Subcontractor directory", "Subcontractor ratings", "Subcontractor aggregate limits"]) assert.ok(html.includes(label));
   assert.ok(!html.includes("PRECONSTRUCTION"));
   assert.ok(!html.includes("Preview as subcontractor"));
 });
@@ -25,7 +25,7 @@ test("project navigation closes each section before the next standalone tool", (
   assert.ok(html.includes("Back to All projects"));
   assert.ok(!html.includes("Subcontractor directory"));
   assert.ok(html.includes('aria-label="Preconstruction budget"'));
-  assert.ok(html.includes('aria-label="Compliance and contracts"'));
+  assert.ok(!html.includes('aria-label="Compliance and contracts"'), "Folded into Subcontractor outreach (24 Oct)");
   assert.ok(html.includes('aria-label="3D model studio"'));
 });
 

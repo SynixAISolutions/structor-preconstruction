@@ -144,6 +144,11 @@ fails(() => A.reviseExhibit(s, id, edited, "", "Sadie", at), "exhibit", /agreed 
 // Subcontract: only after agreement; sub signs, contractor countersigns, then executed.
 fails(() => A.generateSubcontract(s, id, "  ", "Sadie", at), "contractorName", /legal name/);
 fails(() => A.sendSubcontract(s, id, at), "subcontract", /Generate the subcontract first/);
+// Package subcontract (Marcel, 24 Oct): generate and send in one step, from the agreed Exhibit A.
+{
+  const packaged = A.sendSubcontract(A.generateSubcontract(s, id, "Sample General Contractor LLC", "Sadie", at, A.generateSampleSubcontract, A.SAMPLE_SUBCONTRACT_TEMPLATE), id, at);
+  assert.deepEqual([A.awardStage(packaged.awards[0]), packaged.awards[0].subcontract.exhibitRevision, packaged.notifications.at(-1).kind], ["signature-pending", 2, "subcontract-sent"], "One click: generated from Exhibit A revision 2 and out for signature");
+}
 s = freeze(A.generateSubcontract(s, id, "Sample General Contractor LLC", "Sadie", at, A.generateSampleSubcontract, A.SAMPLE_SUBCONTRACT_TEMPLATE));
 award = s.awards[0];
 assert.deepEqual([A.awardStage(award), award.subcontract.exhibitRevision, award.subcontract.amount, award.subcontract.template.sample], ["subcontract-draft", 2, 507960, true]);

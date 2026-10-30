@@ -67,7 +67,7 @@ export function useTodoSummary(project: Project | null): TodoSummary & { setup: 
     awards, procurement, submissions, directory, ve, estimates: estimate.byTrade.trades,
     candidates: openComparisonCandidates({ projectId, procurement, submissions, directory, workspace: leveling.workspace, packageId: loadedPackageId, provenance, comparisons, ve }),
   }).budget, [budget, awards, procurement, submissions, directory, ve, estimate.byTrade.trades, projectId, leveling.workspace, loadedPackageId, provenance, comparisons]);
-  const summary = deriveTodo({ project, documents, procurement, submissions, leveling: leveling.snapshot, budget: plan, awards, schedule: { rows: scheduleRows(procurementSchedule(schedulePlan, { procurement, awards }, today).state, today), today }, setup, check, buyout });
+  const summary = deriveTodo({ project, documents, procurement, submissions, directory, leveling: leveling.snapshot, budget: plan, awards, schedule: { rows: scheduleRows(procurementSchedule(schedulePlan, { procurement, awards }, today).state, today), today }, setup, check, buyout });
   return { ...summary, setup, setupGuide, ready: filesReady && leveling.loaded, reload };
 }
 

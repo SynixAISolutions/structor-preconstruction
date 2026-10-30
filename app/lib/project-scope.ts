@@ -39,7 +39,7 @@ const subscribe = (listener: () => void) => { listeners.add(listener); return ()
 export const useActiveProject = (): string => useSyncExternalStore(subscribe, getActiveProjectId, () => SAMPLE_PROJECT_ID);
 
 /** Drafts that belong to the organization rather than to one project. */
-export const GLOBAL_DRAFT_KEYS = new Set(["directory", "portal-profile", "budget-history", "company-form"]);
+export const GLOBAL_DRAFT_KEYS = new Set(["directory", "portal-profile", "budget-history", "company-form", "subcontractor-limits"]);
 
 /** Browser storage key for a screen draft of a project. */
 export const draftStorageKey = (projectId: string, key: string): string =>

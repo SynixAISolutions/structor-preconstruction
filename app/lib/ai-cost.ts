@@ -1,0 +1,53 @@
+// What an AI reading costs (Danial, 28 Oct: "we have to be smart with how we use this limited credits"): Claude's
+// prices, an estimate shown before a large reading starts, and what a finished request cost from its token counts.
+// Pure; DeepSeek's cost is too small to show and isn't tracked.
+
+/**
+ * US dollars per million tokens (Claude API prices, Oct 2026). `cacheRead` is what a token read from the prompt cache
+ * costs as a share of the input price (a cache write costs 1.25 times it). `measured` scales an estimate to what the
+ * model really cost on Project 1 (28 Oct): Haiku's newer tokenizer counts about 30% more tokens and it writes longer
+ * answers, so it cost about a twentieth of Opus on the same readings, not the fortieth its prices suggest.
+ */
+export const CLAUDE_PRICES: Record<string, { input: number; output: number; cacheRead: number; measured?: number }> = {
+  "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.05 },
+  "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.05 },
+  "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheRead: 0.1, measured: 2 },
+};
+export type TokenUsage = { input: number; output: number; cacheWrite?: number; cacheRead?: number };
+
+/** A request's cost in dollars from its usage, or null for a model without a listed price. */
+export function costOf(model: string, usage: TokenUsage | undefined): number | null {
+  const price = CLAUDE_PRICES[model];
+  if (!price || !usage) return null;
+  return (usage.input * price.input + (usage.cacheWrite ?? 0) * price.input * 1.25 + (usage.cacheRead ?? 0) * price.input * price.cacheRead + usage.output * price.output) / 1e6;
+}
+
+// For estimates: about 3.5 characters a token in specification and drawing text, a sheet image rendered at 2000 px
+// about 4,000 tokens, and each request's thinking and answer about 2,500 tokens at low effort.
+export const ESTIMATE = { charsPerToken: 3.5, imageTokens: 4_000, outputPerRequest: 2_500, promptPerRequest: 800 };
+
+/** The estimated cost of `requests` requests carrying `chars` characters of text and `images` sheet images. */
+export function estimateCost(model: string, work: { requests: number; chars: number; images?: number }): number | null {
+  const price = CLAUDE_PRICES[model];
+  if (!price || work.requests <= 0) return price ? 0 : null;
+  const input = work.chars / ESTIMATE.charsPerToken + (work.images ?? 0) * ESTIMATE.imageTokens + work.requests * ESTIMATE.promptPerRequest;
+  return (price.measured ?? 1) * (input * price.input + work.requests * ESTIMATE.outputPerRequest * price.output) / 1e6;
+}
+
+/**
+ * A reading estimated above this asks before it starts (28 Oct: a click meant for another button started a $30
+ * reading of every trade).
+ */
+export const CONFIRM_ABOVE = 5;
+
+/**
+ * An upload whose full reading (every trade's scope and every package on the drawings) is estimated under this is
+ * read by itself, like Wyre reading a small set; a larger set waits for the estimator (Danial, 28 Oct: "Yes, under $2").
+ */
+export const AUTO_READ_UNDER = 2;
+
+/** "$0.42", "under $0.01", "$12": dollars as people read a cost. */
+export function dollars(amount: number): string {
+  if (amount < 0.01) return "under $0.01";
+  return amount < 10 ? `$${amount.toFixed(2)}` : `$${Math.round(amount)}`;
+}

@@ -15,15 +15,20 @@ const digits = (code: string) => code.replace(/\D/g, "").padEnd(6, "0").slice(0,
 const AFFINITY: Record<string, string> = { "093": "096", "095": "092", "097": "092", "098": "092", "087": "081", "079": "071" };
 
 /**
- * Each section goes to the trade of its CSI division. When several trades share a division: the trade
+ * Each section goes to the package the AI put it in (TradePackage.sections, lib/bid-package-ai). A section no
+ * package lists goes to the trade of its CSI division. When several trades share a division: the trade
  * with the same level-2 code (10 14 signage), then a whole-division trade (10 00 00 specialties), then
  * the same CSI group (09 2x drywall), then the group's usual partner (AFFINITY), then the closest code.
  */
-export function sectionsByTrade<S extends StoredSection>(sections: S[], packages: Pick<TradePackage, "id" | "division" | "code">[]): Map<string, S[]> {
+export function sectionsByTrade<S extends StoredSection>(sections: S[], packages: Pick<TradePackage, "id" | "division" | "code" | "sections">[]): Map<string, S[]> {
   const out = new Map<string, S[]>(packages.map(p => [p.id, []]));
+  const placed = new Map<string, string>();
+  for (const p of packages) for (const s of p.sections ?? []) if (!placed.has(s)) placed.set(s, p.id);
   for (const section of sections) {
     const code = digits(section.section);
     if (code.startsWith("00") || code.startsWith("01")) continue;
+    const chosen = placed.get(section.section);
+    if (chosen) { out.get(chosen)!.push(section); continue; }
     const candidates = packages.filter(p => digits(p.code).slice(0, 2) === code.slice(0, 2));
     if (!candidates.length) continue;
     const group = code.slice(0, 3);
@@ -73,8 +78,13 @@ export const MAX_SHEETS_PER_TRADE = 6;
 type SheetRow = { title: string; discipline?: string };
 const ruleFor = (code: string) => SHEET_RULES.find(r => r.code.test(code));
 
-/** The drawing sheets (from drawingRegister) most likely to show a trade's work, by its CSI code: title keywords first, then its discipline's sheets. */
-export function sheetsForTrade<T extends SheetRow>(register: T[], code: string, max = MAX_SHEETS_PER_TRADE): T[] {
+/**
+ * The drawing sheets (from drawingRegister) that show a trade's work: the ones the AI chose for the package
+ * (TradePackage.sheets), else by its CSI code: title keywords first, then its discipline's sheets.
+ */
+export function sheetsForTrade<T extends SheetRow & { sheet?: string }>(register: T[], trade: string | Pick<TradePackage, "code" | "sheets">, max = MAX_SHEETS_PER_TRADE): T[] {
+  if (typeof trade !== "string" && trade.sheets?.length) return trade.sheets.flatMap(s => register.filter(r => r.sheet === s).slice(0, 1)).slice(0, max);
+  const code = typeof trade === "string" ? trade : trade.code;
   const rule = ruleFor(code), out: T[] = [];
   const add = (match: (row: T) => boolean) => { for (const row of register) if (out.length < max && !out.includes(row) && match(row)) out.push(row); };
   for (const re of rule?.titles ?? []) add(row => re.test(row.title.toUpperCase()));

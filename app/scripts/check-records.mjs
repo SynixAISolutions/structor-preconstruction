@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { loadProjects, normalizeProject, parseProjectForm, sampleProjectRecords, squareFeetLabel } from "../lib/projects.ts";
+import { demoProject, loadProjects, normalizeProject, parseProjectForm, sampleProjectRecords, squareFeetLabel } from "../lib/projects.ts";
 import { dateLabel, displayDate } from "../lib/format.ts";
 import { initialDrawings, initialSpecSections, initialSpecs } from "../lib/data/preconstruction.ts";
 import { CSI_DIVISIONS, csiDivision } from "../lib/csi.ts";
@@ -140,3 +140,14 @@ console.log(`Records checked: ${sampleProjectRecords.length} sample projects, fo
 assert.equal(legacy.estimateStage, null, "Old records keep their unknown estimate stage; status is not the stage");
 assert.equal(single.project.estimateStage, "concept");
 assert(parseProjectForm(form({ ...valid, estimateStage: "Bidding" })).errors.estimateStage);
+
+// "Create a demo project": random details the form accepts, for any random draw.
+const seeded = seed => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const demos = Array.from({ length: 200 }, (_, i) => demoProject(seeded(((i + 1) * 48271 * 9973) % 2147483647 || 1), new Date("2026-10-28T12:00:00Z")));
+assert.ok(demos.every(d => d.name.startsWith("Demo · ") && d.location && d.type && d.workType && d.taxStatus && d.estimateStage && d.deliveryMethod), "Every demo project fills in what the form requires");
+assert.ok(demos.every(d => d.squareFeet >= 12_000 && d.squareFeet <= 90_000 && d.value > 0), "Demo areas and values are realistic");
+assert.ok(demos.every(d => d.workType !== "both" || d.renovationSquareFeet + d.additionSquareFeet === d.squareFeet), "A renovation-and-addition demo splits its area");
+assert.ok(demos.every(d => d.rfi < d.due && d.due > "2026-10-28" && d.start > d.due && d.finish > d.start), "Demo dates are in order and in the future");
+assert.equal(new Set(demos.map(d => d.id)).size, demos.length, "Each demo project has its own id");
+assert.ok(new Set(demos.map(d => d.name)).size > 20 && new Set(demos.map(d => d.workType)).size === 4, "Demo projects vary");
+assert.deepEqual(demos[0].team, [{ name: "Marcel Khoury", role: "Estimator" }]);
