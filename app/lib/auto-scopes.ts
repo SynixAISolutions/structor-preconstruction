@@ -29,7 +29,7 @@ import { sampleExtraction } from "./data/extraction";
 import { sampleDrawingFlip } from "./data/drawing-flip";
 
 export const RUNS_KEY = "ai-scope-runs";
-const PARALLEL_TRADES = 3;
+const PARALLEL_TRADES = 6;
 
 type Snapshot = { run: AutoRun | null; leave: boolean };
 let snapshot: Snapshot = { run: null, leave: false };
