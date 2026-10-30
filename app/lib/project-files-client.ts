@@ -58,6 +58,19 @@ export const storedDocuments = (projectId: string): StoredDocument[] | null => i
 // titled, and no project manual, so it set 4 bid packages).
 export const UPLOAD_SETTLE_MS = 60_000;
 let uploading = 0, lastUploadAt = 0;
+
+// Uploads go on in the background once their window is closed (app/ui/upload-banner shows them on every page), and
+// the tab asks before closing while one runs.
+export type UploadActivity = { key: string; name: string; progress: UploadProgress | null };
+let activity: UploadActivity[] = [];
+const activityListeners = new Set<() => void>();
+const setActivity = (next: UploadActivity[]) => { activity = next; activityListeners.forEach(l => l()); };
+const subscribeActivity = (listener: () => void) => { activityListeners.add(listener); return () => { activityListeners.delete(listener); }; };
+/** The uploads running in this tab, oldest first. */
+export const useUploads = (): UploadActivity[] => useSyncExternalStore(subscribeActivity, () => activity, () => activity);
+const holdTab = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+/** What an upload is doing, as the window and the banner say it. */
+export const uploadProgressText = (p: UploadProgress) => p.stage === "uploading" ? `Uploading ${Math.round((p.done / Math.max(1, p.total)) * 100)}%` : p.stage === "reading" ? `Reading page ${p.done} of ${p.total}` : p.stage === "title-blocks" ? `Reading title blocks ${p.done} of ${p.total}` : `Saving page text ${p.done + 1} of ${p.total}`;
 /** Milliseconds until this tab's uploads have settled: Infinity while one runs, 0 once the last ended a pause ago. */
 export const uploadsSettleIn = (now = Date.now()): number => uploading ? Infinity : Math.max(0, lastUploadAt + UPLOAD_SETTLE_MS - now);
 
@@ -115,8 +128,17 @@ async function readPages(file: File, kind: StoredDocument["kind"], onPage: (done
  * its page text, then the index entry. `revisionOf` makes it the next revision of that document.
  */
 export async function uploadProjectPdf(args: { projectId: string; file: File; category: string; revisionOf?: StoredDocument; onProgress?: (progress: UploadProgress) => void }): Promise<StoredDocument> {
-  uploading++;
-  try { return await storePdf(args); } finally { uploading--; lastUploadAt = Date.now(); notify(); }
+  const key = crypto.randomUUID();
+  setActivity([...activity, { key, name: args.file.name, progress: null }]);
+  if (!uploading++) window.addEventListener("beforeunload", holdTab);
+  const onProgress = (progress: UploadProgress) => { setActivity(activity.map(a => a.key === key ? { ...a, progress } : a)); args.onProgress?.(progress); };
+  try { return await storePdf({ ...args, onProgress }); }
+  finally {
+    if (!--uploading) window.removeEventListener("beforeunload", holdTab);
+    lastUploadAt = Date.now();
+    setActivity(activity.filter(a => a.key !== key));
+    notify();
+  }
 }
 
 async function storePdf(args: Parameters<typeof uploadProjectPdf>[0]): Promise<StoredDocument> {

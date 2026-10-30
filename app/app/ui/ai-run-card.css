@@ -16,3 +16,11 @@
 @media (max-width: 1200px) { .ai-run-card { left: calc(216px + 20px); width: min(340px, calc(100vw - 216px - 40px)); } }
 @media (max-width: 950px) { .ai-run-card { left: calc(190px + 16px); width: min(320px, calc(100vw - 190px - 32px)); } }
 @media (max-width: 700px) { .ai-run-card { left: 12px; right: 12px; width: auto; bottom: calc(max(22px, env(safe-area-inset-bottom)) + 120px); } }
+/* The upload banner and the AI run card stack in one place, bottom left of the work area. */
+.work-status { position: fixed; left: calc(238px + 24px); bottom: max(22px, env(safe-area-inset-bottom)); z-index: 140; display: grid; gap: 10px; width: min(360px, calc(100vw - 238px - 48px)); }
+.work-status:empty { display: none; }
+.work-status .ai-run-card { position: static; width: auto; }
+.upload-banner-link { padding: 0; border: 0; background: none; color: #eff7ef; font: inherit; text-decoration: underline; cursor: pointer; }
+@media (max-width: 1200px) { .work-status { left: calc(216px + 20px); width: min(340px, calc(100vw - 216px - 40px)); } }
+@media (max-width: 950px) { .work-status { left: calc(190px + 16px); width: min(320px, calc(100vw - 190px - 32px)); } }
+@media (max-width: 700px) { .work-status { left: 12px; right: 12px; width: auto; bottom: calc(max(22px, env(safe-area-inset-bottom)) + 120px); } }
