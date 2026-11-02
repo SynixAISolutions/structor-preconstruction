@@ -142,4 +142,23 @@ assert.equal(P2.removePackage(custom, "pool-equipment").packages.some(p => p.id 
 assert.throws(() => P2.removePackage(sample, sample.scopes[0].packageId), /bid form has been published|scope items/);
 assert.throws(() => P2.removePackage(addScope(custom, { packageId: "pool-equipment", title: "Pool pumps" }, "Sadie"), "pool-equipment"), /Move Pool equipment's scope items/);
 
-console.log(`Procurement checked: ${sample.packages.length} packages, ${sample.scopes.length} scope items; move, all-trades, review, publish/revise, invitations, outreach.`);
+// Combining trades: scope items, sections and sheets move; the trade goes; its estimator is tagged once.
+{
+  let two = P2.addPackage(P2.addPackage(empty, { name: "Security systems", code: "28 10 00", owner: "Sadie" }), { name: "Telecom", code: "27 10 00", owner: "Omar" });
+  two = { ...two, packages: two.packages.map(p => p.id === "security-systems" ? { ...p, sections: ["28 10 00", "28 23 00"], sheets: ["TE1.1", "TY1.1"] } : { ...p, sections: ["27 10 00"], sheets: ["TE1.1"] }) };
+  two = addScope(addScope(two, { packageId: "security-systems", title: "Card readers" }, "Sadie"), { packageId: "security-systems", title: "Cameras" }, "Sadie");
+  two = P2.approveScope(two, two.scopes[0].id, "Sadie");
+  const combined = P2.combinePackages(two, "security-systems", "telecom", "Marcel", "2026-11-02T09:00:00.000Z");
+  assert.deepEqual(combined.packages.map(p => [p.id, p.sections, p.sheets]), [["telecom", ["27 10 00", "28 10 00", "28 23 00"], ["TE1.1", "TY1.1"]]], "Its sections and sheets join the other package");
+  assert.deepEqual(combined.scopes.map(s => [s.title, s.packageId, s.status, s.history.at(-1).kind]), [["Card readers", "telecom", "draft", "moved"], ["Cameras", "telecom", "draft", "moved"]], "Its scope items move as drafts for the other estimator");
+  assert.deepEqual(combined.notifications.slice(two.notifications.length).map(n => [n.recipient, n.text]), [["Omar", "Marcel combined Security systems into Telecom: 2 scope items moved. They need your review."]], "One notification, not one per item");
+  const noLists = P2.addPackage(P2.addPackage(empty, { name: "A", code: "10 14 00" }), { name: "B", code: "10 14 23" });
+  const listed = { ...noLists, packages: noLists.packages.map(p => p.id === "a" ? { ...p, sections: ["10 14 00"], sheets: ["A9.1"] } : p) };
+  assert.deepEqual(P2.combinePackages(listed, "a", "b", "M").packages.map(p => [p.id, p.sections, p.sheets]), [["b", ["10 14 00"], undefined]], "A package without its own sheet list keeps picking sheets by the CSI rules");
+  assert.throws(() => P2.combinePackages(two, "telecom", "telecom", "M"), /another trade/);
+  assert.throws(() => P2.combinePackages(sample, sample.packages.find(p => p.published).id, sample.packages.find(p => !p.published).id, "M"), /published/);
+  const invited = P2.inviteBidder(two, "security-systems", "b-1", "Sadie");
+  assert.throws(() => P2.combinePackages(invited, "security-systems", "telecom", "M"), /invited bidders/);
+}
+
+console.log(`Procurement checked: ${sample.packages.length} packages, ${sample.scopes.length} scope items; move, all-trades, review, publish/revise, invitations, outreach, combining trades.`);

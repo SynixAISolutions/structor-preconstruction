@@ -236,6 +236,36 @@ export function removePackage(state: Procurement, id: string): Procurement {
   return { ...state, packages: state.packages.filter(p => p.id !== id) };
 }
 
+/**
+ * Combines one trade into another: the AI's bid packages are a starting point, and an estimator buys some trades
+ * together. Its scope items move to the other package as drafts for its estimator (tagged once), its specification
+ * sections and drawing sheets join that package, so readings and drawing references find them there, and the trade
+ * is removed. Items in every trade's bid form stay in every trade's bid form. Refused for a published trade or one
+ * with invited bidders, as removing it is.
+ */
+export function combinePackages(state: Procurement, fromId: string, toId: string, by: string, at = now()): Procurement {
+  const from = findPackage(state, fromId), to = findPackage(state, toId);
+  if (from.id === to.id) fail("Choose another trade to combine it with.");
+  if (from.published) fail(`${from.name}'s bid form has been published; it can't be combined.`);
+  if (state.invitations.some(i => i.packageId === from.id)) fail(`${from.name} has invited bidders; it can't be combined.`);
+  let moved = 0;
+  const scopes = state.scopes.map((s): ScopeItem => {
+    if (s.packageId !== from.id) return s;
+    if (s.allTrades) return { ...s, packageId: to.id };
+    moved++;
+    return { ...s, packageId: to.id, status: "draft", history: [...s.history, { kind: "moved", at, by, from: from.id, to: to.id }] };
+  });
+  const join = (a: string[] = [], b: string[] = []) => [...new Set([...a, ...b])];
+  // Sheets join only a package with its own list; one without picks its sheets by the CSI rules, which still apply.
+  const merged: TradePackage = { ...to, sections: from.sections || to.sections ? join(to.sections, from.sections) : undefined, sheets: to.sheets ? join(to.sheets, from.sheets) : undefined };
+  const packages = state.packages.filter(p => p.id !== from.id).map(p => p.id === to.id ? merged : p);
+  if (!moved || !to.owner || to.owner === by) return { ...state, packages, scopes };
+  return { ...state, packages, scopes, notifications: [...state.notifications, notify({
+    kind: "scope-moved", recipientType: "team", recipient: to.owner, packageId: to.id, at,
+    text: `${by} combined ${from.name} into ${to.name}: ${moved} scope item${moved === 1 ? "" : "s"} moved. They need your review.`,
+  })] };
+}
+
 // ── Scope review ────────────────────────────────────────────────────────────
 
 export function addScope(state: Procurement, input: { packageId: string; title: string; detail?: string; source?: string; origin?: ScopeOrigin }, by: string, at = now()): Procurement {

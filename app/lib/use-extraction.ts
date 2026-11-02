@@ -6,7 +6,9 @@ import { acceptDraft, ExtractionRuleError, type ExtractionState } from "./extrac
 import { useDrawingFlip } from "./use-drawing-flip";
 import { useLocalDraft } from "./use-local-draft";
 import { useProcurement } from "./use-procurement";
-import { removeReviewedScope, approveWithRegions } from "./scope-review";
+import { removeReviewedScope, approveWithRegions, combineTrades } from "./scope-review";
+import { combineAiReferences } from "./sheet-reference-client";
+import { getActiveProjectId } from "./project-scope";
 
 /**
  * The open project's AI findings and their review, in this browser (demo), under "extraction".
@@ -76,5 +78,21 @@ export function useExtraction() {
     }
   }, [setExtraction, runProcurement, runFlip]);
 
-  return { extraction, procurement, runProcurement, flip, runFlip, run, accept, removeScope, approveScopeItem };
+  /** Combines one trade into another in the bid forms, the AI's waiting findings, Drawing Flip and the AI's drawing references (lib/scope-review combineTrades). */
+  const combine = useCallback((fromId: string, toId: string, by: string): string | null => {
+    try {
+      const next = combineTrades(latest.current, fromId, toId, by);
+      latest.current = next;
+      setExtraction(next.extraction);
+      runProcurement(() => next.procurement);
+      runFlip(() => next.flip);
+      combineAiReferences(getActiveProjectId(), fromId, toId);
+      return null;
+    } catch (error) {
+      if (error instanceof Error && error.name === "ProcurementRuleError") return error.message;
+      throw error;
+    }
+  }, [setExtraction, runProcurement, runFlip]);
+
+  return { extraction, procurement, runProcurement, flip, runFlip, run, accept, removeScope, approveScopeItem, combine };
 }

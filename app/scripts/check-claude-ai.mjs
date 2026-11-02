@@ -9,6 +9,7 @@ const H = await import("../lib/sheet-reference-ai.ts");
 const P = await import("../lib/project-scopes.ts");
 const K = await import("../lib/ai-cost.ts");
 const A = await import("../lib/auto-scope-plan.ts");
+const Refs = await import("../lib/sheet-reference-client.ts");
 
 // ── Claude's answer as JSON ──
 assert.deepEqual(C.jsonFromText('{"a":1}'), { a: 1 });
@@ -189,5 +190,18 @@ assert.equal(A.runSummary({ trades: [], added: 0, duplicates: 0, newTrades: ["Ti
 // Haiku reads Project 1 in full for about what Opus charges for a few trades.
 const fullHaiku = K.estimateCost("claude-haiku-5-5", A.readingWork([{ sections: [{ first: 1, last: 1084 }], sheets: Array(120).fill({}) }]));
 assert.ok(fullHaiku < big / 15, `Haiku costs about a twentieth of Opus (${fullHaiku} vs ${big})`);
+
+// Combining trades: the saved AI references of the trade removed join the other's, one entry per sheet.
+{
+  const ref = (docId, page, lines) => ({ docId, page, sheet: `S${page}`, title: "", discipline: "", lines });
+  const saved = { key: "k", model: "claude-haiku-5-5", at: "", read: 9, failed: [], packages: ["security", "telecom", "doors"], refs: { security: [ref("d", 3, ["CARD READER"]), ref("d", 9, ["CAMERA"])], telecom: [ref("d", 3, ["DATA OUTLET", "CARD READER"]), ref("d", 5, ["RACK"])], doors: [ref("d", 2, ["DOOR TYPE A"])] } };
+  const combined = Refs.combineReferences(saved, "security", "telecom");
+  assert.deepEqual([combined.packages, Object.keys(combined.refs).sort()], [["telecom", "doors"], ["doors", "telecom"]]);
+  assert.deepEqual(combined.refs.telecom.map(r => [r.page, r.lines]), [[3, ["DATA OUTLET", "CARD READER"]], [5, ["RACK"]], [9, ["CAMERA"]]], "One entry per sheet, in sheet order, lines not repeated");
+  assert.deepEqual(combined.refs.doors, saved.refs.doors);
+  assert.equal(Refs.combineReferences(saved, "walls", "telecom"), saved, "A trade the AI pass didn't look for changes nothing");
+  const intoUnsearched = Refs.combineReferences(saved, "security", "fire-alarm");
+  assert.deepEqual([intoUnsearched.packages, "security" in intoUnsearched.refs, "fire-alarm" in intoUnsearched.refs], [["telecom", "doors"], false, false], "Into a trade the pass didn't look for: that trade keeps the CSI rules");
+}
 
 console.log("Claude, AI bid packages and AI drawing references: all checks passed");

@@ -1,6 +1,6 @@
 import { acceptDraft, ExtractionRuleError, type Draft, type ExtractionState, type RegionDraft, type ReviewRecords } from "./extraction";
 import { linkScope } from "./drawing-flip";
-import { addScope, applyScopeToAllTrades, approveScope, type Procurement } from "./procurement";
+import { addScope, applyScopeToAllTrades, approveScope, combinePackages, type Procurement } from "./procurement";
 
 export type GeneralScope = { id: string; title: string; detail: string; source: string };
 /** The AI's proposals still to review in a trade's bid form: an accepted line or highlight now lives in the bid form or on Drawing Flip. */
@@ -33,6 +33,24 @@ export function approveWithRegions(records: ReviewRecords, scopeId: string, by: 
     } catch (error) { if (!(error instanceof ExtractionRuleError)) throw error; }
   }
   return next;
+}
+
+/**
+ * Combines one trade into another everywhere it is recorded: the bid forms (lib/procurement combinePackages), the AI's
+ * findings still waiting for review and the runs that read it, and its Drawing Flip highlights, so nothing the AI
+ * found for the removed trade is lost (the AI's packages are a starting point; Marcel buys some trades together).
+ */
+export function combineTrades(records: ReviewRecords, fromId: string, toId: string, by: string, at = new Date().toISOString()): ReviewRecords {
+  const procurement = combinePackages(records.procurement, fromId, toId, by, at);
+  const swap = (id: string) => id === fromId ? toId : id;
+  return {
+    procurement,
+    extraction: {
+      runs: records.extraction.runs.map(r => r.packageIds.includes(fromId) ? { ...r, packageIds: [...new Set(r.packageIds.map(swap))] } : r),
+      drafts: records.extraction.drafts.map(d => d.packageId === fromId ? { ...d, packageId: toId } : d),
+    },
+    flip: { ...records.flip, regions: records.flip.regions.map(r => r.packageId === fromId ? { ...r, packageId: toId } : r) },
+  };
 }
 
 export function removeReviewedScope(records: ReviewRecords, scopeId: string, by: string, at = new Date().toISOString()): ReviewRecords {
