@@ -1,5 +1,7 @@
 "use client";
 
+import { paintPage } from "./pdf-paint";
+
 /** One rendered page; the file and render are never written to the server or committed. */
 export async function renderDrawingPage(file: File, page: number): Promise<{ image: string; aspect: number }> {
   const pdfjs = await import("pdfjs-dist");
@@ -13,7 +15,7 @@ export async function renderDrawingPage(file: File, page: number): Promise<{ ima
     canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
     const context = canvas.getContext("2d");
     if (!context) throw new Error("This browser cannot render a drawing page.");
-    await sheet.render({ canvas, canvasContext: context, viewport }).promise;
+    await paintPage(sheet, canvas, context, viewport);
     return { image: canvas.toDataURL("image/jpeg", 0.85), aspect: original.width / original.height };
   } finally { await task.destroy(); }
 }

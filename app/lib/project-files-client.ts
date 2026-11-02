@@ -11,6 +11,7 @@ import { aiJob, readTitleBlock } from "./ai-more-client";
 import { rfpPages, type RfpFact } from "./rfp";
 import { useActiveProject } from "./project-scope";
 import { pageTextBoxes, type TextBox } from "./text-anchor";
+import { paintPage } from "./pdf-paint";
 import {
   chunkFor, emptyIndex, kindForCategory, MAX_RANGE_BYTES, sourcePath, TEXT_CHUNK,
   textSource, type PageText, type ProjectFileIndex, type StoredDocument, type StoredSheet,
@@ -223,7 +224,7 @@ async function readTitleBlocks(file: File, sheets: StoredSheet[], onProgress: (d
           // Render the whole sheet, then copy out the title-block strip (right 8.5%, lower half).
           const full = document.createElement("canvas");
           full.width = Math.ceil(viewport.width); full.height = Math.ceil(viewport.height);
-          await page.render({ canvas: full, canvasContext: full.getContext("2d")!, viewport }).promise;
+          await paintPage(page, full, full.getContext("2d")!, viewport);
           page.cleanup();
           const strip = { x: Math.floor(full.width * 0.915), y: Math.floor(full.height * 0.5) };
           const canvas = document.createElement("canvas");
@@ -354,7 +355,7 @@ export function renderStoredPage(doc: StoredDocument, pageNumber: number, size =
       canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
       const context = canvas.getContext("2d");
       if (!context) throw new Error("This browser cannot render a drawing page.");
-      await page.render({ canvas, canvasContext: context, viewport }).promise;
+      await paintPage(page, canvas, context, viewport);
       page.cleanup();
       return { image: canvas.toDataURL("image/jpeg", 0.82), aspect: original.width / original.height };
     })();
@@ -378,7 +379,7 @@ export async function renderStoredRegion(doc: StoredDocument, pageNumber: number
   canvas.width = Math.ceil(w * original.width * scale); canvas.height = Math.ceil(h * original.height * scale);
   const context = canvas.getContext("2d");
   if (!context) throw new Error("This browser cannot render a drawing page.");
-  await page.render({ canvas, canvasContext: context, viewport }).promise;
+  await paintPage(page, canvas, context, viewport);
   return canvas.toDataURL("image/jpeg", 0.82);
 }
 
