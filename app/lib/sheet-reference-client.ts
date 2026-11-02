@@ -10,7 +10,7 @@ import { useSyncExternalStore } from "react";
 import type { DrawingReference, SheetText } from "./drawing-references";
 import type { TradePackage } from "./procurement";
 import { referenceBatches, type SheetReferenceAnswer } from "./sheet-reference-ai";
-import { inAiPool } from "./ai-pool";
+import { inAiPool, timed } from "./ai-pool";
 import { drawingRegister, SCANNED_PAGE_TEXT, type StoredDocument } from "./project-files";
 import { readStoredText } from "./project-files-client";
 import { readDraft, writeDraft } from "./use-local-draft";
@@ -26,16 +26,17 @@ const listeners = new Set<() => void>();
 const set = (change: Partial<ReferenceRun>) => { snapshot = { ...snapshot, ...change }; listeners.forEach(l => l()); };
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 let controller: AbortController | null = null;
-const PARALLEL = 6;
+/** Drawing-search requests sent at once. */
+export const PARALLEL_REFERENCES = 6;
 
 type Pkg = Pick<TradePackage, "id" | "name" | "code"> & { sections: string[] };
 
-async function post(input: unknown, signal: AbortSignal): Promise<SheetReferenceAnswer & { model: string; cost: number | null }> {
+const post = (input: unknown, signal: AbortSignal): Promise<SheetReferenceAnswer & { model: string; cost: number | null }> => timed("sheet-references", async () => {
   const response = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job: "sheet-references", input }), signal });
   const body = await response.json().catch(() => ({ error: `The AI request failed (${response.status}).` }));
   if (!response.ok) throw new Error(body.error ?? `The AI request failed (${response.status}).`);
   return body;
-}
+});
 
 /** The text of every current sheet in register order, and the key naming them, as useDrawingReferences reads them. */
 export async function loadSheetTexts(documents: StoredDocument[]): Promise<{ key: string; sheets: SheetText[] }> {
@@ -61,7 +62,7 @@ export async function findReferencesWithAi(projectId: string, key: string, sheet
   const failed: string[] = [];
   let model = "", unreadSheets = 0, inARow = 0;
   const input = { packages: packages.map(p => ({ id: p.id, name: p.name, code: p.code, sections: p.sections })) };
-  await Promise.all(Array.from({ length: Math.min(PARALLEL, queue.length) }, async () => {
+  await Promise.all(Array.from({ length: Math.min(PARALLEL_REFERENCES, queue.length) }, async () => {
     for (let batch = queue.shift(); batch && !signal.aborted; batch = queue.shift()) {
       try {
         // In a slot of the tab's pool (lib/ai-pool): after an upload this runs alongside the trades' readings.
@@ -121,3 +122,5 @@ export function combineAiReferences(projectId: string, fromId: string, toId: str
 export const stopReferences = () => controller?.abort();
 
 export const useReferenceRun = (): ReferenceRun => useSyncExternalStore(subscribe, () => snapshot, () => snapshot);
+/** The drawing search in this tab right now, for the automatic run's time left. */
+export const referenceRunNow = (): ReferenceRun => snapshot;

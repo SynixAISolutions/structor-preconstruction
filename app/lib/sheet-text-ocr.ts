@@ -74,3 +74,5 @@ export const stopSheetOcr = () => controller?.abort();
 
 /** The run in this tab, if any, and what it has done. */
 export const useSheetOcr = (): SheetOcrRun => useSyncExternalStore(subscribe, () => snapshot, () => snapshot);
+/** The run in this tab right now, for the automatic run's time left. */
+export const sheetOcrNow = (): SheetOcrRun => snapshot;

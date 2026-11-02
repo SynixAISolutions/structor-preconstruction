@@ -18,12 +18,15 @@ import { applyBidPackagePlan } from "./bid-package-ai";
 import { planBidPackages } from "./bid-package-client";
 import { aiReader } from "./ai-reader-client";
 import { AUTO_READ_UNDER, estimateCost } from "./ai-cost";
-import { findReferencesWithAi, loadSheetTexts } from "./sheet-reference-client";
-import { ocrScannedSheets } from "./sheet-text-ocr";
-import { referenceWork } from "./sheet-reference-ai";
+import { findReferencesWithAi, loadSheetTexts, PARALLEL_REFERENCES, referenceRunNow } from "./sheet-reference-client";
+import { ocrScannedSheets, sheetOcrNow } from "./sheet-text-ocr";
+import { referenceWork, SHEET_REFERENCE_LIMITS } from "./sheet-reference-ai";
+import { AI_REQUESTS_AT_ONCE, aiTimes } from "./ai-pool";
+import { OCR_WORKERS, ocrWork } from "./sheet-ocr";
+import { blendPace, checkShare, FIRST_PACE, measurePace, secondsLeft, steadyLeft, tradesLeft, type Pace, type TradeLeft } from "./run-time-left";
 import { readTradeScope } from "./scope-reading";
 import { readDraft, writeDraft } from "./use-local-draft";
-import { biggestFirst, MAX_SAVED_RUNS, NO_RUNS, readingWork, runTarget, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns } from "./auto-scope-plan";
+import { biggestFirst, MAX_SAVED_RUNS, NO_RUNS, readingWork, runTarget, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns, type TradeToRead } from "./auto-scope-plan";
 import { sampleProcurement } from "./data/procurement";
 import { sampleExtraction } from "./data/extraction";
 import { sampleDrawingFlip } from "./data/drawing-flip";
@@ -31,8 +34,10 @@ import { sampleDrawingFlip } from "./data/drawing-flip";
 export const RUNS_KEY = "ai-scope-runs";
 const PARALLEL_TRADES = 6;
 
-type Snapshot = { run: AutoRun | null; leave: boolean };
-let snapshot: Snapshot = { run: null, leave: false };
+/** `left`: the seconds until the run in progress is done (lib/run-time-left), and the share of the run's time gone by,
+ * never less than it was, for the progress card's bar. */
+type Snapshot = { run: AutoRun | null; leave: boolean; left: { seconds: number; share: number } | null };
+let snapshot: Snapshot = { run: null, leave: false, left: null };
 const listeners = new Set<() => void>();
 const emit = (change: Partial<Snapshot>) => { snapshot = { ...snapshot, ...change }; listeners.forEach(l => l()); };
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
@@ -46,6 +51,20 @@ function save(run: AutoRun) {
   try { writeDraft<SavedRuns>(run.projectId, RUNS_KEY, { runs }); } catch { /* storage full: the run goes on, unsaved */ }
   emit({ run: run.status === "running" ? run : null });
 }
+
+// ── Time left ──
+// How fast the AI and this computer worked on the last run, kept in this browser for the next run's first estimate.
+const PACE_KEY = "structor-ai-run-pace";
+function keptPace(): Pace {
+  try {
+    const kept = JSON.parse(localStorage.getItem(PACE_KEY) ?? "null") ?? {};
+    return { ...FIRST_PACE, ...Object.fromEntries(Object.entries(kept).filter(([k, v]) => k in FIRST_PACE && typeof v === "number" && Number.isFinite(v) && v > 0)) };
+  } catch { return FIRST_PACE; }
+}
+const keepPace = (pace: Pace) => { try { localStorage.setItem(PACE_KEY, JSON.stringify(pace)); } catch { /* the next run starts from the 2 Nov pace */ } };
+/** Each trade's work as its files suggest it: a specification request for every five pages of a section, and its sheets. */
+const ledgerOf = <P extends { id: string }>(trades: TradeToRead<P>[], done: (id: string) => boolean = () => false) =>
+  new Map<string, TradeLeft>(trades.map(t => [t.pkg.id, { estimate: { parts: t.sections.reduce((n, s) => n + Math.ceil((s.last - s.first + 1) / 5), 0), sections: t.sections.length, sheets: t.sheets.length }, counts: null, done: done(t.pkg.id) }]));
 
 // ── Leaving while the AI works ──
 const holdTab = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
@@ -100,6 +119,29 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   const controller = new AbortController();
   let procurement = readDraft<Procurement>(projectId, "procurement", sampleProcurement);
   let newTrades: string[] = [], packagesBy = previous?.packagesBy;
+
+  // The time left, every five seconds (lib/run-time-left): what each trade still has (`ledger`, from what its files
+  // suggest until it starts, then from its own counts), the drawing search and the scanned sheets, at the pace measured
+  // since the run began. Until the AI sets the packages, Marcel's CSI trades stand in for them.
+  const pace0 = keptPace(), counters0 = { requests: aiTimes(), ocr: ocrWork() };
+  const began = Date.now();
+  let pace = pace0, shown: { seconds: number; at: number } | null = null, share = 0, setupFrom: number | null = previous ? null : Date.now();
+  let ledger = ledgerOf(tradesToRead([...procurement.packages, ...tradesToAdd(procurement.packages, { sections: specificationSections(documents), sheets: drawingRegister(documents) })], documents));
+  let searchLeft = Math.ceil(drawingRegister(documents).length / SHEET_REFERENCE_LIMITS.sheets), searching = false;
+  const tick = () => {
+    const checks = checkShare([...ledger.values()]);
+    pace = blendPace(pace0, { ...measurePace(counters0, { requests: aiTimes(), ocr: ocrWork() }), checkShare: checks.n ? checks : undefined });
+    const ocrRun = sheetOcrNow(), search = referenceRunNow();
+    const references = searching && search.running && search.projectId === projectId ? search.total - search.done : searchLeft;
+    const work = { setup: setupFrom === null ? null : (Date.now() - setupFrom) / 1000, ...tradesLeft([...ledger.values()], pace), references, scannedTiles: ocrRun.running ? (ocrRun.total - ocrRun.done) * pace.sheetTiles : 0 };
+    shown = steadyLeft(shown, secondsLeft(work, pace, { pool: AI_REQUESTS_AT_ONCE, ocr: OCR_WORKERS, references: PARALLEL_REFERENCES }), Date.now());
+    const gone = (Date.now() - began) / 1000;
+    share = Math.max(share, gone / (gone + shown.seconds || 1));
+    emit({ left: { seconds: shown.seconds, share } });
+  };
+  const ticking = setInterval(tick, 5_000);
+  tick();
+
   if (!previous) {
     emit({ run: { id: "", projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades: [], trades: [], added: 0, duplicates: 0 } });
     try {
@@ -116,6 +158,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
     }
     writeDraft(projectId, "procurement", procurement);
   }
+  setupFrom = null;
 
   // 1b. Scanned sheets have no text to search: each is read once with OCR in the background and saved for everyone
   // (lib/sheet-text-ocr, free, about a minute a sheet), while the trades are read (Danial, 28 Oct: "Make it automatic").
@@ -136,6 +179,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   }
   const scopesLater = fullCost !== undefined && fullCost >= AUTO_READ_UNDER;
   const readable = scopesLater ? [] : all;
+  ledger = ledgerOf(readable, id => !!previous?.trades.some(t => t.packageId === id && t.status === "done"));
   const queued = (t: (typeof readable)[number]): AutoTrade => ({ packageId: t.pkg.id, name: t.pkg.name, status: "queued", added: 0, note: "" });
   let run: AutoRun = previous
     ? { ...previous, status: "running", newTrades: [...new Set([...previous.newTrades, ...newTrades])], trades: readable.map(t => previous.trades.find(x => x.packageId === t.pkg.id && x.status === "done") ?? queued(t)), scopesLater, fullCost }
@@ -155,8 +199,11 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
     await ocr;
     searchable = true;
     const texts = await loadSheetTexts(storedDocuments(projectId) ?? documents).catch(() => null) ?? sheetTexts;
+    searching = true;
     if (texts?.sheets.some(s => s.text.trim())) await findReferencesWithAi(projectId, texts.key, texts.sheets, refPackages).catch(() => {});
+    searchLeft = 0;
   })() : null;
+  if (!references) searchLeft = 0;
 
   // The biggest trades start first; every request shares the tab's pool (lib/ai-pool), so the last trades use every slot.
   const queue = biggestFirst(stillToRead(readable, previous));
@@ -167,7 +214,12 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
       try {
         const outcome = await readTradeScope({
           pkg, sections, sheets, signal: controller.signal,
-          onProgress: p => { const note = p.total ? `Reading part ${Math.min(p.done + 1, p.total)} of ${p.total}` : p.note; if (run.trades.find(t => t.packageId === pkg.id)?.note !== note) setTrade(pkg.id, { note }); },
+          onProgress: p => {
+            const left = ledger.get(pkg.id);
+            if (left) left.counts = p.counts;
+            const note = p.total ? `Reading part ${Math.min(p.done + 1, p.total)} of ${p.total}` : p.note;
+            if (run.trades.find(t => t.packageId === pkg.id)?.note !== note) setTrade(pkg.id, { note });
+          },
           addFlipPages: pages => {
             try {
               const flip = pages.reduce((state, page) => state.pages.some(x => x.sheet === page.sheet) ? state : addPage(state, page), readDraft<DrawingFlipState>(projectId, "drawing-flip", sampleDrawingFlip));
@@ -189,6 +241,8 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
       } catch (error) {
         setTrade(pkg.id, { status: "failed", note: error instanceof Error ? error.message : "The reading failed." });
       }
+      const left = ledger.get(pkg.id);
+      if (left) left.done = true;
     }
   }));
 
@@ -199,6 +253,9 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
     await references;
   }
 
+  clearInterval(ticking);
+  keepPace(pace);
+  emit({ left: null });
   run = { ...run, status: "done", finishedAt: at() };
   save(run);
   active = null;

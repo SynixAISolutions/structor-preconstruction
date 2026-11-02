@@ -6,8 +6,9 @@
 import type { BidPackagePlan } from "./bid-package-ai";
 import { drawingRegister, specificationSections, type StoredDocument } from "./project-files";
 import type { TradePackage } from "./procurement";
+import { timed } from "./ai-pool";
 
-export async function planBidPackages(documents: StoredDocument[], packages: Pick<TradePackage, "id" | "name" | "code">[], signal?: AbortSignal): Promise<BidPackagePlan & { model: string }> {
+export const planBidPackages = (documents: StoredDocument[], packages: Pick<TradePackage, "id" | "name" | "code">[], signal?: AbortSignal): Promise<BidPackagePlan & { model: string }> => timed("bid-packages", async () => {
   const input = {
     sections: specificationSections(documents).map(s => ({ section: s.section, title: s.title })),
     sheets: drawingRegister(documents).map(r => ({ sheet: r.sheet, title: r.title, discipline: r.discipline })),
@@ -17,4 +18,4 @@ export async function planBidPackages(documents: StoredDocument[], packages: Pic
   const body = await response.json().catch(() => ({ error: `The AI request failed (${response.status}).` }));
   if (!response.ok) throw new Error(body.error ?? `The AI request failed (${response.status}).`);
   return body;
-}
+});
