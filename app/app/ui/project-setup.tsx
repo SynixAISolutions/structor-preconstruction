@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { AlertCircle, ArrowUpRight, Check, CircleHelp, Clock3, FileUp } from "lucide-react";
 import type { Project } from "../../lib/projects";
-import { clearDecision, decide, markReviewed, type SetupDecision, type SetupLevel, type SetupStatus } from "../../lib/project-setup";
+import { clearDecision, decide, markReviewed, OWN_TODO_STEPS, type SetupDecision, type SetupLevel, type SetupStatus } from "../../lib/project-setup";
 import { screenLabel } from "../../lib/screens";
 import { latestDocuments, type StoredDocument } from "../../lib/project-files";
 import { uploadProjectPdf, useProjectDocuments, type UploadProgress } from "../../lib/project-files-client";
@@ -61,7 +61,7 @@ export function SetupChecklist({ project, setup, filter, onSave, navigate, notif
   const summary = setup.summary;
   if (!summary) return null;
   const reviewDocs = latestDocuments(documents).filter(d => d.category === "RFP" || d.category === "Addenda");
-  const rows: SetupRow[] = summary.steps.filter(step => step.id !== "scopes" && step.id !== "budget").flatMap(step => step.items.length
+  const rows: SetupRow[] = summary.steps.filter(step => !OWN_TODO_STEPS.has(step.id)).flatMap(step => step.items.length
     ? step.items.map(item => ({ key: `${step.id}:${item.id}`, target: `${step.id}:${item.id}`, stepTitle: step.title, label: item.label, status: item.status, level: item.level, note: item.note, why: item.why, category: item.category, decision: item.decision, reconsider: item.reconsider, screen: step.screen }))
     : [{ key: step.id, target: step.id, stepTitle: step.title, label: step.title, status: step.status, level: step.level, note: step.detail, why: "", category: "", decision: step.decision, reconsider: step.reconsider, screen: step.screen }]);
   const open = rows.filter(row => !inPlace(row)), done = rows.filter(inPlace);

@@ -120,9 +120,9 @@ const proc = { packages: [{ id: "drywall", name: "Drywall", division: "09", code
 const applied = B.applyBidPackagePlan(proc, plan);
 assert.deepEqual(applied.added, ["Doors, frames & hardware"]);
 assert.deepEqual(applied.procurement.packages.map(p => [p.id, p.name, p.owner, (p.sections ?? []).join(), (p.sheets ?? []).join()]), [
-  ["drywall", "Drywall", "Ana", "09 21 16,09 51 13", "A8.1"],
   ["doors-frames-hardware", "Doors, frames & hardware", "", "08 11 13,08 71 00", "A6.1,A8.1"],
-], "An existing package keeps its name and owner and takes the AI's sections and sheets");
+  ["drywall", "Drywall", "Ana", "09 21 16,09 51 13", "A8.1"],
+], "An existing package keeps its name and owner and takes the AI's sections and sheets; packages end up in CSI order");
 assert.deepEqual(B.applyBidPackagePlan(applied.procurement, plan).added, [], "Applying the same plan again adds nothing");
 
 // The packages' sections and sheets lead the scope reading.
@@ -130,7 +130,7 @@ const sec = (section, title = "") => ({ section, title, first: 1, last: 2 });
 const by = P.sectionsByTrade([sec("09 21 16"), sec("09 51 13"), sec("08 71 00"), sec("09 65 13")], applied.procurement.packages);
 assert.deepEqual(Object.fromEntries([...by].map(([id, list]) => [id, list.map(s => s.section)])), { drywall: ["09 21 16", "09 51 13", "09 65 13"], "doors-frames-hardware": ["08 71 00"] }, "Sections go where the AI put them; one it didn't place follows the CSI rules");
 const sheetList = [{ sheet: "A1.1", title: "FLOOR PLAN", discipline: "Architectural" }, { sheet: "A6.1", title: "DOOR SCHEDULE", discipline: "Architectural" }, { sheet: "A8.1", title: "PARTITION TYPES", discipline: "Architectural" }];
-assert.deepEqual(P.sheetsForTrade(sheetList, applied.procurement.packages[1]).map(r => r.sheet), ["A6.1", "A8.1"], "The AI's sheets, in its order");
+assert.deepEqual(P.sheetsForTrade(sheetList, applied.procurement.packages.find(p => p.id === "doors-frames-hardware")).map(r => r.sheet), ["A6.1", "A8.1"], "The AI's sheets, in its order");
 assert.deepEqual(P.sheetsForTrade(sheetList, { code: "08 11 13" }).map(r => r.sheet), ["A6.1"], "A package without AI sheets keeps the title rules");
 
 // ── The AI finds each package on the drawings ──

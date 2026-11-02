@@ -107,7 +107,8 @@ export async function bidPackagesJob(raw: unknown, key: string, signal: AbortSig
 
 /**
  * The plan applied to procurement: an existing package keeps its name and takes the AI's sections and sheets; a
- * new one is added with them (one whose name a package already has joins that package). Returns the new names.
+ * new one is added with them (one whose name a package already has joins that package). Packages end up in CSI
+ * order. Returns the new names.
  */
 export function applyBidPackagePlan(state: Procurement, plan: Pick<BidPackagePlan, "packages">): { procurement: Procurement; added: string[] } {
   let procurement = state;
@@ -122,5 +123,7 @@ export function applyBidPackagePlan(state: Procurement, plan: Pick<BidPackagePla
     assign(procurement.packages.at(-1)!.id, p);
     added.push(p.name);
   }
-  return { procurement, added };
+  // In CSI order, as an estimator reads a bid list, whatever order the AI answered in (2 Nov: Site utilities, 33, came
+  // before Landscape, 32). Packages with the same main section keep their order.
+  return { procurement: { ...procurement, packages: [...procurement.packages].sort((a, b) => a.code.localeCompare(b.code)) }, added };
 }
