@@ -10,6 +10,7 @@ import { useSyncExternalStore } from "react";
 import type { DrawingReference, SheetText } from "./drawing-references";
 import type { TradePackage } from "./procurement";
 import { referenceBatches, type SheetReferenceAnswer } from "./sheet-reference-ai";
+import { inAiPool } from "./ai-pool";
 import { drawingRegister, SCANNED_PAGE_TEXT, type StoredDocument } from "./project-files";
 import { readStoredText } from "./project-files-client";
 import { writeDraft } from "./use-local-draft";
@@ -63,7 +64,8 @@ export async function findReferencesWithAi(projectId: string, key: string, sheet
   await Promise.all(Array.from({ length: Math.min(PARALLEL, queue.length) }, async () => {
     for (let batch = queue.shift(); batch && !signal.aborted; batch = queue.shift()) {
       try {
-        const answer = await post({ ...input, sheets: batch.map(s => ({ sheet: s.sheet, title: s.title, discipline: s.discipline, text: s.text })) }, signal);
+        // In a slot of the tab's pool (lib/ai-pool): after an upload this runs alongside the trades' readings.
+        const answer = await inAiPool(() => post({ ...input, sheets: batch.map(s => ({ sheet: s.sheet, title: s.title, discipline: s.discipline, text: s.text })) }, signal));
         model = answer.model; inARow = 0;
         set({ cost: snapshot.cost + (answer.cost ?? 0) });
         for (const s of answer.sheets) {
