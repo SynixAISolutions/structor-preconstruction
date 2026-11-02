@@ -25,8 +25,9 @@ function ocrWorker(): Promise<Worker> {
   const made = workers[i] ??= (async () => {
     const { createWorker, PSM } = await import("tesseract.js");
     const created = await createWorker("eng");
-    // Drawings are labels and schedules scattered over a sheet, not paragraphs.
-    await created.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT });
+    // Drawings are labels and schedules scattered over a sheet, not paragraphs. Tesseract's notes on every tile
+    // ("Estimating resolution as 297") went to the console as errors, about 500 a run, burying real ones: they go nowhere.
+    await created.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT, debug_file: "/dev/null" });
     return created;
   })();
   made.catch(() => { workers[i] = undefined; });
