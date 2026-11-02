@@ -20,3 +20,15 @@ export async function inAiPool<T>(request: () => Promise<T>): Promise<T> {
 
 /** Requests in flight and waiting, for the checks. */
 export const aiPoolLoad = () => ({ busy, waiting: waiting.length });
+
+/** How long each kind of AI request has taken since the tab opened, answered ones only: the automatic run measures
+ * its pace from it for the time left (lib/run-time-left). */
+const times: Record<string, { n: number; ms: number }> = {};
+export async function timed<T>(job: string, request: () => Promise<T>): Promise<T> {
+  const start = Date.now();
+  const answer = await request();
+  const t = (times[job] ??= { n: 0, ms: 0 });
+  t.n++; t.ms += Date.now() - start;
+  return answer;
+}
+export const aiTimes = () => Object.fromEntries(Object.entries(times).map(([job, t]) => [job, { ...t }]));

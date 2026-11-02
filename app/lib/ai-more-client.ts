@@ -4,14 +4,14 @@
 
 import type { DraftInput } from "./extraction";
 import type { ConsolidatedLine, TitleBlock } from "./ai-jobs-more";
-import { AI_REQUESTS_AT_ONCE, inAiPool } from "./ai-pool";
+import { AI_REQUESTS_AT_ONCE, inAiPool, timed } from "./ai-pool";
 
-export async function aiJob<T>(job: string, input: unknown, signal?: AbortSignal): Promise<T & { model: string }> {
+export const aiJob = <T>(job: string, input: unknown, signal?: AbortSignal): Promise<T & { model: string }> => timed(job, async () => {
   const response = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job, input }), signal });
   const body = await response.json().catch(() => ({ error: `The AI request failed (${response.status}).` }));
   if (!response.ok) throw new Error(body.error ?? `The AI request failed (${response.status}).`);
   return body;
-}
+});
 
 type ScopeDraft = Extract<DraftInput, { kind: "scope" }>;
 
@@ -19,7 +19,7 @@ type ScopeDraft = Extract<DraftInput, { kind: "scope" }>;
  * Merges a trade's paragraph-level scope findings into bid-form lines. Each line keeps the citations
  * of the findings it covers (up to four) and lists their sections as its source.
  */
-export async function consolidateScope(trade: string, drafts: DraftInput[], signal?: AbortSignal, sectionTitles: Record<string, string> = {}): Promise<{ drafts: DraftInput[]; merged: number; dropped: number }> {
+export async function consolidateScope(trade: string, drafts: DraftInput[], signal?: AbortSignal, sectionTitles: Record<string, string> = {}, onProgress?: (done: number, total: number) => void): Promise<{ drafts: DraftInput[]; merged: number; dropped: number }> {
   const scopes = drafts.filter((d): d is ScopeDraft => d.kind === "scope");
   const others = drafts.filter(d => d.kind !== "scope");
   if (scopes.length <= 12) return { drafts, merged: 0, dropped: 0 };
@@ -27,7 +27,9 @@ export async function consolidateScope(trade: string, drafts: DraftInput[], sign
   // lines before reaching its last sections). About one line per four findings, 3 to 12 per section.
   const groups = [...Map.groupBy(scopes, d => d.source.split(" · ")[0]).entries()];
   const results: DraftInput[][] = new Array(groups.length);
-  let next = 0, used = 0;
+  let next = 0, used = 0, answered = 0;
+  const asked = groups.filter(([, items]) => items.length > 3).length;
+  onProgress?.(0, asked);
   // Each section's request in a slot of the tab's shared pool (lib/ai-pool): a big trade finishing alone uses them all.
   await Promise.all(Array.from({ length: Math.min(AI_REQUESTS_AT_ONCE, groups.length) }, async () => {
     while (next < groups.length) {
@@ -46,6 +48,7 @@ export async function consolidateScope(trade: string, drafts: DraftInput[], sign
         if (signal?.aborted) throw error;
         results[i] = items; used += items.length;
       }
+      onProgress?.(++answered, asked);
     }
   }));
   return { drafts: [...results.flat(), ...others], merged: scopes.length, dropped: scopes.length - used };

@@ -15,8 +15,10 @@ import type { RegisterRow, VolumeSection } from "./project-files";
 import { readPageTextBoxes, readStoredText, renderStoredPage } from "./project-files-client";
 import { findInSheetImage } from "./sheet-ocr";
 import { checkImageQuotes, pinFindings, type TextBox } from "./text-anchor";
+import { NO_COUNTS, type TradeCounts } from "./run-time-left";
 
-export type TradeReadProgress = { note: string; done: number; total: number };
+/** `counts` says how far the reading is in requests and sheets, for the automatic run's time left (lib/run-time-left). */
+export type TradeReadProgress = { note: string; done: number; total: number; counts: TradeCounts };
 
 /** One trade's specification and drawing readings as one run (both documents cited). */
 export const mergeRuns = (a: ScopeRunResult, b: ScopeRunResult): ScopeRunResult => {
@@ -41,7 +43,8 @@ export async function readTradeScope(args: {
   const { pkg, sections: stored, sheets, signal } = args;
   // Both halves report at once: "Reading part 3 of 46 · Reading drawing sheet 2 of 6".
   const notes = { specification: stored.length ? "Loading section text…" : "", sheets: sheets.length ? "Reading drawing sheets…" : "" };
-  const say = (half: keyof typeof notes, note: string) => { notes[half] = note; args.onProgress({ note: [notes.specification, notes.sheets].filter(Boolean).join(" · "), done: 0, total: 0 }); };
+  const counts: TradeCounts = { ...NO_COUNTS, specDone: !stored.length };
+  const say = (half: keyof typeof notes, note: string) => { notes[half] = note; args.onProgress({ note: [notes.specification, notes.sheets].filter(Boolean).join(" · "), done: 0, total: 0, counts: { ...counts } }); };
   say("specification", notes.specification);
 
   async function readSpecification(): Promise<ScopeRunResult | null> {
@@ -54,10 +57,11 @@ export async function readTradeScope(args: {
       return { doc, sections, chunks: sections.reduce((n, s) => n + chunkPages(s.pages).length, 0) };
     }));
     const total = volumes.reduce((n, v) => n + v.chunks, 0);
+    counts.parts = total;
     let before = 0;
     for (const { doc, sections, chunks } of volumes) {
       if (!sections.length || signal.aborted) continue;
-      const read = await extractTradeScope({ pkg, manual: { name: doc.name, pageCount: doc.pageCount }, sections, signal, onProgress: done => say("specification", `Reading part ${Math.min(before + done + 1, total)} of ${total}`) });
+      const read = await extractTradeScope({ pkg, manual: { name: doc.name, pageCount: doc.pageCount }, sections, signal, onProgress: done => { counts.partsDone = before + done; say("specification", `Reading part ${Math.min(before + done + 1, total)} of ${total}`); } });
       before += chunks;
       outcome = outcome ? mergeRuns(outcome, read) : read;
     }
@@ -66,13 +70,14 @@ export async function readTradeScope(args: {
     if (outcome && outcome.input.drafts.length > 12 && !signal.aborted) {
       say("specification", "Writing bid-form lines…");
       try {
-        const lines = await consolidateScope(pkg.name, outcome.input.drafts, signal, Object.fromEntries(stored.map(s => [s.section, s.title])));
+        const lines = await consolidateScope(pkg.name, outcome.input.drafts, signal, Object.fromEntries(stored.map(s => [s.section, s.title])), (done, asked) => { counts.lines = asked; counts.linesDone = done; });
         outcome.input = { ...outcome.input, drafts: lines.drafts };
         if (lines.merged) outcome.dropped.push({ what: `${lines.merged} paragraph findings`, reason: `Merged into ${lines.drafts.filter(d => d.kind === "scope").length} bid-form lines${lines.dropped ? `; ${lines.dropped} judged boilerplate` : ""}.` });
       } catch (error) {
         outcome.dropped.push({ what: "Bid-form lines", reason: `Could not merge findings (${error instanceof Error ? error.message : "AI error"}); every paragraph finding is listed.` });
       }
     }
+    counts.specDone = true;
     say("specification", "");
     return outcome;
   }
@@ -85,11 +90,12 @@ export async function readTradeScope(args: {
       const doc = rows[0].doc, aspects = new Map<number, number>();
       const text = await readStoredText(doc, { first: Math.min(...rows.map(r => r.page)), last: Math.max(...rows.map(r => r.page)) });
       const drawn = await extractDrawingScope({
-        pkg, document: doc.name, pageCount: doc.pageCount, signal, onProgress: d => say("sheets", `Reading drawing sheet ${Math.min(done + d + 1, sheets.length)} of ${sheets.length}`),
+        pkg, document: doc.name, pageCount: doc.pageCount, signal, onProgress: d => { counts.sheetsRead = done + d; say("sheets", `Reading drawing sheet ${Math.min(done + d + 1, sheets.length)} of ${sheets.length}`); },
         pages: rows.map(r => ({ page: r.page, sheet: r.sheet, text: text.find(p => p.page === r.page)?.text ?? "" })),
         render: page => renderStoredPage(doc, page, 2000).then(r => { aspects.set(page, r.aspect); return { image: r.image }; }),
       });
       done += rows.length;
+      counts.sheetsRead = done; counts.sheetsSettled = done;
       // Quotes the AI read from a sheet's image, not its text layer, are looked for on the image with OCR: one
       // that isn't printed there holds its finding back from the bid form (lib/extraction notOnSheet). The sheets are
       // checked side by side, spread over the OCR workers (lib/sheet-ocr).
@@ -97,6 +103,7 @@ export async function readTradeScope(args: {
       await Promise.all((drawn.drawingPages ?? []).map(async p => {
         const quotes = [...new Set(drawn.input.drafts.flatMap(d => d.citations).filter(c => c.verification === "image" && c.document === doc.name && c.page === p.page).map(c => c.quote))];
         if (!quotes.length || signal.aborted) return;
+        counts.checks++;
         try {
           const read = await findInSheetImage(doc, p.page, quotes, r => say("sheets", `Checking the AI's quotes on sheet ${p.sheet}: reading the image, part ${r.done + 1} of ${r.total}`), signal);
           ocr.set(p.sheet, read.words);
@@ -104,6 +111,8 @@ export async function readTradeScope(args: {
         } catch (error) {
           drawn.dropped.push({ what: `Quotes read from sheet ${p.sheet}'s image`, reason: `Not checked on the sheet (${error instanceof Error ? error.message : "OCR failed"}); check them against the sheet yourself.` });
         }
+        counts.checksDone++;
+        say("sheets", notes.sheets);
       }));
       // Marks go where the cited words are printed; the AI's own outlines stay only where the text can't place them.
       const boxes = new Map<string, TextBox[]>();

@@ -20,7 +20,7 @@ type Worker = Awaited<ReturnType<typeof import("tesseract.js")["createWorker"]>>
 export const OCR_WORKERS = typeof navigator === "undefined" ? 2 : Math.max(1, Math.min(4, Math.floor((navigator.hardwareConcurrency || 4) / 3)));
 const workers: (Promise<Worker> | undefined)[] = [];
 let turn = 0;
-function ocrWorker(): Promise<Worker> {
+function ocrWorker(): { slot: number; worker: Promise<Worker> } {
   const i = turn++ % OCR_WORKERS;
   const made = workers[i] ??= (async () => {
     const { createWorker, PSM } = await import("tesseract.js");
@@ -31,8 +31,19 @@ function ocrWorker(): Promise<Worker> {
     return created;
   })();
   made.catch(() => { workers[i] = undefined; });
-  return made;
+  return { slot: i, worker: made };
 }
+
+/** What the OCR workers have done since the tab opened, for the automatic run's time left (lib/run-time-left): tiles
+ * read and the time workers were busy reading them, quote checks and the tiles they took, scanned sheets and theirs. */
+const work = { tiles: 0, busyMs: 0, checks: 0, checkTiles: 0, sheets: 0, sheetTiles: 0 };
+const using: number[] = [], busySince: number[] = [];
+const busy = (slot: number, change: 1 | -1) => {
+  using[slot] = (using[slot] ?? 0) + change;
+  if (change === 1 && using[slot] === 1) busySince[slot] = Date.now();
+  if (change === -1 && using[slot] === 0) work.busyMs += Date.now() - busySince[slot];
+};
+export const ocrWork = () => ({ ...work, busyMs: work.busyMs + using.reduce((ms, n, slot) => ms + (n ? Date.now() - busySince[slot] : 0), 0) });
 
 const imageSize = (src: string) => new Promise<{ width: number; height: number }>((resolve, reject) => {
   const image = new Image();
@@ -63,20 +74,31 @@ function sheetRead(doc: StoredDocument, page: number): Promise<SheetRead> {
  */
 export async function findInSheetImage(doc: StoredDocument, page: number, quotes: string[], onProgress?: (progress: OcrProgress) => void, signal?: AbortSignal): Promise<{ marks: Box[]; words: TextBox[]; wholeSheet: boolean }> {
   const look = (words: TextBox[]) => quotes.map(q => findOnSheet(words, q, MAX_TAG_MARKS, { fuzzy: true }));
-  const { words, wholeSheet } = await readTiles(doc, page, read => look(read).every(m => m.length), onProgress, signal);
+  const { words, wholeSheet, read } = await readTiles(doc, page, read => look(read).every(m => m.length), onProgress, signal);
+  work.checks++; work.checkTiles += read;
   return { marks: look(words).flat(), words, wholeSheet };
 }
 
 /** Every word on a page, the whole sheet read: Project files' one-off OCR of scanned sheets (lib/sheet-text-ocr). */
-export const readWholeSheet = (doc: StoredDocument, page: number, onProgress?: (progress: OcrProgress) => void, signal?: AbortSignal) =>
-  readTiles(doc, page, () => false, onProgress, signal);
+export async function readWholeSheet(doc: StoredDocument, page: number, onProgress?: (progress: OcrProgress) => void, signal?: AbortSignal): Promise<{ words: TextBox[]; wholeSheet: boolean }> {
+  const { words, wholeSheet, tiles } = await readTiles(doc, page, () => false, onProgress, signal);
+  if (wholeSheet) { work.sheets++; work.sheetTiles += tiles; }
+  return { words, wholeSheet };
+}
 
-/** Reads a page's tiles in order until `enough` holds for the words read or every tile is read; one reading per page at a time. */
-async function readTiles(doc: StoredDocument, page: number, enough: (words: TextBox[]) => boolean, onProgress?: (progress: OcrProgress) => void, signal?: AbortSignal): Promise<{ words: TextBox[]; wholeSheet: boolean }> {
+/** Reads a page's tiles in order until `enough` holds for the words read or every tile is read; one reading per page at a
+ * time. Also says how many tiles this call read and how many the page has. */
+async function readTiles(doc: StoredDocument, page: number, enough: (words: TextBox[]) => boolean, onProgress?: (progress: OcrProgress) => void, signal?: AbortSignal): Promise<{ words: TextBox[]; wholeSheet: boolean; read: number; tiles: number }> {
   const read = await sheetRead(doc, page);
+  let readHere = 0;
   const run = read.queue.then(async () => {
     if (enough(sheetWords(read.tiles))) return;
-    const ocr = await ocrWorker();
+    const { slot, worker } = ocrWorker();
+    const ocr = await worker;
+    busy(slot, 1);
+    try { await readAll(ocr); } finally { busy(slot, -1); }
+  });
+  async function readAll(ocr: Worker) {
     while (read.tiles.length < read.boxes.length && !signal?.aborted) {
       onProgress?.({ done: read.tiles.length, total: read.boxes.length });
       const box = read.boxes[read.tiles.length];
@@ -84,10 +106,11 @@ async function readTiles(doc: StoredDocument, page: number, enough: (words: Text
       const [{ width, height }, { data }] = await Promise.all([imageSize(image), ocr.recognize(image, {}, { blocks: true })]);
       const words = (data.blocks ?? []).flatMap(b => b.paragraphs.flatMap(p => p.lines.flatMap(l => l.words)));
       read.tiles.push({ box, width, height, words: words.map(word => ({ text: word.text, confidence: word.confidence, bbox: word.bbox })) });
+      work.tiles++; readHere++;
       if (enough(sheetWords(read.tiles))) break;
     }
-  });
+  }
   read.queue = run.catch(() => {});
   await run;
-  return { words: sheetWords(read.tiles), wholeSheet: read.tiles.length === read.boxes.length };
+  return { words: sheetWords(read.tiles), wholeSheet: read.tiles.length === read.boxes.length, read: readHere, tiles: read.boxes.length };
 }

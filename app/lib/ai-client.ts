@@ -11,7 +11,7 @@
 //   run(s => recordReading(s, procurement, result.input));                 // useProposals()
 
 import { LIMITS, parseProposalJob, proposalBatches, mergeProposalReadings, type ProposalReadingOutput, type Dropped } from "./ai-jobs";
-import { AI_REQUESTS_AT_ONCE, inAiPool } from "./ai-pool";
+import { AI_REQUESTS_AT_ONCE, inAiPool, timed } from "./ai-pool";
 import type { DraftInput, RunInput } from "./extraction";
 import type { ManualSection, PageText } from "./manual-sections";
 import type { PdfText } from "./pdf-text";
@@ -23,12 +23,12 @@ export const PAGES_PER_CALL = 5;
 /** Sheets one trade renders and sends at once: each is a large image. */
 const SHEETS_AT_ONCE = 3;
 
-async function post<T>(job: "scope" | "proposal" | "drawing", input: unknown, signal?: AbortSignal): Promise<T & { model: string }> {
+const post = <T>(job: "scope" | "proposal" | "drawing", input: unknown, signal?: AbortSignal): Promise<T & { model: string }> => timed(job, async () => {
   const response = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job, input }), signal });
   const body = await response.json().catch(() => ({ error: `The AI request failed (${response.status}).` }));
   if (!response.ok) throw new Error(body.error ?? `The AI request failed (${response.status}).`);
   return body;
-}
+});
 
 /** Splits pages into requests: at most PAGES_PER_CALL pages and the character limit per request. */
 export function chunkPages(pages: PageText[], perCall = PAGES_PER_CALL, maxChars = LIMITS.scopeChars): PageText[][] {
