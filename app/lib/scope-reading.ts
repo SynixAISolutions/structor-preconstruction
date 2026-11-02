@@ -29,18 +29,23 @@ export const mergeRuns = (a: ScopeRunResult, b: ScopeRunResult): ScopeRunResult 
 
 /**
  * Reads a trade: its `sections`, each from the specification volume it is in (lib/project-files
- * specificationSections), then `sheets`. `addFlipPages` puts the sheets that carry a highlight on Drawing
- * Flip (it returns why it couldn't, or null). Resolves to the run to record, or throws when the trade has
- * nothing to read.
+ * specificationSections), and its `sheets`, side by side (2 Nov: the sheets waited for the specification, so a big
+ * trade's sheet images and their OCR checks, the slowest part of a run, only started once its last page was read).
+ * `addFlipPages` puts the sheets that carry a highlight on Drawing Flip (it returns why it couldn't, or null).
+ * Resolves to the run to record, specification findings first, or throws when the trade has nothing to read.
  */
 export async function readTradeScope(args: {
   pkg: Pick<TradePackage, "id" | "name" | "code">; sections: VolumeSection[]; sheets: RegisterRow[];
   signal: AbortSignal; onProgress: (progress: TradeReadProgress) => void; addFlipPages: (pages: PageInput[]) => string | null;
 }): Promise<ScopeRunResult> {
-  const { pkg, sections: stored, sheets, signal, onProgress } = args;
-  onProgress({ note: stored.length ? "Loading section text…" : "Reading drawing sheets…", done: 0, total: 0 });
-  let outcome: ScopeRunResult | null = null;
-  if (stored.length) {
+  const { pkg, sections: stored, sheets, signal } = args;
+  // Both halves report at once: "Reading part 3 of 46 · Reading drawing sheet 2 of 6".
+  const notes = { specification: stored.length ? "Loading section text…" : "", sheets: sheets.length ? "Reading drawing sheets…" : "" };
+  const say = (half: keyof typeof notes, note: string) => { notes[half] = note; args.onProgress({ note: [notes.specification, notes.sheets].filter(Boolean).join(" · "), done: 0, total: 0 }); };
+  say("specification", notes.specification);
+
+  async function readSpecification(): Promise<ScopeRunResult | null> {
+    let outcome: ScopeRunResult | null = null;
     // One reading per volume, so every finding cites the file its words are in.
     const volumes = await Promise.all([...Map.groupBy(stored, s => s.doc.id).values()].map(async group => {
       const doc = group[0].doc;
@@ -49,34 +54,38 @@ export async function readTradeScope(args: {
       return { doc, sections, chunks: sections.reduce((n, s) => n + chunkPages(s.pages).length, 0) };
     }));
     const total = volumes.reduce((n, v) => n + v.chunks, 0);
-    onProgress({ note: "", done: 0, total });
     let before = 0;
     for (const { doc, sections, chunks } of volumes) {
       if (!sections.length || signal.aborted) continue;
-      const read = await extractTradeScope({ pkg, manual: { name: doc.name, pageCount: doc.pageCount }, sections, signal, onProgress: done => onProgress({ note: "", done: before + done, total }) });
+      const read = await extractTradeScope({ pkg, manual: { name: doc.name, pageCount: doc.pageCount }, sections, signal, onProgress: done => say("specification", `Reading part ${Math.min(before + done + 1, total)} of ${total}`) });
       before += chunks;
       outcome = outcome ? mergeRuns(outcome, read) : read;
     }
-  }
-  // One finding per paragraph → one line per thing the subcontractor prices. Specification findings
-  // only: drawing findings are already one per item, and their highlights point at their keys.
-  if (outcome && outcome.input.drafts.length > 12 && !signal.aborted) {
-    onProgress({ note: "Writing bid-form lines…", done: 0, total: 0 });
-    try {
-      const lines = await consolidateScope(pkg.name, outcome.input.drafts, signal, Object.fromEntries(stored.map(s => [s.section, s.title])));
-      outcome.input = { ...outcome.input, drafts: lines.drafts };
-      if (lines.merged) outcome.dropped.push({ what: `${lines.merged} paragraph findings`, reason: `Merged into ${lines.drafts.filter(d => d.kind === "scope").length} bid-form lines${lines.dropped ? `; ${lines.dropped} judged boilerplate` : ""}.` });
-    } catch (error) {
-      outcome.dropped.push({ what: "Bid-form lines", reason: `Could not merge findings (${error instanceof Error ? error.message : "AI error"}); every paragraph finding is listed.` });
+    // One finding per paragraph → one line per thing the subcontractor prices. Specification findings
+    // only: drawing findings are already one per item, and their highlights point at their keys.
+    if (outcome && outcome.input.drafts.length > 12 && !signal.aborted) {
+      say("specification", "Writing bid-form lines…");
+      try {
+        const lines = await consolidateScope(pkg.name, outcome.input.drafts, signal, Object.fromEntries(stored.map(s => [s.section, s.title])));
+        outcome.input = { ...outcome.input, drafts: lines.drafts };
+        if (lines.merged) outcome.dropped.push({ what: `${lines.merged} paragraph findings`, reason: `Merged into ${lines.drafts.filter(d => d.kind === "scope").length} bid-form lines${lines.dropped ? `; ${lines.dropped} judged boilerplate` : ""}.` });
+      } catch (error) {
+        outcome.dropped.push({ what: "Bid-form lines", reason: `Could not merge findings (${error instanceof Error ? error.message : "AI error"}); every paragraph finding is listed.` });
+      }
     }
+    say("specification", "");
+    return outcome;
   }
-  if (sheets.length && !signal.aborted) {
+
+  async function readSheets(): Promise<ScopeRunResult[]> {
+    const runs: ScopeRunResult[] = [];
     let done = 0;
     for (const rows of Map.groupBy(sheets, r => r.doc.id).values()) {
+      if (signal.aborted) break;
       const doc = rows[0].doc, aspects = new Map<number, number>();
       const text = await readStoredText(doc, { first: Math.min(...rows.map(r => r.page)), last: Math.max(...rows.map(r => r.page)) });
       const drawn = await extractDrawingScope({
-        pkg, document: doc.name, pageCount: doc.pageCount, signal, onProgress: d => onProgress({ note: `Reading drawing sheet ${Math.min(done + d + 1, sheets.length)} of ${sheets.length}`, done: 0, total: 0 }),
+        pkg, document: doc.name, pageCount: doc.pageCount, signal, onProgress: d => say("sheets", `Reading drawing sheet ${Math.min(done + d + 1, sheets.length)} of ${sheets.length}`),
         pages: rows.map(r => ({ page: r.page, sheet: r.sheet, text: text.find(p => p.page === r.page)?.text ?? "" })),
         render: page => renderStoredPage(doc, page, 2000).then(r => { aspects.set(page, r.aspect); return { image: r.image }; }),
       });
@@ -89,7 +98,7 @@ export async function readTradeScope(args: {
         const quotes = [...new Set(drawn.input.drafts.flatMap(d => d.citations).filter(c => c.verification === "image" && c.document === doc.name && c.page === p.page).map(c => c.quote))];
         if (!quotes.length || signal.aborted) return;
         try {
-          const read = await findInSheetImage(doc, p.page, quotes, r => onProgress({ note: `Checking the AI's quotes on sheet ${p.sheet}: reading the image, part ${r.done + 1} of ${r.total}`, done: 0, total: 0 }), signal);
+          const read = await findInSheetImage(doc, p.page, quotes, r => say("sheets", `Checking the AI's quotes on sheet ${p.sheet}: reading the image, part ${r.done + 1} of ${r.total}`), signal);
           ocr.set(p.sheet, read.words);
           drawn.input = { ...drawn.input, drafts: checkImageQuotes(drawn.input.drafts, { document: doc.name, page: p.page }, read.words, read.wholeSheet) };
         } catch (error) {
@@ -104,9 +113,14 @@ export async function readTradeScope(args: {
       const highlighted = new Set(drawn.input.drafts.filter(d => d.kind === "region").map(d => (d as { sheet: string }).sheet));
       const flipError = args.addFlipPages((drawn.drawingPages ?? []).filter(p => highlighted.has(p.sheet)).map(p => ({ sheet: p.sheet, title: rows.find(r => r.page === p.page)?.title ?? p.sheet, discipline: rows.find(r => r.page === p.page)?.discipline ?? "", revision: "", documentId: doc.id, documentName: doc.name, pageNumber: p.page, aspect: aspects.get(p.page) })));
       if (flipError) drawn.dropped.push({ what: "Drawing highlights", reason: flipError });
-      outcome = outcome ? mergeRuns(outcome, drawn) : drawn;
+      runs.push(drawn);
     }
+    say("sheets", "");
+    return runs;
   }
+
+  const [specification, drawings] = await Promise.all([stored.length ? readSpecification() : null, sheets.length ? readSheets() : []]);
+  const outcome = drawings.reduce<ScopeRunResult | null>((run, drawn) => run ? mergeRuns(run, drawn) : drawn, specification);
   if (!outcome) throw new Error("This trade has no specification sections or drawing sheets to read.");
   return outcome;
 }
