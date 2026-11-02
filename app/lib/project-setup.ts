@@ -61,7 +61,7 @@ export type SetupStep = {
 export type SetupSummary = {
   steps: SetupStep[];
   progress: { done: number; total: number; percent: number };
-  /** Item by item (a step without items counts once): how much of what a project needs is in place, and how much is missing (red) or needs checking (yellow). */
+  /** Item by item (a step without items counts once), leaving out OWN_TODO_STEPS: how much of what a project needs is in place, and how much is missing (red) or needs checking (yellow). */
   completeness: { done: number; total: number; percent: number; missing: number; review: number; waiting: number };
   next: SetupStep | null;
 };
@@ -84,6 +84,8 @@ const fail = (message: string): never => { throw new SetupRuleError(message); };
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const DONE = new Set<SetupStatus>(["ready", "not-applicable"]);
 const ROUTE: SetupStepId[] = ["documents", "details", "trades", "scopes"];
+/** Setup steps the Preconstruction to-do shows as steps of their own, not among the setup items. */
+export const OWN_TODO_STEPS = new Set<SetupStepId>(["scopes", "budget"]);
 
 /** Whether a stored file can be used: its pages were read, and (for drawings and manuals) its sheets or sections were found. */
 export function documentReadiness(doc: StoredDocument): { status: "ready" | "needs-review" | "failed"; note: string } {
@@ -220,7 +222,9 @@ export function projectSetup(input: SetupInput): SetupSummary {
   ];
   const done = steps.filter(s => DONE.has(s.status)).length;
   const open = (s: SetupStep) => !DONE.has(s.status) && s.status !== "waiting";
-  const units = steps.flatMap((s): { status: SetupStatus; reconsider: boolean }[] => s.items.length ? s.items : [s]);
+  // Scopes and the budget are steps of their own in the Preconstruction to-do, so the setup count leaves them out, as
+  // its list does (2 Nov: step 1 said "8 missing · 2 to check" over a list showing 7 and 1).
+  const units = steps.filter(s => !OWN_TODO_STEPS.has(s.id)).flatMap((s): { status: SetupStatus; reconsider: boolean }[] => s.items.length ? s.items : [s]);
   const unitsDone = units.filter(u => DONE.has(u.status)).length;
   const completeness = {
     done: unitsDone, total: units.length, percent: Math.round((unitsDone / units.length) * 100),

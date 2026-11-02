@@ -107,12 +107,15 @@ assert.throws(() => S.decide(S.EMPTY_SETUP, { target: "nonsense", kind: "waiting
 assert.equal(S.clearDecision(waiting, "budget").decisions.length, 0);
 assert.equal(S.decide(waiting, { target: "budget", kind: "not-applicable", reason: "Owner holds the budget" }, complete, "Marcel", at).decisions.length, 1, "One decision per target");
 
-// Completeness counts items (a step without items once): done, missing (red), to check (yellow), waiting.
-const full = run({ project: complete, documents: [drawings, rfp], procurement: proc, state: waiting });
-const c = full.completeness;
-assert.equal(c.total, full.steps.reduce((n, s) => n + (s.items.length || 1), 0));
-assert.equal(c.done + c.missing + c.review + c.waiting + full.steps.flatMap(s => s.items.length ? s.items : [s]).filter(u => u.status === "in-progress").length, c.total, "Every item is counted once");
+// Completeness counts items (a step without items once): done, missing (red), to check (yellow), waiting. Scopes and the
+// budget are to-do steps of their own, so they are left out, as step 1's list leaves them out.
+const waitingOnSchedule = S.decide(S.EMPTY_SETUP, { target: "schedule", kind: "waiting", reason: "Owner's schedule", responsible: "DGS", followUp: "2026-10-25" }, complete, "Marcel", at);
+const full = run({ project: complete, documents: [drawings, rfp], procurement: proc, state: waitingOnSchedule });
+const c = full.completeness, counted = full.steps.filter(s => !S.OWN_TODO_STEPS.has(s.id));
+assert.equal(c.total, counted.reduce((n, s) => n + (s.items.length || 1), 0));
+assert.equal(c.done + c.missing + c.review + c.waiting + counted.flatMap(s => s.items.length ? s.items : [s]).filter(u => u.status === "in-progress").length, c.total, "Every item is counted once");
 assert.ok(c.review >= 1 && c.waiting === 1 && c.percent === Math.round(c.done / c.total * 100));
+assert.equal(run({ project: complete, documents: [drawings, rfp], procurement: proc, state: waiting }).completeness.waiting, 0, "Waiting on the budget shows in the budget step, not in setup");
 assert.deepEqual([empty.completeness.done, empty.completeness.review], [0, 0]);
 
 // RFP review is a comparison, never a silent overwrite.
