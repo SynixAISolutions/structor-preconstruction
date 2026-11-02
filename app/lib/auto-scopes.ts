@@ -146,6 +146,18 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
     save(run);
   };
 
+  // 3, alongside the trades: where each package is on the drawings, when the run reads everything
+  // (lib/sheet-reference-client). It starts once the scanned sheets are searchable, so every sheet is looked at, and its
+  // requests share the tab's pool (lib/ai-pool), so they fill the slots the last trades leave idle (2 Nov: 52 requests,
+  // two minutes, used to wait for the last trade).
+  let searchable = false;
+  const references = !scopesLater && refPackages.length ? (async () => {
+    await ocr;
+    searchable = true;
+    const texts = await loadSheetTexts(storedDocuments(projectId) ?? documents).catch(() => null) ?? sheetTexts;
+    if (texts?.sheets.some(s => s.text.trim())) await findReferencesWithAi(projectId, texts.key, texts.sheets, refPackages).catch(() => {});
+  })() : null;
+
   // The biggest trades start first; every request shares the tab's pool (lib/ai-pool), so the last trades use every slot.
   const queue = biggestFirst(stillToRead(readable, previous));
   await Promise.all(Array.from({ length: Math.min(PARALLEL_TRADES, queue.length) }, async () => {
@@ -180,16 +192,11 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
     }
   }));
 
-  // 3. Where each package is on the drawings, when the run read everything (lib/sheet-reference-client), once the
-  // scanned sheets are searchable, so every sheet is looked at.
-  if (!scopesLater && refPackages.length) {
-    run = { ...run, stage: "Making the scanned sheets searchable, then finding every package on the drawings" };
+  if (references) {
+    run = { ...run, stage: searchable ? "Finding every package on the drawings" : "Making the scanned sheets searchable, then finding every package on the drawings" };
     save(run);
-    await ocr;
-    run = { ...run, stage: "Finding every package on the drawings" };
-    save(run);
-    const texts = await loadSheetTexts(storedDocuments(projectId) ?? documents).catch(() => null) ?? sheetTexts;
-    if (texts?.sheets.some(s => s.text.trim())) await findReferencesWithAi(projectId, texts.key, texts.sheets, refPackages).catch(() => {});
+    if (!searchable) void ocr.then(() => { if (run.status === "running") { run = { ...run, stage: "Finding every package on the drawings" }; save(run); } });
+    await references;
   }
 
   run = { ...run, status: "done", finishedAt: at() };
