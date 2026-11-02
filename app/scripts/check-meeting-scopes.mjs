@@ -66,4 +66,19 @@ assert.throws(()=>S.addGeneralScopes({...review.procurement,packages:[]},general
   assert.equal(kept.procurement.scopes.find(s => s.id === line.id).status, "approved");
   assert.equal(S.inlineDrafts(kept.extraction.drafts, "drywall").filter(d => d.runId === run).length, 2);
 }
-console.log('Meeting scope checks passed: inline accept/move/reject/delete, approving a line places its highlights, audit, drawing unlinking, all-trade requirements and idempotency.');
+// Combining trades moves what the AI found for the trade removed: its waiting findings, the runs that read it, its highlights.
+{
+  const open = { ...sampleProcurement, invitations: [], packages: sampleProcurement.packages.map(p => ({ ...p, published: undefined })) };
+  const records = { extraction: sampleExtraction, procurement: open, flip: sampleDrawingFlip };
+  const into = open.packages.find(p => p.id !== "drywall" && p.division === "09").id;
+  const counts = r => ({ drafts: r.extraction.drafts.filter(d => d.packageId === "drywall").length, regions: r.flip.regions.filter(x => x.packageId === "drywall").length, scopes: r.procurement.scopes.filter(x => x.packageId === "drywall").length });
+  const before = counts(records), intoBefore = { drafts: records.extraction.drafts.filter(d => d.packageId === into).length, regions: records.flip.regions.filter(x => x.packageId === into).length };
+  assert.ok(before.drafts && before.regions, "the sample has drywall findings and highlights to move");
+  const combined = S.combineTrades(records, "drywall", into, "Marcel Khoury");
+  assert.deepEqual(counts(combined), { drafts: 0, regions: 0, scopes: 0 }, "Nothing stays with the trade removed");
+  assert.deepEqual([combined.extraction.drafts.filter(d => d.packageId === into).length, combined.flip.regions.filter(x => x.packageId === into).length], [intoBefore.drafts + before.drafts, intoBefore.regions + before.regions]);
+  assert.ok(combined.extraction.runs.every(r => !r.packageIds.includes("drywall") && new Set(r.packageIds).size === r.packageIds.length), "Runs name the trade that now holds their findings, once");
+  assert.equal(combined.procurement.packages.some(p => p.id === "drywall"), false);
+  assert.throws(() => S.combineTrades({ ...records, procurement: sampleProcurement }, sampleProcurement.packages.find(p => p.published).id, into, "M"), /published|invited/);
+}
+console.log('Meeting scope checks passed: inline accept/move/reject/delete, approving a line places its highlights, audit, drawing unlinking, all-trade requirements and idempotency, combining trades.');

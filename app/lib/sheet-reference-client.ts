@@ -12,7 +12,7 @@ import type { TradePackage } from "./procurement";
 import { referenceBatches, type SheetReferenceAnswer } from "./sheet-reference-ai";
 import { drawingRegister, SCANNED_PAGE_TEXT, type StoredDocument } from "./project-files";
 import { readStoredText } from "./project-files-client";
-import { writeDraft } from "./use-local-draft";
+import { readDraft, writeDraft } from "./use-local-draft";
 
 export const AI_REFERENCES_KEY = "drawing-references-ai";
 /** One AI pass over a project's sheets. `key` names the sheets it read; `packages` the packages it looked for. */
@@ -88,6 +88,31 @@ export async function findReferencesWithAi(projectId: string, key: string, sheet
   }
   controller = null;
   set({ running: false, failed: [...failed] });
+}
+
+/**
+ * After one trade is combined into another (lib/scope-review combineTrades), the saved sheets of the trade removed join
+ * the other's, one entry per sheet with both trades' lines. A package the AI pass didn't look for keeps the CSI rules.
+ */
+export function combineReferences(saved: AiReferences, fromId: string, toId: string): AiReferences {
+  if (!saved.packages.includes(fromId)) return saved;
+  const { [fromId]: moved = [], ...refs } = saved.refs;
+  const packages = saved.packages.filter(id => id !== fromId);
+  if (!packages.includes(toId)) return { ...saved, packages, refs };
+  const bySheet = new Map<string, DrawingReference>();
+  for (const ref of [...(refs[toId] ?? []), ...moved]) {
+    const key = `${ref.docId}:${ref.page}`, there = bySheet.get(key);
+    bySheet.set(key, there ? { ...there, lines: [...new Set([...there.lines, ...ref.lines])] } : ref);
+  }
+  const docs = [...new Set([...bySheet.values()].map(r => r.docId))];
+  const sheets = [...bySheet.values()].sort((a, b) => docs.indexOf(a.docId) - docs.indexOf(b.docId) || a.page - b.page);
+  return { ...saved, packages, refs: { ...refs, [toId]: sheets } };
+}
+
+export function combineAiReferences(projectId: string, fromId: string, toId: string): void {
+  const saved = readDraft<AiReferences | null>(projectId, AI_REFERENCES_KEY, null);
+  if (!saved?.packages.includes(fromId)) return;
+  try { writeDraft<AiReferences>(projectId, AI_REFERENCES_KEY, combineReferences(saved, fromId, toId)); } catch { /* storage full: the references stay as they were */ }
 }
 
 /** Stops the run; nothing is saved for a stopped run. */
