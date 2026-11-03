@@ -205,3 +205,23 @@ export function buyoutSummary(rows: BuyoutRow[]): { contracts: number; awarded: 
   const awarded = rows.filter(r => r.award);
   return { contracts: cents(awarded.reduce((s, r) => s + r.award!.amount, 0)), awarded: awarded.length, executed: rows.filter(r => r.executed).length, open: rows.length - awarded.length };
 }
+
+/**
+ * Who to invite to a trade's scope review (Marcel, 24 Oct: "attendees come from the sub directory"): the lowest
+ * bidder's contact first, then the other bidders on the trade, then other directory companies for the trade, then
+ * the trade's owner on our team. Each once, as "Name, Company".
+ */
+export function reviewAttendees(input: { directory: { id: string; company: string; name: string; trade: string }[]; bids: { bidderId: string | null; name: string }[]; trade: string; owner: string }): { label: string; why: string }[] {
+  const out: { label: string; why: string }[] = [], seen = new Set<string>();
+  const add = (label: string, why: string) => { const key = label.toLowerCase(); if (label.trim() && !seen.has(key)) { seen.add(key); out.push({ label, why }); } };
+  const contact = (d: { company: string; name: string }) => d.name ? `${d.name}, ${d.company}` : d.company;
+  const words = (t: string) => t.toLowerCase().split(/[^a-z]+/).filter(w => w.length >= 4);
+  for (const [i, bid] of input.bids.entries()) {
+    const entry = input.directory.find(d => d.id === bid.bidderId) ?? input.directory.find(d => d.company.toLowerCase() === bid.name.toLowerCase());
+    add(entry ? contact(entry) : bid.name, i === 0 ? "Lowest bidder" : "Bidder");
+  }
+  const trade = words(input.trade);
+  for (const d of input.directory) if (words(d.trade).some(w => trade.includes(w))) add(contact(d), "Directory · " + d.trade);
+  if (input.owner.trim()) add(input.owner.trim(), "Our team · trade owner");
+  return out;
+}
