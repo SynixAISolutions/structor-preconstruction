@@ -1,0 +1,15 @@
+/* The owner's budget, read from its file (owner-budget.tsx). */
+.owner-budget-tools { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.owner-budget-tools .ui-field { margin: 0; min-width: 200px; }
+.owner-budget-note { margin: 0 21px 14px; font-size: 11px; color: #74827b; }
+.owner-budget-note.error { color: #ba6256; }
+.owner-budget-table td small.owner-budget-was { display: block; font-size: 9px; color: #929ea0; margin-top: 3px; }
+.owner-budget-table td.owner-budget-amount { font-variant-numeric: tabular-nums; white-space: nowrap; color: #3e525d; font-weight: 550; }
+.owner-budget-table tr.skipped td { opacity: .45; }
+.owner-budget-apply { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 16px 21px 20px; border-top: 1px solid #edf0ec; }
+.owner-budget-apply p { margin: 0; font-size: 11px; color: #62757e; }
+.owner-budget-apply p small { display: block; margin-top: 4px; font-size: 9px; color: #99a4a8; }
+.owner-budget-apply .ui-field { margin: 0; min-width: 180px; }
+.owner-budget-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.product-app .owner-budget-table td input[type=checkbox] { width: 16px; height: 16px; min-width: 0; margin: 0; accent-color: #e9703e; }
+.product-app .owner-budget-table td:first-child { width: 36px; }
