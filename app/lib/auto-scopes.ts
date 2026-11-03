@@ -7,7 +7,7 @@
 // time the project is open. While it runs the tab asks before closing (the browser's own box: a page can't
 // replace it), and reloads from inside the app ask with our own (askToLeave).
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { addRunToBidForms, recordRun, type ExtractionState } from "./extraction";
 import { addPage, DrawingFlipRuleError, type DrawingFlipState } from "./drawing-flip";
 import { addPackage, type Procurement } from "./procurement";
@@ -26,7 +26,7 @@ import { OCR_WORKERS, ocrWork } from "./sheet-ocr";
 import { blendPace, checkShare, FIRST_PACE, measurePace, secondsLeft, steadyLeft, tradesLeft, type Pace, type TradeLeft } from "./run-time-left";
 import { readTradeScope } from "./scope-reading";
 import { readDraft, writeDraft } from "./use-local-draft";
-import { sharedReady, useSharedStatus } from "./shared-sync";
+import { DRAFT_CHANGED, sharedReady, useSharedStatus } from "./shared-sync";
 import { biggestFirst, changedSince, filesToCompare, MAX_SAVED_RUNS, NO_RUNS, onlyChanged, readingWork, runTarget, runToUpdate, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns, type TradeToRead } from "./auto-scope-plan";
 import { sampleProcurement } from "./data/procurement";
 import { sampleExtraction } from "./data/extraction";
@@ -295,12 +295,24 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
  * Watches the open project's files and starts the run when a new drawing set or manual is stored, from
  * whatever page uploaded it. Returns the run in progress (any project) and whether the leave box is open.
  */
-export function useAutoScopes(projectId: string): Snapshot {
+export function useAutoScopes(projectId: string): Snapshot & { elsewhere: AutoRun | null } {
   const { documents, ready } = useProjectDocuments(projectId);
   const key = ready ? runTarget(documents)?.key ?? "" : "";
   // Not before the project's shared copy is in: a run someone else did or is doing must not start again here.
   useSharedStatus();
   const pulled = sharedReady(projectId);
   useEffect(() => { if (ready && key && pulled) ensureRun(projectId, documents); }, [projectId, key, ready, pulled]); // eslint-disable-line react-hooks/exhaustive-deps
-  return useSyncExternalStore(subscribe, () => snapshot, () => snapshot);
+  // A run another browser is reading right now (shared saving): its progress, as it arrives with the project.
+  const [elsewhere, setElsewhere] = useState<AutoRun | null>(null);
+  useEffect(() => {
+    const look = () => {
+      const run = savedRuns(projectId).runs.find(r => r.status === "running") ?? null;
+      setElsewhere(run && run.tab && run.tab !== thisTab() && Date.now() - Date.parse(run.beat ?? "") < OTHER_TAB_FOR ? run : null);
+    };
+    look();
+    const timer = setInterval(look, 15_000);
+    window.addEventListener(DRAFT_CHANGED, look);
+    return () => { clearInterval(timer); window.removeEventListener(DRAFT_CHANGED, look); };
+  }, [projectId]);
+  return { ...useSyncExternalStore(subscribe, () => snapshot, () => snapshot), elsewhere };
 }
