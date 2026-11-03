@@ -2,8 +2,8 @@
 
 import { useEffect } from "react";
 import { Sparkles } from "lucide-react";
-import { answerLeave, askToLeave, useAutoScopes } from "../../lib/auto-scopes";
-import { runFiles, runProgress } from "../../lib/auto-scope-plan";
+import { answerLeave, askToLeave, readingIn, useAutoScopes } from "../../lib/auto-scopes";
+import { runFiles, runProgress, type AutoRun } from "../../lib/auto-scope-plan";
 import { timeLeftLabel } from "../../lib/run-time-left";
 import { Button, Modal } from "./shared";
 import "./ai-run-card.css";
@@ -14,7 +14,7 @@ import "./ai-run-card.css";
  * don't close this tab" box for reloading while the AI works: F5 and Ctrl+R ask here first.
  */
 export function AiRunCard({ projectId }: { projectId: string }) {
-  const { run, leave, left } = useAutoScopes(projectId);
+  const { run, leave, left, elsewhere } = useAutoScopes(projectId);
   useEffect(() => {
     if (!run) return;
     const key = (e: KeyboardEvent) => {
@@ -26,7 +26,7 @@ export function AiRunCard({ projectId }: { projectId: string }) {
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [run]);
-  if (!run && !leave) return null;
+  if (!run && !leave) return elsewhere ? <ElsewhereCard run={elsewhere}/> : null;
   const { done, total } = run ? runProgress(run) : { done: 0, total: 0 };
   const reading = run?.trades.filter(t => t.status === "reading") ?? [];
   // The bar follows the time: the share gone by of the time the run will take (lib/run-time-left).
@@ -48,4 +48,19 @@ export function AiRunCard({ projectId }: { projectId: string }) {
       <div className="proc-form-actions"><Button onClick={() => answerLeave(true)}>Close anyway</Button><Button variant="primary" onClick={() => answerLeave(false)}>Wait for AI</Button></div>
     </Modal>}
   </>;
+}
+
+/** A run someone else's browser is reading on this project (shared saving): what it has done so far. */
+function ElsewhereCard({ run }: { run: AutoRun }) {
+  const { done, total } = runProgress(run);
+  const where = readingIn(run) === "tab" ? "another tab" : "another browser";
+  return <section className="ai-run-card" role="status" aria-live="polite" aria-label={`AI is writing scopes in ${where}`}>
+    <span className="ai-run-icon"><Sparkles size={16}/></span>
+    <div className="ai-run-copy">
+      <strong>AI is reading {runFiles(run)} in {where}</strong>
+      <small>{total ? `${done} of ${total} trades · ${run.added} scope item${run.added === 1 ? "" : "s"} added` : "Setting up the bid packages…"}</small>
+      <span className="ai-run-bar" aria-hidden><i style={{ width: `${Math.max(4, total ? Math.round((done / total) * 100) : 0)}%` }}/></span>
+      <small className="ai-run-now">Its findings appear here as they are saved. Nothing is read twice.</small>
+    </div>
+  </section>;
 }

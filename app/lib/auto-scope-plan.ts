@@ -29,6 +29,9 @@ export type AutoRun = {
   fullCost?: number;
   /** What the run is doing after the trades, for the progress card ("Making the scanned sheets searchable…"). */
   stage?: string;
+  /** The browser tab reading, and when it last said it still was: with shared saving (3 Nov) another person's browser
+   * sees the run and leaves it to that tab instead of reading the same files again. */
+  tab?: string; browser?: string; beat?: string;
   trades: AutoTrade[];
   /** Scope lines added to bid forms for approval, and lines skipped as already there. */
   added: number; duplicates: number;
@@ -71,6 +74,16 @@ export function readingWork(trades: Pick<TradeToRead<unknown>, "sections" | "she
  */
 export const biggestFirst = <T extends Pick<TradeToRead<unknown>, "sections" | "sheets">>(trades: T[]): T[] =>
   trades.map(trade => ({ trade, requests: readingWork([trade]).requests })).sort((a, b) => b.requests - a.requests).map(x => x.trade);
+
+/**
+ * Whether a running run belongs to another tab still reading it, so this one leaves it alone: it said so less than two
+ * minutes ago from another browser, or less than 45 s ago from another tab of this one (a tab says so every 30 s, so a
+ * reloaded tab picks up its own run within the minute).
+ */
+export function heldElsewhere(run: Pick<AutoRun, "status" | "tab" | "browser" | "beat">, me: { tab: string; browser: string }, now = Date.now()): boolean {
+  if (run.status !== "running" || !run.tab || run.tab === me.tab) return false;
+  return now - Date.parse(run.beat ?? "") < (run.browser === me.browser ? 45_000 : 120_000);
+}
 
 /** Trades a run still has to read: a run stopped by a closed tab picks up after the trades it finished. */
 export const stillToRead = <T extends { pkg: { id: string } }>(trades: T[], previous: AutoRun | null): T[] =>
