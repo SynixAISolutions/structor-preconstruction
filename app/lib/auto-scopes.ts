@@ -7,7 +7,7 @@
 // time the project is open. While it runs the tab asks before closing (the browser's own box: a page can't
 // replace it), and reloads from inside the app ask with our own (askToLeave).
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { addRunToBidForms, recordRun, type ExtractionState } from "./extraction";
 import { addPage, DrawingFlipRuleError, type DrawingFlipState } from "./drawing-flip";
 import { addPackage, type Procurement } from "./procurement";
@@ -26,7 +26,8 @@ import { OCR_WORKERS, ocrWork } from "./sheet-ocr";
 import { blendPace, checkShare, FIRST_PACE, measurePace, secondsLeft, steadyLeft, tradesLeft, type Pace, type TradeLeft } from "./run-time-left";
 import { readTradeScope } from "./scope-reading";
 import { readDraft, writeDraft } from "./use-local-draft";
-import { addedSince, biggestFirst, changedSince, filesToCompare, MAX_SAVED_RUNS, NO_RUNS, onlyChanged, readingWork, runTarget, runToUpdate, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns, type TradeToRead } from "./auto-scope-plan";
+import { DRAFT_CHANGED, sharedReady, useSharedStatus } from "./shared-sync";
+import { addedSince, biggestFirst, changedSince, filesToCompare, heldElsewhere, MAX_SAVED_RUNS, NO_RUNS, onlyChanged, readingWork, runTarget, runToUpdate, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns, type TradeToRead } from "./auto-scope-plan";
 import { sampleProcurement } from "./data/procurement";
 import { sampleExtraction } from "./data/extraction";
 import { sampleDrawingFlip } from "./data/drawing-flip";
@@ -46,7 +47,19 @@ let active: string | null = null;
 const waiting = new Map<string, StoredDocument[]>();
 
 const savedRuns = (projectId: string): SavedRuns => readDraft<SavedRuns>(projectId, RUNS_KEY, NO_RUNS);
-function save(run: AutoRun) {
+let tab = "";
+const thisTab = () => tab ||= crypto.randomUUID();
+let browser = "";
+/** This browser, the same in every tab: a run another tab of it was reading is picked up sooner after a reload. */
+const thisBrowser = () => browser ||= (() => {
+  try { const kept = localStorage.getItem("structor-browser"); if (kept) return kept; const made = crypto.randomUUID(); localStorage.setItem("structor-browser", made); return made; }
+  catch { return thisTab(); }
+})();
+const me = () => ({ tab: thisTab(), browser: thisBrowser() });
+/** Whether the run is another tab's (this browser's or someone else's), for the progress card's wording. */
+export const readingIn = (run: AutoRun): "tab" | "browser" => run.browser === thisBrowser() ? "tab" : "browser";
+function save(unstamped: AutoRun) {
+  const run = unstamped.status === "running" ? { ...unstamped, tab: thisTab(), browser: thisBrowser(), beat: new Date().toISOString() } : unstamped;
   const runs = [run, ...savedRuns(run.projectId).runs.filter(r => r.id !== run.id)].slice(0, MAX_SAVED_RUNS);
   try { writeDraft<SavedRuns>(run.projectId, RUNS_KEY, { runs }); } catch { /* storage full: the run goes on, unsaved */ }
   emit({ run: run.status === "running" ? run : null });
@@ -101,6 +114,8 @@ export function ensureRun(projectId: string, documents: StoredDocument[]) {
   if (active === projectId && snapshot.run?.key === target.key) return;
   const previous = savedRuns(projectId).runs.find(r => r.key === target.key) ?? null;
   if (previous?.status === "done") return;
+  // Someone else's browser is reading these files right now (shared saving): its findings arrive with the project.
+  if (previous && heldElsewhere(previous, me())) return;
   const settle = uploadsSettleIn();
   if (settle > 0) { waiting.set(projectId, documents); retryWaiting(settle); return; }
   if (active) { waiting.set(projectId, documents); return; }
@@ -144,6 +159,8 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   };
   const ticking = setInterval(tick, 5_000);
   tick();
+  // Says every 30 s that this tab is still reading, for other browsers (save stamps it).
+  const beating = setInterval(() => { if (snapshot.run?.id) save(snapshot.run); }, 30_000);
 
   // After a revision, first: which sheets and sections changed, from their page text against the versions the last run read.
   let update = previous?.update;
@@ -272,6 +289,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   }
 
   clearInterval(ticking);
+  clearInterval(beating);
   keepPace(pace);
   emit({ left: null });
   run = { ...run, status: "done", finishedAt: at() };
@@ -287,9 +305,29 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
  * Watches the open project's files and starts the run when a new drawing set or manual is stored, from
  * whatever page uploaded it. Returns the run in progress (any project) and whether the leave box is open.
  */
-export function useAutoScopes(projectId: string): Snapshot {
+export function useAutoScopes(projectId: string): Snapshot & { elsewhere: AutoRun | null } {
   const { documents, ready } = useProjectDocuments(projectId);
   const key = ready ? runTarget(documents)?.key ?? "" : "";
-  useEffect(() => { if (ready && key) ensureRun(projectId, documents); }, [projectId, key, ready]); // eslint-disable-line react-hooks/exhaustive-deps
-  return useSyncExternalStore(subscribe, () => snapshot, () => snapshot);
+  // Not before the project's shared copy is in: a run someone else did or is doing must not start again here.
+  useSharedStatus();
+  const pulled = sharedReady(projectId);
+  useEffect(() => { if (ready && key && pulled) ensureRun(projectId, documents); }, [projectId, key, ready, pulled]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A run another browser is reading right now (shared saving): its progress, as it arrives with the project.
+  const [elsewhere, setElsewhere] = useState<AutoRun | null>(null);
+  const latest = useRef({ ready, documents });
+  latest.current = { ready, documents };
+  useEffect(() => {
+    const look = () => {
+      const run = savedRuns(projectId).runs.find(r => r.status === "running") ?? null;
+      const held = !!run && heldElsewhere(run, me());
+      setElsewhere(held ? run : null);
+      // The other tab stopped saying it reads (closed, or this tab reloaded): pick the run up here.
+      if (run && !held && run.tab !== thisTab() && latest.current.ready && sharedReady(projectId)) ensureRun(projectId, storedDocuments(projectId) ?? latest.current.documents);
+    };
+    look();
+    const timer = setInterval(look, 15_000);
+    window.addEventListener(DRAFT_CHANGED, look);
+    return () => { clearInterval(timer); window.removeEventListener(DRAFT_CHANGED, look); };
+  }, [projectId]);
+  return { ...useSyncExternalStore(subscribe, () => snapshot, () => snapshot), elsewhere };
 }

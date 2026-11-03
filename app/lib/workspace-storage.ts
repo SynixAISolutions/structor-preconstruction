@@ -1,5 +1,6 @@
 import { renameDemoNamesDeep } from "./demo-names";
-import { projectScopedKey } from "./project-scope";
+import { getActiveProjectId, projectScopedKey } from "./project-scope";
+import { readDraft, writeDraft } from "./use-local-draft";
 
 const DATABASE_NAME = "structor-workspace";
 const DATABASE_VERSION = 1;
@@ -9,6 +10,15 @@ const FILE_STORE = "files";
 // original key), "active:<projectId>" for any other project. Keys are fixed per call.
 const workspaceKeys = () => ({ workspace: projectScopedKey("active"), workbook: projectScopedKey("active-workbook") });
 type WorkspaceKeys = ReturnType<typeof workspaceKeys>;
+
+// Shared saving (3 Nov): the leveling grid is also kept as the project's "leveling-workspace" draft, which goes to the
+// team's shared copy like every draft (lib/shared-sync). Whichever copy is newer, this browser's database or the
+// draft, is the workspace; `state: null` records a cleared one. The original workbook stays in this browser: it is
+// only used to export in the imported file's own format.
+const MIRROR = "leveling-workspace";
+type Mirror = { savedAt: string; state: WorkspaceState<unknown, unknown, unknown> | null } | null;
+const mirror = (): Mirror => { try { return readDraft<Mirror>(getActiveProjectId(), MIRROR, null); } catch { return null; } };
+const keepMirror = (value: NonNullable<Mirror>) => { try { writeDraft<Mirror>(getActiveProjectId(), MIRROR, value); } catch { /* storage full: this browser's database still has it */ } };
 
 export const WORKSPACE_SCHEMA_VERSION = 1;
 
@@ -193,10 +203,16 @@ export async function loadWorkspace<Project, Item, Bidder>(): Promise<LoadedWork
   try {
     const database = await openDatabase();
     const transaction = database.transaction([WORKSPACE_STORE, FILE_STORE], "readonly");
+    const shared = mirror();
     return await runTransaction(transaction, async () => {
       const record: unknown = await requestResult(transaction.objectStore(WORKSPACE_STORE).get(keys.workspace));
+      if (record !== undefined) validateWorkspaceRecord(record, keys);
+      // Someone else's newer grid (or their clearing it) from the shared copy.
+      if (shared && (record === undefined || shared.savedAt > record.savedAt)) {
+        // Without the workbook here: this browser's copy may be another import's, and exporting would mix the two.
+        return shared.state ? { ...renameDemoNamesDeep(shared.state as WorkspaceState<Project, Item, Bidder>), savedAt: shared.savedAt } : null;
+      }
       if (record === undefined) return null;
-      validateWorkspaceRecord(record, keys);
       let originalWorkbook: ArrayBuffer | undefined;
       if (record.workbookKey) {
         const workbook: unknown = await requestResult(transaction.objectStore(FILE_STORE).get(record.workbookKey));
@@ -261,7 +277,7 @@ export async function saveWorkspace<Project, Item, Bidder>(
         ...(workbookKey ? { workbookKey } : {}),
       } satisfies StoredWorkspace));
       return { savedAt };
-    });
+    }).then(saved => { keepMirror({ savedAt: saved.savedAt, state: persistedState as WorkspaceState<unknown, unknown, unknown> }); return saved; });
   } catch (error) {
     throw mapStorageError(error, "STORAGE_SAVE_FAILED");
   }
@@ -276,6 +292,7 @@ export async function clearWorkspace(): Promise<void> {
       transaction.objectStore(WORKSPACE_STORE).delete(keys.workspace);
       transaction.objectStore(FILE_STORE).delete(keys.workbook);
     });
+    keepMirror({ savedAt: new Date().toISOString(), state: null });
   } catch (error) {
     throw mapStorageError(error, "STORAGE_CLEAR_FAILED");
   }

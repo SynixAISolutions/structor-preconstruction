@@ -7,6 +7,7 @@ import { ESTIMATE_STAGES, estimateStageLabel, PROJECT_TYPES, TAX_STATUSES, WORK_
 import type { useBudget } from "../../lib/use-budget";
 import { useLocalDraft } from "../../lib/use-local-draft";
 import { draftStorageKey } from "../../lib/project-scope";
+import { noteDraftSaved } from "../../lib/shared-sync";
 import { Button, Empty, Panel, Stats, exportRows, type ViewProps, usd } from "./shared";
 import "./concept-budget.css";
 import { ConceptAiReview } from "./concept-ai-review";
@@ -85,6 +86,7 @@ export function ConceptBudgetView({ project, budget, notify, navigate }: { proje
       if (history.some(item => item.name.toLowerCase() === record.name.toLowerCase() && item.year === record.year && item.source === record.source)) throw new Error("That project and source are already in the library.");
       const next = [...history, record];
       localStorage.setItem(draftStorageKey(project.id, "budget-history"), JSON.stringify(next));
+      noteDraftSaved(project.id, "budget-history");
       setHistory(next); setSelected(ids => [...ids, record.id]); setBook(null); setDetail(null); setError(""); notify("Historical budget saved in this browser's shared library.");
     } catch (failure) { setError(failure instanceof Error && failure.name !== "QuotaExceededError" ? failure.message : "There is not enough browser storage. Export the library before adding more."); }
   }
