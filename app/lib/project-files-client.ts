@@ -9,6 +9,7 @@ import { upload } from "@vercel/blob/client";
 import { manualSections } from "./manual-sections";
 import { aiJob, readTitleBlock } from "./ai-more-client";
 import { rfpPages, type RfpFact } from "./rfp";
+import type { OwnerBudgetLine } from "./owner-budget";
 import { useActiveProject } from "./project-scope";
 import { pageTextBoxes, type TextBox } from "./text-anchor";
 import { paintPage } from "./pdf-paint";
@@ -394,6 +395,15 @@ export async function renderStoredTiles(doc: StoredDocument, pageNumber: number,
   const tiles: { image: string; box: Box }[] = [];
   for (const box of boxes) tiles.push({ image: await renderStoredRegion(doc, pageNumber, box, size), box });
   return tiles;
+}
+
+/** Reads the owner's budget or an earlier estimate (the first 40 pages) and returns its cost lines, each with its page
+ * and quote, for the estimator to tick (lib/owner-budget applyOwnerBudget). */
+export async function readOwnerBudget(doc: StoredDocument, signal?: AbortSignal): Promise<{ lines: OwnerBudgetLine[]; model: string }> {
+  const pages = (await readStoredText(doc, { first: 1, last: Math.min(doc.pageCount, 40) })).filter(p => p.text.trim()).map(p => ({ page: p.page, text: p.text }));
+  if (!pages.length) throw new Error("This file has no text to read. Upload a PDF exported from the spreadsheet, not a scan.");
+  const answer = await aiJob<{ lines: OwnerBudgetLine[] }>("budget-lines", { pages }, signal);
+  return { lines: answer.lines, model: answer.model };
 }
 
 /** Reads a stored RFP and returns the project details it states, each with its page and quote, for the user to accept (lib/rfp applyRfpFacts). */

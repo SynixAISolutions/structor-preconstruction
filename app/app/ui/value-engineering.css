@@ -9,3 +9,6 @@
 p.ve-applied,p.ve-unapplied{font-size:11px;margin:12px 0 0}
 @media(max-width:900px){.ve-detail-summary{grid-template-columns:1fr 1fr}}
 @media(max-width:700px){.ve-detail-summary{grid-template-columns:1fr}}
+
+/* A VE item's attached backup (ve-files.tsx). */
+.ve-files{display:grid;gap:10px;margin-top:16px}.ve-files-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.ve-files-actions small{font-size:10px;color:#8c9993}

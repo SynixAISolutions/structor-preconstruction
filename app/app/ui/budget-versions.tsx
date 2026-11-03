@@ -6,6 +6,7 @@ import { budgetTotals, type BudgetState } from "../../lib/budget";
 import type { Project } from "../../lib/projects";
 import { useLocalDraft } from "../../lib/use-local-draft";
 import { draftStorageKey } from "../../lib/project-scope";
+import { noteDraftSaved } from "../../lib/shared-sync";
 import { Badge, Button, Empty, Modal, Panel, Stats, exportRows, type ViewProps } from "./shared";
 import { estimateMoney } from "./estimate-format";
 import "./workflow-features.css";
@@ -26,7 +27,7 @@ export function BudgetVersionsView({ budget, project, notify }: { budget: Budget
     event.preventDefault(); const form = new FormData(event.currentTarget);
     try {
       const next = saveBudgetVersion(saved, budget, { projectId: project.id, name: String(form.get("name")), stage: String(form.get("stage")) as BudgetVersionStage, reason: String(form.get("reason")), by: "Marcel Khoury", at: new Date().toISOString() });
-      try { localStorage.setItem(draftStorageKey(project.id, "budget-versions"), JSON.stringify(next)); }
+      try { localStorage.setItem(draftStorageKey(project.id, "budget-versions"), JSON.stringify(next)); noteDraftSaved(project.id, "budget-versions"); }
       catch { throw new Error("The version was not saved. Browser storage is unavailable or full; export your current budget before leaving."); }
       setSaved(next); setAfterId(next.at(-1)!.id); setSaving(false); setError(""); notify("Budget version saved. Earlier versions and the current budget keep their values.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "The version could not be saved."); }

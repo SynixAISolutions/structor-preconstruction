@@ -6,6 +6,7 @@ import { EMPTY_SETUP, SetupRuleError, projectSetup, type SetupChecks, type Setup
 import { findManual, latestDocuments } from "./project-files";
 import { readStoredText, useProjectDocuments } from "./project-files-client";
 import { draftStorageKey, getActiveProjectId } from "./project-scope";
+import { noteDraftSaved } from "./shared-sync";
 import type { Project } from "./projects";
 import { dueChecks, runSetupChecks, type ReferencedDoc } from "./setup-checks";
 import { useBudget } from "./use-budget";
@@ -27,7 +28,7 @@ function stored(projectId: string): SetupChecks {
 }
 /** Saves results straight to storage (the component that started the run may be gone). */
 function save(projectId: string, found: SetupChecks) {
-  try { localStorage.setItem(draftStorageKey(projectId, "project-setup-checks"), JSON.stringify({ ...stored(projectId), ...found })); } catch { /* the mounted copies still get it */ }
+  try { localStorage.setItem(draftStorageKey(projectId, "project-setup-checks"), JSON.stringify({ ...stored(projectId), ...found })); noteDraftSaved(projectId, "project-setup-checks"); } catch { /* the mounted copies still get it */ }
 }
 const io = {
   text: readStoredText,

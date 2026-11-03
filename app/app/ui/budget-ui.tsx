@@ -25,6 +25,7 @@ import { useLevelingComparison } from "./use-leveling-comparison";
 import { EstimateBasisLabel } from "./estimate-budget-choice";
 import { TradeVarianceReport } from "./trade-variance";
 import { ConceptBudgetView } from "./concept-budget";
+import { OwnerBudgetView } from "./owner-budget";
 import { BudgetVersionsView } from "./budget-versions";
 import { BasisOfEstimateView } from "./basis-of-estimate";
 import { estimateStageLabel, type Project } from "../../lib/projects";
@@ -186,8 +187,8 @@ export function BudgetView({ notify, navigate, project }: ViewProps & { project:
     <PreviewNote>{state.lines.length ? "Browser-only demo · Owner-carried costs stay visible and are excluded from contractor totals." : "Browser-only demo · This project starts with an empty budget and saves additions in this browser."}</PreviewNote>
     <p>Estimate stage: {estimateStageLabel(project.estimateStage)}</p>
     <Panel title="In-house estimate" subtitle="Live priced takeoffs · Direct costs · Compare it with the low sub in Trade variance."><strong>{estimate.rows.length ? estimateMoney(estimate.byTrade.total) : "Not estimated"}</strong><p>{estimate.rows.length} items · {estimate.rows.filter(r => !r.reviewed).length} need review</p><Button onClick={() => navigate("takeoffs")}>Open trade estimates</Button></Panel>
-    <Tabs tabs={["Budget lines", "Trade variance", "Budget versions", "Historical concept budget"]} value={view} onChange={setView}/>
-    {view === "Budget versions" ? <BudgetVersionsView key={project.id} budget={costPlan} project={project} notify={notify}/> : view === "Historical concept budget" ? <ConceptBudgetView key={project.id} project={project} budget={{ state, run }} notify={notify} navigate={navigate}/> : view === "Trade variance" ? <TradeVarianceReport estimate={estimate} budget={costPlan} candidates={candidates} loading={levelingLoading} message={levelingMessage} onRefresh={comparison.refresh}/> : <>
+    <Tabs tabs={["Budget lines", "Trade variance", "Owner's budget", "Budget versions", "Historical concept budget"]} value={view} onChange={setView}/>
+    {view === "Owner's budget" ? <OwnerBudgetView key={project.id} project={project} budget={{ state, run }} notify={notify} navigate={navigate}/> : view === "Budget versions" ? <BudgetVersionsView key={project.id} budget={costPlan} project={project} notify={notify}/> : view === "Historical concept budget" ? <ConceptBudgetView key={project.id} project={project} budget={{ state, run }} notify={notify} navigate={navigate}/> : view === "Trade variance" ? <TradeVarianceReport estimate={estimate} budget={costPlan} candidates={candidates} loading={levelingLoading} message={levelingMessage} onRefresh={comparison.refresh}/> : <>
     {!state.lines.length && !state.allowances.length ? <Panel><Empty title="This project has no budget yet" description="Add the first direct or indirect cost line to start the cost plan." action={<Button variant="primary" onClick={() => setEdit("new")}><Plus size={16}/>Add budget line</Button>}/></Panel> : <>
       <Stats items={[
         { label: "Total cost", value: usd(totals.totalBudget), detail: `${usd(totals.direct)} trades · ${usd(totals.indirect)} indirect${totals.allowancesAdded ? ` · ${usd(totals.allowancesAdded)} allowances` : ""}` },
