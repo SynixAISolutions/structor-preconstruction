@@ -16,7 +16,7 @@ type Action = { kind: "assign" | "not-applicable" | "split"; row: CoverageRow };
 type Props = { procurement: ProcurementHook["state"]; run: ProcurementHook["run"]; actor: string; onBidForm: (packageId: string) => void } & Pick<ViewProps, "notify" | "navigate">;
 
 export function ScopeViewTabs({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  const tabs = ["Bid forms", "Section coverage"];
+  const tabs = ["Bid forms", "Section coverage", "Dashboard"];
   return <div className="ui-tabs" role="tablist" aria-label="Scope views">{tabs.map((tab, index) => <button key={tab} id={`scope-tab-${index}`} role="tab" aria-controls="scope-tab-panel" aria-selected={tab === value} tabIndex={tab === value ? 0 : -1} className={tab === value ? "active" : ""} onClick={() => onChange(tab)} onKeyDown={event => {
     if (event.altKey || event.ctrlKey || event.metaKey || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
