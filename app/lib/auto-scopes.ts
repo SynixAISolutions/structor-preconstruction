@@ -12,7 +12,7 @@ import { addRunToBidForms, recordRun, type ExtractionState } from "./extraction"
 import { addPage, DrawingFlipRuleError, type DrawingFlipState } from "./drawing-flip";
 import { addPackage, type Procurement } from "./procurement";
 import { drawingRegister, specificationSections, type StoredDocument } from "./project-files";
-import { storedDocuments, uploadsSettleIn, useProjectDocuments } from "./project-files-client";
+import { readStoredText, storedDocuments, uploadsSettleIn, useProjectDocuments } from "./project-files-client";
 import { sectionsByTrade, tradesToAdd } from "./project-scopes";
 import { applyBidPackagePlan } from "./bid-package-ai";
 import { planBidPackages } from "./bid-package-client";
@@ -27,7 +27,7 @@ import { blendPace, checkShare, FIRST_PACE, measurePace, secondsLeft, steadyLeft
 import { readTradeScope } from "./scope-reading";
 import { readDraft, writeDraft } from "./use-local-draft";
 import { sharedReady, useSharedStatus } from "./shared-sync";
-import { biggestFirst, MAX_SAVED_RUNS, NO_RUNS, readingWork, runTarget, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns, type TradeToRead } from "./auto-scope-plan";
+import { biggestFirst, changedSince, filesToCompare, MAX_SAVED_RUNS, NO_RUNS, onlyChanged, readingWork, runTarget, runToUpdate, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns, type TradeToRead } from "./auto-scope-plan";
 import { sampleProcurement } from "./data/procurement";
 import { sampleExtraction } from "./data/extraction";
 import { sampleDrawingFlip } from "./data/drawing-flip";
@@ -126,15 +126,18 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   // run says so.
   const controller = new AbortController();
   let procurement = readDraft<Procurement>(projectId, "procurement", sampleProcurement);
-  let newTrades: string[] = [], packagesBy = previous?.packagesBy;
+  // After a revision (Marcel, 24 Oct): the last finished run on other files. Its bid packages stay, and only the
+  // sheets and sections whose text changed since are read (lib/auto-scope-plan changedSince).
+  const prior = previous?.update ? savedRuns(projectId).runs.find(r => r.id === previous.update!.since) ?? null : previous ? null : runToUpdate(savedRuns(projectId).runs, target.key);
+  let newTrades: string[] = [], packagesBy = previous?.packagesBy ?? prior?.packagesBy;
 
   // The time left, every five seconds (lib/run-time-left): what each trade still has (`ledger`, from what its files
   // suggest until it starts, then from its own counts), the drawing search and the scanned sheets, at the pace measured
   // since the run began. Until the AI sets the packages, Marcel's CSI trades stand in for them.
   const pace0 = keptPace(), counters0 = { requests: aiTimes(), ocr: ocrWork() };
   const began = Date.now();
-  let pace = pace0, shown: { seconds: number; at: number } | null = null, share = 0, setupFrom: number | null = previous ? null : Date.now();
-  let ledger = ledgerOf(tradesToRead([...procurement.packages, ...tradesToAdd(procurement.packages, { sections: specificationSections(documents), sheets: drawingRegister(documents) })], documents));
+  let pace = pace0, shown: { seconds: number; at: number } | null = null, share = 0, setupFrom: number | null = previous || prior ? null : Date.now();
+  let ledger = prior ? new Map<string, TradeLeft>() : ledgerOf(tradesToRead([...procurement.packages, ...tradesToAdd(procurement.packages, { sections: specificationSections(documents), sheets: drawingRegister(documents) })], documents));
   let searchLeft = Math.ceil(drawingRegister(documents).length / SHEET_REFERENCE_LIMITS.sheets), searching = false;
   const tick = () => {
     const checks = checkShare([...ledger.values()]);
@@ -152,7 +155,8 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   // Says every 30 s that this tab is still reading, for other browsers (save stamps it).
   const beating = setInterval(() => { if (snapshot.run?.id) save(snapshot.run); }, 30_000);
 
-  if (!previous) {
+  if (!previous && prior) emit({ run: { id: "", projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades: [], trades: [], added: 0, duplicates: 0, stage: "Finding what changed since the last reading" } });
+  if (!previous && !prior) {
     emit({ run: { id: "", projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades: [], trades: [], added: 0, duplicates: 0 } });
     try {
       const plan = await planBidPackages(documents, procurement.packages, controller.signal);
@@ -170,6 +174,15 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   }
   setupFrom = null;
 
+  // 1a. After a revision: which sheets and sections changed, from their page text against the versions the last run read.
+  let update = previous?.update;
+  if (prior && !update) {
+    const before = new Set(prior.key.split("|"));
+    const texts = new Map<string, Map<number, string>>();
+    await Promise.all(filesToCompare(documents, before).map(async d => texts.set(d.id, new Map((await readStoredText(d).catch(() => [])).map(p => [p.page, p.text])))));
+    update = { since: prior.id, ...changedSince(documents, before, (id, page) => texts.get(id)?.get(page)) };
+  }
+
   // 1b. Scanned sheets have no text to search: each is read once with OCR in the background and saved for everyone
   // (lib/sheet-text-ocr, free, about a minute a sheet), while the trades are read (Danial, 28 Oct: "Make it automatic").
   const ocr = ocrScannedSheets(storedDocuments(projectId) ?? documents).catch(() => {});
@@ -182,18 +195,20 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   const all = tradesToRead(procurement.packages, documents);
   const assigned = sectionsByTrade(specificationSections(documents), procurement.packages);
   const refPackages = procurement.packages.map(p => ({ id: p.id, name: p.name, code: p.code, sections: (assigned.get(p.id) ?? []).map(s => `${s.section} ${s.title}`) }));
+  // The drawing search runs again only when sheets changed.
+  const candidates = update ? onlyChanged(all, update) : all, search = !update || update.sheets.length > 0;
   let sheetTexts: Awaited<ReturnType<typeof loadSheetTexts>> | null = null, fullCost: number | undefined;
   if (reader && !reader.autoScopes) {
     sheetTexts = await loadSheetTexts(documents).catch(() => null);
-    fullCost = (estimateCost(reader.model, readingWork(all)) ?? 0) + (sheetTexts ? estimateCost(reader.model, referenceWork(sheetTexts.sheets, refPackages)) ?? 0 : 0);
+    fullCost = (estimateCost(reader.model, readingWork(candidates)) ?? 0) + (sheetTexts && search ? estimateCost(reader.model, referenceWork(sheetTexts.sheets, refPackages)) ?? 0 : 0);
   }
   const scopesLater = fullCost !== undefined && fullCost >= AUTO_READ_UNDER;
-  const readable = scopesLater ? [] : all;
+  const readable = scopesLater ? [] : candidates;
   ledger = ledgerOf(readable, id => !!previous?.trades.some(t => t.packageId === id && t.status === "done"));
   const queued = (t: (typeof readable)[number]): AutoTrade => ({ packageId: t.pkg.id, name: t.pkg.name, status: "queued", added: 0, note: "" });
   let run: AutoRun = previous
     ? { ...previous, status: "running", newTrades: [...new Set([...previous.newTrades, ...newTrades])], trades: readable.map(t => previous.trades.find(x => x.packageId === t.pkg.id && x.status === "done") ?? queued(t)), scopesLater, fullCost }
-    : { id: crypto.randomUUID(), projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades, packagesBy, trades: readable.map(queued), added: 0, duplicates: 0, scopesLater, fullCost };
+    : { id: crypto.randomUUID(), projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades, packagesBy, trades: readable.map(queued), added: 0, duplicates: 0, scopesLater, fullCost, update };
   save(run);
   const setTrade = (packageId: string, change: Partial<AutoTrade>, totals: Partial<Pick<AutoRun, "added" | "duplicates">> = {}) => {
     run = { ...run, ...totals, trades: run.trades.map(t => t.packageId === packageId ? { ...t, ...change } : t) };
@@ -205,7 +220,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   // requests share the tab's pool (lib/ai-pool), so they fill the slots the last trades leave idle (2 Nov: 52 requests,
   // two minutes, used to wait for the last trade).
   let searchable = false;
-  const references = !scopesLater && refPackages.length ? (async () => {
+  const references = !scopesLater && search && refPackages.length ? (async () => {
     await ocr;
     searchable = true;
     const texts = await loadSheetTexts(storedDocuments(projectId) ?? documents).catch(() => null) ?? sheetTexts;

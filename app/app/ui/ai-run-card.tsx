@@ -36,7 +36,8 @@ export function AiRunCard({ projectId }: { projectId: string }) {
       <span className="ai-run-icon"><Sparkles size={16}/></span>
       <div className="ai-run-copy">
         <strong>AI is reading {runFiles(run)}</strong>
-        <small>{total ? `${done} of ${total} trades · ${run.added} scope item${run.added === 1 ? "" : "s"} added` : "Setting up the bid packages…"}{run.newTrades.length ? ` · ${run.newTrades.length} new bid package${run.newTrades.length === 1 ? "" : "s"}` : ""}</small>
+        <small>{total ? `${done} of ${total} trades · ${run.added} scope item${run.added === 1 ? "" : "s"} added` : run.update || run.stage ? "Reading the new revision…" : "Setting up the bid packages…"}{run.newTrades.length ? ` · ${run.newTrades.length} new bid package${run.newTrades.length === 1 ? "" : "s"}` : ""}</small>
+        {run.update && <small>Revision: {run.update.sheets.length} changed sheet{run.update.sheets.length === 1 ? "" : "s"}, {run.update.sections.length} changed section{run.update.sections.length === 1 ? "" : "s"}</small>}
         <span className="ai-run-bar" aria-hidden><i style={{ width: `${Math.max(4, percent)}%` }}/></span>
         {left && <small className="ai-run-left">{timeLeftLabel(left.seconds)}</small>}
         {reading.length > 0 ? <small className="ai-run-now">Now: {reading.map(t => t.name).join(", ")}</small> : run.stage && <small className="ai-run-now">{run.stage}</small>}

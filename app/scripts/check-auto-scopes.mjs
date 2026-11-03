@@ -94,4 +94,36 @@ assert.equal(A.runFiles(finished), "manual.pdf and arch.pdf");
 assert.equal(A.runFiles({ documents: ["a", "b", "c"] }), "a and 2 more");
 assert.deepEqual(A.runProgress(finished), { done: 3, total: 3 });
 
-console.log("Auto scopes checked: Marcel's CSI groups, runs only for new uploads and named by their files, bid packages for every section, resume after a closed tab, findings into bid forms without duplicates, copy to another trade, the run summary.");
+// After a revision (Marcel, 24 Oct: "uploading a new drawing revision should trigger a scope update"): only the
+// sheets and sections whose text changed since the last finished run are read again.
+{
+  const sheet = (page, number, title) => ({ page, sheet: number, title, date: "" });
+  const set1 = doc("set1", "drawings", { series: "set", uploadedAt: "2026-10-27T10:00:00.000Z", sheets: [sheet(1, "A1.1", "FLOOR PLAN"), sheet(2, "A8.1", "PARTITION TYPES")] });
+  const man1 = doc("man1", "manual", { series: "man", uploadedAt: "2026-10-27T10:00:00.000Z", sections: [sec("09 29 00", "Gypsum Board", 5), sec("09 51 13", "Acoustical Panel Ceilings", 9)] });
+  const rev = doc("rev", "drawings", { series: "rev", uploadedAt: "2026-11-02T10:00:00.000Z", sheets: [sheet(1, "A8.1", "PARTITION TYPES")] });
+  const man2 = doc("man2", "manual", { series: "man", revision: 2, uploadedAt: "2026-11-02T10:00:00.000Z", sections: [sec("09 29 00", "Gypsum Board", 5), sec("09 51 13", "Acoustical Panel Ceilings", 9)] });
+  const docs = [set1, man1, rev, man2], before = new Set(["set1", "man1"]);
+  const texts = { set1: { 1: "FLOOR PLAN", 2: "TYPE A 5/8 GYP" }, man1: { 5: "Gypsum board", 6: "Level 4 finish", 9: "Ceiling panels", 10: "Grid" }, rev: { 1: "TYPE A 5/8 GYP TYPE X" }, man2: { 5: "Gypsum  board", 6: "Level 4 finish", 9: "Ceiling panels", 10: "Grid and seismic bracing" } };
+  const text = (id, page) => texts[id]?.[page];
+  assert.deepEqual(A.filesToCompare(docs, before).map(d => d.id).sort(), ["man1", "man2", "rev", "set1"], "The new files and the versions they replace");
+  assert.deepEqual(A.changedSince(docs, before, text), { sheets: ["A8.1"], sections: ["09 51 13"] }, "A8.1's revised text and the ceiling section's new page; spacing alone isn't a change");
+  assert.deepEqual(A.changedSince(docs, before, (id, page) => id === "rev" ? "TYPE A 5/8 GYP" : text(id, page)).sheets, [], "A reissued sheet with the same text didn't change");
+  assert.deepEqual(A.changedSince(docs, before, (id, page) => id === "rev" ? "" : text(id, page)).sheets, ["A8.1"], "A scanned sheet can't be compared: it counts as changed");
+  const added = doc("add", "drawings", { series: "add", uploadedAt: "2026-11-02T11:00:00.000Z", sheets: [sheet(1, "A9.1", "CEILING DETAILS")] });
+  assert(A.changedSince([...docs, added], before, text).sheets.includes("A9.1"), "A new sheet number is new scope");
+  assert.deepEqual(A.changedSince(docs, new Set(["set1", "man1", "rev", "man2"]), text), { sheets: [], sections: [] }, "Nothing new since a run that read everything");
+
+  const drywall = { pkg: { id: "drywall" }, sections: man2.sections.map(s => ({ ...s, doc: man2 })).slice(0, 1), sheets: [{ sheet: "A8.1" }, { sheet: "A1.1" }] };
+  const ceilings = { pkg: { id: "ceilings" }, sections: man2.sections.map(s => ({ ...s, doc: man2 })).slice(1), sheets: [] };
+  const masonry = { pkg: { id: "masonry" }, sections: [], sheets: [{ sheet: "A1.1" }] };
+  const changed = A.onlyChanged([drywall, ceilings, masonry], { sheets: ["A8.1"], sections: ["09 51 13"] });
+  assert.deepEqual(changed.map(t => [t.pkg.id, t.sections.map(s => s.section), t.sheets.map(r => r.sheet)]), [["drywall", [], ["A8.1"]], ["ceilings", ["09 51 13"], []]], "Each trade reads only its changed parts; masonry has none");
+
+  const done = (id, key, status = "done") => ({ ...finished, id, key, status });
+  assert.equal(A.runToUpdate([done("r3", "new", "running"), done("r2", "old"), done("r1", "older")], "new").id, "r2", "The latest finished run on other files");
+  assert.equal(A.runToUpdate([done("r1", "same")], "same"), null, "Not the run on these same files");
+  assert.match(A.runSummary({ ...finished, update: { since: "r2", sheets: ["A8.1"], sections: [] } }), /^Revision: 1 changed sheet and 0 changed sections read again/);
+  assert.equal(A.runSummary({ ...finished, update: { since: "r2", sheets: [], sections: [] } }), "Revision: nothing changed on the drawings or in the specifications");
+}
+
+console.log("Auto scopes checked: Marcel's CSI groups, runs only for new uploads and named by their files, bid packages for every section, resume after a closed tab, findings into bid forms without duplicates, copy to another trade, the run summary, reading only what a revision changed.");
