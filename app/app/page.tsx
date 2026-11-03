@@ -18,6 +18,8 @@ import { DEFAULT_SCREEN, resolveScreen, screenGroup, screenLabel, searchScreens 
 import { PROJECT_TABS, demoProject, filterProjects, loadProjects, sampleProjectRecords, saveProjects, squareFeetLabel, type Project } from "../lib/projects";
 import { SAMPLE_PROJECT_ID, selectProject, useActiveProject } from "../lib/project-scope";
 import { useSampleRefresh } from "../lib/use-sample-refresh";
+import { noteProjectsSaved, onSharedProjects, useSharedSync } from "../lib/shared-sync";
+import { SharedStatus } from "./ui/shared-status";
 import { CompanyForms } from "./ui/company-forms";
 import { SampleDataSettings, SampleRefreshBanner } from "./ui/sample-data-settings";
 import { ArchitectView } from "./ui/architect-view";
@@ -45,7 +47,9 @@ export default function StructorApp(){
  const notify=useCallback((message:string)=>setToast(message),[]);
  const navigate=useCallback((next:Screen)=>{setScreen(next);setModelInspection(null);setMenuOpen(false);setSearchOpen(false); window.location.hash=next;scrollRef.current?.scrollTo({top:0});},[]);
  useEffect(()=>{const sync=()=>{const value=location.hash.slice(1);const next=resolveScreen(value);if(next){setScreen(next);if(value!==next)history.replaceState(null,"",`#${next}`);}};sync();window.addEventListener("hashchange",sync);const saved=loadProjects();if(saved)setProjects(saved);setReady(true);return()=>window.removeEventListener("hashchange",sync);},[]);
- useEffect(()=>{if(ready)saveProjects(projects);},[projects,ready]);
+ useEffect(()=>{if(ready){saveProjects(projects);noteProjectsSaved(projects);}},[projects,ready]);
+ useSharedSync(activeId);
+ useEffect(()=>onSharedProjects(()=>{const saved=loadProjects();if(saved)setProjects(saved);}),[]);
  useEffect(()=>{if(!toast)return;const id=setTimeout(()=>setToast(""),4500);return()=>clearTimeout(id);},[toast]);
  useEffect(()=>{const handler=(e:KeyboardEvent)=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();setSearchOpen(v=>!v);}};window.addEventListener("keydown",handler);return()=>window.removeEventListener("keydown",handler);},[]);
  const [newProjectBusy,setNewProjectBusy]=useState(false);
@@ -61,7 +65,7 @@ export default function StructorApp(){
    <div className="sidebar-footer"><button onClick={()=>navigate("settings")} className={screen==="settings"?"active":""}><Settings2 size={17}/>Settings</button><button onClick={()=>setHelpOpen(true)}><CircleHelp size={17}/>Help & glossary<ArrowUpRight size={14}/></button><div className="sidebar-user"><span className="user-avatar">MK</span><div><strong>Marcel Khoury</strong><small>Project manager</small></div><span className="online-dot"/><button className="sidebar-signout" onClick={signOut} aria-label="Sign out" title="Sign out"><LogOut size={15}/></button></div></div>
   </aside>
   <div className="product-main">
-    <header className="product-topbar"><div className="topbar-left"><button className="ui-icon-btn mobile-menu" aria-label="Open navigation" onClick={()=>setMenuOpen(true)}><Menu size={21}/></button><span className="breadcrumb-home">{screenGroup(screen)?.label??"WORKSPACE"}</span><ChevronRight size={14}/><strong>{screenLabel(screen)}</strong></div><div className="topbar-right"><span className="preview-label"><span/>Design preview</span><button className="top-search" aria-label="Search workspace" onClick={()=>setSearchOpen(true)}><Search size={16}/><span>Quick find</span><kbd>⌘ K</kbd></button><button className="ui-icon-btn notification-btn" aria-label="Open notifications" onClick={()=>setNotifications(v=>!v)}><Bell size={18}/><i/></button><button className="top-avatar" onClick={()=>navigate("settings")} aria-label="Open profile">MK</button></div></header>
+    <header className="product-topbar"><div className="topbar-left"><button className="ui-icon-btn mobile-menu" aria-label="Open navigation" onClick={()=>setMenuOpen(true)}><Menu size={21}/></button><span className="breadcrumb-home">{screenGroup(screen)?.label??"WORKSPACE"}</span><ChevronRight size={14}/><strong>{screenLabel(screen)}</strong></div><div className="topbar-right"><SharedStatus/><span className="preview-label"><span/>Design preview</span><button className="top-search" aria-label="Search workspace" onClick={()=>setSearchOpen(true)}><Search size={16}/><span>Quick find</span><kbd>⌘ K</kbd></button><button className="ui-icon-btn notification-btn" aria-label="Open notifications" onClick={()=>setNotifications(v=>!v)}><Bell size={18}/><i/></button><button className="top-avatar" onClick={()=>navigate("settings")} aria-label="Open profile">MK</button></div></header>
    {notifications&&<ActivityInbox project={project} onOpen={s=>{setNotifications(false);navigate(s);}}/>}
    <div className="product-content" ref={scrollRef}>
     <div className="page-enter" key={screen}>

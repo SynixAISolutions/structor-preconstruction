@@ -2,9 +2,7 @@
 
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { draftStorageKey, startingDraft, useActiveProject } from "./project-scope";
-
-/** Fired on window, with the storage key as detail, when a draft is changed outside its screen. */
-const DRAFT_CHANGED = "structor-draft-changed";
+import { announceDraftChange, DRAFT_CHANGED, noteDraftSaved } from "./shared-sync";
 
 /** A project's saved draft as its screen would load it: the saved copy, else its starting value. */
 export function readDraft<T>(projectId: string, key: string, initial: T): T {
@@ -19,11 +17,13 @@ export function readDraft<T>(projectId: string, key: string, initial: T): T {
 /**
  * Saves a draft from outside its screen (Ask Structor's approved changes) and tells any open screen
  * using it to reload, so neither keeps an older copy. Throws when storage refuses the write.
+ * The change then goes to the team's shared copy (lib/shared-sync).
  */
 export function writeDraft<T>(projectId: string, key: string, value: T): void {
   const storageKey = draftStorageKey(projectId, key);
   localStorage.setItem(storageKey, JSON.stringify(value));
-  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(DRAFT_CHANGED, { detail: storageKey }));
+  announceDraftChange(storageKey);
+  noteDraftSaved(projectId, key);
 }
 
 /**
@@ -54,8 +54,9 @@ export function useLocalDraft<T>(key: string, initial: T) {
     if (draft.storageKey !== storageKey || !draft.edited) return;
     try {
       localStorage.setItem(storageKey, JSON.stringify(draft.value));
+      noteDraftSaved(projectId, key);
     } catch { /* Keep the current session editable when storage is full. */ }
-  }, [draft, storageKey]);
+  }, [draft, storageKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setValue: Dispatch<SetStateAction<T>> = useCallback(next => setDraft(current => ({
     storageKey: current.storageKey,

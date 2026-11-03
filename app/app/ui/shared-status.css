@@ -1,0 +1,9 @@
+/* Where changes are saved, in the top bar beside "Design preview" (lib/shared-sync). */
+.shared-status { display: flex; align-items: center; gap: 6px; font-size: 9px; color: #7b858b; white-space: nowrap; }
+.shared-status > span { width: 6px; height: 6px; border-radius: 50%; background: #9aa6a1; }
+.shared-status.saved > span { background: #4f9a74; }
+.shared-status.saving > span { background: #e9703e; animation: shared-status-pulse 1.2s ease-in-out infinite; }
+.shared-status.offline > span { background: #d0a03c; }
+@keyframes shared-status-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .shared-status.saving > span { animation: none; } }
+@media (max-width: 700px) { .shared-status { font-size: 0; gap: 0; } }

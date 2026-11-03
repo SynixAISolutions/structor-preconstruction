@@ -26,6 +26,7 @@ import { OCR_WORKERS, ocrWork } from "./sheet-ocr";
 import { blendPace, checkShare, FIRST_PACE, measurePace, secondsLeft, steadyLeft, tradesLeft, type Pace, type TradeLeft } from "./run-time-left";
 import { readTradeScope } from "./scope-reading";
 import { readDraft, writeDraft } from "./use-local-draft";
+import { sharedReady, useSharedStatus } from "./shared-sync";
 import { biggestFirst, MAX_SAVED_RUNS, NO_RUNS, readingWork, runTarget, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns, type TradeToRead } from "./auto-scope-plan";
 import { sampleProcurement } from "./data/procurement";
 import { sampleExtraction } from "./data/extraction";
@@ -46,7 +47,12 @@ let active: string | null = null;
 const waiting = new Map<string, StoredDocument[]>();
 
 const savedRuns = (projectId: string): SavedRuns => readDraft<SavedRuns>(projectId, RUNS_KEY, NO_RUNS);
-function save(run: AutoRun) {
+let tab = "";
+const thisTab = () => tab ||= crypto.randomUUID();
+/** How long a run another browser is reading stays theirs without word from it (it says so every 30 s while it reads). */
+const OTHER_TAB_FOR = 120_000;
+function save(unstamped: AutoRun) {
+  const run = unstamped.status === "running" ? { ...unstamped, tab: thisTab(), beat: new Date().toISOString() } : unstamped;
   const runs = [run, ...savedRuns(run.projectId).runs.filter(r => r.id !== run.id)].slice(0, MAX_SAVED_RUNS);
   try { writeDraft<SavedRuns>(run.projectId, RUNS_KEY, { runs }); } catch { /* storage full: the run goes on, unsaved */ }
   emit({ run: run.status === "running" ? run : null });
@@ -101,6 +107,8 @@ export function ensureRun(projectId: string, documents: StoredDocument[]) {
   if (active === projectId && snapshot.run?.key === target.key) return;
   const previous = savedRuns(projectId).runs.find(r => r.key === target.key) ?? null;
   if (previous?.status === "done") return;
+  // Someone else's browser is reading these files right now (shared saving): its findings arrive with the project.
+  if (previous?.status === "running" && previous.tab && previous.tab !== thisTab() && Date.now() - Date.parse(previous.beat ?? "") < OTHER_TAB_FOR) return;
   const settle = uploadsSettleIn();
   if (settle > 0) { waiting.set(projectId, documents); retryWaiting(settle); return; }
   if (active) { waiting.set(projectId, documents); return; }
@@ -141,6 +149,8 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   };
   const ticking = setInterval(tick, 5_000);
   tick();
+  // Says every 30 s that this tab is still reading, for other browsers (save stamps it).
+  const beating = setInterval(() => { if (snapshot.run?.id) save(snapshot.run); }, 30_000);
 
   if (!previous) {
     emit({ run: { id: "", projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades: [], trades: [], added: 0, duplicates: 0 } });
@@ -254,6 +264,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   }
 
   clearInterval(ticking);
+  clearInterval(beating);
   keepPace(pace);
   emit({ left: null });
   run = { ...run, status: "done", finishedAt: at() };
@@ -272,6 +283,9 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
 export function useAutoScopes(projectId: string): Snapshot {
   const { documents, ready } = useProjectDocuments(projectId);
   const key = ready ? runTarget(documents)?.key ?? "" : "";
-  useEffect(() => { if (ready && key) ensureRun(projectId, documents); }, [projectId, key, ready]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Not before the project's shared copy is in: a run someone else did or is doing must not start again here.
+  useSharedStatus();
+  const pulled = sharedReady(projectId);
+  useEffect(() => { if (ready && key && pulled) ensureRun(projectId, documents); }, [projectId, key, ready, pulled]); // eslint-disable-line react-hooks/exhaustive-deps
   return useSyncExternalStore(subscribe, () => snapshot, () => snapshot);
 }

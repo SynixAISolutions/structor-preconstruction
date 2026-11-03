@@ -29,6 +29,9 @@ export type AutoRun = {
   fullCost?: number;
   /** What the run is doing after the trades, for the progress card ("Making the scanned sheets searchable…"). */
   stage?: string;
+  /** The browser tab reading, and when it last said it still was: with shared saving (3 Nov) another person's browser
+   * sees the run and leaves it to that tab instead of reading the same files again. */
+  tab?: string; beat?: string;
   trades: AutoTrade[];
   /** Scope lines added to bid forms for approval, and lines skipped as already there. */
   added: number; duplicates: number;
