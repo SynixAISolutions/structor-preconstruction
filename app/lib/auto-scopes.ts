@@ -26,7 +26,7 @@ import { OCR_WORKERS, ocrWork } from "./sheet-ocr";
 import { blendPace, checkShare, FIRST_PACE, measurePace, secondsLeft, steadyLeft, tradesLeft, type Pace, type TradeLeft } from "./run-time-left";
 import { readTradeScope } from "./scope-reading";
 import { readDraft, writeDraft } from "./use-local-draft";
-import { biggestFirst, changedSince, filesToCompare, MAX_SAVED_RUNS, NO_RUNS, onlyChanged, readingWork, runTarget, runToUpdate, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns, type TradeToRead } from "./auto-scope-plan";
+import { addedSince, biggestFirst, changedSince, filesToCompare, MAX_SAVED_RUNS, NO_RUNS, onlyChanged, readingWork, runTarget, runToUpdate, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns, type TradeToRead } from "./auto-scope-plan";
 import { sampleProcurement } from "./data/procurement";
 import { sampleExtraction } from "./data/extraction";
 import { sampleDrawingFlip } from "./data/drawing-flip";
@@ -145,9 +145,21 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   const ticking = setInterval(tick, 5_000);
   tick();
 
-  if (!previous && prior) emit({ run: { id: "", projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades: [], trades: [], added: 0, duplicates: 0, stage: "Finding what changed since the last reading" } });
-  if (!previous && !prior) {
-    emit({ run: { id: "", projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades: [], trades: [], added: 0, duplicates: 0 } });
+  // After a revision, first: which sheets and sections changed, from their page text against the versions the last run read.
+  let update = previous?.update;
+  if (prior && !update) {
+    emit({ run: { id: "", projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades: [], trades: [], added: 0, duplicates: 0, stage: "Finding what changed since the last reading" } });
+    const before = new Set(prior.key.split("|"));
+    const texts = new Map<string, Map<number, string>>();
+    await Promise.all(filesToCompare(documents, before).map(async d => texts.set(d.id, new Map((await readStoredText(d).catch(() => [])).map(p => [p.page, p.text])))));
+    update = { since: prior.id, ...changedSince(documents, before, (id, page) => texts.get(id)?.get(page)) };
+  }
+  // 1. The bid packages: on a first run, and after a revision that brings sheet numbers or sections no package lists yet
+  // (a discipline's drawings sent later), so the AI places them before the trades are read.
+  const added = prior && !previous ? addedSince(documents, new Set(prior.key.split("|"))) : { sheets: [], sections: [] };
+  if (!previous && (!prior || added.sheets.length || added.sections.length)) {
+    if (prior) setupFrom = Date.now();
+    emit({ run: { id: "", projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades: [], trades: [], added: 0, duplicates: 0, update } });
     try {
       const plan = await planBidPackages(documents, procurement.packages, controller.signal);
       // The latest copy: the team may have changed the packages while the AI read.
@@ -163,15 +175,6 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
     writeDraft(projectId, "procurement", procurement);
   }
   setupFrom = null;
-
-  // 1a. After a revision: which sheets and sections changed, from their page text against the versions the last run read.
-  let update = previous?.update;
-  if (prior && !update) {
-    const before = new Set(prior.key.split("|"));
-    const texts = new Map<string, Map<number, string>>();
-    await Promise.all(filesToCompare(documents, before).map(async d => texts.set(d.id, new Map((await readStoredText(d).catch(() => [])).map(p => [p.page, p.text])))));
-    update = { since: prior.id, ...changedSince(documents, before, (id, page) => texts.get(id)?.get(page)) };
-  }
 
   // 1b. Scanned sheets have no text to search: each is read once with OCR in the background and saved for everyone
   // (lib/sheet-text-ocr, free, about a minute a sheet), while the trades are read (Danial, 28 Oct: "Make it automatic").

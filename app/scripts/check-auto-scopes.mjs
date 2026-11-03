@@ -111,6 +111,8 @@ assert.deepEqual(A.runProgress(finished), { done: 3, total: 3 });
   assert.deepEqual(A.changedSince(docs, before, (id, page) => id === "rev" ? "" : text(id, page)).sheets, ["A8.1"], "A scanned sheet can't be compared: it counts as changed");
   const added = doc("add", "drawings", { series: "add", uploadedAt: "2026-11-02T11:00:00.000Z", sheets: [sheet(1, "A9.1", "CEILING DETAILS")] });
   assert(A.changedSince([...docs, added], before, text).sheets.includes("A9.1"), "A new sheet number is new scope");
+  assert.deepEqual(A.addedSince([...docs, added], before), { sheets: ["A9.1"], sections: [] }, "Only A9.1 is new to every package: the AI places it before the trades are read");
+  assert.deepEqual(A.addedSince(docs, before), { sheets: [], sections: [] }, "Revised sheets and sections are already in packages");
   assert.deepEqual(A.changedSince(docs, new Set(["set1", "man1", "rev", "man2"]), text), { sheets: [], sections: [] }, "Nothing new since a run that read everything");
 
   const drywall = { pkg: { id: "drywall" }, sections: man2.sections.map(s => ({ ...s, doc: man2 })).slice(0, 1), sheets: [{ sheet: "A8.1" }, { sheet: "A1.1" }] };

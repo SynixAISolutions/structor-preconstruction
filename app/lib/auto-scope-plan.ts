@@ -113,6 +113,13 @@ export function changedSince(docs: StoredDocument[], before: ReadonlySet<string>
   };
 }
 
+/** Sheet numbers and sections that weren't in the earlier run's files at all (a discipline's drawings sent later): no
+ * bid package lists them yet, so the AI places them in packages before the trades are read. */
+export function addedSince(docs: StoredDocument[], before: ReadonlySet<string>): { sheets: string[]; sections: string[] } {
+  const { sheets, sections } = newParts(docs, before);
+  return { sheets: sheets.filter(s => !s.was).map(s => s.sheet), sections: sections.filter(s => !s.was).map(s => s.section) };
+}
+
 /** The trades to read after a revision: each with only its changed sections and sheets; trades with neither drop out. */
 export const onlyChanged = <T extends TradeToRead<unknown>>(trades: T[], changed: { sheets: string[]; sections: string[] }): T[] => {
   const sheets = new Set(changed.sheets), sections = new Set(changed.sections.map(sectionKey));
