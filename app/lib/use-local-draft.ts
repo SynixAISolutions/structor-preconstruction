@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { draftStorageKey, startingDraft, useActiveProject } from "./project-scope";
-import { announceDraftChange, DRAFT_CHANGED, noteDraftSaved } from "./shared-sync";
+import { announceDraftChange, DRAFT_CHANGED, freeStorage, noteDraftSaved } from "./shared-sync";
 
 /** A project's saved draft as its screen would load it: the saved copy, else its starting value. */
 export function readDraft<T>(projectId: string, key: string, initial: T): T {
@@ -20,8 +20,9 @@ export function readDraft<T>(projectId: string, key: string, initial: T): T {
  * The change then goes to the team's shared copy (lib/shared-sync).
  */
 export function writeDraft<T>(projectId: string, key: string, value: T): void {
-  const storageKey = draftStorageKey(projectId, key);
-  localStorage.setItem(storageKey, JSON.stringify(value));
+  const storageKey = draftStorageKey(projectId, key), text = JSON.stringify(value);
+  try { localStorage.setItem(storageKey, text); }
+  catch (error) { if (!freeStorage(projectId)) throw error; localStorage.setItem(storageKey, text); }
   announceDraftChange(storageKey);
   noteDraftSaved(projectId, key);
 }
@@ -53,7 +54,9 @@ export function useLocalDraft<T>(key: string, initial: T) {
   useEffect(() => {
     if (draft.storageKey !== storageKey || !draft.edited) return;
     try {
-      localStorage.setItem(storageKey, JSON.stringify(draft.value));
+      const text = JSON.stringify(draft.value);
+      try { localStorage.setItem(storageKey, text); }
+      catch (error) { if (!freeStorage(projectId)) throw error; localStorage.setItem(storageKey, text); }
       noteDraftSaved(projectId, key);
     } catch { /* Keep the current session editable when storage is full. */ }
   }, [draft, storageKey]); // eslint-disable-line react-hooks/exhaustive-deps

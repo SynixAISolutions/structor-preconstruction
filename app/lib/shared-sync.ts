@@ -40,7 +40,13 @@ export const sharedReady = (scope: string) => status.state === "off" || status.s
 // ── What this browser last had from the shared copy ──
 const id = (scope: string, key: string) => `${scope}\n${key}`;
 const readJson = <T>(key: string, fallback: T): T => { try { return JSON.parse(localStorage.getItem(key) ?? "null") ?? fallback; } catch { return fallback; } };
-const writeJson = (key: string, value: unknown) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage full: the shared copy still has it */ } };
+const writeJson = (key: string, value: unknown, keep?: string) => {
+  const text = JSON.stringify(value);
+  try { localStorage.setItem(key, text); } catch {
+    // Storage full: make room from other projects' copies and try once more; else the shared copy still has it.
+    try { if (keep !== undefined && freeStorage(keep)) localStorage.setItem(key, text); } catch { /* still full */ }
+  }
+};
 const versions = () => readJson<Record<string, number>>(VERSIONS_KEY, {});
 const setVersion = (slot: string, version: number) => writeJson(VERSIONS_KEY, { ...versions(), [slot]: version });
 /** Changes made here and not yet in the shared copy, kept across reloads: [scope, key] pairs. */
@@ -51,6 +57,31 @@ const setWaiting = (scope: string, key: string, on: boolean) => {
 };
 /** The copy each draft was last in step with, for merging (lost on reload: then this browser's values win). */
 const bases = new Map<string, unknown>();
+
+/**
+ * Makes room in this browser's storage (about 5 to 10 MB a site) for `keep`'s drafts: other projects' drafts that the
+ * shared copy already has are dropped here, and come back from it when their project is opened. A browser that sees
+ * every project the team opens would otherwise fill up, and a save that doesn't fit would be lost. Without a shared
+ * copy nothing is dropped. Returns whether anything was.
+ */
+export function freeStorage(keep: string): boolean {
+  if (status.state === "off" || status.state === "unknown") return false;
+  const pending = new Set(waiting().map(([s, k]) => id(s, k))), had = versions();
+  let freed = false;
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i), m = key?.match(/^structor-ui-([A-Za-z0-9][A-Za-z0-9_-]{0,79}):([a-z0-9][a-z0-9-]{0,63})$/);
+      if (!key || !m || m[1] === keep) continue;
+      const slotId = id(m[1], m[2]);
+      if (pending.has(slotId) || !(slotId in had)) continue; // only what is safely in the shared copy
+      localStorage.removeItem(key);
+      delete had[slotId];
+      freed = true;
+    }
+    if (freed) localStorage.setItem(VERSIONS_KEY, JSON.stringify(had));
+  } catch { /* no storage */ }
+  return freed;
+}
 
 // ── Where a shared row lives in this browser ──
 type Slot = { scope: string; key: string; read: () => string | null; write: (value: unknown) => void };
@@ -72,7 +103,7 @@ function slot(scope: string, key: string): Slot {
   return {
     scope, key,
     read: () => { try { return localStorage.getItem(storageKey); } catch { return null; } },
-    write: value => { writeJson(storageKey, value); announceDraftChange(storageKey); },
+    write: value => { writeJson(storageKey, value, scope); announceDraftChange(storageKey); },
   };
 }
 const scopeOf = (projectId: string, key: string) => GLOBAL_DRAFT_KEYS.has(key) ? ORG_SCOPE : projectId;
@@ -259,9 +290,12 @@ function look(projectId: string, force = false): Promise<void> {
   return looking;
 }
 
+/** Brings in the project list, the organization's drafts and this project's, now (useSharedSync does it on its own). */
+export const syncProject = (projectId: string): Promise<void> => look(projectId, true);
+
 /** Keeps the open project in step with the shared copy, for the app's top level (app/page.tsx). */
 export function useSharedSync(projectId: string) {
-  useEffect(() => { void look(projectId, true); }, [projectId]);
+  useEffect(() => { void syncProject(projectId); }, [projectId]);
   useEffect(() => {
     const visible = () => { if (document.visibilityState === "visible") void look(projectId); };
     const timer = setInterval(visible, LOOK_EVERY);
