@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { Sparkles } from "lucide-react";
-import { answerLeave, askToLeave, useAutoScopes } from "../../lib/auto-scopes";
+import { answerLeave, askToLeave, readingIn, useAutoScopes } from "../../lib/auto-scopes";
 import { runFiles, runProgress, type AutoRun } from "../../lib/auto-scope-plan";
 import { timeLeftLabel } from "../../lib/run-time-left";
 import { Button, Modal } from "./shared";
@@ -54,10 +54,11 @@ export function AiRunCard({ projectId }: { projectId: string }) {
 /** A run someone else's browser is reading on this project (shared saving): what it has done so far. */
 function ElsewhereCard({ run }: { run: AutoRun }) {
   const { done, total } = runProgress(run);
-  return <section className="ai-run-card" role="status" aria-live="polite" aria-label="AI is writing scopes in another browser">
+  const where = readingIn(run) === "tab" ? "another tab" : "another browser";
+  return <section className="ai-run-card" role="status" aria-live="polite" aria-label={`AI is writing scopes in ${where}`}>
     <span className="ai-run-icon"><Sparkles size={16}/></span>
     <div className="ai-run-copy">
-      <strong>AI is reading {runFiles(run)} in another browser</strong>
+      <strong>AI is reading {runFiles(run)} in {where}</strong>
       <small>{total ? `${done} of ${total} trades · ${run.added} scope item${run.added === 1 ? "" : "s"} added` : "Setting up the bid packages…"}</small>
       <span className="ai-run-bar" aria-hidden><i style={{ width: `${Math.max(4, total ? Math.round((done / total) * 100) : 0)}%` }}/></span>
       <small className="ai-run-now">Its findings appear here as they are saved. Nothing is read twice.</small>

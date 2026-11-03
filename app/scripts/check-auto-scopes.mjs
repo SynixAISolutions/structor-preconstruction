@@ -126,4 +126,18 @@ assert.deepEqual(A.runProgress(finished), { done: 3, total: 3 });
   assert.equal(A.runSummary({ ...finished, update: { since: "r2", sheets: [], sections: [] } }), "Revision: nothing changed on the drawings or in the specifications");
 }
 
-console.log("Auto scopes checked: Marcel's CSI groups, runs only for new uploads and named by their files, bid packages for every section, resume after a closed tab, findings into bid forms without duplicates, copy to another trade, the run summary, reading only what a revision changed.");
+// Another tab reading a run holds it (shared saving): two minutes from another browser, 45 s from another tab of this
+// one, so a reloaded tab picks up its own run within the minute.
+{
+  const me = { tab: "t1", browser: "b1" }, now = Date.parse("2026-11-03T10:00:00.000Z");
+  const running = (tab, browser, secondsAgo) => ({ status: "running", tab, browser, beat: new Date(now - secondsAgo * 1000).toISOString() });
+  assert.equal(A.heldElsewhere(running("t2", "b2", 90), me, now), true, "Someone else's browser, heard from 90 s ago");
+  assert.equal(A.heldElsewhere(running("t2", "b2", 130), me, now), false, "Not heard from for over two minutes: closed");
+  assert.equal(A.heldElsewhere(running("t2", "b1", 30), me, now), true, "Another tab here, still reading");
+  assert.equal(A.heldElsewhere(running("t2", "b1", 50), me, now), false, "A tab here gone quiet for 45 s: reloaded or closed");
+  assert.equal(A.heldElsewhere(running("t1", "b1", 5), me, now), false, "This tab's own run");
+  assert.equal(A.heldElsewhere({ status: "done", tab: "t2", browser: "b2", beat: new Date(now).toISOString() }, me, now), false, "A finished run holds nothing");
+  assert.equal(A.heldElsewhere({ status: "running" }, me, now), false, "A run saved before shared saving");
+}
+
+console.log("Auto scopes checked: Marcel's CSI groups, runs only for new uploads and named by their files, bid packages for every section, resume after a closed tab, findings into bid forms without duplicates, copy to another trade, the run summary, reading only what a revision changed, runs held by another tab.");
