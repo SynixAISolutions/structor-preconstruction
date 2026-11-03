@@ -75,4 +75,23 @@ assert.deepEqual(todo(s), [["award:select:thermal", "todo", "contracts"]], "With
   assert.deepEqual(Y.currentBafos(typed, pulled).map(b => [b.company, b.amount]), [["Beta Roofing", 465000], ["Alpha Roofing", 470000]], "Each company's latest best and final, lowest first: Alpha's V2 replaces its earlier phone number");
 }
 
-console.log("Buyout checked: rows per trade, status and ball in court from bids and awards, scope review, minutes, best and final (typed or from a revised proposal), plan, rules, and the to-do's scope review step.");
+// Scope review attendees come from the subcontractor directory (Marcel, 24 Oct): lowest bidder first, then the other
+// bidders, other companies for the trade, and the trade's owner; each once.
+{
+  const directory = [
+    { id: "b2", company: "District Concrete", name: "Sarah Chen", trade: "Concrete" },
+    { id: "demo-c2", company: "Potomac Concrete (sample)", name: "Jamie Lee", trade: "Concrete" },
+    { id: "x9", company: "Rock Creek Concrete", name: "", trade: "Site concrete" },
+    { id: "b7", company: "Capitol Wall Systems", name: "Avery Morgan", trade: "Drywall" },
+  ];
+  const people = Y.reviewAttendees({ directory, bids: [{ bidderId: "demo-c2", name: "Potomac Concrete (sample)" }, { bidderId: null, name: "District Concrete" }], trade: "Concrete (forming, reinforcing, CIP)", owner: "Victor" });
+  assert.deepEqual(people.map(p => [p.label, p.why]), [
+    ["Jamie Lee, Potomac Concrete (sample)", "Lowest bidder"],
+    ["Sarah Chen, District Concrete", "Bidder"],
+    ["Rock Creek Concrete", "Directory · Site concrete"],
+    ["Victor", "Our team · trade owner"],
+  ], "Lowest bidder's contact first, a bidder found by company, other concrete companies, the owner; drywall left out");
+  assert.deepEqual(Y.reviewAttendees({ directory: [], bids: [], trade: "Concrete", owner: "" }), [], "Nobody to suggest");
+}
+
+console.log("Buyout checked: rows per trade, status and ball in court from bids and awards, scope review, minutes, best and final (typed or from a revised proposal), plan, rules, the to-do's scope review step, and attendees from the directory.");
