@@ -7,12 +7,12 @@
 // time the project is open. While it runs the tab asks before closing (the browser's own box: a page can't
 // replace it), and reloads from inside the app ask with our own (askToLeave).
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { addRunToBidForms, recordRun, type ExtractionState } from "./extraction";
 import { addPage, DrawingFlipRuleError, type DrawingFlipState } from "./drawing-flip";
 import { addPackage, type Procurement } from "./procurement";
 import { drawingRegister, specificationSections, type StoredDocument } from "./project-files";
-import { storedDocuments, uploadsSettleIn, useProjectDocuments } from "./project-files-client";
+import { readStoredText, storedDocuments, uploadsSettleIn, useProjectDocuments } from "./project-files-client";
 import { sectionsByTrade, tradesToAdd } from "./project-scopes";
 import { applyBidPackagePlan } from "./bid-package-ai";
 import { planBidPackages } from "./bid-package-client";
@@ -26,7 +26,8 @@ import { OCR_WORKERS, ocrWork } from "./sheet-ocr";
 import { blendPace, checkShare, FIRST_PACE, measurePace, secondsLeft, steadyLeft, tradesLeft, type Pace, type TradeLeft } from "./run-time-left";
 import { readTradeScope } from "./scope-reading";
 import { readDraft, writeDraft } from "./use-local-draft";
-import { biggestFirst, MAX_SAVED_RUNS, NO_RUNS, readingWork, runTarget, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns, type TradeToRead } from "./auto-scope-plan";
+import { DRAFT_CHANGED, sharedReady, useSharedStatus } from "./shared-sync";
+import { addedSince, biggestFirst, changedSince, filesToCompare, heldElsewhere, MAX_SAVED_RUNS, NO_RUNS, onlyChanged, readingWork, runTarget, runToUpdate, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns, type TradeToRead } from "./auto-scope-plan";
 import { sampleProcurement } from "./data/procurement";
 import { sampleExtraction } from "./data/extraction";
 import { sampleDrawingFlip } from "./data/drawing-flip";
@@ -46,7 +47,19 @@ let active: string | null = null;
 const waiting = new Map<string, StoredDocument[]>();
 
 const savedRuns = (projectId: string): SavedRuns => readDraft<SavedRuns>(projectId, RUNS_KEY, NO_RUNS);
-function save(run: AutoRun) {
+let tab = "";
+const thisTab = () => tab ||= crypto.randomUUID();
+let browser = "";
+/** This browser, the same in every tab: a run another tab of it was reading is picked up sooner after a reload. */
+const thisBrowser = () => browser ||= (() => {
+  try { const kept = localStorage.getItem("structor-browser"); if (kept) return kept; const made = crypto.randomUUID(); localStorage.setItem("structor-browser", made); return made; }
+  catch { return thisTab(); }
+})();
+const me = () => ({ tab: thisTab(), browser: thisBrowser() });
+/** Whether the run is another tab's (this browser's or someone else's), for the progress card's wording. */
+export const readingIn = (run: AutoRun): "tab" | "browser" => run.browser === thisBrowser() ? "tab" : "browser";
+function save(unstamped: AutoRun) {
+  const run = unstamped.status === "running" ? { ...unstamped, tab: thisTab(), browser: thisBrowser(), beat: new Date().toISOString() } : unstamped;
   const runs = [run, ...savedRuns(run.projectId).runs.filter(r => r.id !== run.id)].slice(0, MAX_SAVED_RUNS);
   try { writeDraft<SavedRuns>(run.projectId, RUNS_KEY, { runs }); } catch { /* storage full: the run goes on, unsaved */ }
   emit({ run: run.status === "running" ? run : null });
@@ -101,6 +114,8 @@ export function ensureRun(projectId: string, documents: StoredDocument[]) {
   if (active === projectId && snapshot.run?.key === target.key) return;
   const previous = savedRuns(projectId).runs.find(r => r.key === target.key) ?? null;
   if (previous?.status === "done") return;
+  // Someone else's browser is reading these files right now (shared saving): its findings arrive with the project.
+  if (previous && heldElsewhere(previous, me())) return;
   const settle = uploadsSettleIn();
   if (settle > 0) { waiting.set(projectId, documents); retryWaiting(settle); return; }
   if (active) { waiting.set(projectId, documents); return; }
@@ -118,15 +133,18 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   // run says so.
   const controller = new AbortController();
   let procurement = readDraft<Procurement>(projectId, "procurement", sampleProcurement);
-  let newTrades: string[] = [], packagesBy = previous?.packagesBy;
+  // After a revision (Marcel, 24 Oct): the last finished run on other files. Its bid packages stay, and only the
+  // sheets and sections whose text changed since are read (lib/auto-scope-plan changedSince).
+  const prior = previous?.update ? savedRuns(projectId).runs.find(r => r.id === previous.update!.since) ?? null : previous ? null : runToUpdate(savedRuns(projectId).runs, target.key);
+  let newTrades: string[] = [], packagesBy = previous?.packagesBy ?? prior?.packagesBy;
 
   // The time left, every five seconds (lib/run-time-left): what each trade still has (`ledger`, from what its files
   // suggest until it starts, then from its own counts), the drawing search and the scanned sheets, at the pace measured
   // since the run began. Until the AI sets the packages, Marcel's CSI trades stand in for them.
   const pace0 = keptPace(), counters0 = { requests: aiTimes(), ocr: ocrWork() };
   const began = Date.now();
-  let pace = pace0, shown: { seconds: number; at: number } | null = null, share = 0, setupFrom: number | null = previous ? null : Date.now();
-  let ledger = ledgerOf(tradesToRead([...procurement.packages, ...tradesToAdd(procurement.packages, { sections: specificationSections(documents), sheets: drawingRegister(documents) })], documents));
+  let pace = pace0, shown: { seconds: number; at: number } | null = null, share = 0, setupFrom: number | null = previous || prior ? null : Date.now();
+  let ledger = prior ? new Map<string, TradeLeft>() : ledgerOf(tradesToRead([...procurement.packages, ...tradesToAdd(procurement.packages, { sections: specificationSections(documents), sheets: drawingRegister(documents) })], documents));
   let searchLeft = Math.ceil(drawingRegister(documents).length / SHEET_REFERENCE_LIMITS.sheets), searching = false;
   const tick = () => {
     const checks = checkShare([...ledger.values()]);
@@ -141,9 +159,24 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   };
   const ticking = setInterval(tick, 5_000);
   tick();
+  // Says every 30 s that this tab is still reading, for other browsers (save stamps it).
+  const beating = setInterval(() => { if (snapshot.run?.id) save(snapshot.run); }, 30_000);
 
-  if (!previous) {
-    emit({ run: { id: "", projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades: [], trades: [], added: 0, duplicates: 0 } });
+  // After a revision, first: which sheets and sections changed, from their page text against the versions the last run read.
+  let update = previous?.update;
+  if (prior && !update) {
+    emit({ run: { id: "", projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades: [], trades: [], added: 0, duplicates: 0, stage: "Finding what changed since the last reading" } });
+    const before = new Set(prior.key.split("|"));
+    const texts = new Map<string, Map<number, string>>();
+    await Promise.all(filesToCompare(documents, before).map(async d => texts.set(d.id, new Map((await readStoredText(d).catch(() => [])).map(p => [p.page, p.text])))));
+    update = { since: prior.id, ...changedSince(documents, before, (id, page) => texts.get(id)?.get(page)) };
+  }
+  // 1. The bid packages: on a first run, and after a revision that brings sheet numbers or sections no package lists yet
+  // (a discipline's drawings sent later), so the AI places them before the trades are read.
+  const added = prior && !previous ? addedSince(documents, new Set(prior.key.split("|"))) : { sheets: [], sections: [] };
+  if (!previous && (!prior || added.sheets.length || added.sections.length)) {
+    if (prior) setupFrom = Date.now();
+    emit({ run: { id: "", projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades: [], trades: [], added: 0, duplicates: 0, update } });
     try {
       const plan = await planBidPackages(documents, procurement.packages, controller.signal);
       // The latest copy: the team may have changed the packages while the AI read.
@@ -172,18 +205,20 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   const all = tradesToRead(procurement.packages, documents);
   const assigned = sectionsByTrade(specificationSections(documents), procurement.packages);
   const refPackages = procurement.packages.map(p => ({ id: p.id, name: p.name, code: p.code, sections: (assigned.get(p.id) ?? []).map(s => `${s.section} ${s.title}`) }));
+  // The drawing search runs again only when sheets changed.
+  const candidates = update ? onlyChanged(all, update) : all, search = !update || update.sheets.length > 0;
   let sheetTexts: Awaited<ReturnType<typeof loadSheetTexts>> | null = null, fullCost: number | undefined;
   if (reader && !reader.autoScopes) {
     sheetTexts = await loadSheetTexts(documents).catch(() => null);
-    fullCost = (estimateCost(reader.model, readingWork(all)) ?? 0) + (sheetTexts ? estimateCost(reader.model, referenceWork(sheetTexts.sheets, refPackages)) ?? 0 : 0);
+    fullCost = (estimateCost(reader.model, readingWork(candidates)) ?? 0) + (sheetTexts && search ? estimateCost(reader.model, referenceWork(sheetTexts.sheets, refPackages)) ?? 0 : 0);
   }
   const scopesLater = fullCost !== undefined && fullCost >= AUTO_READ_UNDER;
-  const readable = scopesLater ? [] : all;
+  const readable = scopesLater ? [] : candidates;
   ledger = ledgerOf(readable, id => !!previous?.trades.some(t => t.packageId === id && t.status === "done"));
   const queued = (t: (typeof readable)[number]): AutoTrade => ({ packageId: t.pkg.id, name: t.pkg.name, status: "queued", added: 0, note: "" });
   let run: AutoRun = previous
     ? { ...previous, status: "running", newTrades: [...new Set([...previous.newTrades, ...newTrades])], trades: readable.map(t => previous.trades.find(x => x.packageId === t.pkg.id && x.status === "done") ?? queued(t)), scopesLater, fullCost }
-    : { id: crypto.randomUUID(), projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades, packagesBy, trades: readable.map(queued), added: 0, duplicates: 0, scopesLater, fullCost };
+    : { id: crypto.randomUUID(), projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades, packagesBy, trades: readable.map(queued), added: 0, duplicates: 0, scopesLater, fullCost, update };
   save(run);
   const setTrade = (packageId: string, change: Partial<AutoTrade>, totals: Partial<Pick<AutoRun, "added" | "duplicates">> = {}) => {
     run = { ...run, ...totals, trades: run.trades.map(t => t.packageId === packageId ? { ...t, ...change } : t) };
@@ -195,7 +230,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   // requests share the tab's pool (lib/ai-pool), so they fill the slots the last trades leave idle (2 Nov: 52 requests,
   // two minutes, used to wait for the last trade).
   let searchable = false;
-  const references = !scopesLater && refPackages.length ? (async () => {
+  const references = !scopesLater && search && refPackages.length ? (async () => {
     await ocr;
     searchable = true;
     const texts = await loadSheetTexts(storedDocuments(projectId) ?? documents).catch(() => null) ?? sheetTexts;
@@ -254,6 +289,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   }
 
   clearInterval(ticking);
+  clearInterval(beating);
   keepPace(pace);
   emit({ left: null });
   run = { ...run, status: "done", finishedAt: at() };
@@ -269,9 +305,29 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
  * Watches the open project's files and starts the run when a new drawing set or manual is stored, from
  * whatever page uploaded it. Returns the run in progress (any project) and whether the leave box is open.
  */
-export function useAutoScopes(projectId: string): Snapshot {
+export function useAutoScopes(projectId: string): Snapshot & { elsewhere: AutoRun | null } {
   const { documents, ready } = useProjectDocuments(projectId);
   const key = ready ? runTarget(documents)?.key ?? "" : "";
-  useEffect(() => { if (ready && key) ensureRun(projectId, documents); }, [projectId, key, ready]); // eslint-disable-line react-hooks/exhaustive-deps
-  return useSyncExternalStore(subscribe, () => snapshot, () => snapshot);
+  // Not before the project's shared copy is in: a run someone else did or is doing must not start again here.
+  useSharedStatus();
+  const pulled = sharedReady(projectId);
+  useEffect(() => { if (ready && key && pulled) ensureRun(projectId, documents); }, [projectId, key, ready, pulled]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A run another browser is reading right now (shared saving): its progress, as it arrives with the project.
+  const [elsewhere, setElsewhere] = useState<AutoRun | null>(null);
+  const latest = useRef({ ready, documents });
+  latest.current = { ready, documents };
+  useEffect(() => {
+    const look = () => {
+      const run = savedRuns(projectId).runs.find(r => r.status === "running") ?? null;
+      const held = !!run && heldElsewhere(run, me());
+      setElsewhere(held ? run : null);
+      // The other tab stopped saying it reads (closed, or this tab reloaded): pick the run up here.
+      if (run && !held && run.tab !== thisTab() && latest.current.ready && sharedReady(projectId)) ensureRun(projectId, storedDocuments(projectId) ?? latest.current.documents);
+    };
+    look();
+    const timer = setInterval(look, 15_000);
+    window.addEventListener(DRAFT_CHANGED, look);
+    return () => { clearInterval(timer); window.removeEventListener(DRAFT_CHANGED, look); };
+  }, [projectId]);
+  return { ...useSyncExternalStore(subscribe, () => snapshot, () => snapshot), elsewhere };
 }

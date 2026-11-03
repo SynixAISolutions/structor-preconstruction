@@ -2,7 +2,7 @@
 // as it finds something new it should just add it to the scope list"): which upload starts a run, which trades
 // it reads, and how a run is told. Pure; lib/auto-scopes runs it in the browser.
 
-import { drawingRegister, latestDocuments, specificationSections, type StoredDocument, type VolumeSection } from "./project-files";
+import { drawingLog, drawingRegister, latestDocuments, specificationSections, type StoredDocument, type VolumeSection } from "./project-files";
 import type { TradePackage } from "./procurement";
 import { sectionsByTrade, sheetsForTrade } from "./project-scopes";
 import { dollars } from "./ai-cost";
@@ -29,6 +29,12 @@ export type AutoRun = {
   fullCost?: number;
   /** What the run is doing after the trades, for the progress card ("Making the scanned sheets searchable…"). */
   stage?: string;
+  /** A run after a new revision (Marcel, 24 Oct: "uploading a new drawing revision should trigger a scope update"):
+   * only the sheets and specification sections whose text changed since the run named `since` were read. */
+  update?: { since: string; sheets: string[]; sections: string[] };
+  /** The browser tab reading, and when it last said it still was: with shared saving (3 Nov) another person's browser
+   * sees the run and leaves it to that tab instead of reading the same files again. */
+  tab?: string; browser?: string; beat?: string;
   trades: AutoTrade[];
   /** Scope lines added to bid forms for approval, and lines skipped as already there. */
   added: number; duplicates: number;
@@ -72,6 +78,70 @@ export function readingWork(trades: Pick<TradeToRead<unknown>, "sections" | "she
 export const biggestFirst = <T extends Pick<TradeToRead<unknown>, "sections" | "sheets">>(trades: T[]): T[] =>
   trades.map(trade => ({ trade, requests: readingWork([trade]).requests })).sort((a, b) => b.requests - a.requests).map(x => x.trade);
 
+// ── After a revision ──
+// A new drawing set, a few revised sheets or a new manual used to start a run over every trade (about $1.70 on
+// Project 1 for a single sheet). Now the run reads only what changed since the last finished run: sheets whose
+// current version's text differs from the version that run read, and specification sections whose pages differ.
+// A sheet with no text either way (a scan) counts as changed: nothing tells it apart.
+
+const plain = (text: string | undefined) => (text ?? "").replace(/\s+/g, " ").trim();
+const sectionKey = (section: string) => section.replace(/\s+/g, "");
+type Text = (docId: string, page: number) => string | undefined;
+
+/** The current sheets and sections not in the earlier run's files, each with the version that run read, if any. */
+function newParts(docs: StoredDocument[], before: ReadonlySet<string>) {
+  const sheets = drawingLog(docs).sheets.filter(s => !before.has(s.current.doc.id))
+    .map(s => ({ sheet: s.sheet, now: { doc: s.current.doc, page: s.current.page }, was: [...s.versions].reverse().find(v => before.has(v.doc.id)) ?? null }));
+  const earlier = new Map(specificationSections(docs.filter(d => before.has(d.id))).map(s => [sectionKey(s.section), s]));
+  const sections = specificationSections(docs).filter(s => !before.has(s.doc.id)).map(s => ({ section: s.section, now: s, was: earlier.get(sectionKey(s.section)) ?? null }));
+  return { sheets, sections };
+}
+
+/** The files whose page text tells what changed: the new ones and the earlier versions they replace. */
+export function filesToCompare(docs: StoredDocument[], before: ReadonlySet<string>): StoredDocument[] {
+  const { sheets, sections } = newParts(docs, before);
+  const out = new Map<string, StoredDocument>();
+  for (const s of sheets) { out.set(s.now.doc.id, s.now.doc); if (s.was) out.set(s.was.doc.id, s.was.doc); }
+  for (const s of sections) { out.set(s.now.doc.id, s.now.doc); if (s.was) out.set(s.was.doc.id, s.was.doc); }
+  return [...out.values()];
+}
+
+/** Sheet numbers and section numbers whose text changed since the run that read the files in `before`. */
+export function changedSince(docs: StoredDocument[], before: ReadonlySet<string>, text: Text): { sheets: string[]; sections: string[] } {
+  const { sheets, sections } = newParts(docs, before);
+  const pages = (doc: StoredDocument, first: number, last: number) => Array.from({ length: last - first + 1 }, (_, i) => plain(text(doc.id, first + i))).join(" ");
+  return {
+    sheets: sheets.filter(s => { const now = plain(text(s.now.doc.id, s.now.page)); return !s.was || !now || now !== plain(text(s.was.doc.id, s.was.page)); }).map(s => s.sheet),
+    sections: sections.filter(s => { const now = pages(s.now.doc, s.now.first, s.now.last); return !s.was || !now.trim() || now !== pages(s.was.doc, s.was.first, s.was.last); }).map(s => s.section),
+  };
+}
+
+/** Sheet numbers and sections that weren't in the earlier run's files at all (a discipline's drawings sent later): no
+ * bid package lists them yet, so the AI places them in packages before the trades are read. */
+export function addedSince(docs: StoredDocument[], before: ReadonlySet<string>): { sheets: string[]; sections: string[] } {
+  const { sheets, sections } = newParts(docs, before);
+  return { sheets: sheets.filter(s => !s.was).map(s => s.sheet), sections: sections.filter(s => !s.was).map(s => s.section) };
+}
+
+/** The trades to read after a revision: each with only its changed sections and sheets; trades with neither drop out. */
+export const onlyChanged = <T extends TradeToRead<unknown>>(trades: T[], changed: { sheets: string[]; sections: string[] }): T[] => {
+  const sheets = new Set(changed.sheets), sections = new Set(changed.sections.map(sectionKey));
+  return trades.map(t => ({ ...t, sections: t.sections.filter(s => sections.has(sectionKey(s.section))), sheets: t.sheets.filter(r => sheets.has(r.sheet)) })).filter(t => t.sections.length || t.sheets.length);
+};
+
+/** The last finished run on other files, which a new upload's run updates; null when there is none. */
+export const runToUpdate = (runs: AutoRun[], key: string): AutoRun | null => runs.find(r => r.status === "done" && r.key !== key) ?? null;
+
+/**
+ * Whether a running run belongs to another tab still reading it, so this one leaves it alone: it said so less than two
+ * minutes ago from another browser, or less than 45 s ago from another tab of this one (a tab says so every 30 s, so a
+ * reloaded tab picks up its own run within the minute).
+ */
+export function heldElsewhere(run: Pick<AutoRun, "status" | "tab" | "browser" | "beat">, me: { tab: string; browser: string }, now = Date.now()): boolean {
+  if (run.status !== "running" || !run.tab || run.tab === me.tab) return false;
+  return now - Date.parse(run.beat ?? "") < (run.browser === me.browser ? 45_000 : 120_000);
+}
+
 /** Trades a run still has to read: a run stopped by a closed tab picks up after the trades it finished. */
 export const stillToRead = <T extends { pkg: { id: string } }>(trades: T[], previous: AutoRun | null): T[] =>
   trades.filter(t => !previous?.trades.some(x => x.packageId === t.pkg.id && x.status === "done"));
@@ -85,7 +155,9 @@ export const runProgress = (run: AutoRun) => ({ done: run.trades.filter(t => t.s
 export function runSummary(run: AutoRun): string {
   const failed = run.trades.filter(t => t.status === "failed").length;
   const scoped = run.trades.filter(t => t.added > 0).length;
+  if (run.update && !run.update.sheets.length && !run.update.sections.length) return "Revision: nothing changed on the drawings or in the specifications";
   return [
+    run.update ? `Revision: ${plural(run.update.sheets.length, "changed sheet")} and ${plural(run.update.sections.length, "changed section")} read again` : "",
     run.scopesLater ? `Bid packages set; reading every trade would cost about ${dollars(run.fullCost ?? 0)}, so choose trades in Write scopes with AI` : run.added ? `${plural(run.added, "scope item")} added to ${plural(scoped, "trade")} for approval` : "No new scope items",
     run.newTrades.length ? `${plural(run.newTrades.length, "new bid package")}` : "",
     run.packagesBy && !run.packagesBy.startsWith("AI ") ? run.packagesBy : "",
