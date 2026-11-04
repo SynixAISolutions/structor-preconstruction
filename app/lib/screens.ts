@@ -11,7 +11,7 @@
 export type Screen =
   | "projects" | "information" | "documents" | "scopes" | "takeoffs"
   | "packages" | "bidders" | "portal" | "leveling" | "budget" | "allowances"
-  | "contracts" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
+  | "contracts" | "contract-compare" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
   | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
   | "architect" | "ratings" | "prequalification" | "drawing-flip" | "buyout" | "model-mep" | "model-structural" | "model-exterior";
 
@@ -52,6 +52,8 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "drawing-flip", label: "Drawing Flip", icon: "Layers3", keywords: ["drawing review", "trade overlay", "trade colors", "scope on drawings"] },
     // Marcel, 15 Oct: "move that up to pre-construction" — beside Drawing Flip, above Subcontractor outreach.
     { id: "revisions", label: "Revision comparison", icon: "GitCompareArrows", keywords: ["compare drawings", "overlay", "changes between revisions"] },
+    // Marcel's process doc: what changed since the previous contract with the same client.
+    { id: "contract-compare", label: "Contract comparison", icon: "GitCompareArrows", keywords: ["previous contract", "owner contract", "prime contract", "contract changes", "redline", "same client"] },
     { id: "packages", label: "Bid packages", icon: "Box", section: OUTREACH, keywords: ["invited bidders", "invitations", "messages", "conversations"] },
     { id: "leveling", label: "Bid leveling", icon: "Gauge", section: OUTREACH },
     // Marcel, 22 Oct: after leveling, scope reviews, best and final, award and contract, tracked per trade.
