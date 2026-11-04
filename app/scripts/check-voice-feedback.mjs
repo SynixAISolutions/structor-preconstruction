@@ -31,4 +31,16 @@ assert.equal((await POST(new Request(url,{method:"POST",headers:{"content-type":
 const form = new FormData(); form.set("details", JSON.stringify(valid)); form.set("audio",new Blob(["<script>bad audio</script>"],{type:"audio/webm"}),"message");
 assert.equal((await POST(new Request(url,{method:"POST",body:form}))).status,400);
 assert.equal((await GET(new Request(url+"?cursor="+"x".repeat(2001)))).status,400);
+// Transcripts (Danial, 4 Nov: seven notes went nine days unheard): kept tidy, and easy to copy in one go.
+{
+  const V = await import("../lib/voice-feedback.ts");
+  assert.equal(V.cleanTranscript("  Move  the [BLANK_AUDIO] budget\n column. "), "Move the budget column.", "Whisper's silence markers and spacing go");
+  assert.equal(V.cleanTranscript("[BLANK_AUDIO]"), "", "A silent recording has an empty transcript");
+  assert.throws(() => V.cleanTranscript(12), /as text/);
+  assert.throws(() => V.cleanTranscript("x".repeat(20_001)), /too long/);
+  const note = (o) => ({ id: "1", screen: "budget", projectId: "p", projectName: "Project 1", pageLabel: "Budget summary", author: "Marcel Khoury", note: "", duration: 30, createdAt: "2026-10-26T17:00:35.145Z", ...o });
+  assert.equal(V.transcriptsText([note({ transcript: "Move the column." }), note({ pageLabel: "Scopes" }), note({ pageLabel: "Takeoffs", projectName: null, note: "See sheet A1", transcript: "" })]),
+    "Budget summary · Project 1 · Marcel Khoury · 2026-10-26\nMove the column.\n\nTakeoffs · Marcel Khoury · 2026-10-26\nNote: See sheet A1\n(no speech)", "Transcribed notes only, each with its page, person and date");
+}
+
 console.log("Voice feedback: context, input, audio, range and upload-boundary checks passed.");

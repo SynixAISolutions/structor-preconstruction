@@ -35,6 +35,15 @@ export async function saveFeedback(record: VoiceFeedback, audio: Uint8Array, for
   }
 }
 
+/** Keeps a note's transcript on its record; null when the note is gone. */
+export async function saveTranscript(id: string, transcript: string): Promise<VoiceFeedback | null> {
+  const record = await readFeedback(id);
+  if (!record) return null;
+  const saved: StoredFeedback = { ...record, transcript };
+  await put(feedbackPath(id), JSON.stringify(saved), { access: "private", addRandomSuffix: false, allowOverwrite: true, contentType: "application/json" });
+  return publicFeedback(saved);
+}
+
 export async function listFeedback(cursor?: string) {
   const result = await list({ prefix: VOICE_RECORDS_PREFIX, limit: 20, cursor });
   const records = await Promise.all(result.blobs.map(async blob => {

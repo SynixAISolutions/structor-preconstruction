@@ -6,6 +6,8 @@ export const VOICE_RECORDS_PREFIX = "voice-feedback/records/";
 export type FeedbackPage = { screen: Screen; projectId: string | null; projectName: string | null };
 export type VoiceFeedback = FeedbackPage & {
   id: string; pageLabel: string; author: string; note: string; duration: number; createdAt: string;
+  /** What the recording says, once someone has transcribed it (lib/voice-transcribe). */
+  transcript?: string;
 };
 export type FeedbackInput = FeedbackPage & { id: string; author: string; note: string; duration: number };
 export const isFeedbackId = (id: string) => /^\d{13}-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id);
@@ -28,6 +30,18 @@ export function parseFeedback(value: unknown): FeedbackInput {
   if (projectPage && (typeof v.projectId !== "string" || !/^[\w-]{1,100}$/.test(v.projectId) || typeof v.projectName !== "string" || !v.projectName.trim() || v.projectName.length > 180)) throw new Error("The project details are missing.");
   return { id: v.id, screen: v.screen, author: v.author.trim(), note: v.note.trim(), duration: v.duration,
     projectId: projectPage ? v.projectId as string : null, projectName: projectPage ? (v.projectName as string).trim() : null };
+}
+
+/** A transcript as it is kept: Whisper's silence markers out, spaces tidied. An empty one is still a transcript: a silent recording. */
+export function cleanTranscript(value: unknown): string {
+  if (typeof value !== "string") throw new Error("Send the transcript as text.");
+  if (value.length > 20_000) throw new Error("The transcript is too long.");
+  return value.replace(/\[(?:BLANK_AUDIO|MUSIC|NOISE|SILENCE|INAUDIBLE)\]|\((?:silence|music|inaudible)\)/gi, " ").replace(/\s+/g, " ").trim();
+}
+
+/** Every transcribed note as text to copy, newest first as the inbox lists them. */
+export function transcriptsText(messages: VoiceFeedback[]): string {
+  return messages.filter(m => m.transcript !== undefined).map(m => `${m.pageLabel}${m.projectName ? ` · ${m.projectName}` : ""} · ${m.author} · ${m.createdAt.slice(0, 10)}\n${m.note ? `Note: ${m.note}\n` : ""}${m.transcript || "(no speech)"}`).join("\n\n");
 }
 
 export function feedbackRecord(input: FeedbackInput): VoiceFeedback {
