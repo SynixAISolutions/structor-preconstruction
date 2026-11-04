@@ -9,6 +9,7 @@ import { AiRunCard } from "./ui/ai-run-card";
 import { UploadBanner } from "./ui/upload-banner";
 import { CommercialView } from "./ui/commercial";
 import { BuyoutView } from "./ui/buyout-ui";
+import { UnitCostsView } from "./ui/unit-costs";
 import { UserManual } from "./ui/user-manual";
 import { ProjectForm, ProjectInformation } from "./ui/project-record";
 import { TurnoverView } from "./ui/todo-ui";
@@ -79,6 +80,7 @@ export default function StructorApp(){
      {['packages','bidders','ratings','prequalification','portal','budget','allowances','value-engineering','contracts','schedule'].includes(screen)&&<CommercialView {...props} screen={screen} project={project}/>}
      {screen==="buyout"&&<BuyoutView key={project.id} {...props}/>}
      {screen==="leveling"&&<><PageHeader eyebrow="BID & AWARD" title="Bid leveling" description="A complete scope. A comparable price. A confident decision." actions={<Button onClick={()=>navigate("budget")}><Wallet size={16}/>Budget summary<ArrowRight size={16}/></Button>}/><BidLevelingPage key={project.id} projectName={project.name} squareFeet={project.squareFeet}/></>}
+     {screen==="unit-costs"&&<UnitCostsView key={project.id} {...props} project={project}/>}
      {screen==="settings"&&<WorkspaceSettings notify={notify} reduced={reduced} setReduced={setReduced} navigate={navigate} sampleRefresh={sampleRefresh}/>}
     </div>
     <footer className="product-footer"><span><span className="footer-dot"/>STRUCTOR WORKSPACE</span><span>From first drawing to final award.</span><button onClick={()=>setHelpOpen(true)}>Learn the terminology <ArrowUpRight size={12}/></button></footer>

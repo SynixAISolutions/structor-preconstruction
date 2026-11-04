@@ -1,0 +1,22 @@
+/* Unit cost database (unit-costs.tsx). */
+.unit-costs { display: grid; gap: 18px; min-width: 0; }
+.unit-costs-filters { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.unit-costs-filters .ui-search { flex: 1 1 220px; }
+.unit-costs-filters .ui-field { margin: 0; flex: 0 1 130px; min-width: 110px; }
+.unit-costs-filters .ui-field input, .unit-costs-filters .ui-field select { width: 100%; }
+.product-app .unit-costs-table td { vertical-align: top; }
+.product-app .unit-costs-table td strong { font-weight: 600; }
+.product-app .unit-costs-table td small { display: block; margin-top: 2px; font-size: 9px; color: #8b979c; white-space: normal; }
+.product-app .unit-costs-table td.unit-costs-num { font-variant-numeric: tabular-nums; white-space: nowrap; color: #3e525d; }
+.unit-costs-open { display: flex; align-items: flex-start; gap: 6px; border: 0; background: none; padding: 0; text-align: left; font: inherit; font-size: 11px; font-weight: 550; color: #2f4650; cursor: pointer; min-width: 220px; }
+.unit-costs-open:hover { color: #d2622c; }
+.unit-costs-open svg { flex: none; margin-top: 2px; }
+.product-app .unit-costs-table td.unit-costs-years { white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 10px; }
+.unit-costs-years span { display: inline-block; margin-right: 12px; }
+.product-app .unit-costs-table tr.unit-costs-entry td { background: #fafbf9; }
+.product-app .unit-costs-table tr.unit-costs-total td { background: #fafbf9; border-top: 1px solid #e0e6e2; }
+.unit-costs-programs { display: flex; gap: 14px; flex-wrap: wrap; margin: 14px 0 0; padding: 0; border: 0; font-size: 11px; color: #3e525d; }
+.unit-costs-programs legend { padding: 0; margin-bottom: 6px; font-size: 11px; font-weight: 550; }
+.unit-costs-programs label { display: inline-flex; align-items: center; gap: 5px; }
+.product-app .unit-costs-programs input[type=checkbox] { width: 15px; height: 15px; min-width: 0; margin: 0; accent-color: #e9703e; }
+.unit-costs-error { margin: 10px 0 0; font-size: 11px; color: #ba6256; }

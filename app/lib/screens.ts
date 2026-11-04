@@ -10,7 +10,7 @@
 
 export type Screen =
   | "projects" | "information" | "documents" | "scopes" | "takeoffs"
-  | "packages" | "bidders" | "portal" | "leveling" | "budget" | "allowances"
+  | "packages" | "bidders" | "portal" | "leveling" | "budget" | "allowances" | "unit-costs"
   | "contracts" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
   | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
   | "architect" | "ratings" | "prequalification" | "drawing-flip" | "buyout" | "model-mep" | "model-structural" | "model-exterior";
@@ -43,6 +43,8 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "bidders", label: "Subcontractor directory", icon: "Users", keywords: ["bidder directory", "companies", "trade partners"] },
     { id: "ratings", label: "Subcontractor ratings", icon: "Gauge", keywords: ["rate subcontractors", "reviews", "scorecard"] },
     { id: "prequalification", label: "Subcontractor aggregate limits", icon: "ClipboardCheck", keywords: ["aggregate limit", "single project limit", "open contract value", "Textura", "bonding capacity", "Subcontractor prequalification", "prequal"] },
+    // Marcel's process doc: rates kept from each job as a benchmark for the next.
+    { id: "unit-costs", label: "Unit cost database", icon: "Gauge", keywords: ["unit prices", "benchmark", "cost database", "cost per square foot", "historical rates", "price book"] },
   ]},
   { label: "PRECONSTRUCTION", scope: "project", items: [
     { id: "turnover", label: "Preconstruction to-do", icon: "ClipboardCheck", keywords: ["project turnover", "percent complete", "checklist", "overview", "dashboard", "project health", "progress", "project setup", "getting started", "onboarding", "missing documents", "upload"] },
