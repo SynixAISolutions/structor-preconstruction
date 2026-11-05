@@ -198,6 +198,7 @@ export const STANDARD_TRADES: { id: string; name: string; code: string }[] = [
   { id: "landscaping", name: "Landscaping", code: "32 90 00" },
   { id: "site-improvements", name: "Exterior improvements", code: "32 00 00" },
   { id: "utilities", name: "Site utilities", code: "33 00 00" },
+  { id: "geothermal", name: "Geothermal wells", code: "33 20 00" },
 ];
 
 /** Adds a trade package. `id` is kept for a standard trade; otherwise one is made from the name. */

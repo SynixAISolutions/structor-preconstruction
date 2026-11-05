@@ -71,6 +71,7 @@ const SHEET_RULES: { code: RegExp; titles: RegExp[]; disciplines?: string[] }[] 
   { code: /^28/, titles: [/SECURITY|FIRE ALARM/] },
   { code: /^31/, titles: [/GRADING|EROSION|EARTHWORK|EXCAVATION/] },
   { code: /^32/, titles: [/SITE PLAN|HARDSCAPE|PAVING|PLANTING|FENCING/], disciplines: ["Landscape"] },
+  { code: /^33 2/, titles: [/GEOTHERMAL|GROUND.?LOOP|WELL ?FIELD/] },
   { code: /^33/, titles: [/UTILIT|STORM ?WATER|SEWER/] },
 ];
 export const MAX_SHEETS_PER_TRADE = 6;
