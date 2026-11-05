@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { register } from "node:module";
 register("./ts-resolver.mjs", import.meta.url);
-const { parseFeedback, feedbackRecord, feedbackPath, audioFormat, audioRange, MAX_VOICE_BYTES } = await import("../lib/voice-feedback.ts");
+const { parseFeedback, feedbackRecord, feedbackPath, feedbackListHeaders, audioFormat, audioRange, MAX_VOICE_BYTES } = await import("../lib/voice-feedback.ts");
 const { POST, GET } = await import("../app/api/feedback/route.ts");
 const id = "1792051200000-12345678-abcd-4abc-8def-123456789abc";
 const valid = { id, screen: "projects", projectId: "ignored", projectName: "Ignored", author: " Marcel ", note: " Fix this ", duration: 12 };
@@ -31,4 +31,7 @@ assert.equal((await POST(new Request(url,{method:"POST",headers:{"content-type":
 const form = new FormData(); form.set("details", JSON.stringify(valid)); form.set("audio",new Blob(["<script>bad audio</script>"],{type:"audio/webm"}),"message");
 assert.equal((await POST(new Request(url,{method:"POST",body:form}))).status,400);
 assert.equal((await GET(new Request(url+"?cursor="+"x".repeat(2001)))).status,400);
+assert.deepEqual(feedbackListHeaders(false), { "Cache-Control": "private, no-store" }, "The inbox reads the list in place");
+assert.match(feedbackListHeaders(true)["Content-Disposition"], /^attachment; filename="structor-feedback-list\.json"$/, "?download saves the list as a file");
+assert.equal(feedbackListHeaders(true)["Cache-Control"], "private, no-store", "A saved list is still not cached");
 console.log("Voice feedback: context, input, audio, range and upload-boundary checks passed.");

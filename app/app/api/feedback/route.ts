@@ -1,4 +1,4 @@
-import { audioFormat, feedbackRecord, MAX_VOICE_BYTES, parseFeedback } from "../../../lib/voice-feedback";
+import { audioFormat, feedbackListHeaders, feedbackRecord, MAX_VOICE_BYTES, parseFeedback } from "../../../lib/voice-feedback";
 import { listFeedback, saveFeedback } from "../../../lib/voice-feedback-store";
 
 export const runtime = "nodejs";
@@ -7,9 +7,10 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
 
 // The shared demo password in proxy.ts protects the inbox and recordings.
 export async function GET(request: Request) {
-  const cursor = new URL(request.url).searchParams.get("cursor") || undefined;
+  const params = new URL(request.url).searchParams;
+  const cursor = params.get("cursor") || undefined;
   if (cursor && cursor.length > 2000) return json({ error: "Invalid message page." }, 400);
-  try { return json(await listFeedback(cursor)); }
+  try { return Response.json(await listFeedback(cursor), { headers: feedbackListHeaders(params.has("download")) }); }
   catch { return json({ error: "Messages could not be loaded. Please try again." }, 503); }
 }
 

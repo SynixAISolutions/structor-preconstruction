@@ -34,6 +34,11 @@ export function feedbackRecord(input: FeedbackInput): VoiceFeedback {
   return { ...input, pageLabel: screenLabel(input.screen), createdAt: new Date().toISOString() };
 }
 
+/** The inbox list's headers; ?download saves the list as a file, as a recording's own route does. */
+export function feedbackListHeaders(download: boolean): Record<string, string> {
+  return { "Cache-Control": "private, no-store", ...(download ? { "Content-Disposition": 'attachment; filename="structor-feedback-list.json"' } : {}) };
+}
+
 export function audioFormat(type: string, bytes: Uint8Array): { type: string; extension: string } {
   const mime = type.split(";")[0].trim().toLowerCase();
   const ascii = (start: number, end: number) => String.fromCharCode(...bytes.slice(start, end));
