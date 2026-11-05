@@ -38,6 +38,11 @@ const show = walls => walls.map(w => [r(w.a[0]), r(w.a[1]), r(w.b[0]), r(w.b[1])
 
 // A 14" exterior wall with its inner layers in a lighter weight: one wall, faces only.
 assert.deepEqual(show(W.detectWalls([seg(0, 0, 40, 0), seg(0, 14 / 12, 40, 14 / 12), seg(0, 0.4, 40, 0.4, 0.48), seg(0, 0.6, 40, 0.6, 0.48)], { pointsPerFoot: PPF, minWeight: 1.1 })), [[0, 0.58, 40, 0.58, 1.17]]);
+// A heavy dashed overhead line beside a wall (Jelleff: 1 ft dashes, 0.5 ft gaps, 1.8 pt) is not a face: no thin false
+// wall between the dashes and the face, and the wall stays whole. A face broken into touching pieces is still a face.
+const dashes = Array.from({ length: 12 }, (_, i) => seg(i * 1.5, 0.9, i * 1.5 + 1, 0.9, 1.8));
+assert.deepEqual(show(W.detectWalls([seg(0, 0, 18, 0), seg(0, 0.6, 18, 0.6), ...dashes], { pointsPerFoot: PPF, minWeight: 1.1 })), [[0, 0.3, 18, 0.3, 0.6]]);
+assert.deepEqual(show(W.detectWalls([seg(0, 0, 10, 0), ...Array.from({ length: 10 }, (_, i) => seg(i, 0.6, i + 1, 0.6))], { pointsPerFoot: PPF, minWeight: 1.1 })), [[0, 0.3, 10, 0.3, 0.6]]);
 // Two 4" walls with a 15½" chase between them: two walls, not a third across the chase (seen on Jelleff A1.1).
 const chase = [0, 4.3, 19.8, 23.9].map(inch => seg(0, inch / 12, 20, inch / 12));
 assert.deepEqual(show(W.detectWalls(chase, { pointsPerFoot: PPF, minWeight: 1.1 })).map(w => w[4]), [0.36, 0.34]);
@@ -92,4 +97,4 @@ assert.match(sized.note, /No printed scale was read, so wall sizes follow the bu
 const outlined = S.levelWalls(plan, sheet, { widthFeet: 336, heightFeet: 240 }, [[0, 0], [0.134, 0], [0.134, 0.104], [0, 0.104]], true); // 45 x 25 ft
 assert.equal(outlined.walls.length, 5, "Only walls within the read outline plus a margin (24 ft here) count");
 
-console.log("Wall detection checked: vector lines from pdf.js operators, faces paired narrowest first (chases stay two walls), openings, weights, angled walls, the automatic wall weight, plan area, joined corners and tees, the level's frame.");
+console.log("Wall detection checked: vector lines from pdf.js operators, faces paired narrowest first (chases stay two walls), dashed lines are not faces, openings, weights, angled walls, the automatic wall weight, plan area, joined corners and tees, the level's frame.");

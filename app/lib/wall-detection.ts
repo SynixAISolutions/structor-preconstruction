@@ -119,6 +119,33 @@ export function joinWalls(walls: Wall[]): Wall[] {
   return out;
 }
 
+/**
+ * Lines of one direction without the dashes of dashed lines. Overhead and hidden lines are drawn dashed,
+ * and a heavy dashed line's dashes (Jelleff: 1 ft dashes, 0.5 ft gaps, at 1.8 pt) paired with a wall face
+ * into a thin false wall. Dashes: 3 or more pieces of at most 1.5 ft on one line, in one weight, with real
+ * gaps of up to 1 ft between them. A wall face broken at crossings has longer or touching pieces.
+ */
+function withoutDashes(lines: Line[]): Line[] {
+  const dashes = new Set<Line>(), short = (l: Line) => l.s1 - l.s0 <= 1.5;
+  const flush = (run: Line[]) => { if (run.length >= 3) run.forEach(d => dashes.add(d)); };
+  const sorted = [...lines].sort((p, q) => p.weight - q.weight || p.offset - q.offset);
+  for (let i = 0; i < sorted.length;) {
+    // One drawn line: the same weight, offsets within 0.03 ft of the previous; its pieces in order along it.
+    let j = i + 1;
+    while (j < sorted.length && Math.abs(sorted[j].weight - sorted[i].weight) < 0.005 && sorted[j].offset - sorted[j - 1].offset < 0.03) j++;
+    const pieces = sorted.slice(i, j).sort((p, q) => p.s0 - q.s0);
+    let run: Line[] = [];
+    for (const p of pieces) {
+      const last = run[run.length - 1], gap = last ? p.s0 - last.s1 : 0;
+      if (last && short(p) && gap > 0.1 && gap <= 1) run.push(p);
+      else { flush(run); run = short(p) ? [p] : []; }
+    }
+    flush(run);
+    i = j;
+  }
+  return lines.filter(l => !dashes.has(l));
+}
+
 export function detectWalls(segments: Segment[], opts: WallOptions): Wall[] {
   const { pointsPerFoot, minWeight, minThickness = 0.2, maxThickness = 2, minOverlap = 1, minLength = 2 } = opts;
   const ft = (p: Point): Point => [p[0] / pointsPerFoot, p[1] / pointsPerFoot];
@@ -141,8 +168,8 @@ export function detectWalls(segments: Segment[], opts: WallOptions): Wall[] {
   }
 
   const walls: Wall[] = [];
-  for (const { angle, lines } of groups.values()) {
-    const f = frame(angle);
+  for (const { angle, lines: all } of groups.values()) {
+    const f = frame(angle), lines = withoutDashes(all);
     lines.sort((p, q) => p.offset - q.offset);
     // Candidate face pairs: parallel lines a wall's thickness apart, running beside each other.
     const candidates: { i: number; j: number; gap: number; s0: number; s1: number }[] = [];
