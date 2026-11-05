@@ -41,7 +41,7 @@ assert.deepEqual([row('thermal').budget,row('thermal').carried.value,row('therma
 for(const id of ['concrete','openings','thermal','drywall'])assert.equal(row(id).carried.value,C.lowestTradeBid(sampleProcurement,sampleSubmissions,id,[],initialBidders).value,`${id}: the sheet carries the Budget page's lowest sub`);
 assert.deepEqual([row('steel').budget,row('steel').carried],[1407600+322830,null],'A trade on two cost centers carries both lines; no bids yet');
 assert.deepEqual(['asphalt','site-concrete','fencing','landscaping'].map(id=>row(id).budget),[null,null,null,null],"The shared Site improvements line is no single trade's budget");
-assert.deepEqual([sheet.withoutBids,sheet.total.carried,sheet.total.perSquareFoot],[22,1685000+508750+398500+968750,134.38]);
+assert.deepEqual([sheet.withoutBids,sheet.total.carried,sheet.total.perSquareFoot],[23,1685000+508750+398500+968750,134.38]);
 const reviewedRoof={packageId:'thermal',levelingBidderId:'x',bidderName:'District Roofing (sample)',bidderId:'demo-r1',submissionId:sampleSubmissions.find(s=>s.bidderId==='demo-r1').id,revisionNumber:1,formVersion:1,stale:false,eligible:true,eligibilityReasons:[],baseBid:532000,provisionalTotal:540000,reviewedTotal:540000};
 const leveled=SH.bidSheetSummary({...jel,candidates:[reviewedRoof]}).rows.find(r=>r.packageId==='thermal');
 assert.deepEqual([leveled.carried.value,leveled.carried.basis,leveled.bids.map(b=>[b.value,b.basis])],[540000,'reviewed',[[508750,'base'],[540000,'reviewed']]],"A reviewed total is carried over a lower unreviewed base bid, and replaces that company's base bid");

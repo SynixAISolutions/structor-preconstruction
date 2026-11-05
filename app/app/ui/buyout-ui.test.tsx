@@ -11,7 +11,7 @@ const { BuyoutTable, BuyoutView } = require("./buyout-ui") as typeof import("./b
 test("buyout tracker retains every trade, company BIC, money and contract stages",()=>{
  const rows=buyoutRows({procurement:sampleProcurement,submissions:sampleSubmissions,candidates:[],directory:initialBidders,budget:sampleBudget,awards:sampleAwards,buyout:EMPTY_BUYOUT});
  const html=renderToStaticMarkup(<BuyoutTable rows={rows} onOpen={()=>{}}/>);
- assert.equal((html.match(/scope="row"/g)||[]).length,26);
+ assert.equal((html.match(/scope="row"/g)||[]).length,27);
  for(const text of ["BIC","Best and final","Contract sent","Executed","Buyout delta","Roofing","Closed","508,750"])assert.ok(html.includes(text),text);
  assert.doesNotMatch(html,/NaN|undefined/);
  const screen=renderToStaticMarkup(<BuyoutView projectName="Jelleff" notify={()=>{}} navigate={()=>{}}/>);

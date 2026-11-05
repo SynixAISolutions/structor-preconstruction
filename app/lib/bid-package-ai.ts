@@ -53,7 +53,7 @@ export function bidPackageMessages(job: BidPackageJob): ChatMessage[] {
       "Rules:",
       "- Every specification section listed goes in exactly one package. Divisions 00 and 01 are already left out: they apply to every trade.",
       "- Group the sections one subcontractor normally prices together, as US general contractors buy out work (door hardware with doors and frames; joint sealants with waterproofing; acoustical ceilings with drywall when the drywall contractor usually carries them). Don't make a package for a section a larger trade normally carries, and don't lump unrelated trades together.",
-      "- A trade the drawings show but no section covers (civil, landscape, food service) still gets a package when the drawing index shows its work.",
+      "- A trade the drawings show but no section covers (civil, landscape, food service, geothermal wells) still gets a package when the drawing index shows its work.",
       "- Name packages only for work the lists show. No placeholder for documents still to come (no \"pending project manual\" package).",
       "- Reuse an existing package, by its id, when it is the same trade; otherwise make a new one.",
       "- name: the trade as an estimator says it, e.g. \"Drywall & acoustical ceilings\", \"Doors, frames & hardware\".",

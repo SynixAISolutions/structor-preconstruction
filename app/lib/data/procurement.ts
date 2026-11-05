@@ -42,6 +42,8 @@ const packages: TradePackage[] = [
   { id: "site-concrete", name: "Site concrete", division: "32", code: "32 13 13", owner: "Victor", due: "2026-10-16" },
   { id: "fencing", name: "Site fencing", division: "32", code: "32 31 00", owner: "Sadie", due: "2026-10-16" },
   { id: "landscaping", name: "Landscaping", division: "32", code: "32 90 00", owner: "Sadie", due: "2026-10-16" },
+  // Marcel, 22 Oct: "there's geothermal wells". Project 1's DD budget carries a test well and ground loop piping.
+  { id: "geothermal", name: "Geothermal wells", division: "33", code: "33 20 00", owner: "Victor", due: "2026-10-16" },
 ];
 
 const created = "2026-09-15T14:00:00.000Z";

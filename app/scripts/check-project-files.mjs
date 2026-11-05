@@ -167,6 +167,10 @@ const drawingsOnly = [
   { sheet: "E1.1", title: "LEVEL 1 LIGHTING", discipline: "Electrical" },
 ];
 assert.deepEqual(P.suggestTrades([], { sections: [], sheets: drawingsOnly }).map(t => [t.id, t.sheets.join()]), [["demolition", "C1.0"], ["drywall", "A8.1"], ["mechanical", "M1.1"], ["electrical", "E1.1"], ["earthwork", "C2.0"]].sort((a, b) => P.suggestTrades([], { sections: [], sheets: drawingsOnly }).findIndex(t => t.id === a[0]) - P.suggestTrades([], { sections: [], sheets: drawingsOnly }).findIndex(t => t.id === b[0])), "Drawings alone suggest trades by their most telling title or discipline; elevations alone don't make a masonry trade");
+// Marcel, 22 Oct: "there's geothermal wells". Its own trade, found from its sheets or its section.
+assert.deepEqual(P.suggestTrades([], { sections: [], sheets: [{ sheet: "G1.1", title: "GEOTHERMAL WELL FIELD PLAN" }] }).map(t => [t.id, t.name, t.code, t.sheets.join()]), [["geothermal", "Geothermal wells", "33 20 00", "G1.1"]]);
+assert.deepEqual(P.suggestTrades([], { sections: [sec("33 20 00")], sheets: [] }).map(t => t.id), ["geothermal"], "Wells section");
+assert.deepEqual(P.suggestTrades([], { sections: [sec("33 10 00")], sheets: [] }).map(t => t.id), ["utilities"], "Water utilities stay with Site utilities");
 assert.deepEqual(P.suggestTrades([{ id: "drywall", name: "Drywall" }, { id: "x", name: "MECHANICAL" }], { sections: [], sheets: drawingsOnly }).map(t => t.id), ["demolition", "electrical", "earthwork"], "Trades the project has are skipped, by id or name");
 assert.deepEqual(P.sheetsForTrade(drawingsOnly, "23 00 00").map(r => r.sheet), ["M1.1"], "A discipline fills in when no title matches");
 
