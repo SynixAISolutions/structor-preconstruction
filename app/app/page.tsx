@@ -13,6 +13,7 @@ import { ContractCompareView } from "./ui/contract-compare";
 import { UserManual } from "./ui/user-manual";
 import { ProjectForm, ProjectInformation } from "./ui/project-record";
 import { TurnoverView } from "./ui/todo-ui";
+import { RfpRequirementsView } from "./ui/rfp-requirements";
 import { SidebarNavigation } from "./ui/sidebar-navigation";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, SearchBox, Tabs, usd, type Screen } from "./ui/shared";
 import { DEFAULT_SCREEN, resolveScreen, screenGroup, screenLabel, searchScreens } from "../lib/screens";
@@ -80,6 +81,7 @@ export default function StructorApp(){
       {['documents','scopes','drawing-flip','takeoffs','specs','checks','drawings','specifications','revisions'].includes(screen)&&<IntelligenceView key={project.id} {...props} project={project} screen={screen} quantityFilters={quantityFilters} onQuantityFilters={setQuantityFilters} onInspectModel={inspectModel}/>}
      {['packages','bidders','ratings','prequalification','portal','budget','allowances','value-engineering','contracts','schedule'].includes(screen)&&<CommercialView {...props} screen={screen} project={project}/>}
      {screen==="buyout"&&<BuyoutView key={project.id} {...props}/>}
+     {screen==="rfp-requirements"&&<RfpRequirementsView key={project.id} {...props} project={project}/>}
      {screen==="leveling"&&<><PageHeader eyebrow="BID & AWARD" title="Bid leveling" description="A complete scope. A comparable price. A confident decision." actions={<Button onClick={()=>navigate("budget")}><Wallet size={16}/>Budget summary<ArrowRight size={16}/></Button>}/><BidLevelingPage key={project.id} projectName={project.name} squareFeet={project.squareFeet}/></>}
      {screen==="settings"&&<WorkspaceSettings notify={notify} reduced={reduced} setReduced={setReduced} navigate={navigate} sampleRefresh={sampleRefresh}/>}
     </div>

@@ -13,7 +13,8 @@ export type Screen =
   | "packages" | "bidders" | "portal" | "leveling" | "budget" | "allowances"
   | "contracts" | "contract-compare" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
   | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
-  | "architect" | "ratings" | "prequalification" | "drawing-flip" | "buyout" | "model-mep" | "model-structural" | "model-exterior";
+  | "architect" | "ratings" | "prequalification" | "drawing-flip" | "buyout" | "model-mep" | "model-structural" | "model-exterior"
+  | "rfp-requirements";
 
 export type ViewProps = { navigate: (screen: Screen) => void; notify: (message: string) => void; projectName: string };
 
@@ -48,6 +49,8 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "turnover", label: "Preconstruction to-do", icon: "ClipboardCheck", keywords: ["project turnover", "percent complete", "checklist", "overview", "dashboard", "project health", "progress", "project setup", "getting started", "onboarding", "missing documents", "upload"] },
     { id: "information", label: "Project information", icon: "Building2" },
     { id: "documents", label: "Project files", icon: "FileStack", keywords: ["documents", "document library", "rfp"] },
+    // Marcel's process doc: the RFP divided into one list of what the job requires.
+    { id: "rfp-requirements", label: "RFP requirements", icon: "ClipboardList", keywords: ["requirements", "savings clause", "subcontractor qualifications", "submission requirements", "rfp response", "addenda"] },
     { id: "scopes", label: "Scopes & bid forms", icon: "ListChecks" },
     { id: "drawing-flip", label: "Drawing Flip", icon: "Layers3", keywords: ["drawing review", "trade overlay", "trade colors", "scope on drawings"] },
     // Marcel, 15 Oct: "move that up to pre-construction" — beside Drawing Flip, above Subcontractor outreach.
