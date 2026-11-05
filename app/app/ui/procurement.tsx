@@ -61,6 +61,9 @@ import { InlineScopeDrafts } from "./inline-scope-drafts";
 import { SCOPE_TABS, ScopeViewTabs, SectionCoverage } from "./section-coverage";
 import { inlineDrafts } from "../../lib/scope-review";
 import { ScopeDashboardView } from "./scope-dashboard";
+import { BidThread, PortalLinkDialog, useBidMessages } from "./bid-portal-link";
+import { unreadMessages } from "../../lib/bid-portal";
+import { useActiveProject } from "../../lib/project-scope";
 import { ScopeMatrixView } from "./scope-matrix";
 import { notOnSheet } from "../../lib/extraction";
 import { GeneralScopes } from "./general-scopes";
@@ -252,7 +255,9 @@ function BidderInvite({ state, pkgId, directory, run, notify, onClose }: {
   </Modal>;
 }
 
-function OutreachDialog({ state, target, directory, run, notify, onClose }: {
+function OutreachDialog({ state, target, directory, run, notify, onClose, messages, setMessages }: {
+  messages: ReturnType<typeof useBidMessages>[0];
+  setMessages: ReturnType<typeof useBidMessages>[1];
   state: Procurement;
   target: OutreachTarget;
   directory: Bidder[];
@@ -265,11 +270,14 @@ function OutreachDialog({ state, target, directory, run, notify, onClose }: {
   const pkg = state.packages.find(item => item.id === target.packageId);
   const bidder = directory.find(item => item.id === target.bidderId);
   const history = outreachLog(state, target.packageId, target.bidderId);
+  const invitation = state.invitations.find(item => item.packageId === target.packageId && item.bidderId === target.bidderId);
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (runAndNotify(run, current => logOutreach(current, { ...target, kind, text: entry }, CURRENT_USER), notify, "Outreach added to the company log.")) setEntry("");
   }
   return <Modal title={bidder?.company ?? "Bidder outreach"} subtitle={`${pkg?.name ?? "Trade package"} · Calls, notes, and messages`} onClose={onClose} wide>
+    {invitation && <BidThread messages={messages} setMessages={setMessages} procurement={state} invitationId={invitation.id} company={bidder?.company ?? "this company"} by={CURRENT_USER} notify={notify}/>}
+    <h3>Your own log</h3>
     <form className="proc-outreach-form" onSubmit={save}><label className="ui-field">Contact type<select value={kind} onChange={event => setKind(event.target.value as OutreachKind)}><option value="call">Call</option><option value="note">Internal note</option><option value="message">Message</option></select></label><label className="ui-field">What happened?<textarea required rows={3} value={entry} onChange={event => setEntry(event.target.value)} placeholder="Record the question, response, or next step."/></label><Button type="submit" variant="primary"><Plus size={14}/>Add to log</Button></form>
     <div className="proc-outreach-log">{history.map(item => <article key={item.id}><span>{item.kind === "call" ? <Phone size={14}/> : item.kind === "message" ? <MessageSquareText size={14}/> : <FileText size={14}/>}</span><div><strong>{item.kind}</strong><p>{item.text}</p><small>{item.by} · {eventTime(item.at)}</small></div></article>)}</div>
     {!history.length && <Empty title="No outreach yet" description="Log a call, note, or message after contacting this company."/>}
@@ -290,6 +298,9 @@ function PackagesWorkspace({ projectName, notify, navigate, onProposals }: ViewP
   const [packageId, setPackageId] = useState("demolition");
   const [invitePackage, setInvitePackage] = useState<string | null>(null);
   const [outreach, setOutreach] = useState<OutreachTarget | null>(null);
+  const [linkFor, setLinkFor] = useState<string | null>(null);
+  const projectId = useActiveProject();
+  const [bidMessages, setBidMessages] = useBidMessages();
   const [detailTab, setDetailTab] = useState("Scopes");
   const [messageText, setMessageText] = useState("");
   const activePackage = state.packages.find(pkg => pkg.id === packageId) ?? state.packages[0];
@@ -317,7 +328,7 @@ function PackagesWorkspace({ projectName, notify, navigate, onProposals }: ViewP
       <Panel title={activePackage.name} subtitle={`${activePackage.code} · ${invitations.length} invited`} action={<Button onClick={() => navigate("scopes")}><FileText size={14}/>Review bid form</Button>} className="proc-invite-panel">
         <div className="proc-package-summary"><span><small>OWNER</small><strong>{activePackage.owner || "Unassigned"}</strong></span><span><small>BID DUE</small><strong>{displayDate(activePackage.due)}</strong></span><span><small>FORM</small><strong>{activePackage.published ? `Published v${activePackage.published.version}` : statusLabels[packageStatus(state, activePackage.id)]}</strong></span></div>
         <LinkedProjectContent kind="package" recordId={activePackage.id}/><Tabs tabs={["Scopes", "Invitations", "Bid responses", "Messages"]} value={detailTab} onChange={setDetailTab}/>
-        {detailTab === "Scopes" ? <PackageScopeSources items={bidForm(state, activePackage.id)}/> : detailTab === "Invitations" ? <><div className="proc-invitation-list">{invitations.map(invitation => { const bidder = directory.find(item => item.id === invitation.bidderId); const entries = outreachLog(state, invitation.packageId, invitation.bidderId); return <article key={invitation.id}><span className="proc-company-mark">{(bidder?.company ?? "?").slice(0, 2).toUpperCase()}</span><div><strong>{bidder?.company ?? "Directory company"}</strong><small>{bidder?.name ?? invitation.bidderId} · Invited {displayDate(invitation.invitedAt.slice(0, 10))}</small><button onClick={() => setOutreach({ packageId: invitation.packageId, bidderId: invitation.bidderId })}>{entries.length ? `${entries.length} outreach entr${entries.length === 1 ? "y" : "ies"}` : "Add first outreach"}<ArrowRight size={12}/></button></div>{invitation.status === "submitted" ? <Badge tone="green">Submitted bid</Badge> : <select aria-label={`Invitation status for ${bidder?.company ?? invitation.bidderId}`} value={invitation.status} className={`proc-status-select ${invitationTone(invitation.status)}`} onChange={event => runAndNotify(run, current => setInvitationStatus(current, invitation.id, event.target.value as InvitationStatus), notify, "Invitation status updated.")}><option value="invited">Invited</option><option value="bidding">Bidding</option><option value="declined">Declined</option></select>}</article>; })}</div>{!invitations.length && <Empty title="No bidders invited" description="Invite suggested companies or search the full directory." action={<Button onClick={() => setInvitePackage(activePackage.id)}><UserPlus size={14}/>Invite bidders</Button>}/>}</> : detailTab === "Bid responses" ? <EstimatorSubmissions packageId={activePackage.id} procurement={state} submissions={submissions} directory={directory}/> : <div className="proc-package-thread">
+        {detailTab === "Scopes" ? <PackageScopeSources items={bidForm(state, activePackage.id)}/> : detailTab === "Invitations" ? <><div className="proc-invitation-list">{invitations.map(invitation => { const bidder = directory.find(item => item.id === invitation.bidderId); const entries = outreachLog(state, invitation.packageId, invitation.bidderId); return <article key={invitation.id}><span className="proc-company-mark">{(bidder?.company ?? "?").slice(0, 2).toUpperCase()}</span><div><strong>{bidder?.company ?? "Directory company"}</strong><small>{bidder?.name ?? invitation.bidderId} · Invited {displayDate(invitation.invitedAt.slice(0, 10))}</small><button onClick={() => setOutreach({ packageId: invitation.packageId, bidderId: invitation.bidderId })}>{entries.length ? `${entries.length} outreach entr${entries.length === 1 ? "y" : "ies"}` : "Messages & outreach"}{unreadMessages(bidMessages, invitation.id) > 0 && <span className="bid-thread-unread" aria-label={`${unreadMessages(bidMessages, invitation.id)} new messages`}>{unreadMessages(bidMessages, invitation.id)}</span>}<ArrowRight size={12}/></button><button onClick={() => setLinkFor(invitation.id)}>Private link<ArrowRight size={12}/></button></div>{invitation.status === "submitted" ? <Badge tone="green">Submitted bid</Badge> : <select aria-label={`Invitation status for ${bidder?.company ?? invitation.bidderId}`} value={invitation.status} className={`proc-status-select ${invitationTone(invitation.status)}`} onChange={event => runAndNotify(run, current => setInvitationStatus(current, invitation.id, event.target.value as InvitationStatus), notify, "Invitation status updated.")}><option value="invited">Invited</option><option value="bidding">Bidding</option><option value="declined">Declined</option></select>}</article>; })}</div>{!invitations.length && <Empty title="No bidders invited" description="Invite suggested companies or search the full directory." action={<Button onClick={() => setInvitePackage(activePackage.id)}><UserPlus size={14}/>Invite bidders</Button>}/>}</> : detailTab === "Bid responses" ? <EstimatorSubmissions packageId={activePackage.id} procurement={state} submissions={submissions} directory={directory}/> : <div className="proc-package-thread">
           <header><div><strong>Package message thread</strong><small>{conversation ? `${conversation.company} · ${conversation.name}` : "Questions and replies stay with this trade package."}</small></div><Badge tone="amber">Browser draft</Badge></header>
           <div className="proc-package-messages">{conversation && <article><span className="proc-company-mark">{conversation.initial}</span><div><strong>{conversation.name}<small>{conversation.time}</small></strong><p>{conversation.text}</p></div></article>}{activeDrafts.map(draft => <article className="own" key={draft.id}><span className="proc-company-mark">Y</span><div><strong>You<Badge tone="amber">Local draft</Badge></strong><p>{draft.text}</p><small>{draft.time}</small></div></article>)}</div>
           {!conversation && !activeDrafts.length && <Empty title="No messages yet" description="Start a package conversation below or record a call or note from the Invitations tab."/>}
@@ -326,6 +337,10 @@ function PackagesWorkspace({ projectName, notify, navigate, onProposals }: ViewP
       </Panel>
     </div>
     {invitePackage && <BidderInvite state={state} pkgId={invitePackage} directory={directory} run={run} notify={notify} onClose={() => setInvitePackage(null)}/>}
-    {outreach && <OutreachDialog state={state} target={outreach} directory={directory} run={run} notify={notify} onClose={() => setOutreach(null)}/>}
+    {linkFor && (() => {
+      const invitation = state.invitations.find(item => item.id === linkFor), bidder = directory.find(item => item.id === invitation?.bidderId), pkg = state.packages.find(item => item.id === invitation?.packageId);
+      return invitation ? <PortalLinkDialog projectId={projectId} projectName={projectName} invitationId={invitation.id} trade={pkg?.name ?? "this trade"} company={bidder?.company ?? invitation.bidderId} contact={bidder?.name ?? ""} email={bidder?.email ?? ""} by={CURRENT_USER} notify={notify} onClose={() => setLinkFor(null)}/> : null;
+    })()}
+    {outreach && <OutreachDialog messages={bidMessages} setMessages={setBidMessages} state={state} target={outreach} directory={directory} run={run} notify={notify} onClose={() => setOutreach(null)}/>}
   </div>;
 }

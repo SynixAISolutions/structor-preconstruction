@@ -9,8 +9,8 @@ import { useLocalDraft } from "./use-local-draft";
 import { useProcurement } from "./use-procurement";
 
 /**
- * The open project's bid submissions, stored in this browser until a server backend exists
- * (see submission-api.ts). Returns the procurement record too — use it from here rather than
+ * The open project's bid submissions, shared with the team and with subcontractors' private pages (lib/bid-portal).
+ * Returns the procurement record too — use it from here rather than
  * calling useProcurement() again in the same screen, or the two copies drift apart.
  *
  *   const issues = run(s => setResponse(s, id, itemId, "P", "Excludes slab removal"));

@@ -413,9 +413,11 @@ export const pageGuides = [
     id: "portal",
     group: "Subcontractor view",
     title: "Subcontractor portal",
-    purpose: "See what an invited subcontractor sees: its invitation, the published bid form, its answers and price, its questions, and once awarded its submittals. The contractor opens it as a preview; it is not one of the contractor's own tools.",
+    purpose: "A preview of what an invited subcontractor sees: its invitation, the published bid form, its answers and price, its questions, and once awarded its submittals. Real subcontractors never open this screen: they use the private link from Bid packages, which opens their own page with no account. The contractor opens it as a preview; it is not one of the contractor's own tools.",
     steps: [
-      "Open a project and choose Preview as subcontractor at the bottom of the menu. Project information's Subcontractor view opens the same preview.",
+      "To invite a real company: in Bid packages, open Invitations and choose Private link on its row. Copy the link, or choose Write the email to send it from your own email; automatic emails aren't connected. Their page has the bid documents, the bid form, their versions and messages with you. Turn this link off stops it working.",
+      "Their draft saves as they type. When they submit, the bid arrives in Bid packages and Bid leveling, as V1, then V2 and so on; a revised proposal after the scope review counts as their best and final. Their messages appear under Messages & outreach on their row, with a count of new ones. Open screens catch up within a minute.",
+      "To preview it yourself: open a project and choose Preview as subcontractor at the bottom of the menu. Project information's Subcontractor view opens the same preview.",
       "Use Acting as invited company to choose one of the open project's invitations. A declined invitation or an unpublished bid form explains why that company cannot bid yet.",
       "Use Edit submitter to confirm or change the directory contact name and email. On Invitation, review the package and download the TXT document previews.",
       "Choose Prepare proposal or Scope & bid. Answer every published scope line with Y, N, P, or N/A; explain P and N/A answers.",

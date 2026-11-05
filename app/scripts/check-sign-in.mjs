@@ -38,7 +38,8 @@ try {
   assert.equal((await ask("/settings?tab=team")).headers.get("location"), "https://structor.example/login?next=%2Fsettings%3Ftab%3Dteam", "…and comes back after");
   const api = await ask("/api/project-files?project=jelleff");
   assert.deepEqual([api.status, api.headers.get("www-authenticate"), typeof (await api.json()).error], [401, null, "string"], "An API call gets a 401 with a message");
-  for (const open of ["/login", "/api/login", "/portal/abc", "/api/portal/bid"]) assert(passes(await ask(open)), `${open} is open`);
+  for (const open of ["/login", "/api/login", "/portal/abc", "/portal/bid?t=x", "/api/portal/bid", "/api/portal/bid/upload", "/api/portal/bid/file", "/api/portal/bid/document"]) assert(passes(await ask(open)), `${open} is open`);
+  for (const closed of ["/api/bid-portal/link", "/api/bid-portal/file", "/api/docusign", "/api/shared"]) assert.equal((await ask(closed)).status, 401, `${closed} needs the sign-in`);
   const live = await W.sessionToken("s3cret");
   assert(passes(await ask("/", { cookie: `${W.SESSION_COOKIE}=${live}` })), "A signed-in browser goes through");
   assert(passes(await ask("/api/ai", { authorization: `Basic ${Buffer.from("x:s3cret").toString("base64")}` })), "Scripts can still send the password");
