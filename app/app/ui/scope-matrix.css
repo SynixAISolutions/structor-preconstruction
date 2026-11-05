@@ -1,0 +1,28 @@
+.scope-matrix{display:flex;flex-direction:column;gap:18px;min-width:0}
+.scope-matrix .ui-tabs{flex-wrap:wrap}
+.scope-matrix-actions{display:flex;gap:8px;flex-wrap:wrap}
+.scope-matrix-toolbar{flex-wrap:wrap;gap:12px;padding:0 0 14px}
+.scope-matrix-filters{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-left:auto}
+.scope-matrix-filters .ui-field{min-width:150px;max-width:220px}
+.scope-matrix-bulk{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:10px 12px;border:1px solid #f1c7ad;background:#fdf4ee;border-radius:8px}
+.scope-matrix-bulk strong{align-self:center;font-size:13px;margin-right:6px}
+.scope-matrix-bulk .ui-field{min-width:200px}
+.scope-matrix-table td{vertical-align:top}
+.product-app .scope-matrix-table input[type=checkbox]{width:16px;height:16px;min-width:0;margin:2px 0 0;accent-color:#e9703e}
+.scope-matrix-table th:first-child:not([colspan]),.scope-matrix-table td:first-child{width:36px;padding-right:0}
+.scope-matrix-table tr.selected td{background:#fdf4ee}
+.scope-matrix-item{min-width:280px;max-width:520px}
+.scope-matrix-item strong{display:block;font-weight:600;line-height:1.35}
+.scope-matrix-item small{display:block;margin-top:3px;color:#61717a;line-height:1.4;white-space:normal}
+.scope-matrix-item .ui-source{display:inline-block;margin-top:4px}
+.scope-matrix .scope-matrix-also{display:block;margin-top:3px;font-size:11px;color:#a4501b}
+.scope-matrix-trade{width:190px;max-width:100%;font-size:12px;padding:5px 6px}
+.scope-matrix-row-actions{white-space:nowrap}
+.scope-matrix-row-actions .ui-btn{margin-right:6px;padding:4px 9px;font-size:12px}
+.scope-matrix-group th{background:#f6f4ef;font-size:12px;font-weight:700;text-align:left;padding:8px 12px}
+.scope-matrix-group span{margin-right:8px;color:#8b979c;font-weight:600}
+.scope-matrix-group small{margin-left:8px;color:#8b979c;font-weight:500}
+.scope-matrix-pages{display:flex;align-items:center;justify-content:center;gap:12px;padding:14px 0 2px;font-size:12px;color:#61717a}
+.scope-matrix-form{display:flex;flex-direction:column;gap:12px}
+.scope-matrix-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+@media(max-width:700px){.scope-matrix-filters{margin-left:0;width:100%}.scope-matrix-filters .ui-field{flex:1;max-width:none}.scope-matrix-item{min-width:220px}}
