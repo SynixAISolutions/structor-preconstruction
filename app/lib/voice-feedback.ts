@@ -34,6 +34,19 @@ export function feedbackRecord(input: FeedbackInput): VoiceFeedback {
   return { ...input, pageLabel: screenLabel(input.screen), createdAt: new Date().toISOString() };
 }
 
+// Marcel's seven notes of 26 Oct were flat digital silence (-91 dB) and nothing told him: speech peaks far above this.
+export const SILENT_PEAK = 0.001;
+export const SILENCE_WARNING_SECONDS = 4;
+export type MicSound = "unknown" | "heard" | "silent";
+
+/** What a recording has picked up so far, from its loudest sample (0 to 1). `peak` is null where the browser can't
+ * measure it, and that is never called silent. */
+export function micSound(peak: number | null, seconds: number): MicSound {
+  if (peak === null) return "unknown";
+  if (peak >= SILENT_PEAK) return "heard";
+  return seconds >= SILENCE_WARNING_SECONDS ? "silent" : "unknown";
+}
+
 /** The inbox list's headers; ?download saves the list as a file, as a recording's own route does. */
 export function feedbackListHeaders(download: boolean): Record<string, string> {
   return { "Cache-Control": "private, no-store", ...(download ? { "Content-Disposition": 'attachment; filename="structor-feedback-list.json"' } : {}) };

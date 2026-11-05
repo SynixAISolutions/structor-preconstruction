@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { register } from "node:module";
 register("./ts-resolver.mjs", import.meta.url);
-const { parseFeedback, feedbackRecord, feedbackPath, feedbackListHeaders, audioFormat, audioRange, MAX_VOICE_BYTES } = await import("../lib/voice-feedback.ts");
+const { parseFeedback, feedbackRecord, feedbackPath, feedbackListHeaders, micSound, audioFormat, audioRange, MAX_VOICE_BYTES } = await import("../lib/voice-feedback.ts");
 const { POST, GET } = await import("../app/api/feedback/route.ts");
 const id = "1792051200000-12345678-abcd-4abc-8def-123456789abc";
 const valid = { id, screen: "projects", projectId: "ignored", projectName: "Ignored", author: " Marcel ", note: " Fix this ", duration: 12 };
@@ -34,4 +34,11 @@ assert.equal((await GET(new Request(url+"?cursor="+"x".repeat(2001)))).status,40
 assert.deepEqual(feedbackListHeaders(false), { "Cache-Control": "private, no-store" }, "The inbox reads the list in place");
 assert.match(feedbackListHeaders(true)["Content-Disposition"], /^attachment; filename="structor-feedback-list\.json"$/, "?download saves the list as a file");
 assert.equal(feedbackListHeaders(true)["Cache-Control"], "private, no-store", "A saved list is still not cached");
-console.log("Voice feedback: context, input, audio, range and upload-boundary checks passed.");
+// A silent microphone is called out (Marcel, 26 Oct: seven notes of flat silence at -91 dB, and nothing told him).
+const decibels = db => 10 ** (db / 20);
+assert.equal(micSound(decibels(-91), 52), "silent", "Marcel's notes of 26 Oct");
+assert.equal(micSound(decibels(-4.4), 14), "heard", "A real note, peaking at -4.4 dB");
+assert.equal(micSound(decibels(-50), 30), "heard", "Quiet speech still counts");
+assert.equal(micSound(decibels(-91), 2), "unknown", "Too early to say");
+assert.equal(micSound(null, 60), "unknown", "A browser that can't measure is never called silent");
+console.log("Voice feedback: context, input, audio, range, upload-boundary and silent-microphone checks passed.");
