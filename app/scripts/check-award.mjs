@@ -197,7 +197,7 @@ assert.deepEqual(section(mdoc, "Scope of work").slice(1, 5), ["Documents:", "Div
 assert(section(mdoc, "Phasing & schedule highlights").includes("Project Commencement – 2026-06-01"));
 assert(section(mdoc, "Phasing & schedule highlights").includes("Project Substantial Completion – [finish]"), "A missing value stays visible as [finish]");
 assert(mdoc.sections.some(x => x.heading === "Economic inclusion requirements") && mdoc.sections.at(-1).heading === "- End of Exhibit A -");
-assert.deepEqual(section(mdoc, "Subcontract amount"), ["$450,000, the base bid from bid leveling (bid revision 1, bid form version 1)."]);
+assert.deepEqual(section(mdoc, "Subcontract amount"), ["$450,000, the base bid (bid revision 1, bid form version 1)."]);
 assert.equal(A.latestExhibit(A.createAward(empty, ctx, { levelingBidderId: green.levelingBidderId, basis: "base" }, "Sadie", at).awards[0]).content.sections[0].lines[1], "[owner]", "No owner supplied: the gap is shown");
 let m = A.createAward(empty, mcnCtx, { levelingBidderId: capital.levelingBidderId, basis: "reviewed" }, "Sadie", at);
 const mid = m.awards[0].id;
@@ -247,6 +247,49 @@ assert.deepEqual([A.latestExhibit(custom).content.title, A.latestExhibit(custom)
   assert.deepEqual(startingDraft("p2", "awards", sampleAwards), { awards: [], notifications: [] }, "Other projects start with no awards");
   assert.deepEqual(startingDraft("p2", "submissions", sampleSubmissions), [], "Other projects start with no bids");
   assert(!JSON.stringify([sampleAwards, sampleSubmissions, sampleProcurement]).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}/), "Fixed ids, no random UUIDs");
+}
+
+// ── Contract amount = best and final (Marcel, 24 Oct: "Package Subcontract … amount = BAFO") ──
+{
+  const offer = { amount: 950000, receivedAt: "2026-11-05T10:00:00.000Z", source: "typed" };
+  const direct = A.createAward(empty, ctx, { levelingBidderId: capital.levelingBidderId, basis: "reviewed", bestAndFinal: offer }, "Sadie", at);
+  assert.equal(direct.awards[0].amount, 950000, "Awarding with a best and final uses it");
+  assert.deepEqual(direct.awards[0].bestAndFinal, offer);
+  assert(JSON.stringify(A.latestExhibit(direct.awards[0]).content).includes("$950,000, the best and final offer"), "Exhibit A states it");
+  const leveled = A.createAward(empty, ctx, { levelingBidderId: capital.levelingBidderId, basis: "reviewed" }, "Sadie", at);
+  const aid = leveled.awards[0].id, was = leveled.awards[0].amount;
+  assert.equal(leveled.awards[0].bestAndFinal, undefined);
+  fails(() => A.applyBestAndFinal(leveled, aid, { ...offer, amount: 0 }, "Sadie", at), "basis", /needs an amount/);
+
+  // Before Exhibit A is agreed: a new revision at the new amount.
+  const applied = A.applyBestAndFinal(leveled, aid, offer, "Sadie", at);
+  const after = applied.awards[0], latest = A.latestExhibit(after), text = JSON.stringify(latest.content);
+  assert.deepEqual([after.amount, after.exhibit.revisions.length, latest.number], [950000, 2, 2]);
+  assert(text.includes("$950,000, the best and final offer"), "The amount and its basis both change");
+  assert(!text.includes(`$${was.toLocaleString("en-US")}`), "The old amount is gone from Exhibit A");
+  assert.match(latest.note, /Amount updated to the best and final offer, \$950,000/);
+  assert.equal(JSON.stringify(after.exhibit.revisions[0].content).includes("$950,000"), false, "The earlier revision is kept as it was");
+  assert.match(applied.notifications.at(-1).text, /contract amount is now \$950,000/);
+  assert.equal(A.applyBestAndFinal(applied, aid, offer, "Sadie", at), applied, "The same offer again changes nothing");
+
+  // After agreement: it goes back for agreement, and the draft subcontract is regenerated at the new amount.
+  const agreed = A.generateSubcontract(A.agreeExhibit(A.shareExhibit(leveled, aid, at), aid, "Sub", "subcontractor", at), aid, "Build Co", "Sadie", at);
+  assert.equal(agreed.awards[0].subcontract.amount, was);
+  const reopened = A.applyBestAndFinal(agreed, aid, offer, "Sadie", at);
+  assert.deepEqual([reopened.awards[0].exhibit.status, reopened.awards[0].exhibit.agreement, reopened.awards[0].subcontract], ["draft", null, null], "Nobody's agreement carries over to a changed document");
+  assert.match(reopened.notifications.at(-1).text, /Exhibit A needs agreeing again/);
+  const again = A.generateSubcontract(A.agreeExhibit(A.shareExhibit(reopened, aid, at), aid, "Sub", "subcontractor", at), aid, "Build Co", "Sadie", at);
+  assert.equal(again.awards[0].subcontract.amount, 950000, "The subcontract carries the best and final");
+  assert(JSON.stringify(again.awards[0].subcontract.content).includes("$950,000"), "And says so");
+
+  // Once it's out, the amount stays and the rule says why.
+  const out = A.sendSubcontract(agreed, aid, at);
+  fails(() => A.applyBestAndFinal(out, aid, offer, "Sadie", at), "subcontract", /already went out/);
+
+  // A template that doesn't state the amount leaves an agreed Exhibit A alone.
+  const silent = { ...agreed, awards: [{ ...agreed.awards[0], exhibit: { ...agreed.awards[0].exhibit, revisions: agreed.awards[0].exhibit.revisions.map(r => ({ ...r, content: { title: "E", sections: [{ heading: "Scope", lines: ["Work"] }] } })) } }] };
+  const kept = A.applyBestAndFinal(silent, aid, offer, "Sadie", at);
+  assert.deepEqual([kept.awards[0].exhibit.status, kept.awards[0].exhibit.revisions.length, kept.awards[0].amount], ["agreed", 1, 950000]);
 }
 
 console.log(`Award checked: candidates, explicit award and basis, snapshot, Exhibit A share/changes/revise/resolve/agree, subcontract generate/send/sign/countersign/execute, notifications, documents; Jelleff sample Concrete and Drywall coherent from bids to executed subcontracts.`);

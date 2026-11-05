@@ -156,6 +156,16 @@ export function currentBafos(typed: Bafo[], fromProposals: Bafo[]): Bafo[] {
   return [...latest.values()].sort((a, b) => a.amount - b.amount);
 }
 
+/** A company's latest best and final on a trade, typed or from its proposal: what its contract amount should be. */
+export function bestAndFinalFor(buyout: BuyoutState, submissions: Submission[], packageId: string, directory: { id: string; company: string }[], bidder: { bidderId: string | null; company: string }): Bafo | null {
+  const entry = buyout.entries.find(e => e.packageId === packageId);
+  const company = bidder.company.trim().toLowerCase();
+  // A typed offer may carry only the company's name, so it's matched on either, and the latest of them stands.
+  const mine = [...(entry?.bafos ?? []), ...proposalBafos(submissions, packageId, entry?.scopeReview ?? null, directory)]
+    .filter(b => (bidder.bidderId && b.bidderId === bidder.bidderId) || b.company.trim().toLowerCase() === company);
+  return mine.reduce<Bafo | null>((latest, b) => !latest || b.receivedAt > latest.receivedAt ? b : latest, null);
+}
+
 /** One row per trade, in procurement order: where its buyout stands and whose move it is. */
 export function buyoutRows(input: BuyoutInput): BuyoutRow[] {
   const { procurement, budget } = input;

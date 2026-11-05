@@ -97,7 +97,7 @@ const EXHIBIT_SHELL: DocumentTemplate = {
         "Veteran Owned Business Enterprise (VBE): $________ ____%",
         "Local Manufacturing Business (LMB): $________ ____%",
       ] },
-      { kind: "text", heading: "Subcontract amount", lines: ["{amount}, the {basis} from bid leveling (bid revision {bidRevision}, bid form version {formVersion})."] },
+      { kind: "text", heading: "Subcontract amount", lines: ["{amount}, the {basis} (bid revision {bidRevision}, bid form version {formVersion})."] },
       { kind: "text", heading: "- End of Exhibit A -", lines: ["{template}"] },
     ],
   },
