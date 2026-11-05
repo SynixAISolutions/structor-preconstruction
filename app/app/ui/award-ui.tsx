@@ -39,6 +39,10 @@ import { templateFor } from "../../lib/company-forms";
 import type { CompanyForm } from "../../lib/contract-files";
 import { EXHIBITS, missingContractFiles, setContractFiles } from "../../lib/contract-files";
 import { assetUrl } from "../../lib/document-assets";
+import { applyEnvelope, AwardRuleError, envelopeRequest, recordEnvelope } from "../../lib/award";
+import { canCheck, envelopeLive, type EnvelopeSigners } from "../../lib/docusign";
+import { readEnvelopeStatus, sendEnvelope, useDocusign, voidEnvelopeNow } from "../../lib/docusign-client";
+import { DocusignPanel, DocusignSetupNote, SignerFields } from "./docusign-send";
 import "./award-ui.css";
 
 const actor = "Marcel Khoury";
@@ -137,6 +141,11 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
   const [signer, setSigner] = useState<Signer>({ name: "", title: "", email: "" });
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const docusign = useDocusign();
+  const [signers, setSigners] = useState<EnvelopeSigners>({ subcontractor: { name: "", email: "" }, contractor: { name: "", email: "" } });
+  const [resendOpen, setResendOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     const target = sessionStorage.getItem("contracts-package");
@@ -224,6 +233,53 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
       ? { name: award.snapshot.company.contact, title: "", email: award.snapshot.company.email }
       : { name: actor, title: "Project manager", email: "" });
     setErrors({});
+  }
+
+  // The people who sign, as last sent if it's going out again.
+  function prepareSigners() {
+    if (!award) return;
+    setSigners(award.subcontract?.docusign?.signers ?? { subcontractor: { name: award.snapshot.company.contact, email: award.snapshot.company.email }, contractor: { name: actor, email: "" } });
+    setErrors({});
+  }
+
+  /** Sends the package through DocuSign. The subcontract only moves on once DocuSign has it. */
+  async function sendWithDocusign(prepare: (current: AwardState) => AwardState, close: () => void) {
+    if (!award) return;
+    setSending(true); setErrors({});
+    try {
+      const sent = await sendEnvelope(envelopeRequest(prepare(state), award.id, signers));
+      perform(current => recordEnvelope(prepare(current), award.id, sent, signers, actor), `Sent to ${signers.subcontractor.name} with DocuSign. ${signers.contractor.name} countersigns after them.`, close);
+    } catch (error) {
+      setErrors(error instanceof AwardRuleError ? error.errors : { subcontract: error instanceof Error ? error.message : "The subcontract could not be sent." });
+    } finally { setSending(false); }
+  }
+
+  const envelope = award?.subcontract?.docusign;
+  async function checkEnvelope() {
+    if (!award || !envelope) return;
+    setChecking(true);
+    try {
+      const latest = await readEnvelopeStatus(envelope.envelopeId);
+      const problem = run(current => applyEnvelope(current, award.id, latest));
+      setErrors(problem ?? {});
+    } catch (error) { setErrors({ subcontract: error instanceof Error ? error.message : "DocuSign could not be reached." }); }
+    finally { setChecking(false); }
+  }
+  // Opening the Subcontract tab reads the envelope, if DocuSign's limit allows it.
+  useEffect(() => {
+    if (tab === "Subcontract" && docusign.ready && envelope && envelopeLive(envelope.status) && canCheck(envelope.checkedAt)) void checkEnvelope();
+  }, [tab, docusign.ready, envelope?.envelopeId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** A live envelope is voided first, so nobody can sign a contract whose award is gone. If that fails, the award stays. */
+  async function cancelCurrentAward() {
+    if (!award) return;
+    if (envelope && envelopeLive(envelope.status) && cancelReason.trim()) {
+      setSending(true);
+      try { await voidEnvelopeNow(envelope.envelopeId, cancelReason); }
+      catch (error) { setErrors({ award: `The DocuSign envelope could not be voided, so the award stays as it is. ${error instanceof Error ? error.message : ""}` }); return; }
+      finally { setSending(false); }
+    }
+    perform(current => cancelAward(current, award.id, cancelReason, actor), "Award cancelled; the package is available for a new selection.", () => setCancelOpen(false));
   }
 
   const awardsLive = state.awards.filter(item => !item.cancelled);
@@ -319,25 +375,27 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
           </Panel>}
 
           {tab === "Subcontract" && <>
-            {award.exhibit.status !== "agreed" ? <Panel><Empty title="Agree Exhibit A first" description="The subcontract incorporates the agreed Exhibit A revision. Resolve comments and record agreement before generating it." action={<Button onClick={() => setTab("Exhibit A")}>Review Exhibit A<ArrowRight size={15}/></Button>}/></Panel> : !award.subcontract ? <Panel><Empty title="Exhibit A is agreed" description="Generate the complete subcontract using the agreed scope and selected award amount." action={<Button variant="primary" onClick={() => { setContractorName(company.name || "General contractor"); setPackageOpen(true); setErrors({}); }}>Package subcontract<Send size={15}/></Button>}/></Panel> : <div className="award-document-layout">
+            {award.exhibit.status !== "agreed" ? <Panel><Empty title="Agree Exhibit A first" description="The subcontract incorporates the agreed Exhibit A revision. Resolve comments and record agreement before generating it." action={<Button onClick={() => setTab("Exhibit A")}>Review Exhibit A<ArrowRight size={15}/></Button>}/></Panel> : !award.subcontract ? <Panel><Empty title="Exhibit A is agreed" description="Generate the complete subcontract using the agreed scope and selected award amount." action={<Button variant="primary" onClick={() => { setContractorName(company.name || "General contractor"); prepareSigners(); setPackageOpen(true); }}>Package subcontract<Send size={15}/></Button>}/></Panel> : <div className="award-document-layout">
               <Panel title="Subcontract agreement" subtitle={`${award.subcontract.template.name} · Exhibit A revision ${award.subcontract.exhibitRevision}`} action={<Badge tone={award.subcontract.status === "executed" ? "green" : "amber"}>{award.subcontract.status.replaceAll("-", " ")}</Badge>}>
                 <div className="award-document-actions">
                   <Button onClick={() => downloadText(`${slug(award.snapshot.packageName)}-${award.subcontract!.status === "executed" ? "executed-" : ""}subcontract.txt`, award.subcontract!.executedCopy ?? renderDocumentText(award.subcontract!.content))}><Download size={15}/>Download {award.subcontract.status === "executed" ? "executed copy" : "draft"}</Button>
-                  {award.subcontract.status === "draft" && <><Button onClick={() => { setContractorName(award.subcontract?.contractorName || company.name || "General contractor"); setContractorOpen(true); }}><PenLine size={15}/>Regenerate</Button><Button variant="primary" onClick={() => perform(current => sendSubcontract(current, award.id), "Signature request recorded. No email was sent.")}><Send size={15}/>Send for signature</Button></>}
-                  {award.subcontract.status === "signature-pending" && <Button variant="primary" onClick={() => openSignature("subcontractor")}><Signature size={15}/>Record subcontractor signature</Button>}
-                  {award.subcontract.status === "subcontractor-signed" && <Button variant="primary" onClick={() => openSignature("contractor")}><Signature size={15}/>Countersign</Button>}
-                  {award.subcontract.status === "countersigned" && <Button variant="primary" onClick={() => perform(current => executeSubcontract(current, award.id), "Subcontract executed and final copy frozen.")}><FileCheck2 size={15}/>Execute subcontract</Button>}
+                  {award.subcontract.status === "draft" && <><Button onClick={() => { setContractorName(award.subcontract?.contractorName || company.name || "General contractor"); setContractorOpen(true); }}><PenLine size={15}/>Regenerate</Button><Button variant="primary" onClick={() => { if (docusign.ready) { prepareSigners(); setResendOpen(true); } else perform(current => sendSubcontract(current, award.id), "Signature request recorded. No email was sent."); }}><Send size={15}/>{docusign.ready ? "Send with DocuSign" : "Send for signature"}</Button></>}
+                  {!award.subcontract.docusign && award.subcontract.status === "signature-pending" && <Button variant="primary" onClick={() => openSignature("subcontractor")}><Signature size={15}/>Record subcontractor signature</Button>}
+                  {!award.subcontract.docusign && award.subcontract.status === "subcontractor-signed" && <Button variant="primary" onClick={() => openSignature("contractor")}><Signature size={15}/>Countersign</Button>}
+                  {!award.subcontract.docusign && award.subcontract.status === "countersigned" && <Button variant="primary" onClick={() => perform(current => executeSubcontract(current, award.id), "Subcontract executed and final copy frozen.")}><FileCheck2 size={15}/>Execute subcontract</Button>}
                 </div>
+                <ErrorSummary errors={errors}/>
+                {award.subcontract.status === "draft" && <DocusignSetupNote setup={docusign}/>}
                 {award.subcontract.attachments && <div className="contract-file-row"><h3>Attached originals</h3><p><AssetLink asset={award.subcontract.attachments.company.form}/></p>{Object.entries(award.subcontract.attachments.files).map(([code, asset]) => <p key={code}>Exhibit {code}: <AssetLink asset={asset}/></p>)}</div>}<DocumentPreview company={award.subcontract.attachments?.company} content={award.subcontract.content} status={award.subcontract.status === "executed" ? "EXECUTED" : "SUBCONTRACT"}/>
               </Panel>
-              <aside className="award-document-side"><Panel title="Signature status"><div className="award-signatures">
+              <aside className="award-document-side">{award.subcontract.docusign && <DocusignPanel envelope={award.subcontract.docusign} signed={!!award.subcontract.subcontractorSignature} checking={checking} ready={docusign.ready} onCheck={() => void checkEnvelope()} onResend={() => { prepareSigners(); setResendOpen(true); }}/>}<Panel title="Signature status"><div className="award-signatures">
                 <div className={award.subcontract.subcontractorSignature ? "signed" : ""}><span><Signature size={18}/></span><div><strong>Subcontractor</strong>{award.subcontract.subcontractorSignature ? <><p>{award.subcontract.subcontractorSignature.name} · {award.subcontract.subcontractorSignature.title || "Title not recorded"}</p><small>{award.subcontract.subcontractorSignature.email} · {stamp(award.subcontract.subcontractorSignature.signedAt)}</small></> : <small>Awaiting signature</small>}</div></div>
                 <div className={award.subcontract.contractorSignature ? "signed" : ""}><span><Signature size={18}/></span><div><strong>General contractor</strong>{award.subcontract.contractorSignature ? <><p>{award.subcontract.contractorSignature.name} · {award.subcontract.contractorSignature.title || "Title not recorded"}</p><small>{award.subcontract.contractorSignature.email} · {stamp(award.subcontract.contractorSignature.signedAt)}</small></> : <small>Signs after the subcontractor</small>}</div></div>
               </div></Panel>{award.subcontract.status === "executed" && <div className="award-executed"><CheckCircle2 size={22}/><div><strong>Subcontract executed</strong><small>{stamp(award.subcontract.executedAt)} · Final copy is frozen</small></div></div>}</aside>
             </div>}
           </>}
 
-          {tab === "Activity" && <Panel title="Recorded contract activity" subtitle="Notifications stay in this browser; nothing here was emailed." action={state.notifications.some(note => note.awardId === award.id && !note.read) ? <Button onClick={() => { const ids = state.notifications.filter(note => note.awardId === award.id && !note.read).map(note => note.id); perform(current => markAwardNotificationsRead(current, ids), "Contract notifications marked read."); }}>Mark all read</Button> : <Badge tone="green">All read</Badge>}>
+          {tab === "Activity" && <Panel title="Recorded contract activity" subtitle="What happened on this contract. DocuSign emails its own signers; nothing else here was emailed." action={state.notifications.some(note => note.awardId === award.id && !note.read) ? <Button onClick={() => { const ids = state.notifications.filter(note => note.awardId === award.id && !note.read).map(note => note.id); perform(current => markAwardNotificationsRead(current, ids), "Contract notifications marked read."); }}>Mark all read</Button> : <Badge tone="green">All read</Badge>}>
             <div className="award-activity">{[...state.notifications].filter(note => note.awardId === award.id).reverse().map(note => <article className={note.read ? "read" : ""} key={note.id}><span><Bell size={16}/></span><div><strong>{note.text}</strong><p>{note.recipientType === "team" ? `Project team · ${note.recipient}` : award.snapshot.company.name}</p><small>{stamp(note.at)}</small></div><Badge tone={note.read ? "neutral" : "blue"}>{note.read ? "Read" : "New"}</Badge></article>)}</div>
             {!state.notifications.some(note => note.awardId === award.id) && <Empty title="No recorded activity yet" description="Sharing Exhibit A or sending the subcontract will create a local notification record."/>}
           </Panel>}
@@ -375,7 +433,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
       const template = award.subcontract?.template ?? templateFor(company, "subcontract", DEFAULT_SUBCONTRACT_TEMPLATE);
       const generate = (current: AwardState) => generateSubcontract(current, award.id, contractorName, actor, undefined, undefined, template);
       return <Modal title="Package subcontract" subtitle={`${award.snapshot.company.name} · ${usd(award.amount)}`} wide onClose={() => setPackageOpen(false)}>
-        {!files ? <Empty title="Prepare All other exhibits first" description="The package attaches Exhibit B and Exhibits C to G. Prepare them, then come back to send it." action={<Button onClick={() => { setPackageOpen(false); setTab("All other exhibits"); }}>Open All other exhibits<ArrowRight size={15}/></Button>}/> : <form onSubmit={event => { event.preventDefault(); perform(current => sendSubcontract(generate(current), award.id), "Subcontract package sent for signature with Exhibit A and the other exhibits attached. No email was sent.", () => setPackageOpen(false)); }}>
+        {!files ? <Empty title="Prepare All other exhibits first" description="The package attaches Exhibit B and Exhibits C to G. Prepare them, then come back to send it." action={<Button onClick={() => { setPackageOpen(false); setTab("All other exhibits"); }}>Open All other exhibits<ArrowRight size={15}/></Button>}/> : <form onSubmit={event => { event.preventDefault(); if (docusign.ready) void sendWithDocusign(generate, () => setPackageOpen(false)); else perform(current => sendSubcontract(generate(current), award.id), "Subcontract package sent for signature with Exhibit A and the other exhibits attached. No email was sent.", () => setPackageOpen(false)); }}>
           <ul className="award-package-list">
             <li><strong>Subcontract total</strong><span>{usd(award.amount)}</span></li>
             <li><strong>Exhibit A · Scope of work</strong><span>Revision {exhibit?.number ?? "—"}{award.exhibit.agreement ? ` · agreed by ${award.exhibit.agreement.by}` : ""}</span></li>
@@ -385,11 +443,16 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
           </ul>
           {missing.length > 0 && <p className="award-package-missing" role="note">Not provided yet: {missing.join(", ")}. The subcontract lists them as NOT PROVIDED; add them in All other exhibits first if they belong in this package.</p>}
           <label className="ui-field"><span>General contractor legal name</span><input required value={contractorName} onChange={event => setContractorName(event.target.value)}/></label>
+          {docusign.ready ? <SignerFields value={signers} onChange={setSigners}/> : <DocusignSetupNote setup={docusign}/>}
           <ErrorSummary errors={errors}/>
-          <div className="award-modal-actions"><Button onClick={() => setPackageOpen(false)}>Cancel</Button><Button onClick={() => perform(generate, "Subcontract draft generated. Review it, then send it for signature.", () => setPackageOpen(false))}>Generate draft only</Button><Button type="submit" variant="primary"><Send size={15}/>Send package</Button></div>
+          <div className="award-modal-actions"><Button onClick={() => setPackageOpen(false)}>Cancel</Button><Button disabled={sending} onClick={() => perform(generate, "Subcontract draft generated. Review it, then send it for signature.", () => setPackageOpen(false))}>Generate draft only</Button><Button type="submit" variant="primary" disabled={sending}><Send size={15}/>{sending ? "Sending…" : docusign.ready ? "Send with DocuSign" : "Send package"}</Button></div>
         </form>}
       </Modal>;
     })()}
+    {resendOpen && award && <Modal title="Send with DocuSign" subtitle={`${award.snapshot.packageName} · ${usd(award.amount)}. DocuSign emails the subcontractor first, then the countersigner.`} onClose={() => setResendOpen(false)}><form onSubmit={event => { event.preventDefault(); void sendWithDocusign(current => current, () => setResendOpen(false)); }}>
+      <SignerFields value={signers} onChange={setSigners}/>
+      <ErrorSummary errors={errors}/><div className="award-modal-actions"><Button onClick={() => setResendOpen(false)}>Cancel</Button><Button type="submit" variant="primary" disabled={sending}><Send size={15}/>{sending ? "Sending…" : "Send with DocuSign"}</Button></div>
+    </form></Modal>}
     {contractorOpen && award && <Modal title={award.subcontract ? "Regenerate subcontract" : "Generate subcontract"} subtitle="The agreed Exhibit A revision and award value will be attached." onClose={() => setContractorOpen(false)}><form onSubmit={event => { event.preventDefault(); if (!award.contractFiles) { setErrors({ subcontract: "Prepare All other exhibits before generating the subcontract." }); setContractorOpen(false); setTab("All other exhibits"); return; } perform(current => generateSubcontract(current, award.id, contractorName, actor, undefined, undefined, award.subcontract?.template ?? templateFor(company, "subcontract", DEFAULT_SUBCONTRACT_TEMPLATE)), "Subcontract draft generated.", () => setContractorOpen(false)); }}>
       <label className="ui-field"><span>General contractor legal name</span><input required value={contractorName} onChange={event => setContractorName(event.target.value)}/></label>
       <div className="award-modal-note"><FileText size={17}/><span>The current template is identified inside the generated document. Review every term before signature.</span></div>
@@ -403,9 +466,10 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
       <ErrorSummary errors={errors}/><div className="award-modal-actions"><Button onClick={() => setSignatureParty(null)}>Cancel</Button><Button type="submit" variant="primary"><Signature size={15}/>Record signature</Button></div>
     </form></Modal>}
 
-    {cancelOpen && award && <Modal title="Cancel this award?" subtitle="The package can be awarded again. Executed subcontracts cannot be cancelled here." onClose={() => setCancelOpen(false)}><form onSubmit={event => { event.preventDefault(); perform(current => cancelAward(current, award.id, cancelReason, actor), "Award cancelled; the package is available for a new selection.", () => setCancelOpen(false)); }}>
+    {cancelOpen && award && <Modal title="Cancel this award?" subtitle="The package can be awarded again. Executed subcontracts cannot be cancelled here." onClose={() => setCancelOpen(false)}><form onSubmit={event => { event.preventDefault(); void cancelCurrentAward(); }}>
+      {envelope && envelopeLive(envelope.status) && <p className="award-package-missing" role="note">This voids the DocuSign envelope, so nobody can sign it. Its signers are told, with your reason.</p>}
       <label className="ui-field"><span>Reason</span><textarea required rows={4} value={cancelReason} onChange={event => setCancelReason(event.target.value)} placeholder="Record why the award is being cancelled."/></label>
-      <ErrorSummary errors={errors}/><div className="award-modal-actions"><Button onClick={() => setCancelOpen(false)}>Keep award</Button><Button type="submit" variant="primary">Cancel award</Button></div>
+      <ErrorSummary errors={errors}/><div className="award-modal-actions"><Button onClick={() => setCancelOpen(false)}>Keep award</Button><Button type="submit" variant="primary" disabled={sending}>{sending ? "Voiding…" : "Cancel award"}</Button></div>
     </form></Modal>}
   </div>;
 }
