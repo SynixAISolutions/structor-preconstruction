@@ -5,6 +5,8 @@
 // spent; the library and its speech model (about 80 MB) are downloaded once, from jsDelivr and Hugging Face, and the
 // browser keeps them. In a test it read 17 s of speech in 13 s, near word for word.
 
+import { SILENT_PEAK } from "./voice-feedback";
+
 const WHISPER_LIBRARY = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/+esm";
 const WHISPER_MODEL = "Xenova/whisper-base.en";
 const SAMPLE_RATE = 16_000;
@@ -28,11 +30,12 @@ async function samples(recording: ArrayBuffer): Promise<Float32Array> {
   return (await context.startRendering()).getChannelData(0);
 }
 
-/** What a recording says. */
+/** What a recording says; nothing for a silent one, where Whisper invents words (on Marcel's notes of 26 Oct, "you you you"). */
 export async function transcribeRecording(url: string): Promise<string> {
   const response = await fetch(url);
   if (!response.ok) throw new Error("The recording could not be loaded.");
   const audio = await samples(await response.arrayBuffer());
+  if (!audio.some(sample => Math.abs(sample) >= SILENT_PEAK)) return "";
   const stt = await recogniser();
   return (await stt(audio, { chunk_length_s: 30, stride_length_s: 5 })).text;
 }
