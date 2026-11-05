@@ -16,3 +16,5 @@
 .award-modal-note-plain{margin:0 0 14px;font-size:11px;line-height:1.6;color:#61717a}
 .award-docusign{display:flex;flex-direction:column;gap:9px;font-size:12px}.award-docusign p{margin:0;line-height:1.5}.award-docusign small{font-size:11px;color:#61717a;line-height:1.5}.award-docusign .award-package-missing{margin:0}.award-docusign-actions{display:flex;flex-direction:column;align-items:flex-start;gap:6px}.award-docusign .ui-btn{align-self:flex-start}
 @media(max-width:700px){.award-signer-row{grid-template-columns:1fr}}
+/* A best and final that differs from the contract (BafoNotice). */
+.award-bafo-notice{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:11px 14px;border-radius:8px;background:#fff6e5;color:#7a4b00;font-size:12px;line-height:1.5}.award-package-bafo{display:block!important;padding:0!important;border:0!important}

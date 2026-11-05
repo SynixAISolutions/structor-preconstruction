@@ -94,4 +94,20 @@ assert.deepEqual(todo(s), [["award:select:thermal", "todo", "contracts"]], "With
   assert.deepEqual(Y.reviewAttendees({ directory: [], bids: [], trade: "Concrete", owner: "" }), [], "Nobody to suggest");
 }
 
+// The best and final a company's contract amount follows: typed or from its proposal, whichever is latest.
+{
+  const entry = (bafos, scopeReview = null) => ({ entries: [{ packageId: "t1", bafos, scopeReview }] });
+  const typed = { id: "1", bidderId: null, company: "Sub LLC", amount: 900, note: "", receivedAt: "2026-11-02T00:00:00Z", by: "S", source: "typed" };
+  const rev = (number, baseBid, submittedAt) => ({ number, baseBid, submittedAt, submitter: { name: "Pat" } });
+  const proposal = { id: "s1", packageId: "t1", bidderId: "b1", revisions: [rev(1, 1000, "2026-11-01T00:00:00Z"), rev(2, 800, "2026-11-03T00:00:00Z")] };
+  const dir = [{ id: "b1", company: "Sub LLC" }];
+  const who = { bidderId: "b1", company: "Sub LLC" };
+  assert.equal(Y.bestAndFinalFor(entry([typed]), [], "t1", dir, who).amount, 900, "Typed, matched by company name");
+  assert.equal(Y.bestAndFinalFor(entry([typed]), [proposal], "t1", dir, who).amount, 800, "A later revised proposal wins");
+  assert.equal(Y.bestAndFinalFor(entry([{ ...typed, receivedAt: "2026-11-04T00:00:00Z" }]), [proposal], "t1", dir, who).amount, 900, "A later typed offer wins");
+  assert.equal(Y.bestAndFinalFor(entry([typed]), [], "other", dir, who), null, "Another trade's offer doesn't count");
+  assert.equal(Y.bestAndFinalFor(entry([typed]), [], "t1", dir, { bidderId: "b2", company: "Other Co" }), null, "Nor another company's");
+  assert.equal(Y.bestAndFinalFor({ entries: [] }, [{ ...proposal, revisions: [rev(1, 1000, "2026-11-01T00:00:00Z")] }], "t1", dir, who), null, "A first proposal isn't a best and final");
+}
+
 console.log("Buyout checked: rows per trade, status and ball in court from bids and awards, scope review, minutes, best and final (typed or from a revised proposal), plan, rules, the to-do's scope review step, and attendees from the directory.");

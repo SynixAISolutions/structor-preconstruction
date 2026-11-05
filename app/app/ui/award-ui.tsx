@@ -39,7 +39,9 @@ import { templateFor } from "../../lib/company-forms";
 import type { CompanyForm } from "../../lib/contract-files";
 import { EXHIBITS, missingContractFiles, setContractFiles } from "../../lib/contract-files";
 import { assetUrl } from "../../lib/document-assets";
-import { applyEnvelope, AwardRuleError, envelopeRequest, recordEnvelope } from "../../lib/award";
+import { applyBestAndFinal, applyEnvelope, AwardRuleError, envelopeRequest, recordEnvelope, type AwardBestAndFinal } from "../../lib/award";
+import { bestAndFinalFor, type Bafo } from "../../lib/buyout";
+import { useBuyout } from "../../lib/use-buyout";
 import { canCheck, envelopeLive, type EnvelopeSigners } from "../../lib/docusign";
 import { readEnvelopeStatus, sendEnvelope, useDocusign, voidEnvelopeNow } from "../../lib/docusign-client";
 import { DocusignPanel, DocusignSetupNote, SignerFields } from "./docusign-send";
@@ -104,12 +106,21 @@ function CandidateValues({ candidate }: { candidate: LevelingCandidate }) {
   </div>;
 }
 
+const offerOf = (bafo: Bafo): AwardBestAndFinal => ({ amount: bafo.amount, receivedAt: bafo.receivedAt, source: bafo.source ?? "typed", ...(bafo.revision ? { revision: bafo.revision } : {}) });
+
+/** A company's best and final differs from its contract: use it while the contract can still change, and say so if it can't. */
+function BafoNotice({ offer, amount, open, onUse }: { offer: Bafo; amount: number; open: boolean; onUse: () => void }) {
+  const from = offer.source === "proposal" && offer.revision ? `from their V${offer.revision} proposal` : `recorded by ${offer.by}`;
+  return <div className="award-bafo-notice" role="note"><span><strong>Best and final {usd(offer.amount)}</strong> {from}, {new Date(offer.receivedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. {open ? `This contract is at ${usd(amount)}.` : `The subcontract already went out at ${usd(amount)}.`}</span>{open && <Button variant="primary" onClick={onUse}>Use best and final</Button>}</div>;
+}
+
 export function AwardView({ projectName, notify, navigate, project }: ViewProps & { project: Project }) {
   const { projectId, procurement, submissions } = useSubmissions();
   const { requests: clarifications, loading: clarificationsLoading, error: clarificationsError, reload: reloadClarifications } = useClarifications(projectId);
   const { state: budget } = useBudget();
   const { state, run } = useAward();
   const { state: ve } = useValueEngineering();
+  const { state: buyout } = useBuyout();
   const [directory] = useLocalDraft<Bidder[]>("directory", initialBidders);
   const [provenance] = useLocalDraft<Record<string, BidProvenance>>("leveling-submission-provenance", {});
   const [loadedPackageId] = useLocalDraft("leveling-submission-package", "");
@@ -120,6 +131,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
   const { documents: projectDocuments } = useProjectDocuments();
   const [candidateId, setCandidateId] = useState("");
   const [basis, setBasis] = useState<LevelingBasis>("reviewed");
+  const [levelingValueChosen, setLevelingValueChosen] = useState(false);
   const [budgetLineId, setBudgetLineId] = useState("");
   const [allowanceIds, setAllowanceIds] = useState<string[]>([]);
   const [errors, setErrors] = useState<AwardErrors>({});
@@ -181,7 +193,13 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
   const directLines = budget.lines.filter(line => line.classification === "direct");
   const availableAllowances = budget.allowances.filter(item => item.status !== "excluded");
   const unread = state.notifications.filter(note => !note.read).length;
-  const selectedAmount = selectedCandidate ? (basis === "base" ? selectedCandidate.baseBid : basis === "provisional" ? selectedCandidate.provisionalTotal : selectedCandidate.reviewedTotal) : null;
+  // Marcel, 24 Oct: "amount = BAFO". A company's best and final is the award's value unless someone picks another.
+  const candidateBafo = selectedCandidate ? bestAndFinalFor(buyout, submissions, packageId, directory, { bidderId: submissions.find(s => s.id === selectedCandidate.submissionId)?.bidderId ?? null, company: selectedCandidate.bidderName }) : null;
+  const usingBafo = !!candidateBafo && !levelingValueChosen;
+  const selectedAmount = usingBafo ? candidateBafo.amount : selectedCandidate ? (basis === "base" ? selectedCandidate.baseBid : basis === "provisional" ? selectedCandidate.provisionalTotal : selectedCandidate.reviewedTotal) : null;
+  const awardBafo = award ? bestAndFinalFor(buyout, submissions, award.packageId, directory, { bidderId: award.bidderId, company: award.snapshot.company.name }) : null;
+  const bafoDiffers = !!award && !!awardBafo && awardBafo.amount !== award.amount;
+  const contractOpen = !award?.subcontract || award.subcontract.status === "draft";
 
   function perform(action: (current: AwardState) => AwardState, message: string, close?: () => void) {
     const nextErrors = run(action);
@@ -198,7 +216,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
       documents: pkg ? exhibitADocuments(projectDocuments, pkg, procurement.packages) : [],
       projectAddress: project.location, projectStart: project.start, projectFinish: project.finish,
     };
-    if (perform(current => createAward(current, context, { levelingBidderId: selectedCandidateId, basis, budgetLineId: budgetLineId || null, allowanceIds }, actor, undefined, undefined, templateFor(company, "exhibit-a", DEFAULT_EXHIBIT_TEMPLATE)), `${selectedCandidate?.bidderName ?? "Bidder"} selected for ${pkg?.name ?? "the package"}.`)) {
+    if (perform(current => createAward(current, context, { levelingBidderId: selectedCandidateId, basis, budgetLineId: budgetLineId || null, allowanceIds, bestAndFinal: usingBafo ? offerOf(candidateBafo) : null }, actor, undefined, undefined, templateFor(company, "exhibit-a", DEFAULT_EXHIBIT_TEMPLATE)), `${selectedCandidate?.bidderName ?? "Bidder"} selected for ${pkg?.name ?? "the package"}.`)) {
       setTab("Exhibit A"); setRevisionNumber(0);
     }
   }
@@ -233,6 +251,11 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
       ? { name: award.snapshot.company.contact, title: "", email: award.snapshot.company.email }
       : { name: actor, title: "Project manager", email: "" });
     setErrors({});
+  }
+
+  function useBafo() {
+    if (!award || !awardBafo) return;
+    perform(current => applyBestAndFinal(current, award.id, offerOf(awardBafo), actor), `Contract amount is now ${usd(awardBafo.amount)}, the best and final offer.`, () => setPackageOpen(false));
   }
 
   // The people who sign, as last sent if it's going out again.
@@ -325,7 +348,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
           </Panel>
           {packageCandidates.length > 0 && <Panel title="Award basis and attachments" subtitle="These choices are frozen into the award snapshot and Exhibit A.">
             <div className="award-form-grid">
-              <label className="ui-field"><span>Award value</span><select value={basis} onChange={event => setBasis(event.target.value as LevelingBasis)}>{(Object.keys(basisLabels) as LevelingBasis[]).map(value => <option value={value} key={value}>{basisLabels[value]}</option>)}</select><small>{selectedAmount === null ? "No value is available for this basis." : `${usd(selectedAmount)} will be the subcontract amount.`}</small></label>
+              <label className="ui-field"><span>Award value</span><select value={usingBafo ? "bafo" : basis} onChange={event => { const value = event.target.value; setLevelingValueChosen(value !== "bafo"); if (value !== "bafo") setBasis(value as LevelingBasis); }}>{candidateBafo && <option value="bafo">Best and final · {usd(candidateBafo.amount)}</option>}{(Object.keys(basisLabels) as LevelingBasis[]).map(value => <option value={value} key={value}>{basisLabels[value]}</option>)}</select><small>{selectedAmount === null ? "No value is available for this basis." : `${usd(selectedAmount)} will be the subcontract amount.`}</small></label>
               <label className="ui-field"><span>Budget line · optional</span><select value={budgetLineId} onChange={event => setBudgetLineId(event.target.value)}><option value="">Do not link a budget line</option>{directLines.map(line => <option value={line.id} key={line.id}>{line.description} · {line.csiCode || "No CSI"}</option>)}</select><small>Once the subcontract is executed, its sum is this line's committed cost on the Budget page (pending until then). Left unlinked, it goes to the trade's budget line.</small></label>
             </div>
             <div className="award-allowances"><header><strong>Allowances included in the award</strong><small>Excluded allowances cannot be selected.</small></header>{availableAllowances.length ? availableAllowances.map(item => <label key={item.id}><input type="checkbox" checked={allowanceIds.includes(item.id)} onChange={event => setAllowanceIds(current => event.target.checked ? [...current, item.id] : current.filter(id => id !== item.id))}/><span><strong>{item.name}</strong><small>{item.source || "No source recorded"}</small></span><b>{usd(item.amount)}</b></label>) : <p>No reviewable or included allowances are recorded.</p>}</div>
@@ -344,6 +367,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
           </section>
 
           {stage && <div className="award-flow">{flow.map((label, index) => <div className={index < stageIndex(stage) ? "done" : index === stageIndex(stage) ? "current" : ""} key={label}><span>{index < stageIndex(stage) ? <Check size={14}/> : index + 1}</span><strong>{label}</strong></div>)}</div>}
+          {bafoDiffers && <BafoNotice offer={awardBafo} amount={award.amount} open={contractOpen} onUse={useBafo}/>}
           <Tabs tabs={["Exhibit A", "Comments", "All other exhibits", "Subcontract", "Activity"]} value={tab} onChange={setTab}/>
           <ErrorSummary errors={errors}/>
 
@@ -435,7 +459,8 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
       return <Modal title="Package subcontract" subtitle={`${award.snapshot.company.name} · ${usd(award.amount)}`} wide onClose={() => setPackageOpen(false)}>
         {!files ? <Empty title="Prepare All other exhibits first" description="The package attaches Exhibit B and Exhibits C to G. Prepare them, then come back to send it." action={<Button onClick={() => { setPackageOpen(false); setTab("All other exhibits"); }}>Open All other exhibits<ArrowRight size={15}/></Button>}/> : <form onSubmit={event => { event.preventDefault(); if (docusign.ready) void sendWithDocusign(generate, () => setPackageOpen(false)); else perform(current => sendSubcontract(generate(current), award.id), "Subcontract package sent for signature with Exhibit A and the other exhibits attached. No email was sent.", () => setPackageOpen(false)); }}>
           <ul className="award-package-list">
-            <li><strong>Subcontract total</strong><span>{usd(award.amount)}</span></li>
+            {bafoDiffers && contractOpen && <li className="award-package-bafo"><BafoNotice offer={awardBafo} amount={award.amount} open onUse={useBafo}/></li>}
+            <li><strong>Subcontract total</strong><span>{usd(award.amount)}{award.bestAndFinal ? " · best and final" : ""}</span></li>
             <li><strong>Exhibit A · Scope of work</strong><span>Revision {exhibit?.number ?? "—"}{award.exhibit.agreement ? ` · agreed by ${award.exhibit.agreement.by}` : ""}</span></li>
             <li><strong>Exhibit B · List of documents</strong><span>{missing.includes("Exhibit B") ? "Not provided" : "Attached"}</span></li>
             {(Object.keys(EXHIBITS) as (keyof typeof EXHIBITS)[]).map(code => <li key={code}><strong>Exhibit {code} · {EXHIBITS[code]}</strong><span>{files.files[code]?.name ?? "Not provided"}</span></li>)}

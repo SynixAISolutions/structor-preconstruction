@@ -116,12 +116,16 @@ export type AwardSnapshot = {
 /** One row of Exhibit A's documents table, as MCN's Exhibit As list them: "Spec Section 09 29 00 · Gypsum Board · 12.20.2024". */
 export type ExhibitDocument = { section: string; description: string; date: string };
 
+/** The best and final offer a contract's amount comes from (Marcel, 24 Oct: "Package Subcontract … amount = BAFO"). */
+export type AwardBestAndFinal = { amount: number; receivedAt: string; source: "typed" | "proposal"; revision?: number };
+
 export type Award = {
   contractFiles?: ContractFiles;
+  bestAndFinal?: AwardBestAndFinal;
   id: string; projectId: string; packageId: string; invitationId: string; bidderId: string; submissionId: string; revisionNumber: number;
   budgetLineId: string | null;
   basis: LevelingBasis;
-  /** The selected value: the leveled bidder's base bid, provisional or reviewed total, per `basis`. */
+  /** The selected value: the leveled bidder's base bid, provisional or reviewed total, per `basis`, or `bestAndFinal`. */
   amount: number;
   leveling: { levelingBidderId: string; bidderName: string; baseBid: number | null; provisionalTotal: number | null; reviewedTotal: number | null };
   snapshot: AwardSnapshot;
@@ -164,7 +168,7 @@ export class AwardRuleError extends Error {
   }
 }
 
-export type ExhibitGenerator = (snapshot: AwardSnapshot, award: Pick<Award, "amount" | "basis" | "revisionNumber">, template: DocumentTemplate) => DocumentContent;
+export type ExhibitGenerator = (snapshot: AwardSnapshot, award: Pick<Award, "amount" | "basis" | "revisionNumber" | "bestAndFinal">, template: DocumentTemplate) => DocumentContent;
 export type SubcontractGenerator = (award: Award, exhibit: ExhibitRevision, contractorName: string, template: DocumentTemplate) => DocumentContent;
 
 const now = () => new Date().toISOString();
@@ -173,6 +177,8 @@ const fail = (errors: AwardErrors): never => { throw new AwardRuleError(errors);
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const usd = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;
 const BASIS_LABEL: Record<LevelingBasis, string> = { base: "base bid", provisional: "provisional leveled total", reviewed: "reviewed leveled total" };
+const BEST_AND_FINAL = "best and final offer";
+const basisWords = (award: Pick<Award, "basis" | "bestAndFinal">) => award.bestAndFinal ? BEST_AND_FINAL : BASIS_LABEL[award.basis];
 
 // ── Reading ─────────────────────────────────────────────────────────────────
 
@@ -235,11 +241,11 @@ function renderLayout(layout: TemplateLayout, values: Partial<Record<TemplateFie
   return { title: fill(layout.title, values), sections: sections.filter(s => s.lines.length) };
 }
 
-function fieldValues(snapshot: AwardSnapshot, award: Pick<Award, "amount" | "basis" | "revisionNumber">, template: DocumentTemplate, extra: Partial<Record<TemplateField, string>> = {}): Partial<Record<TemplateField, string>> {
+function fieldValues(snapshot: AwardSnapshot, award: Pick<Award, "amount" | "basis" | "revisionNumber" | "bestAndFinal">, template: DocumentTemplate, extra: Partial<Record<TemplateField, string>> = {}): Partial<Record<TemplateField, string>> {
   return {
     owner: snapshot.owner, project: snapshot.projectName, projectAddress: snapshot.projectAddress, trade: snapshot.packageName, tradeCode: snapshot.packageCode,
     subcontractor: snapshot.company.name, subcontractorContact: snapshot.company.contact, subcontractorEmail: snapshot.company.email,
-    amount: usd(award.amount), basis: BASIS_LABEL[award.basis], formVersion: String(snapshot.formVersion), bidRevision: String(award.revisionNumber),
+    amount: usd(award.amount), basis: basisWords(award), formVersion: String(snapshot.formVersion), bidRevision: String(award.revisionNumber),
     start: snapshot.projectStart, finish: snapshot.projectFinish, template: `${template.name} (${template.version})`, ...extra,
   };
 }
@@ -256,7 +262,7 @@ export const generateSampleExhibit: ExhibitGenerator = (snapshot, award, templat
     { heading: "Clarifications", lines: snapshot.clarifications },
     { heading: "Alternates offered (not included unless accepted in writing)", lines: snapshot.alternates.map(alternateLine) },
     { heading: "Allowances", lines: snapshot.allowances.map(allowanceLine) },
-    { heading: "Subcontract amount", lines: [`${usd(award.amount)}, the ${BASIS_LABEL[award.basis]} from bid leveling.`] },
+    { heading: "Subcontract amount", lines: [`${usd(award.amount)}, the ${basisWords(award)}${award.bestAndFinal ? "" : " from bid leveling"}.`] },
     { heading: "Template", lines: [`${template.name} (${template.version}). ${template.notice}`] },
   ];
   return { title: `Exhibit A — Scope of Work · ${snapshot.packageCode} ${snapshot.packageName}`, sections: sections.filter(s => s.lines.length) };
@@ -321,15 +327,16 @@ const writtenAnswer = (a: NonNullable<ClarificationLine["answer"]>) =>
 
 export function createAward(
   state: AwardState, ctx: AwardContext,
-  input: { levelingBidderId: string; basis: LevelingBasis; budgetLineId?: string | null; allowanceIds?: string[] },
+  input: { levelingBidderId: string; basis: LevelingBasis; budgetLineId?: string | null; allowanceIds?: string[]; bestAndFinal?: AwardBestAndFinal | null },
   by: string, at = now(), generate: ExhibitGenerator = generateSampleExhibit, template: DocumentTemplate = DEFAULT_EXHIBIT_TEMPLATE,
 ): AwardState {
   const candidate = ctx.candidates.find(c => c.levelingBidderId === input.levelingBidderId) ?? fail({ candidate: "Choose a bidder from the current leveling comparison." });
   const check = awardCandidates([candidate])[0];
   if (!check.awardable) fail({ candidate: `${candidate.bidderName} cannot be awarded: ${check.reasons.join(" ")}` });
   if (!(input.basis in BASIS_LABEL)) fail({ basis: "Choose base bid, provisional total, or reviewed total." });
-  const amount = input.basis === "base" ? candidate.baseBid : input.basis === "provisional" ? candidate.provisionalTotal : candidate.reviewedTotal;
-  if (amount === null || !(amount > 0)) fail({ basis: `${candidate.bidderName} has no ${BASIS_LABEL[input.basis]}.` });
+  const bestAndFinal = input.bestAndFinal ?? undefined;
+  const amount = bestAndFinal ? bestAndFinal.amount : input.basis === "base" ? candidate.baseBid : input.basis === "provisional" ? candidate.provisionalTotal : candidate.reviewedTotal;
+  if (amount === null || !(amount > 0)) fail({ basis: `${candidate.bidderName} has no ${bestAndFinal ? BEST_AND_FINAL : BASIS_LABEL[input.basis]}.` });
 
   const submission = ctx.submissions.find(s => s.id === candidate.submissionId) ?? fail({ candidate: "That bid's submission no longer exists." });
   if (submission.projectId !== ctx.projectId) fail({ candidate: "That bid belongs to another project." });
@@ -371,7 +378,7 @@ export function createAward(
     allowances: allowances.map(a => ({ id: a.id, name: a.name, amount: a.amount, source: a.source, status: a.status })),
     company: { name: company?.company ?? submission.bidderId, contact: revision.submitter.name, email: revision.submitter.email },
   };
-  const terms = { amount: amount!, basis: input.basis, revisionNumber: revision.number };
+  const terms = { amount: amount!, basis: input.basis, revisionNumber: revision.number, ...(bestAndFinal ? { bestAndFinal } : {}) };
   const award: Award = {
     id: newId(), projectId: ctx.projectId, packageId: pkg!.id, invitationId: invitation!.id, bidderId: submission.bidderId, submissionId: submission.id,
     budgetLineId, ...terms,
@@ -381,6 +388,25 @@ export function createAward(
     subcontract: null, cancelled: null, createdAt: at, createdBy: by, updatedAt: at,
   };
   return { ...state, awards: [...state.awards, award] };
+}
+
+/**
+ * Makes a best and final offer the contract's amount. A draft subcontract is dropped, to be generated at the new amount.
+ * Exhibit A states the amount, so it gets a new revision; if it was agreed, it goes back for agreement rather than
+ * disagreeing with the contract, or being changed after someone agreed to it. Refused once the subcontract is out.
+ */
+export function applyBestAndFinal(state: AwardState, id: string, offer: AwardBestAndFinal, by: string, at = now()): AwardState {
+  const award = live(findAward(state, id));
+  if (award.subcontract && award.subcontract.status !== "draft") fail({ subcontract: "The subcontract already went out at its amount. Cancel the award to change it." });
+  if (!(offer.amount > 0)) fail({ basis: "A best and final offer needs an amount." });
+  if (offer.amount === award.amount && award.bestAndFinal?.receivedAt === offer.receivedAt) return state;
+  const latest = latestExhibit(award), was = usd(award.amount), now_ = usd(offer.amount), words = basisWords(award);
+  const content: DocumentContent = { ...latest.content, sections: latest.content.sections.map(s => ({ ...s, lines: s.lines.map(line => line.includes(was) ? line.replaceAll(was, now_).replace(`the ${words} from bid leveling`, `the ${words}`).replace(`the ${words}`, `the ${BEST_AND_FINAL}`) : line) })) };
+  const statesAmount = JSON.stringify(content) !== JSON.stringify(latest.content);
+  const reopened = statesAmount && award.exhibit.status === "agreed";
+  const exhibit: ExhibitA = statesAmount ? { ...award.exhibit, status: "draft", agreement: null, revisions: [...award.exhibit.revisions, { number: latest.number + 1, content, template: latest.template, createdAt: at, createdBy: by, note: `Amount updated to the ${BEST_AND_FINAL}, ${now_}.` }] } : award.exhibit;
+  return replace(state, { ...award, amount: offer.amount, bestAndFinal: offer, exhibit, subcontract: null, updatedAt: at },
+    [toTeam(award, reopened ? "exhibit-changes-requested" : "exhibit-shared", `The ${award.snapshot.packageName} contract amount is now ${now_}, the ${BEST_AND_FINAL}.${reopened ? " Exhibit A needs agreeing again at that amount." : ""}`, at)]);
 }
 
 /** Allowed until the subcontract is executed. Frees the package for a new award. */
