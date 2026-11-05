@@ -710,7 +710,7 @@ export default function BidLevelingPage({ projectName, squareFeet }: { projectNa
           </div>
         </header>
 
-        {loadedPackage && <div className="submission-source-bar"><FileText/><span><strong>Portal submissions loaded{Object.values(submissionProvenance).some(p => p.illustrative) ? " · Illustrative sample bids" : ""}</strong><small>{loadedPackage.code} · {loadedPackage.name} · {Object.keys(submissionProvenance).length} bidder revision{Object.keys(submissionProvenance).length === 1 ? "" : "s"} · browser-only demo</small></span></div>}
+        {loadedPackage && <div className="submission-source-bar"><FileText/><span><strong>Portal submissions loaded{Object.values(submissionProvenance).some(p => p.illustrative) ? " · Illustrative sample bids" : ""}</strong><small>{loadedPackage.code} · {loadedPackage.name} · {Object.keys(submissionProvenance).length} bidder revision{Object.keys(submissionProvenance).length === 1 ? "" : "s"}</small></span></div>}
         {!!submissionIssues.length && <div className="submission-issue-bar" role="status"><AlertTriangle/><div><strong>{submissionIssues.length} submission notice{submissionIssues.length === 1 ? "" : "s"}</strong>{submissionIssues.map((issue, index) => <span key={`${issue.code}-${issue.submissionId ?? index}`}>{issue.message}</span>)}</div><button aria-label="Dismiss submission notices" onClick={() => setSubmissionIssues([])}><X/></button></div>}
 
         <section className="summary" aria-label="Bid summary">
@@ -910,7 +910,7 @@ function SubmissionLevelingReview({ bidder, items, provenance, revisionNumbers, 
           </aside>
         </div>
       </div>
-      <footer className="submission-review-actions"><span>Revision {provenance.revisionNumber} of {provenance.revisionCount} · saved in this browser</span>{!provenance.stale && !provenance.superseded && <button className="button secondary" onClick={onEdit}><Pencil/>Edit leveling settings</button>}<button className="button primary" onClick={onClose}>Review scope grid<ArrowRight/></button></footer>
+      <footer className="submission-review-actions"><span>Revision {provenance.revisionNumber} of {provenance.revisionCount}</span>{!provenance.stale && !provenance.superseded && <button className="button secondary" onClick={onEdit}><Pencil/>Edit leveling settings</button>}<button className="button primary" onClick={onClose}>Review scope grid<ArrowRight/></button></footer>
     </section>
   </div>;
   return typeof document === "undefined" ? null : createPortal(modal, document.body);

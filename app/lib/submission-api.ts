@@ -1,8 +1,8 @@
-// Server contract for bid submissions: HTTP request/response shapes and the repository
-// interfaces a real backend must implement. TYPES ONLY — no route or storage exists yet,
-// because no database, authentication provider or file store is configured.
+// A fuller server contract for bid submissions than the portal uses today: HTTP request/response shapes and repository
+// interfaces. TYPES ONLY. The real portal runs on the project's shared drafts (lib/bid-portal, app/api/portal/bid). These
+// are for if bids ever move to tables of their own and companies get accounts.
 //
-// Once one is chosen, route handlers go in app/api/portal/** and app/api/projects/**, and
+// If so, route handlers go in app/api/portal/** and app/api/projects/**, and
 // each one: authenticates → loads with the repositories → runs the pure rules from
 // submissions.ts (sanitizeBidContent on every body) → saves.
 //

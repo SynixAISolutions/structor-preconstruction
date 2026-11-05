@@ -255,8 +255,8 @@ export function setResponse(submissions: Submission[], id: string, scopeItemId: 
   return replace(submissions, { ...submission, draft: { ...submission.draft, responses }, updatedAt: at });
 }
 
-/** Records a file's details. The bytes are not stored until a server file store exists. */
-export function addAttachment(submissions: Submission[], id: string, file: { name: string; size: number; type: string }, at = now()): Submission[] {
+/** Records a file's details, with where its bytes are when the portal stored them (the preview only keeps the details). */
+export function addAttachment(submissions: Submission[], id: string, file: { name: string; size: number; type: string; storageKey?: string | null }, at = now()): Submission[] {
   const submission = find(submissions, id);
   const name = file.name.trim();
   const extension = name.includes(".") ? name.slice(name.lastIndexOf(".")).toLowerCase() : "";
@@ -265,7 +265,7 @@ export function addAttachment(submissions: Submission[], id: string, file: { nam
   if (!(file.size > 0)) fail("attachments", `${name} is empty.`);
   if (file.size > MAX_ATTACHMENT_BYTES) fail("attachments", `${name} is larger than 50 MB.`);
   if (submission.draft.attachments.length >= MAX_ATTACHMENTS) fail("attachments", `A submission can hold up to ${MAX_ATTACHMENTS} files.`);
-  const attachment: AttachmentMeta = { id: newId(), name, size: file.size, type: file.type, addedAt: at, storageKey: null };
+  const attachment: AttachmentMeta = { id: newId(), name, size: file.size, type: file.type, addedAt: at, storageKey: file.storageKey ?? null };
   return replace(submissions, { ...submission, draft: { ...submission.draft, attachments: [...submission.draft.attachments, attachment] }, updatedAt: at });
 }
 

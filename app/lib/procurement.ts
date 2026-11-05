@@ -65,7 +65,7 @@ export type Invitation = { id: string; packageId: string; bidderId: string; stat
 export type OutreachKind = "call" | "note" | "message";
 export type OutreachEntry = { id: string; packageId: string; bidderId: string; kind: OutreachKind; text: string; at: string; by: string };
 
-export type NotificationKind = "scope-moved" | "scope-applied-to-all" | "bid-form-published" | "invited";
+export type NotificationKind = "scope-moved" | "scope-applied-to-all" | "bid-form-published" | "invited" | "bid-received" | "bid-message" | "bid-declined";
 /** `recipient` is a team member's name (recipientType "team") or a directory bidder id ("bidder"). */
 export type ProcurementNotification = { id: string; kind: NotificationKind; recipientType: "team" | "bidder"; recipient: string; packageId: string; text: string; at: string; read: boolean };
 
