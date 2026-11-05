@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
+import { newDirectoryCompany } from "../../lib/directory";
 import { TradePackageControls } from "./trade-package-controls";
 import "./project-setup.css";
 import { LinkedProjectContent } from "./project-content-links";
@@ -237,21 +238,55 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
   </div>;
 }
 
-function BidderInvite({ state, pkgId, directory, run, notify, onClose }: {
+/** A company that isn't in the directory yet, typed in while inviting: it joins the directory under this trade. */
+function AddCompanyForm({ trade, directory, startName, onAdd, onCancel }: { trade: string; directory: Bidder[]; startName: string; onAdd: (company: Bidder) => void; onCancel: () => void }) {
+  const [error, setError] = useState("");
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const text = (name: string) => String(form.get(name) ?? "");
+    try { onAdd(newDirectoryCompany(directory, { company: text("company"), name: text("name"), email: text("email"), location: text("location") }, trade)); }
+    catch (e) { setError(e instanceof Error ? e.message : "The company could not be added."); }
+  }
+  return <form className="proc-add-company" onSubmit={submit}>
+    <h3>New company · {trade}</h3>
+    <div className="ui-form-grid">
+      <label className="ui-field">Company name<input required name="company" defaultValue={startName} autoFocus/></label>
+      <label className="ui-field">Contact name<input required name="name"/></label>
+      <label className="ui-field">Email address<input required type="email" name="email"/></label>
+      <label className="ui-field">Location (optional)<input name="location"/></label>
+    </div>
+    {error && <p className="sub-field-error" role="alert">{error}</p>}
+    <div className="proc-add-company-actions"><Button onClick={onCancel}>Cancel</Button><Button type="submit" variant="primary"><UserPlus size={14}/>Add and invite</Button></div>
+  </form>;
+}
+
+function BidderInvite({ state, pkgId, directory, setDirectory, run, notify, onClose }: {
   state: Procurement;
   pkgId: string;
   directory: Bidder[];
+  setDirectory: Dispatch<SetStateAction<Bidder[]>>;
   run: ReturnType<typeof useProcurement>["run"];
   notify: ViewProps["notify"];
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
+  const [adding, setAdding] = useState(false);
   const pkg = state.packages.find(item => item.id === pkgId)!;
   const candidates = inviteCandidates(state, directory, pkgId, query);
+  function addAndInvite(company: Bidder) {
+    setDirectory(current => [...current, company]);
+    if (runAndNotify(run, current => inviteBidder(current, pkgId, company.id, CURRENT_USER), notify, `${company.company} added to your directory and invited. No email was sent.`)) onClose();
+  }
+  const addButton = <Button onClick={() => setAdding(true)}><Plus size={14}/>Add a company</Button>;
   return <Modal title={`Invite bidders · ${pkg.name}`} subtitle={query ? "Searching the full company directory" : "Suggested companies match this trade"} onClose={onClose} wide>
     <SearchBox value={query} onChange={setQuery} placeholder="Search company, contact, or trade…"/>
     <div className="proc-candidates">{candidates.map(company => <article key={company.id}><span className="proc-company-mark">{company.company.slice(0, 2).toUpperCase()}</span><span><strong>{company.company}</strong><small>{company.name} · {company.trade}</small></span><Button onClick={() => { if (runAndNotify(run, current => inviteBidder(current, pkgId, company.id, CURRENT_USER), notify, `Invitation recorded for ${company.company}. No email was sent.`)) onClose(); }}><UserPlus size={14}/>Invite</Button></article>)}</div>
-    {!candidates.length && <Empty title="No available companies found" description={query ? "Try another company, contact, or trade." : "Search the full directory to invite a company outside the suggested trade."}/>}
+    {adding
+      ? <AddCompanyForm trade={pkg.name} directory={directory} startName={query.trim()} onAdd={addAndInvite} onCancel={() => setAdding(false)}/>
+      : candidates.length
+        ? <div className="proc-add-company-row">{addButton}</div>
+        : <Empty title="No available companies found" description={query ? "Try another company, contact, or trade, or add the company here." : "Add the company here, or search the full directory to invite one from another trade."} action={addButton}/>}
   </Modal>;
 }
 
@@ -291,7 +326,7 @@ export function ProcurementPackagesView(props: ViewProps) {
 
 function PackagesWorkspace({ projectName, notify, navigate, onProposals }: ViewProps & { onProposals: (packageId: string) => void }) {
   const { procurement: state, runProcurement: run, submissions } = useSubmissions();
-  const [directory] = useLocalDraft("directory", initialBidders);
+  const [directory, setDirectory] = useLocalDraft("directory", initialBidders);
   const [messageDrafts, setMessageDrafts] = useLocalDraft<MessageDraft[]>("messages", []);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("All packages");
@@ -336,7 +371,7 @@ function PackagesWorkspace({ projectName, notify, navigate, onProposals }: ViewP
         </div>}
       </Panel>
     </div>
-    {invitePackage && <BidderInvite state={state} pkgId={invitePackage} directory={directory} run={run} notify={notify} onClose={() => setInvitePackage(null)}/>}
+    {invitePackage && <BidderInvite state={state} pkgId={invitePackage} directory={directory} setDirectory={setDirectory} run={run} notify={notify} onClose={() => setInvitePackage(null)}/>}
     {linkFor && (() => {
       const invitation = state.invitations.find(item => item.id === linkFor), bidder = directory.find(item => item.id === invitation?.bidderId), pkg = state.packages.find(item => item.id === invitation?.packageId);
       return invitation ? <PortalLinkDialog projectId={projectId} projectName={projectName} invitationId={invitation.id} trade={pkg?.name ?? "this trade"} company={bidder?.company ?? invitation.bidderId} contact={bidder?.name ?? ""} email={bidder?.email ?? ""} by={CURRENT_USER} notify={notify} onClose={() => setLinkFor(null)}/> : null;

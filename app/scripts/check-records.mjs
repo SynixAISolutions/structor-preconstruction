@@ -3,8 +3,11 @@ import { demoProject, loadProjects, normalizeProject, parseProjectForm, samplePr
 import { dateLabel, displayDate } from "../lib/format.ts";
 import { initialDrawings, initialSpecSections, initialSpecs } from "../lib/data/preconstruction.ts";
 import { CSI_DIVISIONS, csiDivision } from "../lib/csi.ts";
-import { initialMilestones } from "../lib/data/commercial.ts";
+import { register } from "node:module";
 import { SAMPLE_PROJECT_ID, draftStorageKey, getActiveProjectId, projectScopedKey, startingDraft } from "../lib/project-scope.ts";
+
+register("./ts-resolver.mjs", import.meta.url);
+const { initialMilestones } = await import("../lib/data/commercial.ts");
 
 const form = (fields) => {
   const f = new FormData();

@@ -93,9 +93,10 @@ assert.equal(late.notifications.at(-1).kind, "invited");
 assert.equal(inviteBidder(sample, "masonry", "b6", "Naija", at).notifications.length, sample.notifications.length, "Unpublished package: invitation is recorded, nobody notified yet");
 
 // Invite candidates: trade match by default; a search widens to the whole directory; invited ones drop out.
-const withMason = [...initialBidders, { id: "b9", company: "Brick & Block Co.", name: "Dana Ortiz", trade: " masonry " }];
+const withoutPlaceholders = initialBidders.filter(c => !c.id.startsWith("sample-")); // check-directory covers those
+const withMason = [...withoutPlaceholders, { id: "b9", company: "Brick & Block Co.", name: "Dana Ortiz", trade: " masonry " }];
 assert.deepEqual(inviteCandidates(sample, withMason, "masonry").map(c => c.id), ["b9"], "Default list is the package's trade, case- and space-insensitive");
-assert.deepEqual(inviteCandidates(sample, initialBidders, "concrete").map(c => c.id), [], "District Concrete is already invited");
+assert.deepEqual(inviteCandidates(sample, withoutPlaceholders, "concrete").map(c => c.id), [], "District Concrete is already invited");
 assert.deepEqual(inviteCandidates(sample, initialBidders, "concrete", "greenline").map(c => c.id), ["b6"]);
 assert.deepEqual(inviteCandidates(sample, initialBidders, "steel", "summit").map(c => c.id), [], "Already invited companies never reappear");
 
