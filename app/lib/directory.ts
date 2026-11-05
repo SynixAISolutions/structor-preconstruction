@@ -5,13 +5,20 @@ import { initialBidders, type Bidder } from "./data/commercial";
 
 /**
  * A saved directory plus any starting company it doesn't have, at the end. Companies already there stay exactly as
- * they were edited. The same array comes back when nothing is missing, so callers can skip saving.
+ * they were edited, and one the team took out (`removed`) stays out. The same array comes back when nothing is missing,
+ * so callers can skip saving.
  */
-export function withStartingCompanies(saved: Bidder[]): Bidder[] {
-  const have = new Set(saved.map(company => company.id));
+export function withStartingCompanies(saved: Bidder[], removed: string[] = []): Bidder[] {
+  const have = new Set([...saved.map(company => company.id), ...removed]);
   const missing = initialBidders.filter(company => !have.has(company.id));
   return missing.length ? [...saved, ...missing] : saved;
 }
+
+/** Where the starting companies the team took out are kept, so opening the app doesn't bring them back. */
+export const REMOVED_COMPANIES_KEY = "directory-removed";
+/** What to remember when a company leaves the directory: only a starting company could come back. */
+export const removedCompanies = (removed: string[], companyId: string): string[] =>
+  initialBidders.some(company => company.id === companyId) && !removed.includes(companyId) ? [...removed, companyId] : removed;
 
 export type NewCompany = { company: string; name: string; email: string; location: string };
 

@@ -210,6 +210,13 @@ const big = await portalPost(new Request(url(fresh), { method: "POST", headers: 
 assert.equal(big.status, 413);
 assert.equal((await portalPost(new Request(url(fresh), { method: "POST", body: "not json" }))).status, 400);
 
+// ── Removing a company from the trade shuts its link, even one that's still turned on ──
+const { removeInvitation } = await import("../lib/remove-company.ts");
+const withoutRival = removeInvitation(await rows("procurement"), RIVAL);
+await store.save(PROJECT, "procurement", T.packRow(withoutRival), (await T.readRow(store, PROJECT, "procurement", null)).version, "test");
+assert.equal((await open(fresh)).status, 404, "The page no longer opens");
+assert.equal((await act(fresh, { action: "message", author: "R", text: "Hi" })).status, 404, "And nothing more can be sent through it");
+
 // ── The sample project keeps its sample bids when a real one comes in ──
 const invited = sampleProcurement.invitations.find(i => i.status !== "declined" && sampleProcurement.packages.find(p => p.id === i.packageId)?.published);
 const sampleLink = await makeLink(invited.id, "Sample Co", {}, "jelleff");

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import "./demo-names";
 import { isRunning } from "./auto-scopes";
 import type { Bidder } from "./data/commercial";
-import { withStartingCompanies } from "./directory";
+import { REMOVED_COMPANIES_KEY, withStartingCompanies } from "./directory";
 import { SAMPLE_PROJECT_ID, draftStorageKey } from "./project-scope";
 import {
   SampleRefreshError, deleteSampleBackup, keepMyData, listSampleBackups, loadUpdatedSample, markFreshBrowser,
@@ -18,7 +18,8 @@ function addStartingCompanies() {
     const saved = localStorage.getItem(draftStorageKey(SAMPLE_PROJECT_ID, "directory"));
     if (!saved) return;
     const current = JSON.parse(saved) as Bidder[];
-    const next = withStartingCompanies(current);
+    const removed = JSON.parse(localStorage.getItem(draftStorageKey(SAMPLE_PROJECT_ID, REMOVED_COMPANIES_KEY)) ?? "[]") as string[];
+    const next = withStartingCompanies(current, removed);
     if (next !== current) writeDraft(SAMPLE_PROJECT_ID, "directory", next);
   } catch { /* The saved directory stays as it was; the next load tries again. */ }
 }

@@ -46,3 +46,5 @@
 .pkg-drawing-ocr{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:0;font-size:11px;color:#5c6b72;line-height:1.6}
 .proc-add-company{margin-top:15px;padding:15px;border:1px solid #e8ece9;border-radius:8px}.proc-add-company h3{margin:0 0 12px;font-size:12px}.proc-add-company .ui-field{min-width:0}.proc-add-company .ui-field input{width:100%;min-width:0}.proc-add-company-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:12px}.proc-add-company-row{display:flex;justify-content:flex-end;margin-top:12px}
 @media(max-width:650px){.proc-add-company{margin-bottom:76px}}
+.proc-invitation-list button.proc-remove-invitation{color:#8d3f32}
+.ui-btn.danger{background:#8d3f32;border-color:#8d3f32;color:#fff}.ui-btn.danger:hover{background:#763428;border-color:#763428}
