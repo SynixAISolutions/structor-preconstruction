@@ -1,15 +1,37 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckCircle2, Download, Mic, RefreshCw, Send, Square } from "lucide-react";
-import { MAX_VOICE_BYTES, MAX_VOICE_SECONDS, type FeedbackPage, type VoiceFeedback } from "../../lib/voice-feedback";
+import { CheckCircle2, Copy, Download, FileText, Mic, RefreshCw, Send, Square } from "lucide-react";
+import { MAX_VOICE_BYTES, MAX_VOICE_SECONDS, micSound, transcriptsText, type FeedbackPage, type MicSound, type VoiceFeedback } from "../../lib/voice-feedback";
 import { screenLabel } from "../../lib/screens";
 import { Button, Modal, Tabs } from "./shared";
 import "./voice-feedback.css";
 
 type Phase = "idle" | "requesting" | "recording" | "review" | "sending" | "sent";
-type Draft = { id: string; blob: Blob; url: string; duration: number; page: FeedbackPage };
+type Draft = { id: string; blob: Blob; url: string; duration: number; page: FeedbackPage; silent: boolean };
 const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+const CHECK_MICROPHONE = "Check that your microphone isn't muted and that your browser is using the right one, then record again.";
+
+/** Keeps the loudest sample a microphone has sent. Reads null while the browser isn't measuring. */
+function soundMeter(microphone: MediaStream) {
+  try {
+    const context = new AudioContext();
+    void context.resume();
+    const analyser = context.createAnalyser();
+    context.createMediaStreamSource(microphone).connect(analyser);
+    const samples = new Float32Array(analyser.fftSize);
+    let peak = 0;
+    return {
+      read() {
+        if (context.state !== "running") return null;
+        analyser.getFloatTimeDomainData(samples);
+        for (const sample of samples) peak = Math.max(peak, Math.abs(sample));
+        return peak;
+      },
+      close() { void context.close(); },
+    };
+  } catch { return null; }
+}
 
 export function PageVoiceFeedback({ page, notify, onOpenPage }: {
   page: FeedbackPage; notify: (message: string) => void; onOpenPage: (message: VoiceFeedback) => boolean;
@@ -22,13 +44,18 @@ export function PageVoiceFeedback({ page, notify, onOpenPage }: {
   const [author, setAuthor] = useState("Marcel Khoury");
   const [note, setNote] = useState("");
   const [elapsed, setElapsed] = useState(0);
+  const [sound, setSound] = useState<MicSound>("unknown");
   const [error, setError] = useState("");
   const [messages, setMessages] = useState<VoiceFeedback[]>([]);
+  const [transcribing, setTranscribing] = useState<{ done: number; total: number } | null>(null);
+  const [transcribeError, setTranscribeError] = useState("");
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [listError, setListError] = useState("");
   const recorder = useRef<MediaRecorder | null>(null);
   const stream = useRef<MediaStream | null>(null);
+  const meter = useRef<ReturnType<typeof soundMeter>>(null);
+  const peak = useRef<number | null>(null);
   const startedAt = useRef(0);
   const generation = useRef(0);
   const mounted = useRef(true);
@@ -61,6 +88,8 @@ export function PageVoiceFeedback({ page, notify, onOpenPage }: {
     const tick = setInterval(() => {
       const seconds = (performance.now() - startedAt.current) / 1000;
       setElapsed(Math.min(seconds, MAX_VOICE_SECONDS));
+      peak.current = meter.current?.read() ?? peak.current;
+      setSound(micSound(peak.current, seconds));
       if (seconds >= MAX_VOICE_SECONDS) stop();
     }, 250);
     return () => clearInterval(tick);
@@ -93,7 +122,10 @@ export function PageVoiceFeedback({ page, notify, onOpenPage }: {
       microphone = await navigator.mediaDevices.getUserMedia({ audio: true });
       if (!mounted.current || attempt !== generation.current) { microphone.getTracks().forEach(track => track.stop()); return; }
       stream.current = microphone;
-      const mimeType = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm", "audio/ogg;codecs=opus"].find(type => MediaRecorder.isTypeSupported(type));
+      meter.current = soundMeter(microphone);
+      peak.current = null;
+      setSound("unknown");
+      const mimeType =["audio/webm;codecs=opus", "audio/mp4", "audio/webm", "audio/ogg;codecs=opus"].find(type => MediaRecorder.isTypeSupported(type));
       const active = new MediaRecorder(microphone, { ...(mimeType ? { mimeType } : {}), audioBitsPerSecond: 64_000 });
       const id = `${Date.now()}-${crypto.randomUUID()}`;
       const chunks: Blob[] = [];
@@ -108,13 +140,16 @@ export function PageVoiceFeedback({ page, notify, onOpenPage }: {
       active.onerror = () => { setError("Recording was interrupted. Listen to the result before sending, or record it again."); stop(); };
       active.onstop = () => {
         microphone?.getTracks().forEach(track => track.stop());
+        meter.current?.close();
+        meter.current = null;
         if (!mounted.current || recorder.current !== active) return;
         const blob = new Blob(chunks, { type: active.mimeType || mimeType || chunks[0]?.type || "audio/webm" });
         if (blob.size < 16) { setPhase(draftUrl.current ? "review" : "idle"); setError("No audio was captured. Please record the message again."); return; }
         if (draftUrl.current) URL.revokeObjectURL(draftUrl.current);
         const url = URL.createObjectURL(blob);
         draftUrl.current = url;
-        setDraft({ id, blob, url, page: context, duration: Math.min(MAX_VOICE_SECONDS, Math.max(.01, (performance.now() - startedAt.current) / 1000)) });
+        const duration = Math.min(MAX_VOICE_SECONDS, Math.max(.01, (performance.now() - startedAt.current) / 1000));
+        setDraft({ id, blob, url, page: context, duration, silent: micSound(peak.current, duration) === "silent" });
         setPhase("review");
         if (blob.size > MAX_VOICE_BYTES) setError("This message is too large to send. Download it to keep a copy, then record a shorter message.");
       };
@@ -124,6 +159,8 @@ export function PageVoiceFeedback({ page, notify, onOpenPage }: {
       setPhase("recording");
     } catch (problem) {
       microphone?.getTracks().forEach(track => track.stop());
+      meter.current?.close();
+      meter.current = null;
       if (!mounted.current || attempt !== generation.current) return;
       setPhase(draftUrl.current ? "review" : "idle");
       const reason = problem instanceof DOMException ? problem.name : "";
@@ -146,6 +183,32 @@ export function PageVoiceFeedback({ page, notify, onOpenPage }: {
     finally { setLoading(false); }
   }, []);
   useEffect(() => { if (open && tab === "Messages") void loadMessages(); }, [open, tab, loadMessages]);
+
+  // Notes not transcribed yet, oldest first, so they read in the order they were left.
+  const waiting = messages.filter(m => m.transcript === undefined).reverse();
+  async function transcribeAll() {
+    setTranscribeError("");
+    let failed = 0, done = 0;
+    for (const message of waiting) {
+      setTranscribing({ done, total: waiting.length });
+      try {
+        const { transcribeRecording } = await import("../../lib/voice-transcribe");
+        const text = await transcribeRecording(`/api/feedback/${encodeURIComponent(message.id)}/audio`);
+        const response = await fetch(`/api/feedback/${encodeURIComponent(message.id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ transcript: text }) });
+        const saved = await response.json();
+        if (!response.ok) throw new Error(saved.error);
+        setMessages(previous => previous.map(m => m.id === message.id ? { ...m, transcript: saved.transcript } : m));
+      } catch { failed++; }
+      done++;
+    }
+    setTranscribing(null);
+    if (failed) setTranscribeError(`${failed} message${failed === 1 ? "" : "s"} could not be transcribed. Try again.`);
+    else notify(`${done} message${done === 1 ? "" : "s"} transcribed.`);
+  }
+  async function copyTranscripts() {
+    try { await navigator.clipboard.writeText(transcriptsText(messages)); notify("Transcripts copied."); }
+    catch { setTranscribeError("The browser refused to copy. Read them here instead."); }
+  }
 
   async function send() {
     if (!draft || phase !== "review") return;
@@ -185,11 +248,19 @@ export function PageVoiceFeedback({ page, notify, onOpenPage }: {
           </div>
           {draft && ["review", "sending", "sent"].includes(phase) && <>
             <label className="ui-field">Optional note<textarea value={note} onChange={event => setNote(event.target.value)} maxLength={1000} rows={2} disabled={busy || phase === "sent"} placeholder="Anything else to add?"/></label>
-            {phase === "sent" ? <p className="voice-success" role="status"><CheckCircle2 size={17}/>Saved. You can find this recording in Messages.</p> : <div className="ui-form-actions"><a className="ui-btn" href={draft.url} download="structor-voice-message"><Download size={15}/>Download a copy</a><Button type="submit" variant="primary" disabled={phase !== "review" || draft.blob.size > MAX_VOICE_BYTES}><Send size={15}/>{phase === "sending" ? "Sending…" : "Send message"}</Button></div>}
+            {phase === "sent" ? <p className="voice-success" role="status"><CheckCircle2 size={17}/>Saved. You can find this recording in Messages.</p> : <div className="ui-form-actions"><a className="ui-btn" href={draft.url} download="structor-voice-message"><Download size={15}/>Download a copy</a><Button type="submit" variant={draft.silent ? undefined : "primary"} disabled={phase !== "review" || draft.blob.size > MAX_VOICE_BYTES}><Send size={15}/>{phase === "sending" ? "Sending…" : draft.silent ? "Send anyway" : "Send message"}</Button></div>}
           </>}
+          {phase === "recording" && sound === "silent" && <p className="voice-error" role="alert">No sound is reaching Structor. {CHECK_MICROPHONE}</p>}
+          {phase === "review" && draft?.silent && <p className="voice-error" role="alert">This recording has no sound. {CHECK_MICROPHONE}</p>}
           {error && <p className="voice-error" role="alert">{error}</p>}
         </form> : <div className="voice-inbox">
           <div className="voice-inbox-heading"><p>Messages from every page</p><Button onClick={() => void loadMessages()} disabled={loading}><RefreshCw size={14}/>Refresh</Button></div>
+          {messages.length > 0 && <div className="voice-transcribe">
+            {waiting.length > 0 && <Button onClick={() => void transcribeAll()} disabled={transcribing !== null}><FileText size={14}/>{transcribing ? `Transcribing ${transcribing.done + 1} of ${transcribing.total}…` : `Transcribe ${waiting.length} message${waiting.length === 1 ? "" : "s"}`}</Button>}
+            {messages.some(m => m.transcript !== undefined) && <Button onClick={() => void copyTranscripts()}><Copy size={14}/>Copy transcripts</Button>}
+            {transcribing && <small role="status">Runs in this browser, with no AI credits. The first time also downloads the speech model, about 80 MB.</small>}
+            {transcribeError && <p className="voice-error" role="alert">{transcribeError}</p>}
+          </div>}
           {loading && !messages.length && <p role="status">Loading messages…</p>}
           {listError && <p className="voice-error" role="alert">{listError}</p>}
           {!loading && !listError && !messages.length && <p>No messages yet. Record the first one from any page.</p>}
@@ -197,6 +268,7 @@ export function PageVoiceFeedback({ page, notify, onOpenPage }: {
             <header><div><strong>{message.pageLabel}</strong><span>{message.projectName || "Workspace"}</span></div><time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString()}</time></header>
             <p className="voice-author">{message.author} · {clock(message.duration)}</p>
             {message.note && <p>{message.note}</p>}
+            {message.transcript !== undefined && <blockquote className="voice-transcript">{message.transcript || "No speech in this recording."}</blockquote>}
             <audio controls preload="none" aria-label={`Message from ${message.author} about ${message.pageLabel}`} src={`/api/feedback/${encodeURIComponent(message.id)}/audio`} onPlay={event => { const current = event.currentTarget; document.querySelectorAll<HTMLAudioElement>(".voice-inbox audio").forEach(audio => { if (audio !== current) audio.pause(); }); }}/>
             <footer><button type="button" className="ui-btn" onClick={() => { if (onOpenPage(message)) close(); }}>Open page</button><a className="ui-btn" href={`/api/feedback/${encodeURIComponent(message.id)}/audio?download=1`} download><Download size={14}/>Download</a></footer>
           </article>)}
