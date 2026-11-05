@@ -8,8 +8,10 @@
 // Nothing here chooses or awards on anyone's behalf: createAward needs an explicit leveled
 // bidder AND an explicit value basis. Customer templates are not decided, so documents come
 // from clearly labelled SAMPLE templates through replaceable generator functions.
-// Notifications are recorded, never sent. Signatures are typed demo signatures, not a legal
-// e-signature. Pure functions; rule violations throw AwardRuleError with field-level errors.
+// Notifications are recorded, never sent. Without DocuSign connected, signatures are typed demo
+// signatures, not a legal e-signature; with it, an envelope carries the package and its signers'
+// progress moves the subcontract along (lib/docusign). Pure functions; rule violations throw
+// AwardRuleError with field-level errors.
 
 import type { BudgetState, LevelingBasis, LevelingCandidate } from "./budget";
 import type { DirectoryCompany, Procurement } from "./procurement";
@@ -17,6 +19,7 @@ import type { Alternate, ScopeAnswer, Submission } from "./submissions";
 import type { ClarificationLine, ClarificationRequest } from "./clarifications";
 import { MCN_EXHIBIT_TEMPLATE, MCN_SUBCONTRACT_TEMPLATE } from "./data/templates";
 import { contractFileLines, missingContractFiles, type ContractFiles } from "./contract-files";
+import { envelopeDead, signerSigned, type Envelope, type EnvelopeRequest, type EnvelopeSigner, type EnvelopeSigners } from "./docusign";
 
 // ── Templates (samples until the customer's own are configured) ─────────────
 
@@ -74,9 +77,13 @@ export type ExhibitA = { status: ExhibitStatus; revisions: ExhibitRevision[]; co
 
 export type SubcontractStatus = "draft" | "signature-pending" | "subcontractor-signed" | "countersigned" | "executed";
 export type Signer = { name: string; title: string; email: string };
-export type Signature = Signer & { party: Party; signedAt: string; method: "typed-demo" };
+export type Signature = Signer & { party: Party; signedAt: string; method: "typed-demo" | "docusign" };
+/** The DocuSign envelope carrying a subcontract. `problem` says why it was declined or voided. */
+export type SubcontractEnvelope = { envelopeId: string; status: string; sentAt: string; sentBy: string; signers: EnvelopeSigners; checkedAt: string; problem: string };
 export type Subcontract = {
   attachments?: ContractFiles;
+  /** Set once it goes out through DocuSign: from then on signatures come from there, not from typed ones. */
+  docusign?: SubcontractEnvelope;
   status: SubcontractStatus;
   content: DocumentContent;
   template: DocumentTemplate;
@@ -124,7 +131,7 @@ export type Award = {
   createdAt: string; createdBy: string; updatedAt: string;
 };
 
-export type AwardNotificationKind = "exhibit-shared" | "exhibit-changes-requested" | "exhibit-agreed" | "subcontract-sent" | "subcontract-signed" | "subcontract-countersigned" | "subcontract-executed" | "award-cancelled";
+export type AwardNotificationKind = "exhibit-shared" | "exhibit-changes-requested" | "exhibit-agreed" | "subcontract-sent" | "subcontract-signed" | "subcontract-countersigned" | "subcontract-executed" | "subcontract-declined" | "award-cancelled";
 /** `recipient` is a team member's name ("team") or a directory bidder id ("bidder"). */
 export type AwardNotification = { id: string; awardId: string; kind: AwardNotificationKind; recipientType: "team" | "bidder"; recipient: string; text: string; at: string; read: boolean };
 
@@ -471,14 +478,88 @@ export function generateSubcontract(
   return replace(state, { ...award, subcontract, updatedAt: at });
 }
 
+function completePackage(sub: Subcontract) {
+  if (sub.attachments && missingContractFiles(sub.attachments).length) fail({ subcontract: `Complete the contract package first: ${missingContractFiles(sub.attachments).join(", ")}.` });
+}
+
 /** draft → signature-pending; the subcontractor is told. */
 export function sendSubcontract(state: AwardState, id: string, at = now()): AwardState {
   const award = live(findAward(state, id));
   const sub = award.subcontract ?? fail({ subcontract: "Generate the subcontract first." });
   if (sub.status !== "draft") fail({ subcontract: "The subcontract was already sent." });
-  if (sub.attachments && missingContractFiles(sub.attachments).length) fail({ subcontract: `Complete the contract package first: ${missingContractFiles(sub.attachments).join(", ")}.` });
+  completePackage(sub);
   return replace(state, { ...award, subcontract: { ...sub, status: "signature-pending", sentAt: at }, updatedAt: at },
     [toBidder(award, "subcontract-sent", `The ${award.snapshot.packageName} subcontract is ready for your signature.`, at)]);
+}
+
+// ── DocuSign ────────────────────────────────────────────────────────────────
+
+/** A draft, or one whose envelope was declined or voided, can go out in a new envelope. */
+const canSendEnvelope = (sub: Subcontract) => sub.status === "draft" || (!!sub.docusign && envelopeDead(sub.docusign.status));
+
+/** What goes in the envelope, from the subcontract as it stands; checked before anything leaves the app. */
+export function envelopeRequest(state: AwardState, id: string, signers: EnvelopeSigners): EnvelopeRequest {
+  const award = live(findAward(state, id));
+  const sub = award.subcontract ?? fail({ subcontract: "Generate the subcontract first." });
+  if (!canSendEnvelope(sub)) fail({ subcontract: "The subcontract was already sent." });
+  completePackage(sub);
+  const exhibit = award.exhibit.revisions.find(r => r.number === sub.exhibitRevision)!;
+  const files = sub.attachments;
+  return {
+    subject: `${award.snapshot.packageName} subcontract · ${award.snapshot.projectName}`, contractorName: sub.contractorName, subcontractorName: award.snapshot.company.name,
+    documents: [sub.content, exhibit.content], assets: files ? [files.company.form, ...Object.values(files.files)].filter(a => !!a) : [], signers,
+  };
+}
+
+/** The envelope went out: signature-pending, and any earlier envelope's signatures no longer count. */
+export function recordEnvelope(state: AwardState, id: string, sent: { envelopeId: string; status: string }, signers: EnvelopeSigners, by: string, at = now()): AwardState {
+  const award = live(findAward(state, id));
+  const sub = award.subcontract ?? fail({ subcontract: "Generate the subcontract first." });
+  if (!canSendEnvelope(sub)) fail({ subcontract: "The subcontract was already sent." });
+  const docusign: SubcontractEnvelope = { envelopeId: sent.envelopeId, status: sent.status, sentAt: at, sentBy: by, signers, checkedAt: at, problem: "" };
+  return replace(state, { ...award, subcontract: { ...sub, status: "signature-pending", sentAt: at, subcontractorSignature: null, contractorSignature: null, docusign }, updatedAt: at },
+    [toBidder(award, "subcontract-sent", `The ${award.snapshot.packageName} subcontract went to ${signers.subcontractor.name} (${signers.subcontractor.email}) for signature in DocuSign.`, at)]);
+}
+
+const envelopeSignature = (party: Party, s: EnvelopeSigner, at: string): Signature => ({ party, name: s.name, title: "", email: s.email, signedAt: s.signedAt ?? at, method: "docusign" });
+
+/** Moves the subcontract to where its envelope stands: who has signed, and executed once DocuSign says it's complete. */
+export function applyEnvelope(state: AwardState, id: string, envelope: Envelope, at = now()): AwardState {
+  const award = live(findAward(state, id));
+  const sub = award.subcontract;
+  if (!sub?.docusign || sub.docusign.envelopeId !== envelope.id) return fail({ subcontract: "That DocuSign envelope isn't this subcontract's." });
+  if (sub.status === "executed") return state;
+  const trade = award.snapshot.packageName, [first, second] = envelope.signers;
+  const notes: Note[] = [];
+  let next: Subcontract = sub;
+  if (signerSigned(first) && !next.subcontractorSignature) {
+    next = { ...next, status: "subcontractor-signed", subcontractorSignature: envelopeSignature("subcontractor", first, at) };
+    notes.push(toTeam(award, "subcontract-signed", `${award.snapshot.company.name} signed the ${trade} subcontract in DocuSign. It's with ${sub.docusign.signers.contractor.name} to countersign.`, at));
+  }
+  if (signerSigned(second) && !next.contractorSignature) {
+    next = { ...next, status: "countersigned", contractorSignature: envelopeSignature("contractor", second, at) };
+    notes.push(toBidder(award, "subcontract-countersigned", `The ${trade} subcontract was countersigned in DocuSign.`, at));
+  }
+  let problem = "";
+  if (envelope.status === "declined") {
+    const by = envelope.signers.find(s => s.status === "declined");
+    problem = `${by?.name ?? "A signer"} declined to sign${by?.declinedReason ? `: ${by.declinedReason}` : "."}`;
+  } else if (envelope.status === "voided") problem = `The envelope was voided${envelope.voidedReason ? `: ${envelope.voidedReason}` : "."}`;
+  if (problem && !sub.docusign.problem) notes.push(toTeam(award, "subcontract-declined", `${trade} subcontract: ${problem}`, at));
+  next = { ...next, docusign: { ...sub.docusign, status: envelope.status, checkedAt: at, problem } };
+  if (envelope.status === "completed" && next.subcontractorSignature && next.contractorSignature) {
+    const executedAt = envelope.completedAt ?? at;
+    next = { ...next, status: "executed", executedAt, executedCopy: executedCopy(award, next, executedAt) };
+    notes.push(toTeam(award, "subcontract-executed", `The ${trade} subcontract is executed.`, at), toBidder(award, "subcontract-executed", `The ${trade} subcontract is executed. A copy is available.`, at));
+  }
+  return replace(state, { ...award, subcontract: next, updatedAt: at }, notes);
+}
+
+/** The final copy: agreement, Exhibit A and both signatures, frozen; later template changes never alter it. */
+function executedCopy(award: Award, sub: Subcontract, at: string): string {
+  const exhibit = award.exhibit.revisions.find(r => r.number === sub.exhibitRevision)!;
+  const signed = (s: Signature) => `${s.party === "contractor" ? "Contractor" : "Subcontractor"}: ${s.name}${s.title ? `, ${s.title}` : ""} <${s.email}>, signed ${s.signedAt} (${s.method === "docusign" ? `DocuSign envelope ${sub.docusign?.envelopeId}` : "typed demo signature"})`;
+  return [renderDocumentText(sub.content), renderDocumentText(exhibit.content), "SIGNATURES", `  ${signed(sub.subcontractorSignature!)}`, `  ${signed(sub.contractorSignature!)}`, `  Executed ${at}`, ""].join("\n");
 }
 
 function signature(party: Party, signer: Signer, at: string): Signature {
@@ -491,6 +572,7 @@ function signature(party: Party, signer: Signer, at: string): Signature {
 export function signSubcontract(state: AwardState, id: string, party: Party, signer: Signer, at = now()): AwardState {
   const award = live(findAward(state, id));
   const sub = award.subcontract ?? fail({ subcontract: "Generate the subcontract first." });
+  if (sub.docusign) fail({ signature: "This subcontract is in DocuSign: signatures come from there." });
   if (party === "subcontractor") {
     if (sub.status !== "signature-pending") fail({ signature: "The subcontract is not waiting for the subcontractor's signature." });
     return replace(state, { ...award, subcontract: { ...sub, status: "subcontractor-signed", subcontractorSignature: signature(party, signer, at) }, updatedAt: at },
@@ -507,10 +589,8 @@ export function executeSubcontract(state: AwardState, id: string, at = now()): A
   const award = live(findAward(state, id));
   const sub = award.subcontract;
   if (sub?.status !== "countersigned") fail({ subcontract: "Both parties must sign before the subcontract is executed." });
-  const exhibit = award.exhibit.revisions.find(r => r.number === sub!.exhibitRevision)!;
-  const signed = (s: Signature) => `${s.party === "contractor" ? "Contractor" : "Subcontractor"}: ${s.name}${s.title ? `, ${s.title}` : ""} <${s.email}>, signed ${s.signedAt} (typed demo signature)`;
-  const executedCopy = [renderDocumentText(sub!.content), renderDocumentText(exhibit.content), "SIGNATURES", `  ${signed(sub!.subcontractorSignature!)}`, `  ${signed(sub!.contractorSignature!)}`, `  Executed ${at}`, ""].join("\n");
-  return replace(state, { ...award, subcontract: { ...sub!, status: "executed", executedAt: at, executedCopy }, updatedAt: at }, [
+  if (sub!.docusign) fail({ subcontract: "This subcontract is in DocuSign: it's executed when DocuSign completes it." });
+  return replace(state, { ...award, subcontract: { ...sub!, status: "executed", executedAt: at, executedCopy: executedCopy(award, sub!, at) }, updatedAt: at }, [
     toTeam(award, "subcontract-executed", `The ${award.snapshot.packageName} subcontract is executed.`, at),
     toBidder(award, "subcontract-executed", `The ${award.snapshot.packageName} subcontract is executed. A copy is available.`, at),
   ]);
