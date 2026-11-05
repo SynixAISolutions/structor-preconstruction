@@ -34,3 +34,4 @@
 .cm-limit-over,.cm-limit-over .cm-text-button{color:#b4441a!important;font-weight:650}
 .cm-limit-percent{display:flex;align-items:center;gap:6px}
 .cm-limit-percent input{width:72px;padding:6px 8px;border:1px solid #dfe5e1;border-radius:6px;font:inherit}
+.cm-remove-company{margin-top:14px;padding:0;border:0;background:none;color:#8d3f32;font:inherit;font-size:12px;cursor:pointer}.cm-remove-company:hover{text-decoration:underline}
