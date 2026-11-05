@@ -9,6 +9,7 @@ import { AiRunCard } from "./ui/ai-run-card";
 import { UploadBanner } from "./ui/upload-banner";
 import { CommercialView } from "./ui/commercial";
 import { BuyoutView } from "./ui/buyout-ui";
+import { ContractCompareView } from "./ui/contract-compare";
 import { UserManual } from "./ui/user-manual";
 import { ProjectForm, ProjectInformation } from "./ui/project-record";
 import { TurnoverView } from "./ui/todo-ui";
@@ -75,6 +76,7 @@ export default function StructorApp(){
      {modelView&&<ModelStudio project={project} view={modelView} projectId={project.id} projectName={project.name} navigate={navigate} notify={notify} inspection={modelView==="interior"?modelInspection:null}/>}
      {screen==="projects"&&<Projects projects={projects} onNew={()=>setNewProject(true)} onDemo={()=>{const p=demoProject();setProjects(v=>[...v,p]);selectProject(p.id);navigate("documents");notify(`${p.name} created with made-up details. Upload a drawing set and a project manual under Bid documents.`);}} onOpen={p=>{selectProject(p.id);navigate("information");}}/>}
      {screen==="architect"&&<ArchitectView {...props}/>}
+     {screen==="contract-compare"&&<ContractCompareView key={project.id} {...props} project={project}/>}
      {screen==="information"&&<ProjectInformation project={project} cover={<BuildingModel/>} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Project information saved locally.");}} navigate={navigate}/>}
       {['documents','scopes','drawing-flip','takeoffs','specs','checks','drawings','specifications','revisions'].includes(screen)&&<IntelligenceView key={project.id} {...props} project={project} screen={screen} quantityFilters={quantityFilters} onQuantityFilters={setQuantityFilters} onInspectModel={inspectModel}/>}
      {['packages','bidders','ratings','prequalification','portal','budget','allowances','value-engineering','contracts','schedule'].includes(screen)&&<CommercialView {...props} screen={screen} project={project}/>}

@@ -283,6 +283,28 @@ export const pageGuides = [
     related: ["drawings", "scopes", "takeoffs"],
   },
   {
+    id: "contract-compare",
+    group: "Preconstruction",
+    title: "Contract comparison",
+    purpose: "See what changed between the previous contract with a client and the current one, even when it is the same client: every clause that changed, was added or was removed, with the figures that moved, what it means and what you decided.",
+    steps: [
+      "Choose Upload PDF for the previous contract and for the current one, or pick them if they are already under Contracts in Project files. With exactly two contracts on the project, the older is taken as previous and the newer as current.",
+      "The two files are compared clause by clause straight away. This part is plain text comparison: it costs nothing, and it finds the same differences every time. Case, punctuation and page headers don't count as changes.",
+      "Each change shows the wording word by word, red for what went and green for what came, and the page in each file. Figures changed lists the money, percentages and durations that moved. Clauses that only got a new number are listed once, at the top.",
+      "The AI then explains each change in a sentence or two and rates its risk to the contractor: Adds risk, Reduces risk or Neutral. You can leave the page while it does.",
+      "Use Show, Look at and Decision to narrow the list, for example to the changes that add risk, or to those with figures that moved.",
+      "Set each change to Accepted or To negotiate and add a note for what to raise with the client. Choose Export CSV to send the list to the team.",
+    ],
+    terms: [
+      { name: "Previous contract", meaning: "The last contract signed with this client, used as the baseline." },
+      { name: "Renumbered clause", meaning: "A clause with the same words under a new number, as happens to everything after an inserted clause." },
+      { name: "Adds risk", meaning: "The AI's reading that a change means more cost, exposure or obligation for the contractor. A person decides." },
+    ],
+    example: "The current contract raises retainage from 5% to 10%, adds a savings clause and drops the waiver of consequential damages. The list shows Retainage as Changed with 5% was and 10% now, Savings as a New clause and the Waiver as Removed, each with its pages. Set the waiver to To negotiate and note it for the client.",
+    reality: "The comparison reads the PDFs' text, so a scan with no text can't be compared, and unusual layouts can split clauses differently. The explanations and risk ratings are the AI's reading, not legal advice, and up to 200 changes are explained for one comparison. The decisions and notes are saved with the project; nothing is sent to the client.",
+    related: ["documents", "revisions", "contracts"],
+  },
+  {
     id: "packages",
     group: "Preconstruction",
     title: "Bid packages",

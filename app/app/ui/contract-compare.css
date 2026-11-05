@@ -1,0 +1,33 @@
+/* Contract comparison (contract-compare.tsx). */
+.contract-cmp { display: grid; gap: 18px; min-width: 0; }
+.contract-cmp-pick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; padding: 0 21px 18px; }
+.contract-cmp-file { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.contract-cmp-file .ui-field { flex: 1 1 200px; margin: 0; min-width: 0; }
+.contract-cmp-file select { width: 100%; }
+.contract-cmp-note { margin: 0 21px 14px; font-size: 11px; color: #74827b; }
+.contract-cmp > .contract-cmp-note { margin: 0; }
+.contract-cmp-note.error { color: #ba6256; }
+.contract-cmp-warning { margin: 0; padding: 12px 14px; border: 1px solid #f2d3c2; border-radius: 8px; background: #fdf5f0; font-size: 12px; color: #6f4a35; }
+.contract-cmp-renumbered { font-size: 11px; color: #62757e; }
+.contract-cmp-renumbered summary { cursor: pointer; }
+.contract-cmp-renumbered ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 3px; }
+.contract-cmp-tools { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.contract-cmp-tools .ui-search { flex: 1 1 220px; }
+.contract-cmp-tools .ui-field { margin: 0; min-width: 130px; }
+.contract-cmp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; min-width: 0; }
+.contract-cmp-change { display: grid; gap: 10px; padding: 16px 18px; background: #fff; border: 1px solid #e8ece8; border-left: 3px solid #4f8fae; border-radius: 10px; min-width: 0; }
+.contract-cmp-change.added { border-left-color: #3f7f58; }
+.contract-cmp-change.removed { border-left-color: #ba6256; }
+.contract-cmp-change > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.contract-cmp-change > header > div:first-child { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; min-width: 0; flex: 1 1 260px; }
+.contract-cmp-change strong { font-size: 12px; font-weight: 600; color: #2f4650; overflow-wrap: anywhere; }
+.contract-cmp-sources { display: flex; gap: 6px; flex-wrap: wrap; }
+.contract-cmp-summary { margin: 0; font-size: 12px; line-height: 1.55; color: #3e525d; }
+.contract-cmp-figures { display: flex; gap: 16px; flex-wrap: wrap; margin: 0; font-size: 11px; font-weight: 600; color: #2f4650; font-variant-numeric: tabular-nums; }
+.contract-cmp-figures small { display: block; font-size: 8px; font-weight: 600; letter-spacing: .08em; color: #8b979c; }
+.contract-cmp-wording { margin: 0; padding: 10px 12px; border-radius: 7px; background: #faf9f6; font-size: 11px; line-height: 1.7; color: #5f747c; overflow-wrap: anywhere; }
+.contract-cmp-wording ins { text-decoration: none; background: #dff1e5; color: #1f5a37; border-radius: 3px; padding: 0 2px; }
+.contract-cmp-wording del { background: #f8e3df; color: #93392d; border-radius: 3px; padding: 0 2px; }
+.contract-cmp-change > footer { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 10px; }
+.contract-cmp-change > footer .ui-field { margin: 0; min-width: 0; }
+@media (max-width: 720px) { .contract-cmp-pick, .contract-cmp-change > footer { grid-template-columns: minmax(0, 1fr); } }
