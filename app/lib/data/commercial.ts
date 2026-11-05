@@ -5,10 +5,24 @@
 // This is illustrative preview content, not data from a live system of record.
 
 import type { Screen } from "../screens";
+import { STANDARD_TRADES } from "../procurement";
 
-export const trades = ["Demolition", "Concrete", "Structural steel", "Carpentry", "Drywall", "Mechanical", "Electrical", "Site work"];
+/** Every trade a company can be listed under: the standard bid packages, plus the sample's older "Site work". */
+export const trades = [...STANDARD_TRADES.map(t => t.name), "Site work"];
 
 export type Bidder = { id: string; company: string; name: string; email: string; trade: string; location: string; status: string };
+
+/** Two clearly marked placeholder companies for every standard trade, so each bid package has someone to invite. */
+export const sampleTradeCompanies: Bidder[] = STANDARD_TRADES.flatMap(t => [1, 2].map(n => ({
+  id: `sample-${t.id}-${n}`,
+  company: `${t.name} Contractor ${n} (sample)`,
+  name: "Sample Contact",
+  email: `${t.id}-${n}@example.com`,
+  trade: t.name,
+  location: "Washington, DC",
+  status: "Qualified",
+})));
+
 export const initialBidders: Bidder[] = [
   { id: "b1", company: "Capital Demolition", name: "Michael Brooks", email: "michael@example.com", trade: "Demolition", location: "Washington, DC", status: "Qualified" },
   { id: "b2", company: "District Concrete", name: "Sarah Chen", email: "sarah@example.com", trade: "Concrete", location: "Arlington, VA", status: "Qualified" },
@@ -24,6 +38,7 @@ export const initialBidders: Bidder[] = [
   { id: "demo-d2", company: "Metro Openings (sample)", name: "Casey Bell", email: "casey@example.com", trade: "Doors, frames & hardware", location: "Arlington, VA", status: "Qualified" },
   { id: "demo-r1", company: "District Roofing (sample)", name: "Sam Park", email: "sam@example.com", trade: "Roofing", location: "Washington, DC", status: "Qualified" },
   { id: "demo-r2", company: "Potomac Roof Systems (sample)", name: "Alex Gray", email: "alex.gray@example.com", trade: "Roofing", location: "Fairfax, VA", status: "Qualified" },
+  ...sampleTradeCompanies,
 ];
 
 export const portalScope=["Site protection and dust control","Selective demolition per demolition plans","Debris removal and disposal","Existing utilities coordination","Include required permits and inspections","Include all addenda through September 8"];

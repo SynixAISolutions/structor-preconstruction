@@ -3,10 +3,25 @@
 import { useCallback, useEffect, useState } from "react";
 import "./demo-names";
 import { isRunning } from "./auto-scopes";
+import type { Bidder } from "./data/commercial";
+import { withStartingCompanies } from "./directory";
+import { SAMPLE_PROJECT_ID, draftStorageKey } from "./project-scope";
 import {
   SampleRefreshError, deleteSampleBackup, keepMyData, listSampleBackups, loadUpdatedSample, markFreshBrowser,
   restoreSampleBackup, sampleBackupFile, sampleStatus, type SampleBackup, type SampleStatus,
 } from "./sample-refresh";
+import { writeDraft } from "./use-local-draft";
+
+/** A directory saved before the starting list grew gets the new companies, here and in the team's shared copy. */
+function addStartingCompanies() {
+  try {
+    const saved = localStorage.getItem(draftStorageKey(SAMPLE_PROJECT_ID, "directory"));
+    if (!saved) return;
+    const current = JSON.parse(saved) as Bidder[];
+    const next = withStartingCompanies(current);
+    if (next !== current) writeDraft(SAMPLE_PROJECT_ID, "directory", next);
+  } catch { /* The saved directory stays as it was; the next load tries again. */ }
+}
 
 /**
  * The offer to load the updated Jelleff sample, and the backups it leaves. `status` is null until
@@ -21,6 +36,7 @@ export function useSampleRefresh() {
     catch { setStatus(null); setBackups([]); }
   }, []);
   useEffect(read, [read]);
+  useEffect(addStartingCompanies, []);
 
   const attempt = useCallback((action: () => void, reload: boolean): string | null => {
     // Swapping the sample's data under a running AI scope run would mix the two (lib/auto-scopes).
