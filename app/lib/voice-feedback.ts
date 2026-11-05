@@ -6,6 +6,8 @@ export const VOICE_RECORDS_PREFIX = "voice-feedback/records/";
 export type FeedbackPage = { screen: Screen; projectId: string | null; projectName: string | null };
 export type VoiceFeedback = FeedbackPage & {
   id: string; pageLabel: string; author: string; note: string; duration: number; createdAt: string;
+  /** What the recording says, once someone has transcribed it (lib/voice-transcribe). */
+  transcript?: string;
 };
 export type FeedbackInput = FeedbackPage & { id: string; author: string; note: string; duration: number };
 export const isFeedbackId = (id: string) => /^\d{13}-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id);
@@ -30,8 +32,38 @@ export function parseFeedback(value: unknown): FeedbackInput {
     projectId: projectPage ? v.projectId as string : null, projectName: projectPage ? (v.projectName as string).trim() : null };
 }
 
+/** A transcript as it is kept: Whisper's silence markers out, spaces tidied. An empty one is still a transcript: a silent recording. */
+export function cleanTranscript(value: unknown): string {
+  if (typeof value !== "string") throw new Error("Send the transcript as text.");
+  if (value.length > 20_000) throw new Error("The transcript is too long.");
+  return value.replace(/\[(?:BLANK_AUDIO|MUSIC|NOISE|SILENCE|INAUDIBLE)\]|\((?:silence|music|inaudible)\)/gi, " ").replace(/\s+/g, " ").trim();
+}
+
+/** Every transcribed note as text to copy, newest first as the inbox lists them. */
+export function transcriptsText(messages: VoiceFeedback[]): string {
+  return messages.filter(m => m.transcript !== undefined).map(m => `${m.pageLabel}${m.projectName ? ` · ${m.projectName}` : ""} · ${m.author} · ${m.createdAt.slice(0, 10)}\n${m.note ? `Note: ${m.note}\n` : ""}${m.transcript || "(no speech)"}`).join("\n\n");
+}
+
 export function feedbackRecord(input: FeedbackInput): VoiceFeedback {
   return { ...input, pageLabel: screenLabel(input.screen), createdAt: new Date().toISOString() };
+}
+
+// Marcel's seven notes of 26 Oct were flat digital silence (-91 dB) and nothing told him: speech peaks far above this.
+export const SILENT_PEAK = 0.001;
+export const SILENCE_WARNING_SECONDS = 4;
+export type MicSound = "unknown" | "heard" | "silent";
+
+/** What a recording has picked up so far, from its loudest sample (0 to 1). `peak` is null where the browser can't
+ * measure it, and that is never called silent. */
+export function micSound(peak: number | null, seconds: number): MicSound {
+  if (peak === null) return "unknown";
+  if (peak >= SILENT_PEAK) return "heard";
+  return seconds >= SILENCE_WARNING_SECONDS ? "silent" : "unknown";
+}
+
+/** The inbox list's headers; ?download saves the list as a file, as a recording's own route does. */
+export function feedbackListHeaders(download: boolean): Record<string, string> {
+  return { "Cache-Control": "private, no-store", ...(download ? { "Content-Disposition": 'attachment; filename="structor-feedback-list.json"' } : {}) };
 }
 
 export function audioFormat(type: string, bytes: Uint8Array): { type: string; extension: string } {

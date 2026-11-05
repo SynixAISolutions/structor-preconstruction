@@ -10,6 +10,8 @@ import { manualSections } from "./manual-sections";
 import { aiJob, readTitleBlock } from "./ai-more-client";
 import { rfpPages, type RfpFact } from "./rfp";
 import type { OwnerBudgetLine } from "./owner-budget";
+import { MAX_REQUIREMENT_PAGES, requirementBatches, type FoundRequirement } from "./rfp-requirements";
+import { inAiPool } from "./ai-pool";
 import { useActiveProject } from "./project-scope";
 import { pageTextBoxes, type TextBox } from "./text-anchor";
 import { paintPage } from "./pdf-paint";
@@ -404,6 +406,38 @@ export async function readOwnerBudget(doc: StoredDocument, signal?: AbortSignal)
   if (!pages.length) throw new Error("This file has no text to read. Upload a PDF exported from the spreadsheet, not a scan.");
   const answer = await aiJob<{ lines: OwnerBudgetLine[] }>("budget-lines", { pages }, signal);
   return { lines: answer.lines, model: answer.model };
+}
+
+/** Reads an RFP or addendum (the first 150 pages) a few pages at a time and returns everything it requires, each line with
+ * its page and quote (lib/rfp-requirements). A batch whose answer ran out of room is split; other failures are counted,
+ * and the pages that did come back are kept. Throws only when nothing came back. */
+export async function readRfpRequirements(doc: StoredDocument, signal?: AbortSignal, onProgress?: (done: number, total: number) => void): Promise<{ found: FoundRequirement[]; model: string; pages: number; failedPages: number; capped: boolean; cost: number | null }> {
+  const pages = (await readStoredText(doc, { first: 1, last: Math.min(doc.pageCount, MAX_REQUIREMENT_PAGES) })).filter(p => p.text.trim()).map(p => ({ page: p.page, text: p.text }));
+  if (!pages.length) throw new Error("This file has no text to read. Upload a PDF with selectable text, not a scan.");
+  const found: FoundRequirement[] = [];
+  let model = "", cost: number | null = null, done = 0, failedPages = 0, lastError = "";
+  onProgress?.(0, pages.length);
+  const read = async (batch: typeof pages): Promise<void> => {
+    try {
+      const answer = await inAiPool(() => aiJob<{ requirements: FoundRequirement[]; cost?: number | null }>("rfp-requirements", { pages: batch }, signal));
+      found.push(...answer.requirements);
+      model = answer.model;
+      if (typeof answer.cost === "number") cost = (cost ?? 0) + answer.cost;
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      lastError = error instanceof Error ? error.message : "The AI request failed.";
+      if (/cut off/i.test(lastError) && batch.length > 1) {
+        await Promise.all(requirementBatches(batch, Math.ceil(batch.length / 2)).map(read));
+        return;
+      }
+      failedPages += batch.length;
+    }
+    done += batch.length;
+    onProgress?.(done, pages.length);
+  };
+  await Promise.all(requirementBatches(pages).map(read));
+  if (failedPages === pages.length) throw new Error(lastError);
+  return { found, model, pages: pages.length, failedPages, capped: doc.pageCount > MAX_REQUIREMENT_PAGES, cost };
 }
 
 /** Reads a stored RFP and returns the project details it states, each with its page and quote, for the user to accept (lib/rfp applyRfpFacts). */
