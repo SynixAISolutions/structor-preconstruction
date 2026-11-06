@@ -31,12 +31,14 @@ function circle(p: Point, q: Point, r: Point): { c: Point; r: number } | null {
 
 const bezier = (c: Curve, t: number): Point => [0, 1].map(k => (1 - t) ** 3 * c.from[k] + 3 * (1 - t) ** 2 * t * c.c1[k] + 3 * (1 - t) * t ** 2 * c.c2[k] + t ** 3 * c.to[k]) as Point;
 
+/** An arc 1.5-4.5 ft in radius, whatever its sweep: `sweep` is the angle it turns through, in degrees. */
+export type ArcFit = Swing & { sweep: number };
+
 /**
- * Quarter-circle arcs 1.5-4.5 ft in radius. Short lines (under 1.2 ft) are chained end to end, true curves
- * are sampled into the same chains, and a chain is a swing when every point sits on one circle and the arc
- * turns about a right angle.
+ * Arcs 1.5-4.5 ft in radius. Short lines (under 1.2 ft) are chained end to end, true curves are sampled into
+ * the same chains, and a chain is an arc when every point sits on one circle.
  */
-export function swingArcs(segments: Segment[], curves: Curve[], pointsPerFoot: number): Swing[] {
+export function arcFits(segments: Segment[], curves: Curve[], pointsPerFoot: number): ArcFit[] {
   const ft = (p: Point): Point => [p[0] / pointsPerFoot, p[1] / pointsPerFoot];
   const pieces: [Point, Point][] = [];
   for (const s of segments) { const a = ft(s.a), b = ft(s.b), L = dist(a, b); if (L > 0.005 && L <= 1.2) pieces.push([a, b]); }
@@ -68,7 +70,7 @@ export function swingArcs(segments: Segment[], curves: Curve[], pointsPerFoot: n
   const at = new Map<string, number[]>();
   pieces.forEach(([a, b], i) => { for (const p of [a, b]) { const k = key(p); at.set(k, [...(at.get(k) ?? []), i]); } });
   const used = new Array(pieces.length).fill(false);
-  const swings: Swing[] = [];
+  const arcs: ArcFit[] = [];
   // A chain also stops at a sharp corner: an arc turns a few degrees per piece, while the two swings of a
   // pair meet at a point in the middle and a swing runs into the end of its leaf at a right angle.
   const turn = (p: Point, q: Point, r: Point) => {
@@ -105,12 +107,22 @@ export function swingArcs(segments: Segment[], curves: Curve[], pointsPerFoot: n
     if (pts.some(p => Math.abs(dist(p, fit.c) - fit.r) > Math.max(0.06, 0.03 * fit.r))) continue;
     const u = [pts[0][0] - fit.c[0], pts[0][1] - fit.c[1]], v = [pts[pts.length - 1][0] - fit.c[0], pts[pts.length - 1][1] - fit.c[1]];
     const sweep = Math.acos(Math.max(-1, Math.min(1, (u[0] * v[0] + u[1] * v[1]) / (fit.r * fit.r)))) * 180 / Math.PI;
-    if (sweep < 70 || sweep > 110) continue;
     const ends: [Point, Point] = [pts[0], pts[pts.length - 1]];
     const leafAt = ends.map(e => hasLeaf(fit.c, e, fit.r));
-    swings.push({ hinge: fit.c, radius: fit.r, ends, open: leafAt[0] !== leafAt[1] ? (leafAt[0] ? 0 : 1) : null });
+    arcs.push({ hinge: fit.c, radius: fit.r, ends, open: leafAt[0] !== leafAt[1] ? (leafAt[0] ? 0 : 1) : null, sweep });
   }
-  // The same swing drawn twice (overlapping lines) counts once.
+  return arcs;
+}
+
+/**
+ * A door's swing: an arc that turns about a right angle, or at any other angle when the door is drawn on it: its leaf is a
+ * line from the hinge, door-sized (Project 1: doors on the skewed wing open 45 degrees, doors folding back to a wall 169).
+ * The same swing drawn twice (overlapping lines) counts once.
+ */
+export function swingArcs(segments: Segment[], curves: Curve[], pointsPerFoot: number): Swing[] {
+  const swings = arcFits(segments, curves, pointsPerFoot)
+    .filter(a => (a.sweep >= 70 && a.sweep <= 110) || (a.open !== null && a.radius >= 2.4 && a.sweep >= 35))
+    .map(({ sweep: _, ...s }) => s);
   return swings.filter((s, i) => !swings.slice(0, i).some(t => dist(s.hinge, t.hinge) < 0.3 && Math.abs(s.radius - t.radius) < 0.2));
 }
 
@@ -132,6 +144,16 @@ function along(w: Wall, p: Point, d: Point): number | null {
 export function doorsFromSwings(swings: Swing[], walls: Wall[]): Door[] {
   type Leaf = { hinge: Point; closed: Point; open: Point; radius: number; host: number | null; leaf: boolean };
   const leaves: Leaf[] = [];
+  // Two door-sized swings closing onto each other are a pair of doors wherever they stand: in a curtain wall (Project 1's
+  // 101A and 101B) no wall runs through the hinges to confirm them, and neither has a drawn leaf.
+  const closesOnto = new Map<Swing, number>();
+  swings.forEach((p, i) => swings.forEach((q, j) => {
+    if (j <= i || p.radius < 2.4 || Math.abs(p.radius - q.radius) >= 0.2 || dist(p.hinge, q.hinge) <= 1) return;
+    for (const e of [0, 1]) for (const f of [0, 1]) {
+      if (p.open === e || q.open === f || dist(p.ends[e], q.ends[f]) >= 0.5) continue;
+      closesOnto.set(p, e); closesOnto.set(q, f);
+    }
+  }));
   for (const s of swings) {
     // The host wall runs through the hinge along the closed leaf. Where the drawn leaf says which end is
     // open, only walls along the other end count; otherwise the nearest such wall decides.
@@ -143,8 +165,9 @@ export function doorsFromSwings(swings: Swing[], walls: Wall[]): Door[] {
     });
     const found = best as { end: number; host: number; off: number } | null;
     // No wall runs through the hinge: still a door (a storefront, a door in glass), with no host wall.
-    const end = s.open !== null ? 1 - s.open : found?.end ?? 0;
-    leaves.push({ hinge: s.hinge, closed: s.ends[end], open: s.ends[1 - end], radius: s.radius, host: found?.host ?? null, leaf: s.open !== null });
+    const paired = closesOnto.get(s);
+    const end = s.open !== null ? 1 - s.open : paired ?? found?.end ?? 0;
+    leaves.push({ hinge: s.hinge, closed: s.ends[end], open: s.ends[1 - end], radius: s.radius, host: found?.host ?? null, leaf: s.open !== null || paired !== undefined });
   }
   // A swing whose hinge is nowhere near a wall (on a wall's line or within 2 ft of a wall's end) is a
   // drawing symbol drawn with a quarter circle, not a door.

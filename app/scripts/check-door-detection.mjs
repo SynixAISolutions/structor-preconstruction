@@ -49,6 +49,22 @@ assert.deepEqual(D.swingArcs(wavy, [], PPF), []);
 // A swing drawn twice (overlapping lines) is one door.
 assert.equal(D.swingArcs([...single, ...arc([10, 0], 3, 0, 90)], [], PPF).length, 1);
 
+// A door opening less or more than a right angle counts when its leaf is drawn: Project 1's skewed wing opens 45 degrees,
+// and doors folding back to a wall 169. Without a leaf those arcs stay symbols, as does a small one even with a leaf.
+const at = (c, r, deg) => [c[0] + r * Math.cos(deg * Math.PI / 180), c[1] + r * Math.sin(deg * Math.PI / 180)];
+for (const sweep of [45, 169]) {
+  const drawn = [...arc([10, 0], 3, 0, sweep, 24), ...leaf([10, 0], at([10, 0], 3, sweep))];
+  const found = D.doorsFromSwings(D.swingArcs(drawn, [], PPF), walls);
+  assert.deepEqual(found.map(d => [r2(d.a), r2(d.b), Math.round(d.width * 100) / 100, d.kind]), [[[10, 0], [13, 0], 3, "door"]], `A ${sweep} degree swing with its leaf`);
+  assert.deepEqual(D.swingArcs(arc([10, 0], 3, 0, sweep, 24), [], PPF), [], `A ${sweep} degree arc with no leaf isn't a swing`);
+}
+assert.deepEqual(D.swingArcs([...arc([10, 0], 1.8, 0, 45, 24), ...leaf([10, 0], at([10, 0], 1.8, 45))], [], PPF), [], "Too small to be a door at that angle");
+assert.equal(D.arcFits(arc([0, 50], 3, 0, 180, 32), [], PPF)[0].sweep > 170, true, "The arc itself is measured whatever its sweep");
+// Two door-sized swings closing onto each other are a pair wherever they stand: a curtain wall has no wall to confirm them.
+const curtain = D.doorsFromSwings(D.swingArcs([...arc([40, 40], 3, 0, 90), ...arc([46, 40], 3, 180, 90)], [], PPF), []);
+assert.deepEqual(curtain.map(d => [r2(d.a), r2(d.b), Math.round(d.width * 100) / 100, d.leaves, d.host, d.kind]), [[[40, 40], [46, 40], 6, 2, null, "door"]], "A pair in a curtain wall");
+assert.deepEqual(D.doorsFromSwings(D.swingArcs([...arc([40, 40], 3, 0, 90), ...arc([60, 40], 3, 180, 90)], [], PPF), []), [], "Two swings that don't meet are still symbols");
+
 // In a level's frame: doors sit on the walls read from the same sheet.
 const sheet = { widthPt: 3024, heightPt: 2160 }, frame = { widthFeet: 336, heightFeet: 240 };
 const planSegs = [...[[0, 10], [13, 20]].flatMap(([x0, x1]) => [seg([x0, 0], [x1, 0], 1.2), seg([x0, 0.4], [x1, 0.4], 1.2)]), ...single];
