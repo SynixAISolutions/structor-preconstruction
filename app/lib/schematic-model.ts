@@ -13,7 +13,7 @@ import { mergeTags, placeTags, tagOvals, type PartitionType, type PlacedTag } fr
 import type { Curve, Segment } from "./plan-vectors";
 import type { RegisterRow } from "./project-files";
 import { levelRooms, type Room } from "./room-detection";
-import { hexagonTags, planGlazing, planWalls } from "./wall-detection";
+import { hexagonTags, planGlazing, planPartitions, planWalls } from "./wall-detection";
 
 export type Point = [number, number];
 export type SchematicRoom = { name: string; number: string; at: Point };
@@ -44,9 +44,13 @@ export type SchematicLevel = {
   doors?: SchematicDoor[];
   /** Glass read from the plan's panes (levelGlazing). Missing on models built before 21 Oct. */
   glazing?: SchematicGlazing[];
+  /** Operable partitions read from the plan (levelPartitions). Missing on models built before 6 Nov. */
+  partitions?: SchematicPartition[];
 };
 /** A run of glass from a to b, in feet; `type` from the plan's storefront/window tags (SF-10). */
 export type SchematicGlazing = { a: Point; b: Point; type?: string | null; excluded?: boolean };
+/** An operable partition from a to b, in feet. Kept apart from the walls: it's bought and built as its own item, and has no wall type. */
+export type SchematicPartition = { a: Point; b: Point; thickness: number; excluded?: boolean };
 /** A wall centerline from a to b with its thickness, in feet; `type` is its partition type from the plan's tags. */
 export type SchematicWall = { a: Point; b: Point; thickness: number; type?: string | null; /** The type was set by the estimator for untagged walls, not read from a tag. */ typeSet?: boolean; /** Corrected by the estimator on this wall. */ edited?: boolean; /** Marked by the estimator as not a wall (kept so it can be restored). */ excluded?: boolean };
 /**
@@ -98,13 +102,14 @@ export function levelTags(read: { tile: [number, number, number, number]; tags: 
   };
 }
 /**
- * The enclosed rooms of a level, from its walls, doors and glass as they stand now (the estimator's "Not a
- * wall" and "Not glass" corrections included), named by its room tags. Computed, not stored, so a
- * correction reflows the rooms; empty for a level without walls read from its lines.
+ * The enclosed rooms of a level, from its walls, doors, glass and operable partitions as they stand now (the
+ * estimator's "Not a wall" and "Not glass" corrections included), named by its room tags. A partition divides:
+ * the rooms either side of it have numbers and finishes of their own. Computed, not stored, so a correction
+ * reflows the rooms; empty for a level without walls read from its lines.
  */
-export function levelSpaces(level: Pick<SchematicLevel, "walls" | "doors" | "glazing" | "rooms">): Room[] {
+export function levelSpaces(level: Pick<SchematicLevel, "walls" | "doors" | "glazing" | "partitions" | "rooms">): Room[] {
   if (!level.walls?.length) return [];
-  return levelRooms({ walls: level.walls.filter(w => !w.excluded), doors: (level.doors ?? []).filter(d => d.kind === "door"), glazing: (level.glazing ?? []).filter(g => !g.excluded), tags: level.rooms });
+  return levelRooms({ walls: [...level.walls, ...(level.partitions ?? [])].filter(w => !w.excluded), doors: (level.doors ?? []).filter(d => d.kind === "door"), glazing: (level.glazing ?? []).filter(g => !g.excluded), tags: level.rooms });
 }
 
 /** `partitionTypes`: the wall types the partition type sheet lists (read by AI), to describe and check wall types. */
@@ -261,6 +266,13 @@ export function levelGlazing(segments: Segment[], page: { widthPt: number; heigh
   const inside = (p: Point) => !box || (p[0] >= box[0] && p[0] <= box[2] && p[1] >= box[1] && p[1] <= box[3]);
   const tags = hexagonTags(segments, pointsPerFoot).filter(t => inside(t.at)).map((t): Point => [t.at[0] / pointsPerFoot, t.at[1] / pointsPerFoot]);
   return planGlazing(segments, pointsPerFoot, wallWeight, walls.map(w => ({ ...w, weights: [] })), box, leaves, tags).map(g => ({ a: [r1(g.a[0]), r1(g.a[1])] as Point, b: [r1(g.b[0]), r1(g.b[1])] as Point }));
+}
+
+/** A level's operable partitions (wall-detection planPartitions), in the same frame as its walls and glass. */
+export function levelPartitions(segments: Segment[], page: { widthPt: number; heightPt: number }, frame: Frame, outline: Point[], wallWeight: number | null, walls: SchematicWall[], glazing: SchematicGlazing[]): SchematicPartition[] {
+  const { pointsPerFoot, box } = planArea(page, frame, outline);
+  const r1 = (n: number) => Math.round(n * 10) / 10 || 0;
+  return planPartitions(segments, pointsPerFoot, wallWeight, walls.map(w => ({ ...w, weights: [] })), glazing, box).map(p => ({ a: [r1(p.a[0]), r1(p.a[1])] as Point, b: [r1(p.b[0]), r1(p.b[1])] as Point, thickness: Math.round(p.thickness * 100) / 100 }));
 }
 /** Image fraction → feet in a level's frame (to 0.1 ft). */
 export const fromFraction = (frame: Frame, [x, y]: Point): Point => [Math.round(x * frame.widthFeet * 10) / 10, Math.round(y * frame.heightFeet * 10) / 10];
@@ -442,6 +454,14 @@ export function editGlazing(model: SchematicModel, levelId: string, index: numbe
     if (!l.glazing?.[index]) throw new Error("That glass is no longer in the model.");
     const t = change.type === undefined ? undefined : change.type.trim().toUpperCase().replace(/\s+/g, "").slice(0, 16);
     return { ...l, glazing: l.glazing.map((g, i) => i !== index ? g : { ...g, ...(t !== undefined ? { type: t || null } : {}), ...(change.excluded !== undefined ? { excluded: change.excluded } : {}) }) };
+  });
+}
+
+/** The estimator's correction of one operable partition: that it isn't one (kept, so it can be restored). */
+export function editPartition(model: SchematicModel, levelId: string, index: number, excluded: boolean): SchematicModel {
+  return editLevel(model, levelId, l => {
+    if (!l.partitions?.[index]) throw new Error("That partition is no longer in the model.");
+    return { ...l, partitions: l.partitions.map((p, i) => i === index ? { ...p, excluded } : p) };
   });
 }
 

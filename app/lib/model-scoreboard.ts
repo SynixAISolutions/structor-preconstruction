@@ -165,7 +165,8 @@ function faceOf(run: { a: Point; b: Point }, walls: WallLike[], reach: number) {
     if (!wl || Math.abs(ux * (w.b[1] - w.a[1]) / wl - uy * (w.b[0] - w.a[0]) / wl) > Math.sin((3 * Math.PI) / 180)) continue;
     const across = (p: Point) => (p[0] - run.a[0]) * -uy + (p[1] - run.a[1]) * ux;
     const center = (across(w.a) + across(w.b)) / 2;
-    const offset = Math.abs(Math.abs(center) - w.thickness / 2);
+    // A line inside a wall is one of its layers, so it's on that wall.
+    const offset = Math.max(0, Math.abs(center) - w.thickness / 2);
     if (offset > reach) continue;
     const along = (p: Point) => (p[0] - run.a[0]) * ux + (p[1] - run.a[1]) * uy;
     const [t0, t1] = [along(w.a), along(w.b)].sort((x, y) => x - y);
@@ -378,6 +379,8 @@ export type LevelScore = {
   sheet: string; walls: { count: number; feet: number }; wallWeight: number | null;
   dimensions: DimensionScore; faces: FaceScore; lines: LineScore; doors: DoorScore | null; rooms: RoomScore | null;
   wallFlags: WallFlagScore; glass: GlassScore;
+  /** Operable partitions read. No key: nothing lists them, so a person checks them on the overlay. */
+  partitions: { a: Point; b: Point }[];
 };
 
 const inchesText = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100) / 100} in`);
@@ -400,10 +403,12 @@ export function scoreboardReport(levels: LevelScore[], title = "Drawings to 3D s
   row("Glass tags with glass within 10 ft", l => pct(l.glass.tagsNearGlass, l.glass.tags));
   row("Glass read", l => `${l.glass.feet} ft in ${l.glass.runs} runs`);
   row("Glass runs touching nothing", l => String(l.glass.aloneRuns.length));
+  row("Operable partitions read (no key: check by eye)", l => `${l.partitions.length} (${Math.round(l.partitions.reduce((t, p) => t + dist(p.a, p.b), 0))} ft)`);
   out.push(
     "",
     "A value that disagrees is usually OCR misreading a stray line as a digit: look at its picture in the sheet's strips folder before believing it.",
     "A flagged wall is one to look at, not one known to be wrong: nothing on a drawing lists the walls, so false walls have no key.",
+    "Rooms only counts rooms with a position in the key, and closed says nothing about a room's shape: a guardrail isn't read, so a corridor can take in a void beside it. Look at the spaces on the plan too.",
     "Glass tags only say glass is near. Not scored yet: how much glass is missing between tags, wall types, level heights. Stairs, roofs and structure aren't read yet.",
   );
   for (const l of levels) {
@@ -414,6 +419,7 @@ export function scoreboardReport(levels: LevelScore[], title = "Drawings to 3D s
     if (l.wallFlags.flagged.length) out.push("", `Walls flagged (${l.wallFlags.flagged.length}):`, ...l.wallFlags.flagged.slice(0, 40).map(w => `- ${w.feet} ft, ${Math.round(w.thickness * 12 * 10) / 10} in thick, at (${Math.round(w.a[0])}, ${Math.round(w.a[1])}) to (${Math.round(w.b[0])}, ${Math.round(w.b[1])}) ft: ${w.flags.join(", ")}`));
     if (l.glass.tagsMissed.length) out.push("", "Glass tags with no glass near them:", ...l.glass.tagsMissed.map(t => `- at (${Math.round(t[0])}, ${Math.round(t[1])}) ft`));
     if (l.glass.aloneRuns.length) out.push("", "Glass touching nothing at either end:", ...l.glass.aloneRuns.map(g => `- ${g.feet} ft at (${Math.round(g.a[0])}, ${Math.round(g.a[1])}) to (${Math.round(g.b[0])}, ${Math.round(g.b[1])}) ft`));
+    if (l.partitions.length) out.push("", "Operable partitions read:", ...l.partitions.map(p => `- ${Math.round(dist(p.a, p.b) * 10) / 10} ft at (${Math.round(p.a[0])}, ${Math.round(p.a[1])}) to (${Math.round(p.b[0])}, ${Math.round(p.b[1])}) ft`));
     if (l.doors) {
       const missed = l.doors.rows.filter(r => r.status === "missed"), wrong = l.doors.rows.filter(r => r.widthRight === false), unkeyed = l.doors.rows.filter(r => r.status === "not on plan key");
       if (missed.length) out.push("", `Scheduled doors not found: ${missed.map(r => r.number).join(", ")}.`);

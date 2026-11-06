@@ -12,6 +12,8 @@ type Line = { a: Point; b: Point };
 const dist = (p: Point, q: Point) => Math.hypot(p[0] - q[0], p[1] - q[1]);
 /** The widest gap between two wall ends in line that still closes a space; wider is an opening. */
 const OPENING_FEET = 6;
+/** An end with nothing ahead closes against a line this near: narrower than any door (toilet stalls' 2 ft aside), so not an opening. */
+const BRIDGE_FEET = 2.25;
 export const polygonArea = (pts: Point[]) => Math.abs(signedArea(pts));
 const signedArea = (pts: Point[]) => pts.reduce((s, [x, y], i) => { const [nx, ny] = pts[(i + 1) % pts.length]; return s + x * ny - nx * y; }, 0) / 2;
 
@@ -36,7 +38,7 @@ export function faces(drawn: Line[], snap = 0.75, minArea = 15, gap = 10, minWid
   const foot = (l: Line, p: Point) => at(l, Math.max(0, Math.min(1, along(l, p))));
   // 0. An end that meets nothing (a wall stopping at the face of the one it meets, a wall broken by an
   // opening, a door line shorter than its opening) is extended straight ahead to the first line within `gap`;
-  // failing that, bridged to the nearest line within twice the snap. So the spaces close.
+  // failing that, bridged to the nearest line within BRIDGE_FEET. So the spaces close.
   // ponytail: O(n²) over a level's few hundred lines; grid-bucket the lines if plans get to thousands.
   const lines = [...drawn];
   drawn.forEach((l, i) => {
@@ -68,7 +70,7 @@ export function faces(drawn: Line[], snap = 0.75, minArea = 15, gap = 10, minWid
       if (d <= snap) continue;
       // The first thing ahead is another wall's end, too far to close across: it stays open, even with a wall behind that end.
       if (facing > OPENING_FEET && facing <= s) ahead = null;
-      const to = ahead ?? (d <= 2 * snap ? near : null);
+      const to = ahead ?? (d <= BRIDGE_FEET ? near : null);
       if (to) lines.push({ a: p, b: to });
     }
   });
@@ -88,13 +90,23 @@ export function faces(drawn: Line[], snap = 0.75, minArea = 15, gap = 10, minWid
     const tol = snap / L, tolM = snap / (dist(m.a, m.b) || 1);
     if (t > -tol && t < 1 + tol && u > -tolM && u < 1 + tolM) { cuts[i].push(Math.min(1, Math.max(0, t))); cuts[j].push(Math.min(1, Math.max(0, u))); }
   }
-  // 2. Nodes: points within snap are one node.
-  const nodes: Point[] = [];
-  const node = (p: Point) => { let k = nodes.findIndex(n => dist(n, p) <= snap); if (k < 0) { nodes.push(p); k = nodes.length - 1; } return k; };
+  // 2. Nodes: points within snap are one node, chains of them included. Keeping to the first point found split a corner when a
+  // third point fell between two that meet (Project 1: a partition's end beside the point where a wall meets its glass).
+  const stops = cuts.map(ts => [...new Set(ts.map(t => Math.round(t * 1e6) / 1e6))].sort((x, y) => x - y));
+  const points: Point[] = [], firstStop: number[] = [];
+  lines.forEach((l, i) => { firstStop.push(points.length); for (const t of stops[i]) points.push(at(l, t)); });
+  const parent = points.map((_, i) => i);
+  const root = (i: number): number => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  for (let i = 0; i < points.length; i++) for (let j = i + 1; j < points.length; j++) if (dist(points[i], points[j]) <= snap) parent[root(j)] = root(i);
+  const nodes: Point[] = [], nodeOfRoot = new Map<number, number>();
+  const node = (point: number) => {
+    const r = root(point);
+    if (!nodeOfRoot.has(r)) { nodes.push(points[r]); nodeOfRoot.set(r, nodes.length - 1); }
+    return nodeOfRoot.get(r)!;
+  };
   const edges = new Set<string>();
-  lines.forEach((l, i) => {
-    const ts = [...new Set(cuts[i].map(t => Math.round(t * 1e6) / 1e6))].sort((x, y) => x - y);
-    for (let k = 0; k + 1 < ts.length; k++) { const p = node(at(l, ts[k])), q = node(at(l, ts[k + 1])); if (p !== q) edges.add(p < q ? `${p},${q}` : `${q},${p}`); }
+  stops.forEach((ts, i) => {
+    for (let k = 0; k + 1 < ts.length; k++) { const p = node(firstStop[i] + k), q = node(firstStop[i] + k + 1); if (p !== q) edges.add(p < q ? `${p},${q}` : `${q},${p}`); }
   });
   // 3. Half-edges around each node by angle; trace faces keeping to the left (next = previous neighbor clockwise).
   const nbrs: number[][] = nodes.map(() => []);

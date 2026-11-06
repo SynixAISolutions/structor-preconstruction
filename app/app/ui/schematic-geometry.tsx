@@ -44,7 +44,8 @@ export function schematicGeometry(level: SchematicLevel) {
 }
 /**
  * The walls the app read from the plan's own lines (level.walls) as one instanced mesh of boxes: each runs
- * along its centerline with its thickness, full level height. Plan y is world -z, as for the outline.
+ * along its centerline with its thickness, full level height. Plan y is -z here, as for the outline; the scene's group
+ * flips z, so the building isn't shown mirrored.
  */
 export function schematicWalls(level: SchematicLevel): THREE.InstancedMesh | null {
   const walls = (level.walls ?? []).filter(w => !w.excluded); // the estimator marked the rest not a wall
@@ -108,6 +109,24 @@ export function schematicGlazing(level: SchematicLevel): THREE.InstancedMesh | n
   mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingBox(); mesh.computeBoundingSphere();
   return mesh;
 }
+/** Operable partitions are drawn up to 10 ft, or the level's height if lower, until their printed height is read (Project 1's are 9'-8" and 10'-0"). */
+export const PARTITION_HEIGHT = 10;
+/** A level's operable partitions (level.partitions) as one instanced mesh of panels from the floor, darker than the walls. */
+export function schematicPartitions(level: SchematicLevel): THREE.InstancedMesh | null {
+  const partitions = (level.partitions ?? []).filter(p => !p.excluded);
+  if (!partitions.length) return null;
+  const height = Math.min(level.height, PARTITION_HEIGHT), place = new THREE.Object3D();
+  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#8f7f9e", roughness: .8 }), partitions.length);
+  partitions.forEach((p, i) => {
+    const dx = p.b[0] - p.a[0], dy = p.b[1] - p.a[1];
+    place.position.set((p.a[0] + p.b[0]) / 2, height / 2, -(p.a[1] + p.b[1]) / 2);
+    place.rotation.set(0, Math.atan2(dy, dx), 0);
+    place.scale.set(Math.max(Math.hypot(dx, dy), .01), height, Math.max(p.thickness, .05));
+    place.updateMatrix(); mesh.setMatrixAt(i, place.matrix);
+  });
+  mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingBox(); mesh.computeBoundingSphere();
+  return mesh;
+}
 /** A level's rooms (levelSpaces) as flat floors just above the slab: named rooms warm, unnamed spaces grey. */
 export function schematicRoomFloors(rooms: Room[]): THREE.Group | null {
   if (!rooms.length) return null;
@@ -120,12 +139,13 @@ export function schematicRoomFloors(rooms: Room[]): THREE.Group | null {
   return group;
 }
 /** Count and total centerline length of a level's walls; null for a model built before walls were read. */
-export function wallTotals(level: SchematicLevel): { count: number; feet: number; doors: number | null; compartments: number; glassFeet: number | null } | null {
+export function wallTotals(level: SchematicLevel): { count: number; feet: number; doors: number | null; compartments: number; glassFeet: number | null; partitionFeet: number | null } | null {
   if (!level.walls) return null;
   const doors = level.doors ?? null, walls = level.walls.filter(w => !w.excluded);
   return {
     count: walls.length, feet: Math.round(walls.reduce((sum, w) => sum + Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), 0)),
     doors: doors && doors.filter(d => d.kind === "door").length, compartments: doors?.filter(d => d.kind === "compartment").length ?? 0,
     glassFeet: level.glazing ? Math.round(level.glazing.filter(g => !g.excluded).reduce((sum, g) => sum + Math.hypot(g.b[0] - g.a[0], g.b[1] - g.a[1]), 0)) : null,
+    partitionFeet: level.partitions ? Math.round(level.partitions.filter(p => !p.excluded).reduce((sum, p) => sum + Math.hypot(p.b[0] - p.a[0], p.b[1] - p.a[1]), 0)) : null,
   };
 }

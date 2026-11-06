@@ -103,6 +103,11 @@ assert.deepEqual(T.glazingTotals(glassRuns.map((g, i) => ({ ...g, type: glassPla
 const glassModel = { ...model, levels: [{ ...model.levels[0], glazing: glassRuns }] };
 assert.deepEqual(S.editGlazing(S.editGlazing(glassModel, "L1", 2, { excluded: true }), "L1", 0, { type: " sf 9 " }).levels[0].glazing.map(g => [g.type ?? null, !!g.excluded]), [["SF9", false], [null, false], [null, true]]);
 assert.throws(() => S.editGlazing(glassModel, "L1", 7, { excluded: true }), /glass is no longer/);
+const partitionModel = { levels: [{ id: "L1", partitions: [{ a: [0, 0], b: [20, 0], thickness: 0.35 }, { a: [0, 9], b: [20, 9], thickness: 0.35 }] }] };
+const notPartition = S.editPartition(partitionModel, "L1", 1, true);
+assert.deepEqual(notPartition.levels[0].partitions.map(p => !!p.excluded), [false, true], "Marked not a partition, and kept so it can be restored");
+assert.deepEqual(S.editPartition(notPartition, "L1", 1, false).levels[0].partitions.map(p => !!p.excluded), [false, false], "Restored");
+assert.throws(() => S.editPartition(partitionModel, "L1", 7, true), /partition is no longer/);
 
 // Tiles over the plan's area, and tags read on a tile placed back in the level's feet.
 const sheet = { widthPt: 3024, heightPt: 2160 }, frame = { widthFeet: 336, heightFeet: 240 };
