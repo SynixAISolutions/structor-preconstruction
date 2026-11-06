@@ -285,7 +285,34 @@ function RoomFinishPanel({ objects, bases, records, onSource, onInspect, onInspe
 }
 
 export default function ModelStudio(props: StudioProps) {
-  return props.projectId === SAMPLE_PROJECT_ID ? <PreparedModelStudio {...props}/> : <SchematicModelStudio key={props.projectId} project={props.project} navigate={props.navigate} notify={props.notify}/>;
+  return props.projectId === SAMPLE_PROJECT_ID ? <SampleProjectStudio {...props}/> : <SchematicModelStudio key={props.projectId} project={props.project} navigate={props.navigate} notify={props.notify}/>;
+}
+
+/** Remembers which model this browser last looked at on Project 1. Storage can be unavailable; the prepared model is then shown. */
+const MODEL_SOURCE_KEY = "structor-model-source";
+type ModelSourceChoice = "prepared" | "drawings";
+
+/**
+ * Project 1 has a prepared model, and its drawings too, so the two can be compared: the prepared model, or the one the app
+ * builds from those drawings (lib/schematic-model). Other projects only ever have the second.
+ */
+function SampleProjectStudio(props: StudioProps) {
+  const [source, setSource] = useState<ModelSourceChoice>("prepared");
+  useEffect(() => { try { if (localStorage.getItem(MODEL_SOURCE_KEY) === "drawings") setSource("drawings"); } catch { /* Stays on the prepared model. */ } }, []);
+  // A quantity or a takeoff line opening a modelled object asks for the prepared model, the only one with those objects.
+  useEffect(() => { if (props.inspection) setSource("prepared"); }, [props.inspection]);
+  const choose = (next: ModelSourceChoice) => {
+    setSource(next);
+    try { localStorage.setItem(MODEL_SOURCE_KEY, next); } catch { /* Remembered for this visit only. */ }
+  };
+  const option = (value: ModelSourceChoice, label: string) => <button type="button" aria-pressed={source === value} className={source === value ? "active" : ""} onClick={() => choose(value)}>{label}</button>;
+  return <>
+    <div className="ms-source-switch">
+      <div role="group" aria-label="Which model to show">{option("prepared", "Prepared model")}{option("drawings", "From the drawings")}</div>
+      <p>{source === "prepared" ? "The prepared model of this project, with its finishes, schedules and quantities." : "Built by the app from this project's floor plans. Building or rebuilding it uses AI credits."}</p>
+    </div>
+    {source === "prepared" ? <PreparedModelStudio {...props}/> : <SchematicModelStudio key={props.projectId} project={props.project} navigate={props.navigate} notify={props.notify}/>}
+  </>;
 }
 
 function PreparedModelStudio({ view, projectId, projectName, navigate, notify, inspection }: StudioProps) {
