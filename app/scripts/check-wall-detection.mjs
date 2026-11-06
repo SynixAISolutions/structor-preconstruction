@@ -150,6 +150,48 @@ assert.equal(parts([...panels(0, 6, 10), joint(2), joint(4)], [roomWalls[0], { a
 assert.deepEqual(W.planPartitions([...stack, ...joints], PPF, null, roomWalls, []), [], "No wall weight (a scan): nothing");
 assert.deepEqual(S.levelPartitions([...stack, ...joints], { widthPt: 3024, heightPt: 2160 }, { widthFeet: 336, heightFeet: 240 }, [], 1.2, roomWalls, []), [{ a: [0, 10.2], b: [20, 10.2], thickness: 0.35 }], "In the level's frame");
 
+// ── Guardrails: light pairs 1.8-3 in apart, clear of walls and glass ──────────────────────────────────
+const RAIL = 0.16, railPair = (x0, x1, y, w = 0.24) => [seg(x0, y, x1, y, w), seg(x0, y + RAIL, x1, y + RAIL, w)];
+const rails = (lines, walls = roomWalls, glazing = []) => W.planRailings(lines, PPF, 1.2, walls, glazing);
+assert.deepEqual(rails(railPair(0, 20, 10)).map(p => [r(p.a[0]), r(p.b[0]), r(p.thickness)]), [[0, 20, 0.16]], "Wall to wall: a guardrail");
+assert.equal(rails(railPair(6, 14, 10), roomWalls).length, 0, "Reaching nothing: not a guardrail");
+assert.equal(W.planRailings(railPair(0, 20, 10), PPF, 1.2, [roomWalls[0]], []).length, 1, "One end at a wall is enough");
+assert.equal(rails([...railPair(0, 20, 10), ...railPair(19, 19.1, 2)], roomWalls).length, 1);
+assert.equal(rails(railPair(0, 20, 10), [...roomWalls, { a: [0, 10.5], b: [20, 10.5], thickness: 0.4, weights: [] }]).length, 0, "Along a wall: a lining or a pad");
+assert.equal(rails(railPair(0, 20, 10), roomWalls, [{ a: [0, 10.4], b: [20, 10.4] }]).length, 0, "Along glass: a frame");
+assert.equal(rails([...railPair(0, 20, 10), ...[10.5, 10.8, 11.1, 11.4].map(y => seg(0, y, 20, y, 0.24))]).length, 0, "With lines repeating beside it: treads or paving");
+assert.equal(rails(railPair(0, 7, 10), [roomWalls[0]]).length, 0, "Under 8 ft isn't read");
+assert.deepEqual(W.planRailings(railPair(0, 20, 10), PPF, null, roomWalls, []), [], "No wall weight (a scan): nothing");
+assert.deepEqual(S.levelPartitions([...stack, ...joints, ...railPair(0, 20, 20)], { widthPt: 3024, heightPt: 2160 }, { widthFeet: 336, heightFeet: 240 }, [], 1.2, roomWalls, []).map(p => p.kind ?? "partition"), ["partition", "railing"], "A level keeps both, told apart");
+
+// ── Columns: small closed rectangles in the heavy pens, clear of the walls ────────────────────────────
+const rect = (x, y, w, h, weight = 0.96, turn = 0) => { const c = Math.cos(turn), s = Math.sin(turn), p = (u, v) => [x + u * c - v * s, y + u * s + v * c]; const q = [p(0, 0), p(w, 0), p(w, h), p(0, h)]; return q.map((a, i) => seg(a[0], a[1], q[(i + 1) % 4][0], q[(i + 1) % 4][1], weight)); };
+const columns = (lines, walls = []) => W.planColumns(lines, PPF, 1.2, walls);
+assert.deepEqual(columns(rect(10, 10, 0.8, 0.8)).map(c => [r(c.at[0]), r(c.at[1]), r(c.width), r(c.depth)]), [[10.4, 10.4, 0.8, 0.8]], "A square column");
+assert.deepEqual(columns(rect(10, 10, 0.8, 0.5, 0.96, 0.4)).map(c => [r(c.width), r(c.depth)]), [[0.8, 0.5]], "Any rotation: the skewed wing");
+assert.equal(columns([...rect(10, 10, 0.8, 0.8), ...rect(10.1, 10.1, 0.6, 0.6)]).length, 1, "Nested squares are one column");
+assert.equal(r(columns([...rect(10, 10, 0.6, 0.6), ...rect(9.9, 9.9, 0.8, 0.8, 0.84)])[0].width), 0.8, "Drawn in two pens: the outermost");
+assert.equal(columns(rect(10, 10, 3, 1.3, 0.96)).length, 0, "Too long: a room tag box");
+assert.equal(columns(rect(10, 10, 0.8, 0.8, 0.48)).length, 0, "Too light: a symbol, not cut");
+assert.equal(columns(rect(10, 10, 1.4, 0.4)).length, 0, "Too long and thin: a jamb");
+assert.equal(columns(rect(10, 10, 0.2, 0.2)).length, 0, "Too small");
+const inPen = color => rect(10, 10, 0.5, 0.5).map(s => ({ ...s, color }));
+assert.equal(columns(inPen("#000000")).length, 1, "Black is a column");
+assert.equal(columns(inPen("#191919")).length, 1, "So is a dark grey");
+assert.equal(columns(inPen("#7f3f00")).length, 0, "Brown is a floor drain, another trade's symbol");
+assert.equal(columns(inPen("#c0c0c0")).length, 0, "Pale grey is from a level above or below");
+assert.equal(columns(rect(10, 10, 0.8, 0.8).slice(0, 3)).length, 0, "Not closed");
+assert.equal(columns(rect(10, 10, 0.8, 0.8), [{ a: [0, 10.4], b: [20, 10.4], thickness: 1, weights: [] }]).length, 0, "Inside a wall: part of the wall");
+assert.deepEqual(W.planColumns(rect(10, 10, 0.8, 0.8), PPF, null, []), [], "No wall weight (a scan): nothing");
+assert.deepEqual(S.levelColumns(rect(10, 10, 0.8, 0.8), { widthPt: 3024, heightPt: 2160 }, { widthFeet: 336, heightFeet: 240 }, [], 1.2, []).map(c => [c.at, c.width, c.depth]), [[[10.4, 10.4], 0.8, 0.8]], "In the level's frame");
+
+// A pane too short to count alone is glass with its own tag right beside it, and not without.
+const shortTagged = (tags) => W.planGlazing(shortPane(10, 1, 1.7), PPF, 1.2, wallFar, undefined, [], tags).map(g => r(len(g)));
+assert.deepEqual(shortTagged([[12, 3]]), [1.7], "A 1.7 ft pane with its tag beside it");
+assert.deepEqual(shortTagged([[30, 30]]), [], "With its tag far away");
+assert.deepEqual(shortTagged([]), [], "With no tags");
+assert.deepEqual(W.planGlazing(shortPane(10, 1, 1), PPF, 1.2, wallFar, undefined, [], [[10, 3]]), [], "Under 1.25 ft isn't read even with a tag");
+
 // Corners and tees close: ends move to where the centerlines meet.
 const joined = W.joinWalls([
   { a: [0, 0], b: [19.8, 0], thickness: 0.4, weights: [] },   // stops short of the corner

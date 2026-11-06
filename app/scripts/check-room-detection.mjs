@@ -44,6 +44,16 @@ const corner = gap => R.levelRooms({ walls: [line([0, 0], [20, 0]), line([0, 0],
 assert.equal(corner(2).length, 1, "A 2 ft gap at a corner closes");
 assert.equal(corner(3).length, 0, "A 3 ft gap at a corner is an opening");
 
+// A wall end reaching far across a room has to part two rooms. An alcove's wall that just stops doesn't cut the room in two (Project
+// 1's 109 and 110), a short reach still closes, and a long one between two real rooms stays.
+const stub = (size, y, x) => R.levelRooms({ walls: [...box(0, 0, size, size), line([0, y], [x, y])], doors: [], glazing: [], tags: [] });
+assert.deepEqual(areas(stub(20, 4, 12)), [400], "8 ft across, cutting off 80 SF: one room, with the wall stopping in it");
+assert.deepEqual(areas(stub(20, 4, 15)), [80, 320], "5 ft across: a short reach still closes");
+assert.deepEqual(areas(stub(40, 20, 32)), [800, 800], "8 ft across, between two real rooms: two rooms");
+// A guardrail closes a space, but a wall end doesn't stretch out to meet one: that made a false box in Project 1's corridor.
+const niche = { walls: [...box(0, 0, 40, 20), line([20, 0], [20, 6])], doors: [], glazing: [], tags: [] };
+assert.deepEqual(areas(R.levelRooms({ ...niche, walls: [...niche.walls, { ...line([0, 12], [40, 12]), kind: "railing" }] })), [320, 480], "The wall stopping above the rail stays stopped: the space above it isn't split");
+
 // A level's spaces follow the estimator's corrections: a wall marked not a wall merges the two rooms.
 const level = { walls: [...box(0, 0, 20, 10), line([10, 0], [10, 10])].map(w => ({ ...w, thickness: 0.5 })), doors: [], glazing: [], rooms: [] };
 assert.deepEqual(areas(S.levelSpaces(level)), [100, 100]);

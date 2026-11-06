@@ -14,8 +14,8 @@ import type { Wall } from "./wall-detection";
 export type Swing = { hinge: Point; radius: number; ends: [Point, Point]; open: 0 | 1 | null };
 /**
  * A door opening from a to b in the wall, with its leaves' hinges and where each leaf swings open to.
- * `kind` "compartment" is a leaf under 2.4 ft (toilet stalls, cabinets): toilet partitions, not the door
- * schedule. `host` is the wall it sits in, null in glazing or where no wall was read.
+ * `kind` "compartment" is a leaf under 2.4 ft (toilet stalls, cabinets), or an accessible stall's wider door:
+ * toilet partitions, not the door schedule. `host` is the wall it sits in, null in glazing or where no wall was read.
  */
 export type Door = { a: Point; b: Point; width: number; leaves: number; hinges: Point[]; openTo: Point[]; host: number | null; kind: "door" | "compartment" };
 
@@ -182,5 +182,15 @@ export function doorsFromSwings(swings: Swing[], walls: Wall[]): Door[] {
       doors.push({ a: p.hinge, b: q.hinge, width: dist(p.hinge, q.hinge), leaves: 2, hinges: [p.hinge, q.hinge], openTo: [p.open, q.open], host: p.host ?? q.host, kind: Math.max(p.radius, q.radius) < 2.4 ? "compartment" : "door" });
     } else doors.push({ a: p.hinge, b: p.closed, width: p.radius, leaves: 1, hinges: [p.hinge], openTo: [p.open], host: p.host, kind: p.radius < 2.4 ? "compartment" : "door" });
   });
-  return doors;
+  // An accessible stall's door is as wide as a real door, so its size doesn't tell. It hangs on a toilet partition: with stall
+  // doors beside it, it closes onto no wall. A site gate closes onto no wall either, but has no stalls beside it.
+  const stalls = doors.filter(d => d.kind === "compartment");
+  const toWall = (p: Point, w: Wall) => {
+    const dx = w.b[0] - w.a[0], dy = w.b[1] - w.a[1], t = Math.max(0, Math.min(1, ((p[0] - w.a[0]) * dx + (p[1] - w.a[1]) * dy) / (dx * dx + dy * dy || 1)));
+    return Math.hypot(p[0] - (w.a[0] + t * dx), p[1] - (w.a[1] + t * dy)) - w.thickness / 2;
+  };
+  return doors.map(d => d.kind === "door" && d.leaves === 1 && d.width <= STALL_MAX_FEET && stalls.some(s => dist(s.a, d.a) <= STALL_BESIDE_FEET) && walls.every(w => toWall(d.b, w) > STALL_WALL_FEET) ? { ...d, kind: "compartment" as const } : d);
 }
+
+/** An accessible stall's door: no wider than this, with another stall's door this near, and its closed edge this far from any wall. */
+const STALL_MAX_FEET = 3.5, STALL_BESIDE_FEET = 8, STALL_WALL_FEET = 2.5;

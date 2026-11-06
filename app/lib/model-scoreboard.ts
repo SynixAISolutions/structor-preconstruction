@@ -373,14 +373,67 @@ export function scoreRooms(tags: RoomTag[], lines: { a: Point; b: Point }[]): Ro
   return { total: rows.length, closed: count("closed"), shared: count("shared"), open: count("open"), rows };
 }
 
+// ── Room shapes ──
+
+export type RoomShapeRow = {
+  room: string; name?: string;
+  /** The room's ceiling zones, in square feet. */
+  zoneArea: number;
+  /** The read space holding most of them, its area, and how much of the zones it holds (0-1). Null where none does. */
+  spaceArea: number | null; covered: number;
+  /** How much of that space is outside the room's zones (0-1): the room runs on into something, or a wall is missing. */
+  outside: number;
+  /** Other read spaces holding at least a tenth of the zones: a false wall has split the room. */
+  splitInto: number[];
+};
+export type RoomShapeScore = { total: number; whole: number; rows: RoomShapeRow[] };
+
+/** A room counts as whole when one read space holds at least this share of its ceiling zones. */
+export const ROOM_WHOLE_SHARE = 0.85;
+
+/**
+ * Each room's outline from a source apart from the walls (Project 1: the ceiling zones on its reflected ceiling plans, read from
+ * their filled regions), against the spaces read from the walls. Unlike "closed", this sees a room split by a false line or
+ * running on into the next. Sampled on a half-foot grid. Spaces run to wall centerlines and zones to wall faces, so a space
+ * always has a little outside its zones.
+ */
+export function scoreRoomShapes(zones: { room: string; name?: string; points: Point[] }[], spaces: Point[][], step = 0.5): RoomShapeScore {
+  const area = (poly: Point[]) => Math.abs(poly.reduce((s, [x, y], i) => { const [nx, ny] = poly[(i + 1) % poly.length]; return s + x * ny - nx * y; }, 0) / 2);
+  const rooms = new Map<string, { points: Point[][]; name?: string }>();
+  for (const z of zones) { const r = rooms.get(z.room) ?? { points: [], name: z.name }; r.points.push(z.points); rooms.set(z.room, r); }
+  const rows = [...rooms].map(([room, { points, name }]): RoomShapeRow => {
+    const all = points.flat(), xs = all.map(p => p[0]), ys = all.map(p => p[1]), tally = new Map<number, number>();
+    let total = 0;
+    for (let x = Math.min(...xs) + step / 2; x < Math.max(...xs); x += step) for (let y = Math.min(...ys) + step / 2; y < Math.max(...ys); y += step) {
+      if (!points.some(poly => inside([x, y], poly))) continue;
+      total++;
+      let best = -1;
+      spaces.forEach((s, i) => { if (inside([x, y], s) && (best < 0 || area(s) < area(spaces[best]))) best = i; });
+      if (best >= 0) tally.set(best, (tally.get(best) ?? 0) + 1);
+    }
+    const ranked = [...tally].sort((p, q) => q[1] - p[1]), top = ranked[0];
+    return {
+      room, name, zoneArea: Math.round(total * step * step),
+      spaceArea: top ? Math.round(area(spaces[top[0]])) : null, covered: top && total ? top[1] / total : 0,
+      outside: top ? Math.max(0, 1 - top[1] * step * step / area(spaces[top[0]])) : 0,
+      splitInto: ranked.slice(1).filter(([, n]) => n >= 0.1 * total).map(([i]) => Math.round(area(spaces[i]))),
+    };
+  });
+  return { total: rows.length, whole: rows.filter(r => r.covered >= ROOM_WHOLE_SHARE).length, rows };
+}
+
 // ── The report ──
 
 export type LevelScore = {
   sheet: string; walls: { count: number; feet: number }; wallWeight: number | null;
   dimensions: DimensionScore; faces: FaceScore; lines: LineScore; doors: DoorScore | null; rooms: RoomScore | null;
   wallFlags: WallFlagScore; glass: GlassScore;
-  /** Operable partitions read. No key: nothing lists them, so a person checks them on the overlay. */
-  partitions: { a: Point; b: Point }[];
+  /** Operable partitions and guardrails read. No key: nothing lists them, so a person checks them on the overlay. */
+  partitions: { a: Point; b: Point; kind?: "railing" }[];
+  /** Columns read. No key here either: the structural sheets aren't read. */
+  columns: { at: Point; width: number; depth: number }[];
+  /** Rooms against an outline from another source; null with none to compare against. */
+  roomShapes?: RoomShapeScore | null;
 };
 
 const inchesText = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100) / 100} in`);
@@ -398,17 +451,21 @@ export function scoreboardReport(levels: LevelScore[], title = "Drawings to 3D s
   row("Door widths right (within 3 in)", l => (l.doors ? pct(l.doors.widthRight, l.doors.widthChecked) : "no schedule key"));
   row("Doors read at no scheduled door's position", l => (l.doors ? String(l.doors.extra.length) : "no schedule key"));
   row("Rooms with a position, in a closed space of their own", l => (l.rooms ? pct(l.rooms.closed, l.rooms.total) : "no room key"));
+  row("Rooms with an outline to compare, whole in one read space (85%+)", l => (l.roomShapes ? pct(l.roomShapes.whole, l.roomShapes.total) : "no outlines"));
   row("Walls read", l => `${l.walls.count} (${l.walls.feet} ft)`);
   row("Walls flagged to check by eye", l => `${l.wallFlags.flagged.length} (${l.wallFlags.flaggedFeet} of ${l.wallFlags.feet} ft)`);
   row("Glass tags with glass within 10 ft", l => pct(l.glass.tagsNearGlass, l.glass.tags));
   row("Glass read", l => `${l.glass.feet} ft in ${l.glass.runs} runs`);
   row("Glass runs touching nothing", l => String(l.glass.aloneRuns.length));
-  row("Operable partitions read (no key: check by eye)", l => `${l.partitions.length} (${Math.round(l.partitions.reduce((t, p) => t + dist(p.a, p.b), 0))} ft)`);
+  const runs = (list: { a: Point; b: Point }[]) => `${list.length} (${Math.round(list.reduce((t, p) => t + dist(p.a, p.b), 0))} ft)`;
+  row("Operable partitions read (no key: check by eye)", l => runs(l.partitions.filter(p => p.kind !== "railing")));
+  row("Guardrails read (no key: check by eye)", l => runs(l.partitions.filter(p => p.kind === "railing")));
+  row("Columns read (no key: check by eye)", l => String(l.columns.length));
   out.push(
     "",
     "A value that disagrees is usually OCR misreading a stray line as a digit: look at its picture in the sheet's strips folder before believing it.",
     "A flagged wall is one to look at, not one known to be wrong: nothing on a drawing lists the walls, so false walls have no key.",
-    "Rooms only counts rooms with a position in the key, and closed says nothing about a room's shape: a guardrail isn't read, so a corridor can take in a void beside it. Look at the spaces on the plan too.",
+    "Rooms closed only counts rooms with a position in the key, and says nothing about a room's shape. Room outlines come from the ceiling plans, so a room with no ceiling drawn has no outline to compare.",
     "Glass tags only say glass is near. Not scored yet: how much glass is missing between tags, wall types, level heights. Stairs, roofs and structure aren't read yet.",
   );
   for (const l of levels) {
@@ -419,7 +476,9 @@ export function scoreboardReport(levels: LevelScore[], title = "Drawings to 3D s
     if (l.wallFlags.flagged.length) out.push("", `Walls flagged (${l.wallFlags.flagged.length}):`, ...l.wallFlags.flagged.slice(0, 40).map(w => `- ${w.feet} ft, ${Math.round(w.thickness * 12 * 10) / 10} in thick, at (${Math.round(w.a[0])}, ${Math.round(w.a[1])}) to (${Math.round(w.b[0])}, ${Math.round(w.b[1])}) ft: ${w.flags.join(", ")}`));
     if (l.glass.tagsMissed.length) out.push("", "Glass tags with no glass near them:", ...l.glass.tagsMissed.map(t => `- at (${Math.round(t[0])}, ${Math.round(t[1])}) ft`));
     if (l.glass.aloneRuns.length) out.push("", "Glass touching nothing at either end:", ...l.glass.aloneRuns.map(g => `- ${g.feet} ft at (${Math.round(g.a[0])}, ${Math.round(g.a[1])}) to (${Math.round(g.b[0])}, ${Math.round(g.b[1])}) ft`));
-    if (l.partitions.length) out.push("", "Operable partitions read:", ...l.partitions.map(p => `- ${Math.round(dist(p.a, p.b) * 10) / 10} ft at (${Math.round(p.a[0])}, ${Math.round(p.a[1])}) to (${Math.round(p.b[0])}, ${Math.round(p.b[1])}) ft`));
+    for (const [title, list] of [["Operable partitions read:", l.partitions.filter(p => p.kind !== "railing")], ["Guardrails read:", l.partitions.filter(p => p.kind === "railing")]] as const) {
+      if (list.length) out.push("", title, ...list.map(p => `- ${Math.round(dist(p.a, p.b) * 10) / 10} ft at (${Math.round(p.a[0])}, ${Math.round(p.a[1])}) to (${Math.round(p.b[0])}, ${Math.round(p.b[1])}) ft`));
+    }
     if (l.doors) {
       const missed = l.doors.rows.filter(r => r.status === "missed"), wrong = l.doors.rows.filter(r => r.widthRight === false), unkeyed = l.doors.rows.filter(r => r.status === "not on plan key");
       if (missed.length) out.push("", `Scheduled doors not found: ${missed.map(r => r.number).join(", ")}.`);
@@ -431,6 +490,10 @@ export function scoreboardReport(levels: LevelScore[], title = "Drawings to 3D s
       const open = l.rooms.rows.filter(r => r.status === "open"), shared = l.rooms.rows.filter(r => r.status === "shared");
       if (open.length) out.push("", `Rooms not closed: ${open.map(r => `${r.number} ${r.name}`.trim()).join(", ")}.`);
       if (shared.length) out.push("", "Rooms sharing a space:", ...shared.map(r => `- ${r.number} ${r.name} with ${r.sharedWith.join(", ")}`));
+    }
+    if (l.roomShapes) {
+      const off = l.roomShapes.rows.filter(r => r.covered < ROOM_WHOLE_SHARE || r.outside > 0.35).sort((p, q) => p.covered - q.covered);
+      if (off.length) out.push("", "Room outlines that don't match a read space:", ...off.map(r => `- ${r.room}: outline ${r.zoneArea} SF, ${Math.round(r.covered * 100)}% in a ${r.spaceArea ?? "no"} SF space${r.outside > 0.35 ? `, ${Math.round(r.outside * 100)}% of that space is outside the outline` : ""}${r.splitInto.length ? `, the rest in ${r.splitInto.join(" and ")} SF` : ""}`));
     }
   }
   return `${out.join("\n")}\n`;

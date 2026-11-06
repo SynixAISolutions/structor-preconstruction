@@ -16,11 +16,13 @@ import { relative, resolve } from "node:path";
 
 register("./ts-resolver.mjs", import.meta.url);
 const { vectorsFromOperators } = await import("../lib/plan-vectors.ts");
-const { feetPerInch, levelDoors, levelGlazing, levelPartitions, levelWalls } = await import("../lib/schematic-model.ts");
+const { feetPerInch, levelColumns, levelDoors, levelGlazing, levelPartitions, levelWalls } = await import("../lib/schematic-model.ts");
 const B = await import("../lib/model-scoreboard.ts");
 const { hexagonTags } = await import("../lib/wall-detection.ts");
 const { jelleffTruth, JELLEFF_PLAN_SHEETS } = await import("../lib/drawing-score.ts");
 const { doorScheduleRows } = await import("../lib/jelleff-doors.ts");
+const { ceilingZones } = await import("../lib/jelleff-ceilings.ts");
+const { faces: faces2 } = await import("../lib/room-detection.ts");
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((pairs, a, i, all) => (a.startsWith("--") ? [...pairs, [a.slice(2), all[i + 1]]] : pairs), []));
 if (!args.pdf || !existsSync(args.pdf) || !args.out) {
@@ -93,6 +95,7 @@ for (const plan of plans) {
   const doors = levelDoors(segments, curves, sheet, frame, outline, walls.walls);
   const glazing = levelGlazing(segments, sheet, frame, outline, walls.weight, walls.walls, doors);
   const partitions = levelPartitions(segments, sheet, frame, outline, walls.weight, walls.walls, glazing);
+  const columns = levelColumns(segments, sheet, frame, outline, walls.weight, walls.walls);
   const wallFeet = Math.round(walls.walls.reduce((t, w) => t + Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), 0));
   console.log(`  read ${walls.walls.length} walls (${wallFeet} ft), ${doors.filter(d => d.kind === "door").length} doors, ${glazing.length} glass runs`);
 
@@ -139,7 +142,9 @@ for (const plan of plans) {
 
   // Doors and rooms need a key: Project 1 has its schedule and the positions of its doors and rooms.
   const isProject1 = JELLEFF_PLAN_SHEETS.some(s => s.sheet === plan.sheet && s.page === plan.page);
-  let doorScore = null, roomScore = null;
+  // The lines that close spaces, as the app uses them (schematic-model levelSpaces): a stall door closes no room.
+  const spaceLines = [...walls.walls, ...glazing, ...doors.filter(d => d.kind === "door"), ...partitions];
+  let doorScore = null, roomScore = null, roomShapes = null;
   if (isProject1) {
     const truth = jelleffTruth(plan.sheet), feet = ([x, y]) => [x * frame.widthFeet, y * frame.heightFeet];
     const floor = plan.sheet === "A1.1" ? "1" : "2";
@@ -149,12 +154,16 @@ for (const plan of plans) {
       const traced = truth.doors.find(d => d.number === r.number);
       return { number: r.number, widthInches: r.widthIn === null ? null : r.widthIn * (r.panels ?? 1), at: traced ? feet(traced.at) : null };
     }), doors);
-    roomScore = B.scoreRooms(truth.rooms.map(r => ({ number: r.number, name: r.name, at: feet(r.at) })), [...walls.walls, ...glazing, ...doors, ...partitions]);
+    roomScore = B.scoreRooms(truth.rooms.map(r => ({ number: r.number, name: r.name, at: feet(r.at) })), spaceLines);
+    // The ceiling zones are in the plan's 2400-wide viewBox, moved onto the plan with the measured sheet offsets.
+    const toFeet = ([x, y]) => [x * frame.widthFeet / 2400, y * frame.widthFeet / 2400];
+    const zones = ceilingZones.filter(z => z.room && z.level === (plan.sheet === "A1.1" ? "L1" : "L2")).map(z => ({ room: z.room, name: z.name, points: z.points.map(toFeet) }));
+    roomShapes = B.scoreRoomShapes(zones, faces2(spaceLines));
   }
-  levels.push({ sheet: plan.sheet, walls: { count: walls.walls.length, feet: wallFeet }, wallWeight: walls.weight, dimensions, faces, lines, doors: doorScore, rooms: roomScore, wallFlags, glass, partitions });
-  writeFileSync(resolve(out, `${plan.sheet}-model.json`), JSON.stringify({ walls: walls.walls, doors, glazing, partitions }));
+  levels.push({ sheet: plan.sheet, walls: { count: walls.walls.length, feet: wallFeet }, wallWeight: walls.weight, dimensions, faces, lines, doors: doorScore, rooms: roomScore, roomShapes, wallFlags, glass, partitions, columns });
+  writeFileSync(resolve(out, `${plan.sheet}-model.json`), JSON.stringify({ walls: walls.walls, doors, glazing, partitions, columns }));
 
-  // The model over the sheet: walls blue, glass teal, doors green, operable partitions orange; red is what the checks say is missing.
+  // The model over the sheet: walls blue, glass teal, doors green, operable partitions orange, guardrails brown, columns black; red is what the checks say is missing.
   const OVERLAY = 1.5, shot = createCanvas(Math.ceil(vp.width * OVERLAY), Math.ceil(vp.height * OVERLAY)), g = shot.getContext("2d");
   g.drawImage(raster, 0, 0, shot.width, shot.height);
   g.fillStyle = "rgba(255,255,255,0.55)"; g.fillRect(0, 0, shot.width, shot.height);
@@ -162,7 +171,8 @@ for (const plan of plans) {
   for (const w of walls.walls) stroke(w.a, w.b, "rgba(20,90,220,0.75)", Math.max(2, w.thickness * px));
   for (const w of glazing) stroke(w.a, w.b, "rgba(0,160,160,0.9)", 4);
   for (const d of doors) stroke(d.a, d.b, "rgba(20,160,60,0.95)", 5);
-  for (const p of partitions) stroke(p.a, p.b, "rgba(240,120,0,0.95)", 6);
+  for (const p of partitions) stroke(p.a, p.b, p.kind === "railing" ? "rgba(140,80,20,0.95)" : "rgba(240,120,0,0.95)", 6);
+  for (const c of columns) { g.save(); g.translate(c.at[0] * px, c.at[1] * px); g.rotate(c.angle); g.fillStyle = "rgba(0,0,0,0.85)"; g.fillRect(-c.width * px / 2, -c.depth * px / 2, c.width * px, c.depth * px); g.restore(); }
   for (const m of [...faces.misses, ...lines.largestMissed]) stroke(m.a, m.b, "rgba(230,30,30,0.95)", 5);
   // Flagged walls and lone glass in magenta; a glass tag with no glass near it ringed in magenta.
   for (const w of wallFlags.flagged) stroke(w.a, w.b, "rgba(220,0,200,0.95)", 7);
