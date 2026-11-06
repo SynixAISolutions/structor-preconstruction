@@ -74,6 +74,22 @@ assert.equal(B.scoreWallLines(middle, [{ a: [0, 21], b: [20, 21], thickness: 1 }
 const read = planWalls(drawn, FT).walls;
 assert.equal(B.scoreWallLines(B.lineRuns(drawn, 1.2), read, FT).onWalls, 100, "The app's own reader puts its walls on these faces");
 
+// ── Room shapes ──
+const square = (x, y, s) => [[x, y], [x + s, y], [x + s, y + s], [x, y + s]];
+const shapes = B.scoreRoomShapes([{ room: "A", points: square(0, 0, 10) }, { room: "B", points: square(20, 0, 10) }, { room: "C", points: square(40, 0, 10) }, { room: "D", points: square(60, 0, 5) }, { room: "E", points: square(80, 0, 5) }, { room: "E", points: square(85, 0, 5) }], [
+  square(-0.2, -0.2, 10.4),                    // A: the space fits it, a little over at the wall centerlines
+  [[20, 0], [26, 0], [26, 10], [20, 10]], [[26, 0], [30, 0], [30, 10], [26, 10]], // B: a false line splits it
+  square(38, -2, 30),                          // C: the room runs on into something, with D inside it
+  [[80, 0], [90, 0], [90, 5], [80, 5]],        // E: two zones, one room
+]);
+const shape = room => shapes.rows.find(r => r.room === room);
+assert.deepEqual([shapes.total, shapes.whole], [5, 4], "A, C, D and E are whole; B is split");
+assert(shape("A").covered === 1 && shape("A").outside < 0.1, "A whole room with its wall thickness left over");
+assert.deepEqual([Math.round(shape("B").covered * 100), shape("B").spaceArea, shape("B").splitInto], [60, 60, [40]], "Split: where the rest went");
+assert(shape("C").outside > 0.8, "A room running on into something is seen");
+assert.equal(shape("E").zoneArea, 50, "A room's zones add up");
+assert.equal(B.scoreRoomShapes([{ room: "F", points: square(0, 0, 5) }], []).rows[0].spaceArea, null, "No read space holds it");
+
 // ── Doors ──
 const door = (x, y, width, leaves = 1, kind = "door") => ({ a: [x, y], b: [x + width, y], width, leaves, kind });
 const doors = B.scoreDoors([
@@ -139,7 +155,7 @@ assert.deepEqual([glassScore.runs, glassScore.feet, glassScore.tags, glassScore.
 assert.deepEqual(B.scoreGlass([], [pane], [], []).aloneRuns.map(g => g.feet), [20], "Glass touching nothing is reported");
 
 // ── The report ──
-const level = { sheet: "A1.1", walls: { count: 2, feet: 50 }, wallWeight: 1.2, dimensions: scored, faces: B.scoreDimensionedFaces(faceTicks, runs, walls, FT), lines: onWalls, doors, rooms: B.scoreRooms(tags, closed), wallFlags: beside, glass: glassScore, partitions: [{ a: [0, 0], b: [23, 0] }] };
+const level = { sheet: "A1.1", walls: { count: 2, feet: 50 }, wallWeight: 1.2, dimensions: scored, faces: B.scoreDimensionedFaces(faceTicks, runs, walls, FT), lines: onWalls, doors, rooms: B.scoreRooms(tags, closed), wallFlags: beside, glass: glassScore, partitions: [{ a: [0, 0], b: [23, 0] }, { a: [0, 9], b: [12, 9], kind: "railing" }], columns: [{ at: [5, 5], width: 0.7, depth: 0.7 }] };
 const report = B.scoreboardReport([level, { ...level, sheet: "A1.2", doors: null, rooms: null }]);
 assert(report.includes("| Operable partitions read (no key: check by eye) | 1 (23 ft) | 1 (23 ft) |") && report.includes("- 23 ft at (0, 0) to (23, 0) ft"), "Partitions are listed, to check by eye");
 for (const expected of ["| Check | A1.1 | A1.2 |", "2 of 3 (67%)", "3 of 4 (75%)", "no schedule key", "no room key", "Scheduled doors not found: 103.", "Door widths off:", "104: scheduled 36 in, read 48 in", "Not scored yet"]) assert(report.includes(expected), `The report has: ${expected}`);

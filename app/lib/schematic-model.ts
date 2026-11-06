@@ -9,11 +9,12 @@
 // People can correct the outline and heights afterwards. Pure functions.
 
 import { doorsFromSwings, swingArcs } from "./door-detection";
+import { floorOpenings } from "./floor-openings";
 import { mergeTags, placeTags, tagOvals, type PartitionType, type PlacedTag } from "./tag-placement";
 import type { Curve, Segment } from "./plan-vectors";
 import type { RegisterRow } from "./project-files";
 import { levelRooms, type Room } from "./room-detection";
-import { hexagonTags, planGlazing, planPartitions, planWalls } from "./wall-detection";
+import { hexagonTags, planColumns, planGlazing, planPartitions, planRailings, planWalls } from "./wall-detection";
 
 export type Point = [number, number];
 export type SchematicRoom = { name: string; number: string; at: Point };
@@ -44,19 +45,28 @@ export type SchematicLevel = {
   doors?: SchematicDoor[];
   /** Glass read from the plan's panes (levelGlazing). Missing on models built before 21 Oct. */
   glazing?: SchematicGlazing[];
-  /** Operable partitions read from the plan (levelPartitions). Missing on models built before 6 Nov. */
+  /** Operable partitions and guardrails read from the plan (levelPartitions). Missing on models built before 6 Nov. */
   partitions?: SchematicPartition[];
+  /** Columns read from the plan (levelColumns). Missing on models built before 6 Nov. */
+  columns?: SchematicColumn[];
+  /** Where the plan marks the floor open to the level below (levelOpenings). Missing on models built before 6 Nov. */
+  openings?: Point[];
 };
 /** A run of glass from a to b, in feet; `type` from the plan's storefront/window tags (SF-10). */
 export type SchematicGlazing = { a: Point; b: Point; type?: string | null; excluded?: boolean };
-/** An operable partition from a to b, in feet. Kept apart from the walls: it's bought and built as its own item, and has no wall type. */
-export type SchematicPartition = { a: Point; b: Point; thickness: number; excluded?: boolean };
+/**
+ * An operable partition from a to b, in feet, or a guardrail when `kind` is "railing". Kept apart from the walls: each is bought
+ * and built as its own item, and has no wall type. Both divide the rooms either side.
+ */
+export type SchematicPartition = { a: Point; b: Point; thickness: number; kind?: "railing"; excluded?: boolean };
+/** A column at `at`, in feet, with its sides and the angle of `width` in radians. */
+export type SchematicColumn = { at: Point; width: number; depth: number; angle: number; excluded?: boolean };
 /** A wall centerline from a to b with its thickness, in feet; `type` is its partition type from the plan's tags. */
 export type SchematicWall = { a: Point; b: Point; thickness: number; type?: string | null; /** The type was set by the estimator for untagged walls, not read from a tag. */ typeSet?: boolean; /** Corrected by the estimator on this wall. */ edited?: boolean; /** Marked by the estimator as not a wall (kept so it can be restored). */ excluded?: boolean };
 /**
  * A door opening from a to b, its leaves' hinges and where each leaf swings open to, in feet. "compartment"
- * is a leaf under 2.4 ft (toilet stalls): toilet partitions, not the door schedule. `thickness` is the host
- * wall's, for the header above the opening.
+ * is a toilet stall's door: toilet partitions, not the door schedule. `thickness` is the host wall's, for the
+ * header above the opening.
  */
 export type SchematicDoor = { a: Point; b: Point; width: number; leaves: number; hinges: Point[]; openTo: Point[]; kind: "door" | "compartment"; thickness: number; number?: string | null };
 
@@ -107,9 +117,9 @@ export function levelTags(read: { tile: [number, number, number, number]; tags: 
  * the rooms either side of it have numbers and finishes of their own. Computed, not stored, so a correction
  * reflows the rooms; empty for a level without walls read from its lines.
  */
-export function levelSpaces(level: Pick<SchematicLevel, "walls" | "doors" | "glazing" | "partitions" | "rooms">): Room[] {
+export function levelSpaces(level: Pick<SchematicLevel, "walls" | "doors" | "glazing" | "partitions" | "rooms" | "openings">): Room[] {
   if (!level.walls?.length) return [];
-  return levelRooms({ walls: [...level.walls, ...(level.partitions ?? [])].filter(w => !w.excluded), doors: (level.doors ?? []).filter(d => d.kind === "door"), glazing: (level.glazing ?? []).filter(g => !g.excluded), tags: level.rooms });
+  return levelRooms({ walls: [...level.walls, ...(level.partitions ?? [])].filter(w => !w.excluded), doors: (level.doors ?? []).filter(d => d.kind === "door"), glazing: (level.glazing ?? []).filter(g => !g.excluded), tags: level.rooms, openings: level.openings });
 }
 
 /** `partitionTypes`: the wall types the partition type sheet lists (read by AI), to describe and check wall types. */
@@ -268,11 +278,24 @@ export function levelGlazing(segments: Segment[], page: { widthPt: number; heigh
   return planGlazing(segments, pointsPerFoot, wallWeight, walls.map(w => ({ ...w, weights: [] })), box, leaves, tags).map(g => ({ a: [r1(g.a[0]), r1(g.a[1])] as Point, b: [r1(g.b[0]), r1(g.b[1])] as Point }));
 }
 
-/** A level's operable partitions (wall-detection planPartitions), in the same frame as its walls and glass. */
+/** A level's operable partitions and guardrails (wall-detection planPartitions, planRailings), in the same frame as its walls and glass. */
 export function levelPartitions(segments: Segment[], page: { widthPt: number; heightPt: number }, frame: Frame, outline: Point[], wallWeight: number | null, walls: SchematicWall[], glazing: SchematicGlazing[]): SchematicPartition[] {
-  const { pointsPerFoot, box } = planArea(page, frame, outline);
+  const { pointsPerFoot, box } = planArea(page, frame, outline), hosts = walls.map(w => ({ ...w, weights: [] }));
   const r1 = (n: number) => Math.round(n * 10) / 10 || 0;
-  return planPartitions(segments, pointsPerFoot, wallWeight, walls.map(w => ({ ...w, weights: [] })), glazing, box).map(p => ({ a: [r1(p.a[0]), r1(p.a[1])] as Point, b: [r1(p.b[0]), r1(p.b[1])] as Point, thickness: Math.round(p.thickness * 100) / 100 }));
+  const read = (p: { a: Point; b: Point; thickness: number }) => ({ a: [r1(p.a[0]), r1(p.a[1])] as Point, b: [r1(p.b[0]), r1(p.b[1])] as Point, thickness: Math.round(p.thickness * 100) / 100 });
+  return [...planPartitions(segments, pointsPerFoot, wallWeight, hosts, glazing, box).map(read), ...planRailings(segments, pointsPerFoot, wallWeight, hosts, glazing, box).map(p => ({ ...read(p), kind: "railing" as const }))];
+}
+
+/** Where a level's plan marks its floor open to the level below (lib/floor-openings), in the same frame as its walls. */
+export function levelOpenings(segments: Segment[], page: { widthPt: number; heightPt: number }, frame: Frame, outline: Point[]): Point[] {
+  const { pointsPerFoot, box } = planArea(page, frame, outline), r1 = (n: number) => Math.round(n * 10) / 10 || 0;
+  return floorOpenings(segments, pointsPerFoot, box).map(([x, y]) => [r1(x), r1(y)]);
+}
+
+/** A level's columns (wall-detection planColumns), in the same frame as its walls. */
+export function levelColumns(segments: Segment[], page: { widthPt: number; heightPt: number }, frame: Frame, outline: Point[], wallWeight: number | null, walls: SchematicWall[]): SchematicColumn[] {
+  const { pointsPerFoot, box } = planArea(page, frame, outline), r2 = (n: number) => Math.round(n * 100) / 100 || 0;
+  return planColumns(segments, pointsPerFoot, wallWeight, walls.map(w => ({ ...w, weights: [] })), box).map(c => ({ at: [r2(c.at[0]), r2(c.at[1])] as Point, width: r2(c.width), depth: r2(c.depth), angle: Math.round(c.angle * 1000) / 1000 || 0 }));
 }
 /** Image fraction → feet in a level's frame (to 0.1 ft). */
 export const fromFraction = (frame: Frame, [x, y]: Point): Point => [Math.round(x * frame.widthFeet * 10) / 10, Math.round(y * frame.heightFeet * 10) / 10];
@@ -457,11 +480,19 @@ export function editGlazing(model: SchematicModel, levelId: string, index: numbe
   });
 }
 
-/** The estimator's correction of one operable partition: that it isn't one (kept, so it can be restored). */
+/** The estimator's correction of one operable partition or guardrail: that it isn't one (kept, so it can be restored). */
 export function editPartition(model: SchematicModel, levelId: string, index: number, excluded: boolean): SchematicModel {
   return editLevel(model, levelId, l => {
     if (!l.partitions?.[index]) throw new Error("That partition is no longer in the model.");
     return { ...l, partitions: l.partitions.map((p, i) => i === index ? { ...p, excluded } : p) };
+  });
+}
+
+/** The estimator's correction of one column: that it isn't one (kept, so it can be restored). */
+export function editColumn(model: SchematicModel, levelId: string, index: number, excluded: boolean): SchematicModel {
+  return editLevel(model, levelId, l => {
+    if (!l.columns?.[index]) throw new Error("That column is no longer in the model.");
+    return { ...l, columns: l.columns.map((c, i) => i === index ? { ...c, excluded } : c) };
   });
 }
 

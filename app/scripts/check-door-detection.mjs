@@ -65,6 +65,22 @@ const curtain = D.doorsFromSwings(D.swingArcs([...arc([40, 40], 3, 0, 90), ...ar
 assert.deepEqual(curtain.map(d => [r2(d.a), r2(d.b), Math.round(d.width * 100) / 100, d.leaves, d.host, d.kind]), [[[40, 40], [46, 40], 6, 2, null, "door"]], "A pair in a curtain wall");
 assert.deepEqual(D.doorsFromSwings(D.swingArcs([...arc([40, 40], 3, 0, 90), ...arc([60, 40], 3, 180, 90)], [], PPF), []), [], "Two swings that don't meet are still symbols");
 
+// An accessible stall's door is as wide as a real one. With a stall door beside it and no wall where it closes, it's a stall's door;
+// a door closing onto a wall stays a door, and so does a gate with no stalls beside it.
+const stallRoom = [wall([0, 0], [0, 40]), wall([0, 40], [40, 40])];
+const small = (x, y) => arc([x, y], 2, 0, 90);
+const asDoors = lines => D.doorsFromSwings(D.swingArcs(lines, [], PPF), stallRoom).map(d => [Math.round(d.a[0]), d.kind]).sort((p, q) => p[0] - q[0]);
+const leafOf = (x, y, r0) => leaf([x, y], at([x, y], r0, 90));
+assert.deepEqual(asDoors([...arc([20, 20], 3, 0, 90), ...leafOf(20, 20, 3), ...small(25, 20), ...leafOf(25, 20, 2)]), [[20, "compartment"], [25, "compartment"]], "3 ft, closing onto nothing, a stall door 5 ft away");
+assert.deepEqual(asDoors([...arc([20, 20], 3, 0, 90), ...leafOf(20, 20, 3)]), [[20, "door"]], "With no stall beside it: a gate");
+assert.deepEqual(asDoors([...arc([20, 20], 3, 0, 90), ...leafOf(20, 20, 3), ...small(32, 20), ...leafOf(32, 20, 2)]), [[20, "door"], [32, "compartment"]], "With the nearest stall 12 ft away: a gate");
+const besideWall = D.doorsFromSwings(D.swingArcs([...arc([0.2, 10], 3, 90, 0), ...leaf([0.2, 10], [3.2, 10]), ...small(6, 10), ...leafOf(6, 10, 2)], [], PPF), stallRoom);
+assert.deepEqual(besideWall.map(d => d.kind).sort(), ["compartment", "door"], "Closing onto a wall, even beside a stall: a real door");
+
+// A very dense sheet doesn't overflow the call stack (Project 1's A5.2 has 170,000 lines, and failed on reading its doors).
+const dense = Array.from({ length: 250000 }, (_, i) => seg([(i % 500) * 2, Math.floor(i / 500) * 2], [(i % 500) * 2 + 0.5, Math.floor(i / 500) * 2]));
+assert.deepEqual(D.arcFits(dense, [], PPF), [], "A quarter of a million short lines, and no arcs among them");
+
 // In a level's frame: doors sit on the walls read from the same sheet.
 const sheet = { widthPt: 3024, heightPt: 2160 }, frame = { widthFeet: 336, heightFeet: 240 };
 const planSegs = [...[[0, 10], [13, 20]].flatMap(([x0, x1]) => [seg([x0, 0], [x1, 0], 1.2), seg([x0, 0.4], [x1, 0.4], 1.2)]), ...single];

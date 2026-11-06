@@ -113,7 +113,7 @@ export function schematicGlazing(level: SchematicLevel): THREE.InstancedMesh | n
 export const PARTITION_HEIGHT = 10;
 /** A level's operable partitions (level.partitions) as one instanced mesh of panels from the floor, darker than the walls. */
 export function schematicPartitions(level: SchematicLevel): THREE.InstancedMesh | null {
-  const partitions = (level.partitions ?? []).filter(p => !p.excluded);
+  const partitions = (level.partitions ?? []).filter(p => !p.excluded && p.kind !== "railing");
   if (!partitions.length) return null;
   const height = Math.min(level.height, PARTITION_HEIGHT), place = new THREE.Object3D();
   const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#8f7f9e", roughness: .8 }), partitions.length);
@@ -127,8 +127,42 @@ export function schematicPartitions(level: SchematicLevel): THREE.InstancedMesh 
   mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingBox(); mesh.computeBoundingSphere();
   return mesh;
 }
-/** A level's rooms (levelSpaces) as flat floors just above the slab: named rooms warm, unnamed spaces grey. */
+/** Guardrails are drawn 42" high, the height codes usually call for, until a printed height is read. */
+export const RAILING_HEIGHT = 3.5;
+/** A level's guardrails (level.partitions, kind "railing") as one instanced mesh of thin panels from the floor. */
+export function schematicRailings(level: SchematicLevel): THREE.InstancedMesh | null {
+  const rails = (level.partitions ?? []).filter(p => !p.excluded && p.kind === "railing");
+  if (!rails.length) return null;
+  const height = Math.min(level.height, RAILING_HEIGHT), place = new THREE.Object3D();
+  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#5b6770", roughness: .5 }), rails.length);
+  rails.forEach((r, i) => {
+    const dx = r.b[0] - r.a[0], dy = r.b[1] - r.a[1];
+    place.position.set((r.a[0] + r.b[0]) / 2, height / 2, -(r.a[1] + r.b[1]) / 2);
+    place.rotation.set(0, Math.atan2(dy, dx), 0);
+    place.scale.set(Math.max(Math.hypot(dx, dy), .01), height, Math.max(r.thickness, .05));
+    place.updateMatrix(); mesh.setMatrixAt(i, place.matrix);
+  });
+  mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingBox(); mesh.computeBoundingSphere();
+  return mesh;
+}
+/** A level's columns (level.columns) as one instanced mesh of boxes, full level height. */
+export function schematicColumns(level: SchematicLevel): THREE.InstancedMesh | null {
+  const columns = (level.columns ?? []).filter(c => !c.excluded);
+  if (!columns.length) return null;
+  const place = new THREE.Object3D();
+  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#3f4a4f", roughness: .6 }), columns.length);
+  columns.forEach((c, i) => {
+    place.position.set(c.at[0], level.height / 2, -c.at[1]);
+    place.rotation.set(0, c.angle, 0);
+    place.scale.set(c.width, level.height, c.depth);
+    place.updateMatrix(); mesh.setMatrixAt(i, place.matrix);
+  });
+  mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingBox(); mesh.computeBoundingSphere();
+  return mesh;
+}
+/** A level's rooms (levelSpaces) as flat floors just above the slab: named rooms warm, unnamed spaces grey. A space open to the level below has no floor. */
 export function schematicRoomFloors(rooms: Room[]): THREE.Group | null {
+  rooms = rooms.filter(r => !r.open);
   if (!rooms.length) return null;
   const group = new THREE.Group(), named = new THREE.MeshStandardMaterial({ color: "#e6cf9f", roughness: .9, side: THREE.DoubleSide }), unnamed = new THREE.MeshStandardMaterial({ color: "#cdd8d4", roughness: .9, side: THREE.DoubleSide });
   for (const room of rooms) {
@@ -139,13 +173,16 @@ export function schematicRoomFloors(rooms: Room[]): THREE.Group | null {
   return group;
 }
 /** Count and total centerline length of a level's walls; null for a model built before walls were read. */
-export function wallTotals(level: SchematicLevel): { count: number; feet: number; doors: number | null; compartments: number; glassFeet: number | null; partitionFeet: number | null } | null {
+export function wallTotals(level: SchematicLevel): { count: number; feet: number; doors: number | null; compartments: number; glassFeet: number | null; partitionFeet: number | null; railingFeet: number | null; columns: number | null } | null {
   if (!level.walls) return null;
   const doors = level.doors ?? null, walls = level.walls.filter(w => !w.excluded);
+  const run = (lines: { a: Point; b: Point }[]) => Math.round(lines.reduce((sum, l) => sum + Math.hypot(l.b[0] - l.a[0], l.b[1] - l.a[1]), 0));
   return {
     count: walls.length, feet: Math.round(walls.reduce((sum, w) => sum + Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), 0)),
     doors: doors && doors.filter(d => d.kind === "door").length, compartments: doors?.filter(d => d.kind === "compartment").length ?? 0,
     glassFeet: level.glazing ? Math.round(level.glazing.filter(g => !g.excluded).reduce((sum, g) => sum + Math.hypot(g.b[0] - g.a[0], g.b[1] - g.a[1]), 0)) : null,
-    partitionFeet: level.partitions ? Math.round(level.partitions.filter(p => !p.excluded).reduce((sum, p) => sum + Math.hypot(p.b[0] - p.a[0], p.b[1] - p.a[1]), 0)) : null,
+    partitionFeet: level.partitions ? run(level.partitions.filter(p => !p.excluded && p.kind !== "railing")) : null,
+    railingFeet: level.partitions ? run(level.partitions.filter(p => !p.excluded && p.kind === "railing")) : null,
+    columns: level.columns ? level.columns.filter(c => !c.excluded).length : null,
   };
 }

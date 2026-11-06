@@ -113,7 +113,12 @@ export function planGlazing(segments: Segment[], pointsPerFoot: number, wallWeig
     }
     return out;
   };
-  const glass = panes.flatMap(outsideWalls).filter(g => !alongLeaf(g));
+  // A pane too short to count on its own is glass when its own tag is right beside it (Project 1: SF-24, one 1.7 ft pane between
+  // a door and a wall, which also closes that room). Read apart, so a short pair doesn't take faces from the long ones.
+  const length = (g: Wall) => Math.hypot(g.b[0] - g.a[0], g.b[1] - g.a[1]), mid = (g: Wall): Point => [(g.a[0] + g.b[0]) / 2, (g.a[1] + g.b[1]) / 2];
+  const tagged = !tags.length ? [] : detectWalls(light, { pointsPerFoot, minWeight: 0.3, minThickness: 0.05, maxThickness: 0.15, minOverlap: 1, minLength: GLASS_TAGGED_MIN_FEET })
+    .filter(g => length(g) < 2 && !insideWall(mid(g)) && !panes.some(p => distanceToLine(mid(g), p) < 0.3) && tags.some(t => distanceToLine(t, g) <= GLASS_TAGGED_REACH_FEET));
+  const glass = [...panes.flatMap(outsideWalls), ...tagged].filter(g => !alongLeaf(g));
   // Glass stands in a wall or a run of glass. A short pair of light lines touching nothing, in the middle of a room, is
   // something else (Project 1: a 3 ft pair in a vestibule, which split the room in two).
   const nearLine = (p: Point, l: { a: Point; b: Point }) => distanceToLine(p, l) <= GLASS_REACH_FEET;
@@ -167,12 +172,111 @@ export function planPartitions(segments: Segment[], pointsPerFoot: number, wallW
   return found;
 }
 
+/** A pane shorter than 2 ft needs its own tag within this reach, and to be at least this long. */
+const GLASS_TAGGED_REACH_FEET = 4, GLASS_TAGGED_MIN_FEET = 1.25;
 /** At least this many hexagon tags on a sheet before their absence means anything. */
 const GLASS_TAGS_TO_TRUST = 5;
 /** Storefronts and curtain walls are tagged along their length: glass has a tag within this. */
 const GLASS_TAG_REACH_FEET = 25;
 /** Shorter pieces aren't judged by tags: a corner's small return has no tag of its own, and can be what closes a room. */
 const GLASS_TAG_MIN_FEET = 4;
+
+/** How close an end of a guardrail must come to a wall, glass or another guardrail for it to stand. */
+const RAIL_REACH_FEET = 1.5;
+/** Running this near a wall or glass, light lines belong to it: a lining, a pad, a frame. */
+const RAIL_APART_FEET = 1;
+/** This many other lines beside a pair, within this much, are a pattern: stair treads, paving. */
+const RAIL_PATTERN_LINES = 3, RAIL_PATTERN_FEET = 1.5;
+
+/**
+ * Guardrails: two light lines 1.8-3" apart, 8 ft or longer, standing clear of walls and glass, with an end at one of them or at
+ * another guardrail (Project 1: 0.24 pt lines 1.9" apart around the opening to the lobby below). They keep a corridor apart from
+ * the void beside it. A stair's own rail reads the same way, and is a rail too. Nothing without a wall weight (a scan).
+ */
+export function planRailings(segments: Segment[], pointsPerFoot: number, wallWeight: number | null, walls: Wall[], glazing: { a: Point; b: Point }[], box?: [number, number, number, number]): Wall[] {
+  if (wallWeight === null) return [];
+  const plan = segments.filter(inBox(box));
+  const midpoint = (l: { a: Point; b: Point }): Point => [(l.a[0] + l.b[0]) / 2, (l.a[1] + l.b[1]) / 2];
+  const pairs: Wall[] = [];
+  for (const weight of new Set(plan.map(s => Math.round(s.width * 100) / 100))) {
+    if (weight >= wallWeight - 0.005) continue;
+    const own = plan.filter(s => Math.abs(s.width - weight) < 0.005);
+    for (const pair of detectWalls(own, { pointsPerFoot, minWeight: 0, minThickness: 0.15, maxThickness: 0.25, minOverlap: 1, minLength: 8 })) {
+      const L = dist(pair.a, pair.b), ux = (pair.b[0] - pair.a[0]) / L, uy = (pair.b[1] - pair.a[1]) / L, m = midpoint(pair);
+      if (walls.some(w => distanceToLine(m, w) <= w.thickness / 2 + RAIL_APART_FEET) || glazing.some(g => distanceToLine(m, g) <= RAIL_APART_FEET)) continue;
+      const offsets = new Set<number>();
+      for (const s of own) {
+        const a: Point = [s.a[0] / pointsPerFoot, s.a[1] / pointsPerFoot], b: Point = [s.b[0] / pointsPerFoot, s.b[1] / pointsPerFoot], length = dist(a, b);
+        if (length < 3 || Math.abs((b[0] - a[0]) * uy - (b[1] - a[1]) * ux) / length > 0.02) continue;
+        const c = midpoint({ a, b }), along = (c[0] - pair.a[0]) * ux + (c[1] - pair.a[1]) * uy, across = (c[0] - m[0]) * -uy + (c[1] - m[1]) * ux;
+        if (along > 0 && along < L && Math.abs(across) > pair.thickness / 2 + 0.05 && Math.abs(across) <= RAIL_PATTERN_FEET) offsets.add(Math.round(across * 20));
+      }
+      if (offsets.size < RAIL_PATTERN_LINES) pairs.push(pair);
+    }
+  }
+  const stands = (p: Point, self: Wall) => walls.some(w => distanceToLine(p, w) <= w.thickness / 2 + RAIL_REACH_FEET) || glazing.some(g => distanceToLine(p, g) <= RAIL_REACH_FEET) || pairs.some(o => o !== self && distanceToLine(p, o) <= RAIL_REACH_FEET);
+  return pairs.filter(pair => stands(pair.a, pair) || stands(pair.b, pair));
+}
+
+/** A column: a closed rectangle on the plan with these sides, in feet, no longer than this many times its width. */
+const COLUMN_MIN_FEET = 0.5, COLUMN_MAX_FEET = 1.5, COLUMN_MAX_ASPECT = 2.5;
+/** Columns are cut, so drawn nearly as heavy as walls: at least this share of the wall weight. Room tag boxes are lighter. */
+const COLUMN_WEIGHT_SHARE = 0.7;
+/** The same column drawn more than once, nested or in two pens, counts once: the outermost, within this. */
+const COLUMN_SAME_FEET = 0.75;
+
+/**
+ * Whether a pen is black or a dark grey. A coloured square is another trade's symbol (Project 1: brown floor drains, 0.5 ft square,
+ * in the wall weight), and a pale grey one is drawn from a level above or below. No colour read counts as black.
+ */
+function darkNeutral(color: string): boolean {
+  const hex = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
+  if (!hex) return true;
+  const [r, g, b] = hex.slice(1).map(v => parseInt(v, 16));
+  return Math.max(r, g, b) <= 0x60 && Math.max(r, g, b) - Math.min(r, g, b) <= 8;
+}
+
+/** A column on a plan: its center, its sides in feet, and the angle of `width` in radians. */
+export type Column = { at: Point; width: number; depth: number; angle: number };
+
+/**
+ * Columns: small closed rectangles in the heavy pens, standing clear of the walls (Project 1: steel columns 0.7 ft square at the
+ * gym's grid, and 0.5 ft square posts inside the building). Any rotation, so the skewed wing's columns read too. A column inside a
+ * wall's thickness is part of that wall. Larger furred enclosures aren't read. Nothing without a wall weight (a scan).
+ */
+export function planColumns(segments: Segment[], pointsPerFoot: number, wallWeight: number | null, walls: Wall[], box?: [number, number, number, number]): Column[] {
+  if (wallWeight === null) return [];
+  const minWeight = COLUMN_WEIGHT_SHARE * wallWeight, key = (p: Point) => `${Math.round(p[0] * 2)},${Math.round(p[1] * 2)}`;
+  const near = (p: Point, q: Point) => dist(p, q) < 0.15;
+  const found: Column[] = [];
+  for (const weight of new Set(segments.filter(inBox(box)).map(s => Math.round(s.width * 100) / 100))) {
+    if (weight < minWeight || weight > wallWeight + 0.005) continue;
+    const own = segments.filter(inBox(box)).filter(s => Math.abs(s.width - weight) < 0.005 && darkNeutral(s.color))
+      .map(s => ({ a: [s.a[0] / pointsPerFoot, s.a[1] / pointsPerFoot] as Point, b: [s.b[0] / pointsPerFoot, s.b[1] / pointsPerFoot] as Point }))
+      .filter(s => dist(s.a, s.b) >= COLUMN_MIN_FEET - 0.05 && dist(s.a, s.b) <= COLUMN_MAX_FEET + 0.05);
+    // Corners are found through their neighbours in a half-foot grid, so a corner on a grid line's far side is looked for there too.
+    const at = new Map<string, typeof own>();
+    const add = (p: Point, s: (typeof own)[number]) => { for (const dx of [-0.2, 0, 0.2]) for (const dy of [-0.2, 0, 0.2]) { const k = key([p[0] + dx, p[1] + dy]), list = at.get(k) ?? []; if (!list.includes(s)) list.push(s); at.set(k, list); } };
+    for (const s of own) { add(s.a, s); add(s.b, s); }
+    for (const s of own) for (const t of at.get(key(s.b)) ?? []) {
+      if (t === s || !(near(t.a, s.b) || near(t.b, s.b))) continue;
+      const c = near(t.a, s.b) ? t.b : t.a, w = dist(s.a, s.b), h = dist(c, s.b);
+      if (Math.abs((s.b[0] - s.a[0]) * (c[0] - s.b[0]) + (s.b[1] - s.a[1]) * (c[1] - s.b[1])) / (w * h) > 0.1) continue;
+      if (Math.max(w, h) / Math.min(w, h) > COLUMN_MAX_ASPECT) continue;
+      // The fourth corner, reached along the other two sides.
+      const d: Point = [s.a[0] + c[0] - s.b[0], s.a[1] + c[1] - s.b[1]];
+      const side = (p: Point, q: Point) => (at.get(key(p)) ?? []).some(u => (near(u.a, p) && near(u.b, q)) || (near(u.b, p) && near(u.a, q)));
+      if (!side(c, d) || !side(s.a, d)) continue;
+      const center: Point = [(s.a[0] + c[0]) / 2, (s.a[1] + c[1]) / 2];
+      if (walls.some(v => withinWall(center, v))) continue;
+      found.push({ at: center, width: w, depth: h, angle: Math.atan2(s.b[1] - s.a[1], s.b[0] - s.a[0]) });
+    }
+  }
+  // Each rectangle was found from each of its corners, and a column may be drawn nested: keep the largest in each place.
+  const largestFirst = [...found].sort((p, q) => q.width * q.depth - p.width * p.depth), kept: Column[] = [];
+  for (const c of largestFirst) if (!kept.some(k => dist(k.at, c.at) < COLUMN_SAME_FEET)) kept.push(c);
+  return kept;
+}
 
 /** A hexagon tag on a plan, in page points: SF-12 (storefront) or CW-1 (curtain wall) on Project 1. */
 export type HexagonTag = { at: Point; side: number };

@@ -6,14 +6,18 @@
 
 import type { Point } from "./plan-vectors";
 
-export type Room = { outline: Point[]; area: number; name: string; number: string; at: Point };
-type Line = { a: Point; b: Point };
+/** `open`: a space with no floor of its own, open to the level below (lib/floor-openings). */
+export type Room = { outline: Point[]; area: number; name: string; number: string; at: Point; open?: boolean };
+/** `kind` "railing": a guardrail closes a space, but a wall end never stretches out to reach one. */
+type Line = { a: Point; b: Point; kind?: string };
 
 const dist = (p: Point, q: Point) => Math.hypot(p[0] - q[0], p[1] - q[1]);
 /** The widest gap between two wall ends in line that still closes a space; wider is an opening. */
 const OPENING_FEET = 6;
 /** An end with nothing ahead closes against a line this near: narrower than any door (toilet stalls' 2 ft aside), so not an opening. */
 const BRIDGE_FEET = 2.25;
+/** A wall end stretching further than this across a room has to part two rooms: each side of it at least this many square feet. */
+const LONG_REACH_FEET = 6.5, LONG_REACH_MIN_SIDE = 150;
 export const polygonArea = (pts: Point[]) => Math.abs(signedArea(pts));
 const signedArea = (pts: Point[]) => pts.reduce((s, [x, y], i) => { const [nx, ny] = pts[(i + 1) % pts.length]; return s + x * ny - nx * y; }, 0) / 2;
 
@@ -32,7 +36,7 @@ export function inside(p: Point, poly: Point[]): boolean {
  * one it meets) and splits a line where another ends on it. Faces smaller than `minArea` or narrower on
  * average than `minWidth` (wall thickness slivers, chases) and the unbounded outside are dropped.
  */
-export function faces(drawn: Line[], snap = 0.75, minArea = 15, gap = 10, minWidth = 1.5): Point[][] {
+export function faces(drawn: Line[], snap = 0.75, minArea = 15, gap = 10, minWidth = 1.5, reachMinSide = LONG_REACH_MIN_SIDE): Point[][] {
   const along = (l: Line, p: Point) => { const dx = l.b[0] - l.a[0], dy = l.b[1] - l.a[1], L2 = dx * dx + dy * dy || 1; return ((p[0] - l.a[0]) * dx + (p[1] - l.a[1]) * dy) / L2; };
   const at = (l: Line, t: number): Point => [l.a[0] + t * (l.b[0] - l.a[0]), l.a[1] + t * (l.b[1] - l.a[1])];
   const foot = (l: Line, p: Point) => at(l, Math.max(0, Math.min(1, along(l, p))));
@@ -40,7 +44,7 @@ export function faces(drawn: Line[], snap = 0.75, minArea = 15, gap = 10, minWid
   // opening, a door line shorter than its opening) is extended straight ahead to the first line within `gap`;
   // failing that, bridged to the nearest line within BRIDGE_FEET. So the spaces close.
   // ponytail: O(n²) over a level's few hundred lines; grid-bucket the lines if plans get to thousands.
-  const lines = [...drawn];
+  const lines = [...drawn], longReaches: Line[] = [];
   drawn.forEach((l, i) => {
     const len = dist(l.a, l.b) || 1;
     for (const [p, q] of [[l.a, l.b], [l.b, l.a]] as [Point, Point][]) {
@@ -48,6 +52,7 @@ export function faces(drawn: Line[], snap = 0.75, minArea = 15, gap = 10, minWid
       let ahead: Point | null = null, s = gap, near: Point | null = null, d = Infinity, facing = Infinity;
       for (let j = 0; j < drawn.length; j++) {
         if (j === i) continue;
+        if (drawn[j].kind === "railing" && l.kind !== "railing") continue;
         const m = drawn[j], f = foot(m, p), e = dist(p, f);
         if (e < d) { d = e; near = f; }
         // where the ray p + s·u meets m, or an end of m lying on the ray (a collinear continuation)
@@ -71,9 +76,21 @@ export function faces(drawn: Line[], snap = 0.75, minArea = 15, gap = 10, minWid
       // The first thing ahead is another wall's end, too far to close across: it stays open, even with a wall behind that end.
       if (facing > OPENING_FEET && facing <= s) ahead = null;
       const to = ahead ?? (d <= BRIDGE_FEET ? near : null);
-      if (to) lines.push({ a: p, b: to });
+      if (to) { const reach = { a: p, b: to }; lines.push(reach); if (dist(p, to) > LONG_REACH_FEET) longReaches.push(reach); }
     }
   });
+  const spaces = traceFaces(lines, snap, minArea, minWidth);
+  // A long reach is there to part two rooms across a wide opening. Where it cuts a small piece off a room instead, the wall just
+  // stops (Project 1's 109 and 110: an alcove's wall, reaching 7 ft across the room to the far wall).
+  const onEdge = (p: Point, poly: Point[]) => poly.some((q, k) => dist(foot({ a: q, b: poly[(k + 1) % poly.length] }, p), p) <= snap);
+  const small = longReaches.filter(r => { const mid: Point = [(r.a[0] + r.b[0]) / 2, (r.a[1] + r.b[1]) / 2]; return spaces.some(poly => polygonArea(poly) < reachMinSide && onEdge(mid, poly)); });
+  return small.length ? traceFaces(lines.filter(l => !small.includes(l)), snap, minArea, minWidth) : spaces;
+}
+
+/** The enclosed spaces of lines already extended to meet (faces): splits them where they meet, and traces each face. */
+function traceFaces(lines: Line[], snap: number, minArea: number, minWidth: number): Point[][] {
+  const along = (l: Line, p: Point) => { const dx = l.b[0] - l.a[0], dy = l.b[1] - l.a[1], L2 = dx * dx + dy * dy || 1; return ((p[0] - l.a[0]) * dx + (p[1] - l.a[1]) * dy) / L2; };
+  const at = (l: Line, t: number): Point => [l.a[0] + t * (l.b[0] - l.a[0]), l.a[1] + t * (l.b[1] - l.a[1])];
   // 1. Split every line where it crosses another, and where another's end lies on it (within snap).
   const cuts: number[][] = lines.map(() => [0, 1]);
   for (let i = 0; i < lines.length; i++) for (let j = 0; j < lines.length; j++) {
@@ -145,9 +162,9 @@ export function centroid(pts: Point[]): Point {
  * room tag inside it. A face with no tag keeps an empty name; one with two tags takes the first. Spaces
  * whose walls leave gaps wider than the extension (open to below, an open corridor) are not rooms.
  */
-export function levelRooms(input: { walls: Line[]; doors: Line[]; glazing: Line[]; tags: { name: string; number: string; at: Point }[] }): Room[] {
+export function levelRooms(input: { walls: Line[]; doors: Line[]; glazing: Line[]; tags: { name: string; number: string; at: Point }[]; openings?: Point[] }): Room[] {
   return faces([...input.walls, ...input.glazing, ...input.doors]).map(outline => {
     const tag = input.tags.find(t => inside(t.at, outline)), r1 = (v: number) => Math.round(v * 10) / 10;
-    return { outline: outline.map(([x, y]) => [r1(x), r1(y)] as Point), area: Math.round(polygonArea(outline)), name: tag?.name ?? "", number: tag?.number ?? "", at: (tag?.at ?? centroid(outline)).map(r1) as Point };
+    return { outline: outline.map(([x, y]) => [r1(x), r1(y)] as Point), area: Math.round(polygonArea(outline)), name: tag?.name ?? "", number: tag?.number ?? "", at: (tag?.at ?? centroid(outline)).map(r1) as Point, ...(input.openings?.some(p => inside(p, outline)) ? { open: true } : {}) };
   });
 }

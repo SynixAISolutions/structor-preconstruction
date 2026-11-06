@@ -4,6 +4,7 @@ import { register } from "node:module";
 register("./ts-resolver.mjs", import.meta.url);
 const R = await import("../lib/room-detection.ts");
 const S = await import("../lib/schematic-model.ts");
+const O = await import("../lib/floor-openings.ts");
 
 const line = (a, b) => ({ a, b });
 const box = (x0, y0, x1, y1) => [line([x0, y0], [x1, y0]), line([x1, y0], [x1, y1]), line([x1, y1], [x0, y1]), line([x0, y1], [x0, y0])];
@@ -43,6 +44,42 @@ assert.deepEqual(areas(R.levelRooms({ walls: [...threeSided, line([0, 5.3], [19.
 const corner = gap => R.levelRooms({ walls: [line([0, 0], [20, 0]), line([0, 0], [0, 10]), line([0, 10], [20.1, 10]), line([20.1, gap], [20.1, 10]), line([20.1, gap], [30, gap])], doors: [], glazing: [], tags: [] });
 assert.equal(corner(2).length, 1, "A 2 ft gap at a corner closes");
 assert.equal(corner(3).length, 0, "A 3 ft gap at a corner is an opening");
+
+// A wall end reaching far across a room has to part two rooms. An alcove's wall that just stops doesn't cut the room in two (Project
+// 1's 109 and 110), a short reach still closes, and a long one between two real rooms stays.
+const stub = (size, y, x) => R.levelRooms({ walls: [...box(0, 0, size, size), line([0, y], [x, y])], doors: [], glazing: [], tags: [] });
+assert.deepEqual(areas(stub(20, 4, 12)), [400], "8 ft across, cutting off 80 SF: one room, with the wall stopping in it");
+assert.deepEqual(areas(stub(20, 4, 15)), [80, 320], "5 ft across: a short reach still closes");
+assert.deepEqual(areas(stub(40, 20, 32)), [800, 800], "8 ft across, between two real rooms: two rooms");
+// A guardrail closes a space, but a wall end doesn't stretch out to meet one: that made a false box in Project 1's corridor.
+const niche = { walls: [...box(0, 0, 40, 20), line([20, 0], [20, 6])], doors: [], glazing: [], tags: [] };
+assert.deepEqual(areas(R.levelRooms({ ...niche, walls: [...niche.walls, { ...line([0, 12], [40, 12]), kind: "railing" }] })), [320, 480], "The wall stopping above the rail stays stopped: the space above it isn't split");
+
+// ── Floor openings: a big X in fine dashes marks a floor open to the level below ─────────────────────
+const dashedLine = (a, b, width = 0.24, dash = 0.5, every = 2.4) => {
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1]), ux = (b[0] - a[0]) / L, uy = (b[1] - a[1]) / L, out = [];
+  // A dash's ends are rounded as a drawing's are, so its own angle is rough.
+  const rough = v => Math.round(v * 20) / 20;
+  for (let t = 0; t + dash <= L; t += every) out.push({ a: [rough(a[0] + ux * t) * 9, rough(a[1] + uy * t) * 9], b: [rough(a[0] + ux * (t + dash)) * 9, rough(a[1] + uy * (t + dash)) * 9], width, color: "" });
+  return out;
+};
+const cross = (x, y, w, h, ...rest) => [...dashedLine([x, y], [x + w, y + h], ...rest), ...dashedLine([x + w, y], [x, y + h], ...rest)];
+const round1 = ps => ps.map(p => p.map(v => Math.round(v)));
+assert.deepEqual(round1(O.floorOpenings(cross(10, 10, 60, 40), 9)), [[40, 30]], "An X in fine dashes, found at its crossing");
+assert.deepEqual(round1(O.floorOpenings(cross(10, 10, 60, 100), 9)), [[40, 60]], "A long narrow opening too");
+assert.equal(O.floorOpenings(dashedLine([10, 10], [70, 50]), 9).length, 0, "One dashed line is no X");
+assert.equal(O.floorOpenings(cross(10, 10, 8, 6), 9).length, 0, "A small X isn't read: a shaft or a symbol");
+assert.equal(O.floorOpenings(cross(10, 10, 60, 40, 0.72), 9).length, 0, "In a heavier pen it's something else");
+assert.equal(O.floorOpenings([...dashedLine([10, 40], [70, 40]), ...dashedLine([40, 10], [40, 70])], 9).length, 0, "Dashed lines square to the sheet are hidden lines or grid lines");
+assert.equal(O.floorOpenings([...dashedLine([10, 10], [70, 50]), ...dashedLine([70, 10], [50, 23.3])], 9).length, 0, "Crossing near one end isn't an X");
+assert.equal(O.floorOpenings([{ a: [90, 90], b: [630, 450], width: 0.24, color: "" }, { a: [630, 90], b: [90, 450], width: 0.24, color: "" }], 9).length, 0, "Two solid lines aren't dashes");
+assert.equal(O.floorOpenings(cross(10, 10, 60, 40), 9, [0, 0, 100, 100]).length, 0, "Only the plan's area counts");
+const hatch = [0, 4, 8, 12].flatMap(off => [...dashedLine([10, 10 + off], [70, 50 + off]), ...dashedLine([70, 10 + off], [10, 50 + off])]);
+assert.equal(O.floorOpenings(hatch, 9).length, 0, "Dashed lines repeating side by side are a hatch, however they cross");
+// A space under an X is open, so it has no floor. Its neighbour isn't.
+const overOpening = { walls: [...box(0, 0, 20, 10), line([10, 0], [10, 10])].map(w => ({ ...w, thickness: 0.5 })), doors: [], glazing: [], rooms: [], openings: [[5, 5]] };
+assert.deepEqual(S.levelSpaces(overOpening).map(r => [r.area, !!r.open]).sort((p, q) => Number(p[1]) - Number(q[1])), [[100, false], [100, true]], "Open where the X is");
+assert.deepEqual(S.levelSpaces({ ...overOpening, openings: undefined }).map(r => !!r.open), [false, false], "A model built before openings were read has floors");
 
 // A level's spaces follow the estimator's corrections: a wall marked not a wall merges the two rooms.
 const level = { walls: [...box(0, 0, 20, 10), line([10, 0], [10, 10])].map(w => ({ ...w, thickness: 0.5 })), doors: [], glazing: [], rooms: [] };
