@@ -53,7 +53,15 @@ const shortPane = (x, y, L) => [seg(x, y, x + L, y, 0.72), seg(x, y + 0.08, x + 
 const wallFar = [{ a: [0, 0], b: [40, 0], thickness: 0.5, weights: [1.2] }];
 assert.equal(W.planGlazing(shortPane(10, 20, 3), PPF, 1.2, wallFar).length, 0, "Alone and short: not glass");
 assert.equal(W.planGlazing(shortPane(10, 1, 3), PPF, 1.2, wallFar).length, 1, "Within reach of a wall");
-assert.equal(W.planGlazing(shortPane(10, 20, 8), PPF, 1.2, wallFar).length, 1, "Long enough to stand alone");
+assert.equal(W.planGlazing(shortPane(10, 20, 13), PPF, 1.2, wallFar).length, 0, "A site fence's 6-13 ft lengths, with gaps between them, aren't glass");
+assert.equal(W.planGlazing(shortPane(10, 20, 25), PPF, 1.2, wallFar).length, 1, "Long enough to stand alone");
+// On a sheet that tags its glass, a run far from every tag isn't glass (a roof edge, a coping). A sheet with few tags can't say.
+const tagged = (tags) => W.planGlazing([...shortPane(10, 1, 30), ...shortPane(10, 60, 40)], PPF, 1.2, [...wallFar, { a: [0, 60.5], b: [8, 60.5], thickness: 0.5, weights: [1.2] }, { a: [0, 60.2], b: [10, 60.2], thickness: 0.2, weights: [1.2] }], undefined, [], tags).map(g => r(g.a[1]));
+const fiveTags = [[12, 5], [18, 5], [24, 5], [30, 5], [36, 5]];
+assert.deepEqual(tagged(fiveTags).sort((a, b) => a - b), [1.04], "Five tags by the first run: the far one is dropped");
+assert.equal(tagged(fiveTags.slice(0, 4)).length, 2, "Four tags aren't enough to judge by");
+assert.equal(tagged([]).length, 2, "With no tags, nothing changes");
+assert.equal(W.planGlazing([...shortPane(10, 60, 3), ...shortPane(13.5, 60, 0)], PPF, 1.2, [{ a: [0, 60.5], b: [10, 60.5], thickness: 0.5, weights: [1.2] }], undefined, [], fiveTags).length, 1, "A short return far from every tag stays: it may be what closes a room");
 
 // A short line beside a face doesn't take that stretch of the face from the wall it belongs to: the wall stays whole.
 assert.deepEqual(show(W.detectWalls([seg(0, 0, 8, 0), seg(0, 1.1, 8, 1.1), seg(2, 0.5, 3.8, 0.5)], { pointsPerFoot: PPF, minWeight: 1.1 })), [[0, 0.55, 8, 0.55, 1.1]], "A 1.8 ft line inside a wall isn't a wall, and the wall isn't cut by it");
@@ -92,7 +100,7 @@ assert.equal(W.planWalls(plan, PPF, [0, 0, 45 * PPF, 35 * PPF]).walls.length, 4,
 
 // Glass: a pane is two lines ~1" apart drawn lighter than the walls; never inside a wall or along a door leaf.
 const pane = (x0, x1, y, w = 0.72) => [seg(x0, y, x1, y, w), seg(x0, y + 1 / 12, x1, y + 1 / 12, w)];
-const wallsHere = [{ a: [0, 50.2], b: [20, 50.2], thickness: 0.4, weights: [] }];
+const wallsHere = [{ a: [0, 50.2], b: [29, 50.2], thickness: 0.4, weights: [] }]; // the storefront below stands in this wall
 const glazed = W.planGlazing([
   ...pane(30, 36, 50), ...pane(36.2, 42, 50),   // two bays of one storefront, a mullion between
   ...pane(5, 15, 50.15, 0.48),                    // light layer lines inside the wall

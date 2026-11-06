@@ -236,6 +236,82 @@ export function scoreWallLines(runs: LineRun[], walls: WallLike[], pointsPerFoot
   return { feet: Math.round(feetTotal), onWalls: Math.round(feetOn), largestMissed: missed.sort((p, q) => q.feet - p.feet).slice(0, 25) };
 }
 
+// ── Walls that may not be real ──
+// Nothing on a drawing lists its walls, so there's no key to score false ones against. These are the patterns real walls
+// don't show. A flag means "look at this", not "this is wrong": the report calls them flagged, and a person decides.
+
+export type WallFlag = "touches nothing" | "too thin" | "across a door" | "doubled";
+export type FlaggedWall = { a: Point; b: Point; thickness: number; feet: number; flags: WallFlag[] };
+export type WallFlagScore = { walls: number; feet: number; flaggedFeet: number; flagged: FlaggedWall[] };
+
+/** Thinner than any wall we'd expect: a 2 1/2" stud with one layer of board is over 3". */
+export const THIN_WALL_FEET = 0.25;
+/** An end this close to another wall, glass or door touches it. */
+const TOUCH_FEET = 1.5;
+
+const distanceToLine = (p: Point, l: { a: Point; b: Point }) => {
+  const dx = l.b[0] - l.a[0], dy = l.b[1] - l.a[1], t = Math.max(0, Math.min(1, ((p[0] - l.a[0]) * dx + (p[1] - l.a[1]) * dy) / (dx * dx + dy * dy || 1)));
+  return dist(p, [l.a[0] + t * dx, l.a[1] + t * dy]);
+};
+
+export function scoreWallFlags(walls: WallLike[], doors: { a: Point; b: Point }[], glazing: { a: Point; b: Point }[]): WallFlagScore {
+  const length = (w: { a: Point; b: Point }) => dist(w.a, w.b);
+  const flagged: FlaggedWall[] = [];
+  walls.forEach((w, i) => {
+    const flags: WallFlag[] = [], feet = length(w);
+    if (w.thickness < THIN_WALL_FEET) flags.push("too thin");
+    const others = walls.filter((_, j) => j !== i);
+    const touches = (p: Point) => others.some(o => distanceToLine(p, o) <= o.thickness / 2 + TOUCH_FEET) || [...glazing, ...doors].some(l => distanceToLine(p, l) <= TOUCH_FEET);
+    if (!touches(w.a) && !touches(w.b)) flags.push("touches nothing");
+    // A door's opening is a gap in its wall: a wall running along through the opening's middle wasn't there to be read.
+    const ux = (w.b[0] - w.a[0]) / (feet || 1), uy = (w.b[1] - w.a[1]) / (feet || 1);
+    const across = (p: Point) => Math.abs((p[0] - w.a[0]) * uy - (p[1] - w.a[1]) * ux), along = (p: Point) => (p[0] - w.a[0]) * ux + (p[1] - w.a[1]) * uy;
+    const inDoor = doors.some(d => {
+      const dl = length(d), mid: Point = [(d.a[0] + d.b[0]) / 2, (d.a[1] + d.b[1]) / 2];
+      if (dl < 1 || Math.abs(((d.b[0] - d.a[0]) * uy - (d.b[1] - d.a[1]) * ux) / dl) > Math.sin((5 * Math.PI) / 180)) return false;
+      return across(mid) <= w.thickness / 2 + 0.1 && along(mid) > 0.5 && along(mid) < feet - 0.5;
+    });
+    if (inDoor) flags.push("across a door");
+    // Two walls running side by side and touching, the shorter flagged: one wall read twice would count its quantity twice.
+    const doubled = others.some(o => {
+      const ol = length(o);
+      if (!ol || ol < feet || Math.abs(ux * (o.b[1] - o.a[1]) / ol - uy * (o.b[0] - o.a[0]) / ol) > Math.sin((3 * Math.PI) / 180)) return false;
+      const [t0, t1] = [along(o.a), along(o.b)].sort((x, y) => x - y), overlap = Math.min(feet, t1) - Math.max(0, t0);
+      const apart = (across(o.a) + across(o.b)) / 2;
+      return overlap >= 0.5 * feet && apart <= (w.thickness + o.thickness) / 2 + 1 / 12;
+    });
+    if (doubled) flags.push("doubled");
+    if (flags.length) flagged.push({ a: w.a, b: w.b, thickness: w.thickness, feet: Math.round(feet * 10) / 10, flags });
+  });
+  return {
+    walls: walls.length, feet: Math.round(walls.reduce((t, w) => t + length(w), 0)),
+    flaggedFeet: Math.round(flagged.reduce((t, w) => t + w.feet, 0)), flagged: flagged.sort((p, q) => q.feet - p.feet),
+  };
+}
+
+// ── Glass ──
+
+type GlassRun = { a: Point; b: Point; feet: number };
+export type GlassScore = { runs: number; feet: number; tags: number; tagsNearGlass: number; tagsMissed: Point[]; aloneRuns: GlassRun[] };
+
+/** How far a glass tag may sit from its glass, in feet: they sit beside it, or at the end of a short leader. */
+export const GLASS_TAG_FEET = 10;
+
+/**
+ * Every storefront or curtain wall tag on a plan should have glass near it, which checks glass the reader may have missed.
+ * A run with nothing at either end is the opposite check: glass stands in a wall or beside other glass. Tags in page feet.
+ */
+export function scoreGlass(tags: Point[], glazing: { a: Point; b: Point }[], walls: WallLike[], doors: { a: Point; b: Point }[]): GlassScore {
+  const tagsMissed = tags.filter(t => !glazing.some(g => distanceToLine(t, g) <= GLASS_TAG_FEET));
+  const run = (g: { a: Point; b: Point }): GlassRun => ({ a: g.a, b: g.b, feet: Math.round(dist(g.a, g.b) * 10) / 10 });
+  const aloneRuns = glazing.filter((g, i) => {
+    const others = glazing.filter((_, j) => j !== i);
+    const touches = (p: Point) => walls.some(w => distanceToLine(p, w) <= w.thickness / 2 + TOUCH_FEET) || [...others, ...doors].some(l => distanceToLine(p, l) <= TOUCH_FEET);
+    return !touches(g.a) && !touches(g.b);
+  }).map(run);
+  return { runs: glazing.length, feet: Math.round(glazing.reduce((t, g) => t + dist(g.a, g.b), 0)), tags: tags.length, tagsNearGlass: tags.length - tagsMissed.length, tagsMissed, aloneRuns };
+}
+
 // ── Doors ──
 
 export type ScheduledDoor = { number: string; widthInches: number | null; at: Point | null };
@@ -301,6 +377,7 @@ export function scoreRooms(tags: RoomTag[], lines: { a: Point; b: Point }[]): Ro
 export type LevelScore = {
   sheet: string; walls: { count: number; feet: number }; wallWeight: number | null;
   dimensions: DimensionScore; faces: FaceScore; lines: LineScore; doors: DoorScore | null; rooms: RoomScore | null;
+  wallFlags: WallFlagScore; glass: GlassScore;
 };
 
 const inchesText = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100) / 100} in`);
@@ -319,16 +396,24 @@ export function scoreboardReport(levels: LevelScore[], title = "Drawings to 3D s
   row("Doors read at no scheduled door's position", l => (l.doors ? String(l.doors.extra.length) : "no schedule key"));
   row("Rooms with a position, in a closed space of their own", l => (l.rooms ? pct(l.rooms.closed, l.rooms.total) : "no room key"));
   row("Walls read", l => `${l.walls.count} (${l.walls.feet} ft)`);
+  row("Walls flagged to check by eye", l => `${l.wallFlags.flagged.length} (${l.wallFlags.flaggedFeet} of ${l.wallFlags.feet} ft)`);
+  row("Glass tags with glass within 10 ft", l => pct(l.glass.tagsNearGlass, l.glass.tags));
+  row("Glass read", l => `${l.glass.feet} ft in ${l.glass.runs} runs`);
+  row("Glass runs touching nothing", l => String(l.glass.aloneRuns.length));
   out.push(
     "",
     "A value that disagrees is usually OCR misreading a stray line as a digit: look at its picture in the sheet's strips folder before believing it.",
-    "Not scored yet: walls read that aren't real, wall types, glass, level heights. Stairs, roofs and structure aren't read yet.",
+    "A flagged wall is one to look at, not one known to be wrong: nothing on a drawing lists the walls, so false walls have no key.",
+    "Glass tags only say glass is near. Not scored yet: how much glass is missing between tags, wall types, level heights. Stairs, roofs and structure aren't read yet.",
   );
   for (const l of levels) {
     out.push("", `## ${l.sheet}`, "", `Wall weight ${l.wallWeight ?? "not found"} pt. Median difference from printed dimensions ${inchesText(l.dimensions.medianDiffInches)}; median wall face offset ${inchesText(l.faces.medianOffsetInches)}.`);
     if (l.dimensions.disagree.length) out.push("", `Dimensions that disagree (${l.dimensions.disagree.length}; a misread number or a real difference):`, ...l.dimensions.disagree.slice(0, 30).map(d => `- printed "${d.printed}", measured ${Math.round(d.span.feet * 12 * 10) / 10} in, off by ${Math.round(d.diffInches * 10) / 10} in`));
     if (l.faces.misses.length) out.push("", `Dimensioned faces not on a wall (${l.faces.misses.length}):`, ...l.faces.misses.slice(0, 30).map(m => `- ${Math.round(m.feet)} ft line at (${Math.round(m.a[0])}, ${Math.round(m.a[1])}) to (${Math.round(m.b[0])}, ${Math.round(m.b[1])}) ft`));
     if (l.lines.largestMissed.length) out.push("", "Longest lines in the wall weight not on a wall:", ...l.lines.largestMissed.slice(0, 15).map(m => `- ${m.feet} ft at (${Math.round(m.a[0])}, ${Math.round(m.a[1])}) to (${Math.round(m.b[0])}, ${Math.round(m.b[1])}) ft`));
+    if (l.wallFlags.flagged.length) out.push("", `Walls flagged (${l.wallFlags.flagged.length}):`, ...l.wallFlags.flagged.slice(0, 40).map(w => `- ${w.feet} ft, ${Math.round(w.thickness * 12 * 10) / 10} in thick, at (${Math.round(w.a[0])}, ${Math.round(w.a[1])}) to (${Math.round(w.b[0])}, ${Math.round(w.b[1])}) ft: ${w.flags.join(", ")}`));
+    if (l.glass.tagsMissed.length) out.push("", "Glass tags with no glass near them:", ...l.glass.tagsMissed.map(t => `- at (${Math.round(t[0])}, ${Math.round(t[1])}) ft`));
+    if (l.glass.aloneRuns.length) out.push("", "Glass touching nothing at either end:", ...l.glass.aloneRuns.map(g => `- ${g.feet} ft at (${Math.round(g.a[0])}, ${Math.round(g.a[1])}) to (${Math.round(g.b[0])}, ${Math.round(g.b[1])}) ft`));
     if (l.doors) {
       const missed = l.doors.rows.filter(r => r.status === "missed"), wrong = l.doors.rows.filter(r => r.widthRight === false), unkeyed = l.doors.rows.filter(r => r.status === "not on plan key");
       if (missed.length) out.push("", `Scheduled doors not found: ${missed.map(r => r.number).join(", ")}.`);

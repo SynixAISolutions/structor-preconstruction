@@ -3,7 +3,7 @@ import { register } from "node:module";
 
 register("./ts-resolver.mjs", import.meta.url);
 const B = await import("../lib/model-scoreboard.ts");
-const { planWalls } = await import("../lib/wall-detection.ts");
+const { hexagonTags, planWalls } = await import("../lib/wall-detection.ts");
 
 const FT = 9; // 1/8" = 1'-0": page points per foot
 const line = (x0, y0, x1, y1, width = 0.48) => ({ a: [x0, y0], b: [x1, y1], width, color: "#000" });
@@ -97,8 +97,44 @@ assert.deepEqual([rooms.closed, rooms.shared, rooms.rows[0].sharedWith], [0, 2, 
 rooms = B.scoreRooms([{ number: "3", name: "C", at: [5, 5] }], [{ a: [0, 0], b: [40, 0] }, { a: [40, 0], b: [40, 40] }, { a: [0, 40], b: [40, 40] }]);
 assert.deepEqual([rooms.closed, rooms.open], [0, 1], "A wall left out: the room is open");
 
+// ── Walls that may not be real ──
+const room = [{ a: [0, 0], b: [20, 0], thickness: 0.5 }, { a: [20, 0], b: [20, 15], thickness: 0.5 }, { a: [0, 15], b: [20, 15], thickness: 0.5 }, { a: [0, 0], b: [0, 15], thickness: 0.5 }];
+const flagsOf = (extra, doorsHere = [], glassHere = []) => B.scoreWallFlags([...room, ...extra], doorsHere, glassHere).flagged.map(w => [w.a, w.flags]);
+assert.deepEqual(flagsOf([]), [], "A plain room: nothing flagged");
+assert.deepEqual(flagsOf([{ a: [8, 7], b: [12, 7], thickness: 0.5 }]), [[[8, 7], ["touches nothing"]]], "Alone in the middle of the room");
+assert.deepEqual(flagsOf([{ a: [8, 7], b: [12, 7], thickness: 0.5 }], [{ a: [12.5, 7], b: [15, 7] }]), [], "Touching a door isn't alone");
+assert.deepEqual(flagsOf([{ a: [8, 7], b: [12, 7], thickness: 0.5 }], [], [{ a: [12.5, 7], b: [15, 7] }]), [], "Touching glass isn't alone");
+assert.deepEqual(flagsOf([{ a: [10, 0], b: [10, 15], thickness: 0.2 }]), [[[10, 0], ["too thin"]]]);
+assert.deepEqual(flagsOf([{ a: [10, 0], b: [10, 15], thickness: 0.5 }]), [], "A partition across the room is a wall");
+assert.deepEqual(flagsOf([], [{ a: [8, 0], b: [11, 0] }]).map(([, f]) => f), [["across a door"]], "A wall through a door's opening wasn't there to read");
+assert.deepEqual(flagsOf([], [{ a: [8, 0.3], b: [8, 3] }]), [], "A door at right angles to the wall isn't in it");
+const beside = B.scoreWallFlags([...room, { a: [5, 0.55], b: [15, 0.55], thickness: 0.5 }], [], []);
+assert.deepEqual(beside.flagged.map(w => [w.a, w.flags]), [[[5, 0.55], ["doubled"]]], "Side by side and touching: the shorter is flagged");
+assert.deepEqual(B.scoreWallFlags([...room, { a: [5, 2], b: [15, 2], thickness: 0.5 }, { a: [5, 0.5], b: [5, 2], thickness: 0.5 }], [], []).flagged, [], "With a real gap between them they're two walls");
+assert.deepEqual([beside.walls, beside.feet, beside.flaggedFeet], [5, 80, 10]);
+
+// ── Glass tags ──
+const hexagon = (cx, cy, side, width = 0.24, turn = 0) => Array.from({ length: 6 }, (_, i) => {
+  const at = k => [cx + side * Math.cos(turn + (k * Math.PI) / 3), cy + side * Math.sin(turn + (k * Math.PI) / 3)];
+  return line(...at(i), ...at(i + 1), width);
+});
+const hexFound = hexagonTags([...hexagon(200, 200, 14.3), ...hexagon(400, 200, 14.3, 0.24, 0.5), ...hexagon(600, 200, 14.3), ...hexagon(600, 200, 14.3)], FT);
+assert.deepEqual(hexFound.map(t => [Math.round(t.at[0]), Math.round(t.at[1])]).sort((p, q) => p[0] - q[0]), [[200, 200], [400, 200], [600, 200]], "Upright, turned, and drawn twice: each found once, at its center");
+assert(Math.abs(hexFound[0].side - 14.3) < 0.1);
+const squarish = [line(0, 0, 14, 0), line(14, 0, 14, 14), line(14, 14, 0, 14), line(0, 14, 0, 0)];
+assert.deepEqual(hexagonTags(squarish, FT), [], "A square isn't a hexagon");
+const open = hexagon(200, 200, 14.3).slice(0, 5);
+assert.deepEqual(hexagonTags(open, FT), [], "Nor is five sides of one");
+assert.deepEqual(hexagonTags(hexagon(200, 200, 2), FT), [], "Too small to be a tag");
+
+const pane = { a: [0, 0], b: [20, 0] }, onWall = { a: [20, 0], b: [40, 0], thickness: 0.5 };
+const glassScore = B.scoreGlass([[10, 5], [10, 50]], [pane], [onWall], []);
+assert.deepEqual([glassScore.runs, glassScore.feet, glassScore.tags, glassScore.tagsNearGlass, glassScore.tagsMissed, glassScore.aloneRuns], [1, 20, 2, 1, [[10, 50]], []], "A tag far from any glass is reported; glass running into a wall is fine");
+
+assert.deepEqual(B.scoreGlass([], [pane], [], []).aloneRuns.map(g => g.feet), [20], "Glass touching nothing is reported");
+
 // ── The report ──
-const level = { sheet: "A1.1", walls: { count: 2, feet: 50 }, wallWeight: 1.2, dimensions: scored, faces: B.scoreDimensionedFaces(faceTicks, runs, walls, FT), lines: onWalls, doors, rooms: B.scoreRooms(tags, closed) };
+const level = { sheet: "A1.1", walls: { count: 2, feet: 50 }, wallWeight: 1.2, dimensions: scored, faces: B.scoreDimensionedFaces(faceTicks, runs, walls, FT), lines: onWalls, doors, rooms: B.scoreRooms(tags, closed), wallFlags: beside, glass: glassScore };
 const report = B.scoreboardReport([level, { ...level, sheet: "A1.2", doors: null, rooms: null }]);
 for (const expected of ["| Check | A1.1 | A1.2 |", "2 of 3 (67%)", "3 of 4 (75%)", "no schedule key", "no room key", "Scheduled doors not found: 103.", "Door widths off:", "104: scheduled 36 in, read 48 in", "Not scored yet"]) assert(report.includes(expected), `The report has: ${expected}`);
 assert(B.scoreboardReport([{ ...level, dimensions: B.scoreDimensions([], []), faces: { total: 0, found: 0, medianOffsetInches: null, misses: [] }, lines: { feet: 0, onWalls: 0, largestMissed: [] } }]).includes("none to check"), "Nothing to check isn't a score of zero");
