@@ -143,6 +143,7 @@ for (const plan of plans) {
     roomScore = B.scoreRooms(truth.rooms.map(r => ({ number: r.number, name: r.name, at: feet(r.at) })), [...walls.walls, ...glazing, ...doors]);
   }
   levels.push({ sheet: plan.sheet, walls: { count: walls.walls.length, feet: wallFeet }, wallWeight: walls.weight, dimensions, faces, lines, doors: doorScore, rooms: roomScore });
+  writeFileSync(resolve(out, `${plan.sheet}-model.json`), JSON.stringify({ walls: walls.walls, doors, glazing }));
 
   // The model over the sheet: walls blue, glass teal, doors green; red is what the checks say is missing.
   const OVERLAY = 1.5, shot = createCanvas(Math.ceil(vp.width * OVERLAY), Math.ceil(vp.height * OVERLAY)), g = shot.getContext("2d");

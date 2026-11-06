@@ -39,6 +39,22 @@ const show = walls => walls.map(w => [r(w.a[0]), r(w.a[1]), r(w.b[0]), r(w.b[1])
 // A face drawn in short pieces end to end is one line, so it pairs (a recess's back wall on Project 1, in 0.8-1 ft lengths).
 assert.deepEqual(show(W.detectWalls([seg(0, 0, 6, 0), ...[0, 0.85, 1.7, 2.55, 3.4, 4.25, 5.1].map(x => seg(x, 0.8, x + 0.82, 0.8))], { pointsPerFoot: PPF, minWeight: 1.1 })), [[0, 0.4, 5.92, 0.4, 0.8]], "Pieces 0.03 ft apart make one face");
 assert.equal(W.detectWalls([seg(0, 0, 6, 0), ...[0, 2, 4].map(x => seg(x, 0.8, x + 0.8, 0.8))], { pointsPerFoot: PPF, minWeight: 1.1 }).length, 0, "Pieces with real gaps don't");
+// Two faces of a thin pair stay two faces even when they drift across their group's angle: a skewed wing's glass panes,
+// a fraction of a degree off, 0.08 ft apart and in touching bays. Joining them into one line lost the whole storefront.
+const skew = Math.tan(0.2 * Math.PI / 180), bay = (x, y0) => seg(x, y0 + x * skew, x + 3.9, y0 + (x + 3.9) * skew, 0.72);
+const panes = [0, 4, 8, 12].flatMap(x => [bay(x, 10), bay(x, 10.08)]);
+assert.deepEqual(W.detectWalls(panes, { pointsPerFoot: PPF, minWeight: 0.3, minThickness: 0.05, maxThickness: 0.15, minOverlap: 1, minLength: 2 }).map(w => [r(len(w)), r(w.thickness)]), [[15.9, 0.08]], "One run of glass, the bays joined");
+// Glass passes a pier: only the stretch inside the wall comes out, and glass on both sides stays.
+const pier = [{ a: [10, 10.04], b: [14, 10.04], thickness: 1, weights: [1.2] }];
+const longPane = [seg(0, 10, 24, 10, 0.72), seg(0, 10.08, 24, 10.08, 0.72)];
+assert.deepEqual(W.planGlazing(longPane, PPF, 1.2, pier).map(g => [r(g.a[0]), r(g.b[0])]).sort((p, q) => p[0] - q[0]), [[0, 10], [14.25, 24]], "Cut around the pier, not dropped because its middle is inside");
+// A short pair touching nothing, in the middle of a room, isn't glass. Beside a wall or other glass it is; long, it is alone.
+const shortPane = (x, y, L) => [seg(x, y, x + L, y, 0.72), seg(x, y + 0.08, x + L, y + 0.08, 0.72)];
+const wallFar = [{ a: [0, 0], b: [40, 0], thickness: 0.5, weights: [1.2] }];
+assert.equal(W.planGlazing(shortPane(10, 20, 3), PPF, 1.2, wallFar).length, 0, "Alone and short: not glass");
+assert.equal(W.planGlazing(shortPane(10, 1, 3), PPF, 1.2, wallFar).length, 1, "Within reach of a wall");
+assert.equal(W.planGlazing(shortPane(10, 20, 8), PPF, 1.2, wallFar).length, 1, "Long enough to stand alone");
+
 // A short line beside a face doesn't take that stretch of the face from the wall it belongs to: the wall stays whole.
 assert.deepEqual(show(W.detectWalls([seg(0, 0, 8, 0), seg(0, 1.1, 8, 1.1), seg(2, 0.5, 3.8, 0.5)], { pointsPerFoot: PPF, minWeight: 1.1 })), [[0, 0.55, 8, 0.55, 1.1]], "A 1.8 ft line inside a wall isn't a wall, and the wall isn't cut by it");
 // A long line inside a wall still makes the narrower wall: two real walls either side of a line beat one across it.

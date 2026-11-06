@@ -10,6 +10,8 @@ export type Room = { outline: Point[]; area: number; name: string; number: strin
 type Line = { a: Point; b: Point };
 
 const dist = (p: Point, q: Point) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+/** The widest gap between two wall ends in line that still closes a space; wider is an opening. */
+const OPENING_FEET = 6;
 export const polygonArea = (pts: Point[]) => Math.abs(signedArea(pts));
 const signedArea = (pts: Point[]) => pts.reduce((s, [x, y], i) => { const [nx, ny] = pts[(i + 1) % pts.length]; return s + x * ny - nx * y; }, 0) / 2;
 
@@ -28,7 +30,7 @@ export function inside(p: Point, poly: Point[]): boolean {
  * one it meets) and splits a line where another ends on it. Faces smaller than `minArea` or narrower on
  * average than `minWidth` (wall thickness slivers, chases) and the unbounded outside are dropped.
  */
-export function faces(drawn: Line[], snap = 0.75, minArea = 15, gap = 6, minWidth = 1.5): Point[][] {
+export function faces(drawn: Line[], snap = 0.75, minArea = 15, gap = 10, minWidth = 1.5): Point[][] {
   const along = (l: Line, p: Point) => { const dx = l.b[0] - l.a[0], dy = l.b[1] - l.a[1], L2 = dx * dx + dy * dy || 1; return ((p[0] - l.a[0]) * dx + (p[1] - l.a[1]) * dy) / L2; };
   const at = (l: Line, t: number): Point => [l.a[0] + t * (l.b[0] - l.a[0]), l.a[1] + t * (l.b[1] - l.a[1])];
   const foot = (l: Line, p: Point) => at(l, Math.max(0, Math.min(1, along(l, p))));
@@ -41,7 +43,7 @@ export function faces(drawn: Line[], snap = 0.75, minArea = 15, gap = 6, minWidt
     const len = dist(l.a, l.b) || 1;
     for (const [p, q] of [[l.a, l.b], [l.b, l.a]] as [Point, Point][]) {
       const u: Point = [(p[0] - q[0]) / len, (p[1] - q[1]) / len];
-      let ahead: Point | null = null, s = gap, near: Point | null = null, d = Infinity;
+      let ahead: Point | null = null, s = gap, near: Point | null = null, d = Infinity, facing = Infinity;
       for (let j = 0; j < drawn.length; j++) {
         if (j === i) continue;
         const m = drawn[j], f = foot(m, p), e = dist(p, f);
@@ -53,12 +55,19 @@ export function faces(drawn: Line[], snap = 0.75, minArea = 15, gap = 6, minWidt
           const tol = snap / (Math.hypot(mx, my) || 1);
           if (t > 0 && t < s && v > -tol && v < 1 + tol) { s = t; ahead = [p[0] + t * u[0], p[1] + t * u[1]]; }
         }
+        // A wall end facing another in line across a gap is an opening: it only closes across a door's width (OPENING_FEET),
+        // where an end running into a line across its way can reach further.
+        const inLine = Math.abs(den) <= 0.05 * (Math.hypot(mx, my) || 1);
         for (const e2 of [m.a, m.b]) {
           const t = (e2[0] - p[0]) * u[0] + (e2[1] - p[1]) * u[1], off = Math.abs((e2[0] - p[0]) * u[1] - (e2[1] - p[1]) * u[0]);
-          if (t > 0 && t < s && off <= snap) { s = t; ahead = e2; }
+          if (t <= 0 || off > snap) continue;
+          if (inLine) facing = Math.min(facing, t);
+          if (t < (inLine ? Math.min(s, OPENING_FEET) : s)) { s = t; ahead = e2; }
         }
       }
       if (d <= snap) continue;
+      // The first thing ahead is another wall's end, too far to close across: it stays open, even with a wall behind that end.
+      if (facing > OPENING_FEET && facing <= s) ahead = null;
       const to = ahead ?? (d <= 2 * snap ? near : null);
       if (to) lines.push({ a: p, b: to });
     }

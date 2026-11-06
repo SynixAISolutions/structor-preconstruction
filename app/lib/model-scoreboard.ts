@@ -225,7 +225,13 @@ export function scoreWallLines(runs: LineRun[], walls: WallLike[], pointsPerFoot
     if (dist(run.a, run.b) < 2 * pointsPerFoot) continue;
     const feet = toFeet(run, pointsPerFoot), { length, hits } = faceOf(feet, walls, FACE_REACH_FEET), on = Math.min(length, covered(hits));
     feetTotal += length; feetOn += on;
-    if (length - on >= 2) missed.push({ ...feet, feet: Math.round((length - on) * 10) / 10 });
+    // Only the stretches off a wall, so a long line missed for a few feet doesn't read as missed all along.
+    const at = (t: number): Point => [feet.a[0] + (feet.b[0] - feet.a[0]) * t / length, feet.a[1] + (feet.b[1] - feet.a[1]) * t / length];
+    let from = 0;
+    for (const { s0, s1 } of [...hits, { s0: length, s1: length }].sort((p, q) => p.s0 - q.s0)) {
+      if (s0 - from >= 2) missed.push({ a: at(from), b: at(s0), feet: Math.round((s0 - from) * 10) / 10 });
+      from = Math.max(from, s1);
+    }
   }
   return { feet: Math.round(feetTotal), onWalls: Math.round(feetOn), largestMissed: missed.sort((p, q) => q.feet - p.feet).slice(0, 25) };
 }

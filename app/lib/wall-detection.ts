@@ -86,8 +86,37 @@ export function planGlazing(segments: Segment[], pointsPerFoot: number, wallWeig
     const L = Math.hypot(o[0] - h[0], o[1] - h[1]) || 1, ux = (o[0] - h[0]) / L, uy = (o[1] - h[1]) / L;
     return [g.a, g.b].every(p => { const t = (p[0] - h[0]) * ux + (p[1] - h[1]) * uy; return t >= -0.5 && t <= L + 0.5 && Math.abs((p[0] - h[0]) * uy - (p[1] - h[1]) * ux) <= 0.4; });
   });
-  return panes.filter(g => !insideWall([(g.a[0] + g.b[0]) / 2, (g.a[1] + g.b[1]) / 2]) && !alongLeaf(g));
+  // A run of glass can pass a wall or a pier: only the stretch inside the wall comes out, and what's left stays if it's long enough.
+  const outsideWalls = (g: Wall): Wall[] => {
+    const L = Math.hypot(g.b[0] - g.a[0], g.b[1] - g.a[1]), at = (t: number): Point => [g.a[0] + (g.b[0] - g.a[0]) * t / L, g.a[1] + (g.b[1] - g.a[1]) * t / L];
+    const out: Wall[] = [];
+    let start: number | null = null;
+    const STEP = 0.25;
+    for (let t = 0; ; t = Math.min(L, t + STEP)) {
+      const inWall = insideWall(at(t));
+      if (!inWall && start === null) start = t;
+      if ((inWall || t >= L) && start !== null) {
+        if (t - start >= 2) out.push({ ...g, a: at(start), b: at(t) });
+        start = null;
+      }
+      if (t >= L) break;
+    }
+    return out;
+  };
+  const glass = panes.flatMap(outsideWalls).filter(g => !alongLeaf(g));
+  // Glass stands in a wall or a run of glass. A short pair of light lines touching nothing, in the middle of a room, is
+  // something else (Project 1: a 3 ft pair in a vestibule, which split the room in two).
+  const nearLine = (p: Point, l: { a: Point; b: Point }) => {
+    const dx = l.b[0] - l.a[0], dy = l.b[1] - l.a[1], t = Math.max(0, Math.min(1, ((p[0] - l.a[0]) * dx + (p[1] - l.a[1]) * dy) / (dx * dx + dy * dy || 1)));
+    return Math.hypot(p[0] - (l.a[0] + t * dx), p[1] - (l.a[1] + t * dy)) <= GLASS_REACH_FEET;
+  };
+  return glass.filter(g => Math.hypot(g.b[0] - g.a[0], g.b[1] - g.a[1]) >= GLASS_ALONE_FEET || [g.a, g.b].some(p => walls.some(w => nearLine(p, w)) || glass.some(o => o !== g && nearLine(p, o))));
 }
+
+/** How close glass must come to a wall or other glass to stand in it. */
+const GLASS_REACH_FEET = 2;
+/** Glass this long is glass even standing alone (a freestanding storefront). */
+const GLASS_ALONE_FEET = 6;
 
 /**
  * Extends wall ends to meet the wall they run into, so corners and tees close: an end moves to the
@@ -151,21 +180,16 @@ function withoutDashes(lines: Line[]): Line[] {
  * a recess's back wall in 0.8-1 ft lengths, 0.04 ft apart) could otherwise never pair.
  */
 function joinTouching(lines: Line[]): Line[] {
-  const sorted = [...lines].sort((p, q) => p.weight - q.weight || p.offset - q.offset);
-  const out: Line[] = [];
-  for (let i = 0; i < sorted.length;) {
-    let j = i + 1;
-    while (j < sorted.length && Math.abs(sorted[j].weight - sorted[i].weight) < 0.005 && sorted[j].offset - sorted[j - 1].offset < 0.03) j++;
-    const pieces = sorted.slice(i, j).sort((p, q) => p.s0 - q.s0);
-    let run = { ...pieces[0] };
-    for (const p of pieces.slice(1)) {
-      if (p.s0 - run.s1 <= 0.1) run.s1 = Math.max(run.s1, p.s1);
-      else { out.push(run); run = { ...p }; }
-    }
-    out.push(run);
-    i = j;
+  // Each piece is compared with the end of the run it would extend. A line a fraction of a degree off its group's angle
+  // drifts across the group as it runs, so a whole group by offset could take in both faces of a thin pair (glass panes).
+  const runs: { line: Line; lastOffset: number; total: number; length: number }[] = [];
+  for (const l of [...lines].sort((p, q) => p.s0 - q.s0)) {
+    const run = runs.find(r => Math.abs(r.line.weight - l.weight) < 0.005 && Math.abs(r.lastOffset - l.offset) < 0.03 && l.s0 - r.line.s1 <= 0.1);
+    const length = l.s1 - l.s0;
+    if (!run) { runs.push({ line: { ...l }, lastOffset: l.offset, total: l.offset * length, length }); continue; }
+    run.line.s1 = Math.max(run.line.s1, l.s1); run.lastOffset = l.offset; run.total += l.offset * length; run.length += length;
   }
-  return out;
+  return runs.map(r => ({ ...r.line, offset: r.length ? r.total / r.length : r.line.offset }));
 }
 
 /** How many times the pairing is redone after giving back faces held by pairs too short to be walls. */

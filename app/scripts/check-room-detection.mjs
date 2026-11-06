@@ -21,6 +21,9 @@ assert.deepEqual(areas(R.levelRooms({ walls: [...box(0, 0, 20, 10), ...partition
 assert.deepEqual(areas(R.levelRooms({ walls: [...box(0, 0, 20, 10), ...partition], doors: [], glazing: [], tags: [] })), [100, 100], "A 3 ft gap in line closes");
 // An opening wider than the extension leaves the spaces joined: one room, not a guess.
 assert.deepEqual(areas(R.levelRooms({ walls: [...box(0, 0, 40, 10), line([20, 0], [20, 1]), line([20, 9], [20, 10])], doors: [], glazing: [], tags: [] })), [400], "An 8 ft opening is open");
+// A wall end that runs into a line ahead closes across a longer stretch than two ends facing each other do: 9 ft here.
+assert.deepEqual(areas(R.levelRooms({ walls: [...box(0, 0, 40, 10), line([20, 0], [20, 1])], doors: [], glazing: [], tags: [] })), [200, 200], "A wall stopping 9 ft short of the wall ahead closes");
+assert.deepEqual(areas(R.levelRooms({ walls: [...box(0, 0, 60, 30), line([30, 0], [30, 1])], doors: [], glazing: [], tags: [] })), [1800], "One stopping 29 ft short doesn't");
 // Glass encloses like a wall; a drawing with an open side encloses nothing.
 assert.deepEqual(areas(R.levelRooms({ walls: box(0, 0, 20, 10).slice(0, 3), doors: [], glazing: [line([0, 10], [0, 0])], tags: [] })), [200]);
 assert.deepEqual(R.levelRooms({ walls: box(0, 0, 20, 10).slice(0, 3), doors: [], glazing: [], tags: [] }), []);
