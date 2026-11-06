@@ -77,6 +77,10 @@ assert.deepEqual(asDoors([...arc([20, 20], 3, 0, 90), ...leafOf(20, 20, 3), ...s
 const besideWall = D.doorsFromSwings(D.swingArcs([...arc([0.2, 10], 3, 90, 0), ...leaf([0.2, 10], [3.2, 10]), ...small(6, 10), ...leafOf(6, 10, 2)], [], PPF), stallRoom);
 assert.deepEqual(besideWall.map(d => d.kind).sort(), ["compartment", "door"], "Closing onto a wall, even beside a stall: a real door");
 
+// A very dense sheet doesn't overflow the call stack (Project 1's A5.2 has 170,000 lines, and failed on reading its doors).
+const dense = Array.from({ length: 250000 }, (_, i) => seg([(i % 500) * 2, Math.floor(i / 500) * 2], [(i % 500) * 2 + 0.5, Math.floor(i / 500) * 2]));
+assert.deepEqual(D.arcFits(dense, [], PPF), [], "A quarter of a million short lines, and no arcs among them");
+
 // In a level's frame: doors sit on the walls read from the same sheet.
 const sheet = { widthPt: 3024, heightPt: 2160 }, frame = { widthFeet: 336, heightFeet: 240 };
 const planSegs = [...[[0, 10], [13, 20]].flatMap(([x0, x1]) => [seg([x0, 0], [x1, 0], 1.2), seg([x0, 0.4], [x1, 0.4], 1.2)]), ...single];

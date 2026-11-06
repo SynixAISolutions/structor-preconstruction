@@ -74,6 +74,8 @@ assert.equal(O.floorOpenings([...dashedLine([10, 40], [70, 40]), ...dashedLine([
 assert.equal(O.floorOpenings([...dashedLine([10, 10], [70, 50]), ...dashedLine([70, 10], [50, 23.3])], 9).length, 0, "Crossing near one end isn't an X");
 assert.equal(O.floorOpenings([{ a: [90, 90], b: [630, 450], width: 0.24, color: "" }, { a: [630, 90], b: [90, 450], width: 0.24, color: "" }], 9).length, 0, "Two solid lines aren't dashes");
 assert.equal(O.floorOpenings(cross(10, 10, 60, 40), 9, [0, 0, 100, 100]).length, 0, "Only the plan's area counts");
+const hatch = [0, 4, 8, 12].flatMap(off => [...dashedLine([10, 10 + off], [70, 50 + off]), ...dashedLine([70, 10 + off], [10, 50 + off])]);
+assert.equal(O.floorOpenings(hatch, 9).length, 0, "Dashed lines repeating side by side are a hatch, however they cross");
 // A space under an X is open, so it has no floor. Its neighbour isn't.
 const overOpening = { walls: [...box(0, 0, 20, 10), line([10, 0], [10, 10])].map(w => ({ ...w, thickness: 0.5 })), doors: [], glazing: [], rooms: [], openings: [[5, 5]] };
 assert.deepEqual(S.levelSpaces(overOpening).map(r => [r.area, !!r.open]).sort((p, q) => Number(p[1]) - Number(q[1])), [[100, false], [100, true]], "Open where the X is");

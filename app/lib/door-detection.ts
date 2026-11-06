@@ -66,7 +66,9 @@ export function arcFits(segments: Segment[], curves: Curve[], pointsPerFoot: num
   // A line drawn twice (overlapping layers) would make every joint a crossing: keep one copy.
   const seen = new Set<string>();
   const unique = pieces.filter(([a, b]) => { const k = [key(a), key(b)].sort().join("|"); return seen.has(k) ? false : (seen.add(k), true); });
-  pieces.length = 0; pieces.push(...unique);
+  // Not pushed back with a spread: a dense sheet has more short lines than a call can take arguments (Project 1's A5.2, 170,000 lines).
+  pieces.length = 0;
+  for (const piece of unique) pieces.push(piece);
   const at = new Map<string, number[]>();
   pieces.forEach(([a, b], i) => { for (const p of [a, b]) { const k = key(p); at.set(k, [...(at.get(k) ?? []), i]); } });
   const used = new Array(pieces.length).fill(false);
