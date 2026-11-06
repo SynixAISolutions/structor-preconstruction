@@ -119,7 +119,7 @@ for (const plan of plans) {
   // The strips OCR couldn't read or that disagree, to see whether the reading or the drawing is at fault.
   const stripsDir = resolve(out, `${plan.sheet}-strips`);
   mkdirSync(stripsDir, { recursive: true });
-  spans.forEach((span, i) => {
+  if (!args["skip-ocr"]) spans.forEach((span, i) => {
     const value = B.parseDimension(printed[i]);
     if (value !== null && Math.abs(value - span.feet) * 12 <= 0.5) return;
     if (i < 200) writeFileSync(resolve(stripsDir, `${String(i).padStart(3, "0")}-${value === null ? "unread" : "disagree"}-${Math.round(span.feet * 12)}in.png`), strips[i]);

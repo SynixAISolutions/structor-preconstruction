@@ -36,6 +36,14 @@ const len = w => Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]);
 const r = n => Math.round(n * 100) / 100;
 const show = walls => walls.map(w => [r(w.a[0]), r(w.a[1]), r(w.b[0]), r(w.b[1]), r(w.thickness)]).sort((p, q) => p[1] - q[1] || p[0] - q[0]);
 
+// A face drawn in short pieces end to end is one line, so it pairs (a recess's back wall on Project 1, in 0.8-1 ft lengths).
+assert.deepEqual(show(W.detectWalls([seg(0, 0, 6, 0), ...[0, 0.85, 1.7, 2.55, 3.4, 4.25, 5.1].map(x => seg(x, 0.8, x + 0.82, 0.8))], { pointsPerFoot: PPF, minWeight: 1.1 })), [[0, 0.4, 5.92, 0.4, 0.8]], "Pieces 0.03 ft apart make one face");
+assert.equal(W.detectWalls([seg(0, 0, 6, 0), ...[0, 2, 4].map(x => seg(x, 0.8, x + 0.8, 0.8))], { pointsPerFoot: PPF, minWeight: 1.1 }).length, 0, "Pieces with real gaps don't");
+// A short line beside a face doesn't take that stretch of the face from the wall it belongs to: the wall stays whole.
+assert.deepEqual(show(W.detectWalls([seg(0, 0, 8, 0), seg(0, 1.1, 8, 1.1), seg(2, 0.5, 3.8, 0.5)], { pointsPerFoot: PPF, minWeight: 1.1 })), [[0, 0.55, 8, 0.55, 1.1]], "A 1.8 ft line inside a wall isn't a wall, and the wall isn't cut by it");
+// A long line inside a wall still makes the narrower wall: two real walls either side of a line beat one across it.
+assert.deepEqual(show(W.detectWalls([seg(0, 0, 8, 0), seg(0, 0.5, 8, 0.5)], { pointsPerFoot: PPF, minWeight: 1.1 })), [[0, 0.25, 8, 0.25, 0.5]]);
+
 // A 14" exterior wall with its inner layers in a lighter weight: one wall, faces only.
 assert.deepEqual(show(W.detectWalls([seg(0, 0, 40, 0), seg(0, 14 / 12, 40, 14 / 12), seg(0, 0.4, 40, 0.4, 0.48), seg(0, 0.6, 40, 0.6, 0.48)], { pointsPerFoot: PPF, minWeight: 1.1 })), [[0, 0.58, 40, 0.58, 1.17]]);
 // A heavy dashed overhead line beside a wall (Jelleff: 1 ft dashes, 0.5 ft gaps, 1.8 pt) is not a face: no thin false

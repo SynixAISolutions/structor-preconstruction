@@ -146,6 +146,31 @@ function withoutDashes(lines: Line[]): Line[] {
   return lines.filter(l => !dashes.has(l));
 }
 
+/**
+ * Pieces of one straight line drawn end to end, as one line. A face drawn in pieces shorter than minOverlap (Project 1:
+ * a recess's back wall in 0.8-1 ft lengths, 0.04 ft apart) could otherwise never pair.
+ */
+function joinTouching(lines: Line[]): Line[] {
+  const sorted = [...lines].sort((p, q) => p.weight - q.weight || p.offset - q.offset);
+  const out: Line[] = [];
+  for (let i = 0; i < sorted.length;) {
+    let j = i + 1;
+    while (j < sorted.length && Math.abs(sorted[j].weight - sorted[i].weight) < 0.005 && sorted[j].offset - sorted[j - 1].offset < 0.03) j++;
+    const pieces = sorted.slice(i, j).sort((p, q) => p.s0 - q.s0);
+    let run = { ...pieces[0] };
+    for (const p of pieces.slice(1)) {
+      if (p.s0 - run.s1 <= 0.1) run.s1 = Math.max(run.s1, p.s1);
+      else { out.push(run); run = { ...p }; }
+    }
+    out.push(run);
+    i = j;
+  }
+  return out;
+}
+
+/** How many times the pairing is redone after giving back faces held by pairs too short to be walls. */
+const PAIRING_PASSES = 4;
+
 export function detectWalls(segments: Segment[], opts: WallOptions): Wall[] {
   const { pointsPerFoot, minWeight, minThickness = 0.2, maxThickness = 2, minOverlap = 1, minLength = 2 } = opts;
   const ft = (p: Point): Point => [p[0] / pointsPerFoot, p[1] / pointsPerFoot];
@@ -169,7 +194,7 @@ export function detectWalls(segments: Segment[], opts: WallOptions): Wall[] {
 
   const walls: Wall[] = [];
   for (const { angle, lines: all } of groups.values()) {
-    const f = frame(angle), lines = withoutDashes(all);
+    const f = frame(angle), lines = joinTouching(withoutDashes(all));
     lines.sort((p, q) => p.offset - q.offset);
     // Candidate face pairs: parallel lines a wall's thickness apart, running beside each other.
     const candidates: { i: number; j: number; gap: number; s0: number; s1: number }[] = [];
@@ -184,40 +209,53 @@ export function detectWalls(segments: Segment[], opts: WallOptions): Wall[] {
     // Narrowest first, and a stretch of line is a face of one wall only (a face has the room on its other
     // side): two 4" walls with a chase between them are two walls, not a third one across the chase.
     candidates.sort((p, q) => p.gap - q.gap);
-    const claimed: [number, number][][] = lines.map(() => []);
-    const free = (k: number, s0: number, s1: number): [number, number][] => {
-      let parts: [number, number][] = [[s0, s1]];
-      for (const [c0, c1] of claimed[k]) parts = parts.flatMap(([a, b]): [number, number][] => c1 <= a || c0 >= b ? [[a, b]] : [[a, Math.max(a, c0)], [Math.min(b, c1), b]].filter(([x, y]) => y - x > 1e-6) as [number, number][]);
+    const minus = (parts: [number, number][], taken: [number, number][]) => {
+      for (const [c0, c1] of taken) parts = parts.flatMap(([a, b]): [number, number][] => c1 <= a || c0 >= b ? [[a, b]] : [[a, Math.max(a, c0)], [Math.min(b, c1), b]].filter(([x, y]) => y - x > 1e-6) as [number, number][]);
       return parts;
     };
-    type Piece = { center: number; thickness: number; s0: number; s1: number; weights: number[] };
-    const pieces: Piece[] = [];
-    for (const c of candidates) {
-      for (const [a, b] of free(c.i, c.s0, c.s1).flatMap(([a, b]) => free(c.j, a, b))) {
-        if (b - a < minOverlap) continue;
-        claimed[c.i].push([a, b]); claimed[c.j].push([a, b]);
-        pieces.push({ center: (lines[c.i].offset + lines[c.j].offset) / 2, thickness: c.gap, s0: a, s1: b, weights: [lines[c.i].weight, lines[c.j].weight] });
-      }
-    }
-    // Join pieces on the same centerline and thickness that touch or nearly touch.
-    pieces.sort((p, q) => p.center - q.center || p.s0 - q.s0);
-    const used = new Array(pieces.length).fill(false);
-    for (let i = 0; i < pieces.length; i++) {
-      if (used[i]) continue;
-      const run = { ...pieces[i], weights: [...pieces[i].weights] };
-      used[i] = true;
-      for (let grew = true; grew;) {
-        grew = false;
-        for (let j = 0; j < pieces.length; j++) {
-          const q = pieces[j];
-          if (used[j] || Math.abs(q.center - run.center) > 0.15 || Math.abs(q.thickness - run.thickness) > 0.1) continue;
-          if (q.s0 > run.s1 + 0.5 || q.s1 < run.s0 - 0.5) continue;
-          run.s0 = Math.min(run.s0, q.s0); run.s1 = Math.max(run.s1, q.s1); run.weights.push(...q.weights);
-          used[j] = true; grew = true;
+    type Piece = { pair: string; center: number; thickness: number; s0: number; s1: number; weights: number[] };
+    type Run = Omit<Piece, "pair"> & { pieces: Piece[] };
+    // A pair too short to be a wall (a stair's edge beside a face, a jamb) mustn't keep the face from its real partner: its
+    // stretch is given back and the pairing done again without it.
+    const refused = new Map<string, [number, number][]>();
+    let runs: Run[] = [];
+    for (let pass = 0; pass < PAIRING_PASSES; pass++) {
+      const claimed: [number, number][][] = lines.map(() => []);
+      const pieces: Piece[] = [];
+      for (const c of candidates) {
+        const pair = `${c.i}:${c.j}`;
+        const open = minus(minus(minus([[c.s0, c.s1]], refused.get(pair) ?? []), claimed[c.i]), claimed[c.j]);
+        for (const [a, b] of open) {
+          if (b - a < minOverlap) continue;
+          claimed[c.i].push([a, b]); claimed[c.j].push([a, b]);
+          pieces.push({ pair, center: (lines[c.i].offset + lines[c.j].offset) / 2, thickness: c.gap, s0: a, s1: b, weights: [lines[c.i].weight, lines[c.j].weight] });
         }
       }
-      if (run.s1 - run.s0 >= minLength) walls.push({ a: f.point(run.s0, run.center), b: f.point(run.s1, run.center), thickness: run.thickness, weights: [...new Set(run.weights)].sort((x, y) => x - y) });
+      // Join pieces on the same centerline and thickness that touch or nearly touch.
+      pieces.sort((p, q) => p.center - q.center || p.s0 - q.s0);
+      const used = new Array(pieces.length).fill(false);
+      runs = [];
+      for (let i = 0; i < pieces.length; i++) {
+        if (used[i]) continue;
+        const run: Run = { ...pieces[i], weights: [...pieces[i].weights], pieces: [pieces[i]] };
+        used[i] = true;
+        for (let grew = true; grew;) {
+          grew = false;
+          for (let j = 0; j < pieces.length; j++) {
+            const q = pieces[j];
+            if (used[j] || Math.abs(q.center - run.center) > 0.15 || Math.abs(q.thickness - run.thickness) > 0.1) continue;
+            if (q.s0 > run.s1 + 0.5 || q.s1 < run.s0 - 0.5) continue;
+            run.s0 = Math.min(run.s0, q.s0); run.s1 = Math.max(run.s1, q.s1); run.weights.push(...q.weights); run.pieces.push(q);
+            used[j] = true; grew = true;
+          }
+        }
+        runs.push(run);
+      }
+      const tooShort = runs.filter(r => r.s1 - r.s0 < minLength);
+      if (!tooShort.length) break;
+      for (const r of tooShort) for (const p of r.pieces) refused.set(p.pair, [...(refused.get(p.pair) ?? []), [p.s0, p.s1]]);
     }
+    for (const run of runs) if (run.s1 - run.s0 >= minLength) walls.push({ a: f.point(run.s0, run.center), b: f.point(run.s1, run.center), thickness: run.thickness, weights: [...new Set(run.weights)].sort((x, y) => x - y) });
   }
   return walls;
 }
