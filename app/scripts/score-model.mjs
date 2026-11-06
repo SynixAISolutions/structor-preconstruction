@@ -100,7 +100,8 @@ for (const plan of plans) {
   context.fillStyle = "#fff"; context.fillRect(0, 0, raster.width, raster.height);
   await page.render({ canvas: raster, canvasContext: context, viewport: page.getViewport({ scale }) }).promise;
   const printed = [], strips = [];
-  for (let i = 0; i < spans.length; i++) {
+  // --skip-ocr yes leaves the printed values out, for a quick score after a change to the reader.
+  for (let i = 0; i < spans.length && !args["skip-ocr"]; i++) {
     const image = stripImage(raster, spans[i]);
     const { data } = await worker.recognize(image);
     printed.push(data.text.trim());
