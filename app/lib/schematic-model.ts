@@ -13,7 +13,7 @@ import { mergeTags, placeTags, tagOvals, type PartitionType, type PlacedTag } fr
 import type { Curve, Segment } from "./plan-vectors";
 import type { RegisterRow } from "./project-files";
 import { levelRooms, type Room } from "./room-detection";
-import { planGlazing, planWalls } from "./wall-detection";
+import { hexagonTags, planGlazing, planWalls } from "./wall-detection";
 
 export type Point = [number, number];
 export type SchematicRoom = { name: string; number: string; at: Point };
@@ -258,7 +258,9 @@ export function levelGlazing(segments: Segment[], page: { widthPt: number; heigh
   const { pointsPerFoot, box } = planArea(page, frame, outline);
   const leaves = doors.flatMap(d => d.hinges.map((h, i) => [h, d.openTo[i]] as [Point, Point]));
   const r1 = (n: number) => Math.round(n * 10) / 10 || 0;
-  return planGlazing(segments, pointsPerFoot, wallWeight, walls.map(w => ({ ...w, weights: [] })), box, leaves).map(g => ({ a: [r1(g.a[0]), r1(g.a[1])] as Point, b: [r1(g.b[0]), r1(g.b[1])] as Point }));
+  const inside = (p: Point) => !box || (p[0] >= box[0] && p[0] <= box[2] && p[1] >= box[1] && p[1] <= box[3]);
+  const tags = hexagonTags(segments, pointsPerFoot).filter(t => inside(t.at)).map((t): Point => [t.at[0] / pointsPerFoot, t.at[1] / pointsPerFoot]);
+  return planGlazing(segments, pointsPerFoot, wallWeight, walls.map(w => ({ ...w, weights: [] })), box, leaves, tags).map(g => ({ a: [r1(g.a[0]), r1(g.a[1])] as Point, b: [r1(g.b[0]), r1(g.b[1])] as Point }));
 }
 /** Image fraction → feet in a level's frame (to 0.1 ft). */
 export const fromFraction = (frame: Frame, [x, y]: Point): Point => [Math.round(x * frame.widthFeet * 10) / 10, Math.round(y * frame.heightFeet * 10) / 10];

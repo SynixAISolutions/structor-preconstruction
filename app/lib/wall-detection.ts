@@ -20,6 +20,7 @@ export type WallOptions = {
 };
 
 const ANGLE_TOLERANCE = (1 * Math.PI) / 180;
+const dist = (p: Point, q: Point) => Math.hypot(p[0] - q[0], p[1] - q[1]);
 
 type Line = { angle: number; offset: number; s0: number; s1: number; weight: number };
 
@@ -71,7 +72,7 @@ export function planWalls(segments: Segment[], pointsPerFoot: number, box?: [num
  * walls (Jelleff: 0.72 pt panes 1" apart between 0.24 pt frame lines, walls at 1.2 pt). Bays join across
  * their mullions; runs shorter than 2 ft are left out. Nothing without a wall weight (a scan).
  */
-export function planGlazing(segments: Segment[], pointsPerFoot: number, wallWeight: number | null, walls: Wall[], box?: [number, number, number, number], leaves: [Point, Point][] = []): Wall[] {
+export function planGlazing(segments: Segment[], pointsPerFoot: number, wallWeight: number | null, walls: Wall[], box?: [number, number, number, number], leaves: [Point, Point][] = [], tags: Point[] = []): Wall[] {
   if (wallWeight === null) return [];
   const light = segments.filter(inBox(box)).filter(s => s.width >= 0.3 && s.width < wallWeight - 0.005);
   const panes = detectWalls(light, { pointsPerFoot, minWeight: 0.3, minThickness: 0.05, maxThickness: 0.15, minOverlap: 1, minLength: 2 });
@@ -110,13 +111,78 @@ export function planGlazing(segments: Segment[], pointsPerFoot: number, wallWeig
     const dx = l.b[0] - l.a[0], dy = l.b[1] - l.a[1], t = Math.max(0, Math.min(1, ((p[0] - l.a[0]) * dx + (p[1] - l.a[1]) * dy) / (dx * dx + dy * dy || 1)));
     return Math.hypot(p[0] - (l.a[0] + t * dx), p[1] - (l.a[1] + t * dy)) <= GLASS_REACH_FEET;
   };
-  return glass.filter(g => Math.hypot(g.b[0] - g.a[0], g.b[1] - g.a[1]) >= GLASS_ALONE_FEET || [g.a, g.b].some(p => walls.some(w => nearLine(p, w)) || glass.some(o => o !== g && nearLine(p, o))));
+  const standing = glass.filter(g => Math.hypot(g.b[0] - g.a[0], g.b[1] - g.a[1]) >= GLASS_ALONE_FEET || [g.a, g.b].some(p => walls.some(w => nearLine(p, w)) || glass.some(o => o !== g && nearLine(p, o))));
+  // On a sheet that tags its glass, a thin pair far from every tag is something else: a roof edge below, a coping, a railing
+  // (Project 1: a 42 ft run and a 20 ft run of roof edge). A sheet with few tags says nothing either way.
+  if (tags.length < GLASS_TAGS_TO_TRUST) return standing;
+  const distanceTo = (p: Point, g: Wall) => {
+    const dx = g.b[0] - g.a[0], dy = g.b[1] - g.a[1], t = Math.max(0, Math.min(1, ((p[0] - g.a[0]) * dx + (p[1] - g.a[1]) * dy) / (dx * dx + dy * dy || 1)));
+    return Math.hypot(p[0] - (g.a[0] + t * dx), p[1] - (g.a[1] + t * dy));
+  };
+  return standing.filter(g => Math.hypot(g.b[0] - g.a[0], g.b[1] - g.a[1]) < GLASS_TAG_MIN_FEET || tags.some(t => distanceTo(t, g) <= GLASS_TAG_REACH_FEET));
+}
+
+/** At least this many hexagon tags on a sheet before their absence means anything. */
+const GLASS_TAGS_TO_TRUST = 5;
+/** Storefronts and curtain walls are tagged along their length: glass has a tag within this. */
+const GLASS_TAG_REACH_FEET = 25;
+/** Shorter pieces aren't judged by tags: a corner's small return has no tag of its own, and can be what closes a room. */
+const GLASS_TAG_MIN_FEET = 4;
+
+/** A hexagon tag on a plan, in page points: SF-12 (storefront) or CW-1 (curtain wall) on Project 1. */
+export type HexagonTag = { at: Point; side: number };
+
+/** Closed regular hexagons with sides this long in feet: tags, not drawn parts of the building. */
+export function hexagonTags(segments: Segment[], pointsPerFoot: number): HexagonTag[] {
+  const key = (p: Point) => `${Math.round(p[0] * 4)},${Math.round(p[1] * 4)}`;
+  const edges = new Map<string, Point[]>();
+  const seen = new Set<string>();
+  for (const s of segments) {
+    const L = dist(s.a, s.b) / pointsPerFoot;
+    if (L < 0.5 || L > 3) continue;
+    const id = [key(s.a), key(s.b)].sort().join("|");
+    if (seen.has(id)) continue; // a line drawn twice is one edge
+    seen.add(id);
+    edges.set(key(s.a), [...(edges.get(key(s.a)) ?? []), s.b]);
+    edges.set(key(s.b), [...(edges.get(key(s.b)) ?? []), s.a]);
+  }
+  const found: HexagonTag[] = [];
+  const within = (at: Point) => found.some(t => dist(t.at, at) < t.side * 0.5);
+  for (const list of edges.values()) for (const first of list) {
+    // From each corner, walk around: six equal sides, each turning 60 degrees the same way.
+    for (const next of edges.get(key(first)) ?? []) {
+      const path: Point[] = [first, next];
+      const side = dist(first, next);
+      let turn = 0;
+      for (let i = 0; i < 4; i++) {
+        const [p, q] = [path[path.length - 2], path[path.length - 1]];
+        const step = (edges.get(key(q)) ?? []).find(r => {
+          if (key(r) === key(p) || Math.abs(dist(q, r) - side) > 0.1 * side) return false;
+          const a = Math.atan2(q[1] - p[1], q[0] - p[0]), b = Math.atan2(r[1] - q[1], r[0] - q[0]);
+          let d = ((b - a) * 180) / Math.PI;
+          while (d > 180) d -= 360;
+          while (d < -180) d += 360;
+          if (Math.abs(Math.abs(d) - 60) > 6 || (turn && Math.sign(d) !== turn)) return false;
+          turn = Math.sign(d);
+          return true;
+        });
+        if (!step) break;
+        path.push(step);
+      }
+      if (path.length !== 6) continue;
+      // The sixth side is drawn, back to the first corner.
+      if (!(edges.get(key(path[5])) ?? []).some(p => key(p) === key(first))) continue;
+      const at: Point = [path.reduce((t, p) => t + p[0], 0) / 6, path.reduce((t, p) => t + p[1], 0) / 6];
+      if (!within(at)) found.push({ at, side });
+    }
+  }
+  return found;
 }
 
 /** How close glass must come to a wall or other glass to stand in it. */
 const GLASS_REACH_FEET = 2;
 /** Glass this long is glass even standing alone (a freestanding storefront). */
-const GLASS_ALONE_FEET = 6;
+const GLASS_ALONE_FEET = 20;
 
 /**
  * Extends wall ends to meet the wall they run into, so corners and tees close: an end moves to the
