@@ -160,8 +160,9 @@ export function schematicColumns(level: SchematicLevel): THREE.InstancedMesh | n
   mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingBox(); mesh.computeBoundingSphere();
   return mesh;
 }
-/** A level's rooms (levelSpaces) as flat floors just above the slab: named rooms warm, unnamed spaces grey. */
+/** A level's rooms (levelSpaces) as flat floors just above the slab: named rooms warm, unnamed spaces grey. A space open to the level below has no floor. */
 export function schematicRoomFloors(rooms: Room[]): THREE.Group | null {
+  rooms = rooms.filter(r => !r.open);
   if (!rooms.length) return null;
   const group = new THREE.Group(), named = new THREE.MeshStandardMaterial({ color: "#e6cf9f", roughness: .9, side: THREE.DoubleSide }), unnamed = new THREE.MeshStandardMaterial({ color: "#cdd8d4", roughness: .9, side: THREE.DoubleSide });
   for (const room of rooms) {

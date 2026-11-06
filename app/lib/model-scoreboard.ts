@@ -432,6 +432,8 @@ export type LevelScore = {
   partitions: { a: Point; b: Point; kind?: "railing" }[];
   /** Columns read. No key here either: the structural sheets aren't read. */
   columns: { at: Point; width: number; depth: number }[];
+  /** Where the plan marks the floor open to the level below. No key: a person checks them on the overlay. */
+  openings?: Point[];
   /** Rooms against an outline from another source; null with none to compare against. */
   roomShapes?: RoomShapeScore | null;
 };
@@ -461,6 +463,7 @@ export function scoreboardReport(levels: LevelScore[], title = "Drawings to 3D s
   row("Operable partitions read (no key: check by eye)", l => runs(l.partitions.filter(p => p.kind !== "railing")));
   row("Guardrails read (no key: check by eye)", l => runs(l.partitions.filter(p => p.kind === "railing")));
   row("Columns read (no key: check by eye)", l => String(l.columns.length));
+  row("Floor openings read (no key: check by eye)", l => String(l.openings?.length ?? 0));
   out.push(
     "",
     "A value that disagrees is usually OCR misreading a stray line as a digit: look at its picture in the sheet's strips folder before believing it.",

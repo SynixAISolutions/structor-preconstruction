@@ -9,6 +9,7 @@
 // People can correct the outline and heights afterwards. Pure functions.
 
 import { doorsFromSwings, swingArcs } from "./door-detection";
+import { floorOpenings } from "./floor-openings";
 import { mergeTags, placeTags, tagOvals, type PartitionType, type PlacedTag } from "./tag-placement";
 import type { Curve, Segment } from "./plan-vectors";
 import type { RegisterRow } from "./project-files";
@@ -48,6 +49,8 @@ export type SchematicLevel = {
   partitions?: SchematicPartition[];
   /** Columns read from the plan (levelColumns). Missing on models built before 6 Nov. */
   columns?: SchematicColumn[];
+  /** Where the plan marks the floor open to the level below (levelOpenings). Missing on models built before 6 Nov. */
+  openings?: Point[];
 };
 /** A run of glass from a to b, in feet; `type` from the plan's storefront/window tags (SF-10). */
 export type SchematicGlazing = { a: Point; b: Point; type?: string | null; excluded?: boolean };
@@ -114,9 +117,9 @@ export function levelTags(read: { tile: [number, number, number, number]; tags: 
  * the rooms either side of it have numbers and finishes of their own. Computed, not stored, so a correction
  * reflows the rooms; empty for a level without walls read from its lines.
  */
-export function levelSpaces(level: Pick<SchematicLevel, "walls" | "doors" | "glazing" | "partitions" | "rooms">): Room[] {
+export function levelSpaces(level: Pick<SchematicLevel, "walls" | "doors" | "glazing" | "partitions" | "rooms" | "openings">): Room[] {
   if (!level.walls?.length) return [];
-  return levelRooms({ walls: [...level.walls, ...(level.partitions ?? [])].filter(w => !w.excluded), doors: (level.doors ?? []).filter(d => d.kind === "door"), glazing: (level.glazing ?? []).filter(g => !g.excluded), tags: level.rooms });
+  return levelRooms({ walls: [...level.walls, ...(level.partitions ?? [])].filter(w => !w.excluded), doors: (level.doors ?? []).filter(d => d.kind === "door"), glazing: (level.glazing ?? []).filter(g => !g.excluded), tags: level.rooms, openings: level.openings });
 }
 
 /** `partitionTypes`: the wall types the partition type sheet lists (read by AI), to describe and check wall types. */
@@ -281,6 +284,12 @@ export function levelPartitions(segments: Segment[], page: { widthPt: number; he
   const r1 = (n: number) => Math.round(n * 10) / 10 || 0;
   const read = (p: { a: Point; b: Point; thickness: number }) => ({ a: [r1(p.a[0]), r1(p.a[1])] as Point, b: [r1(p.b[0]), r1(p.b[1])] as Point, thickness: Math.round(p.thickness * 100) / 100 });
   return [...planPartitions(segments, pointsPerFoot, wallWeight, hosts, glazing, box).map(read), ...planRailings(segments, pointsPerFoot, wallWeight, hosts, glazing, box).map(p => ({ ...read(p), kind: "railing" as const }))];
+}
+
+/** Where a level's plan marks its floor open to the level below (lib/floor-openings), in the same frame as its walls. */
+export function levelOpenings(segments: Segment[], page: { widthPt: number; heightPt: number }, frame: Frame, outline: Point[]): Point[] {
+  const { pointsPerFoot, box } = planArea(page, frame, outline), r1 = (n: number) => Math.round(n * 10) / 10 || 0;
+  return floorOpenings(segments, pointsPerFoot, box).map(([x, y]) => [r1(x), r1(y)]);
 }
 
 /** A level's columns (wall-detection planColumns), in the same frame as its walls. */

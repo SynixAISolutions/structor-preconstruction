@@ -106,6 +106,11 @@ test("outline edits reject crossing edges, collapsed footprints and non-finite c
   assert.equal(footprintValid([[0, 0], [1, 0], [2, 0]]), false);
   assert.equal(footprintValid([[0, 0], [Infinity, 0], [10, 10]]), false);
 });
+test("a space open to the level below has no floor", () => {
+  const floor = { outline: [[0, 0], [10, 0], [10, 10], [0, 10]] as Point[], area: 100, name: "", number: "", at: [5, 5] as Point };
+  assert.equal(schematicRoomFloors([floor, { ...floor, open: true }])!.children.length, 1);
+  assert.equal(schematicRoomFloors([{ ...floor, open: true }]), null);
+});
 test("rooms become flat floors just above the slab, named rooms apart from unnamed spaces", () => {
   assert.equal(schematicRoomFloors([]), null);
   const group = schematicRoomFloors([{ outline: [[0, 0], [20, 0], [20, 10], [0, 10]], area: 200, name: "GYM", number: "103", at: [10, 5] }, { outline: [[20, 0], [30, 0], [30, 10], [20, 10]], area: 100, name: "", number: "", at: [25, 5] }])!;

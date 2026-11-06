@@ -6,7 +6,8 @@
 
 import type { Point } from "./plan-vectors";
 
-export type Room = { outline: Point[]; area: number; name: string; number: string; at: Point };
+/** `open`: a space with no floor of its own, open to the level below (lib/floor-openings). */
+export type Room = { outline: Point[]; area: number; name: string; number: string; at: Point; open?: boolean };
 /** `kind` "railing": a guardrail closes a space, but a wall end never stretches out to reach one. */
 type Line = { a: Point; b: Point; kind?: string };
 
@@ -161,9 +162,9 @@ export function centroid(pts: Point[]): Point {
  * room tag inside it. A face with no tag keeps an empty name; one with two tags takes the first. Spaces
  * whose walls leave gaps wider than the extension (open to below, an open corridor) are not rooms.
  */
-export function levelRooms(input: { walls: Line[]; doors: Line[]; glazing: Line[]; tags: { name: string; number: string; at: Point }[] }): Room[] {
+export function levelRooms(input: { walls: Line[]; doors: Line[]; glazing: Line[]; tags: { name: string; number: string; at: Point }[]; openings?: Point[] }): Room[] {
   return faces([...input.walls, ...input.glazing, ...input.doors]).map(outline => {
     const tag = input.tags.find(t => inside(t.at, outline)), r1 = (v: number) => Math.round(v * 10) / 10;
-    return { outline: outline.map(([x, y]) => [r1(x), r1(y)] as Point), area: Math.round(polygonArea(outline)), name: tag?.name ?? "", number: tag?.number ?? "", at: (tag?.at ?? centroid(outline)).map(r1) as Point };
+    return { outline: outline.map(([x, y]) => [r1(x), r1(y)] as Point), area: Math.round(polygonArea(outline)), name: tag?.name ?? "", number: tag?.number ?? "", at: (tag?.at ?? centroid(outline)).map(r1) as Point, ...(input.openings?.some(p => inside(p, outline)) ? { open: true } : {}) };
   });
 }

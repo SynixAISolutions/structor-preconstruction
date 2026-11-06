@@ -16,7 +16,7 @@ import { relative, resolve } from "node:path";
 
 register("./ts-resolver.mjs", import.meta.url);
 const { vectorsFromOperators } = await import("../lib/plan-vectors.ts");
-const { feetPerInch, levelColumns, levelDoors, levelGlazing, levelPartitions, levelWalls } = await import("../lib/schematic-model.ts");
+const { feetPerInch, levelColumns, levelDoors, levelGlazing, levelOpenings, levelPartitions, levelWalls } = await import("../lib/schematic-model.ts");
 const B = await import("../lib/model-scoreboard.ts");
 const { hexagonTags } = await import("../lib/wall-detection.ts");
 const { jelleffTruth, JELLEFF_PLAN_SHEETS } = await import("../lib/drawing-score.ts");
@@ -96,6 +96,8 @@ for (const plan of plans) {
   const glazing = levelGlazing(segments, sheet, frame, outline, walls.weight, walls.walls, doors);
   const partitions = levelPartitions(segments, sheet, frame, outline, walls.weight, walls.walls, glazing);
   const columns = levelColumns(segments, sheet, frame, outline, walls.weight, walls.walls);
+  // The lowest level listed has no floor below it to open onto.
+  const openings = plan === plans[0] ? [] : levelOpenings(segments, sheet, frame, outline);
   const wallFeet = Math.round(walls.walls.reduce((t, w) => t + Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), 0));
   console.log(`  read ${walls.walls.length} walls (${wallFeet} ft), ${doors.filter(d => d.kind === "door").length} doors, ${glazing.length} glass runs`);
 
@@ -160,8 +162,8 @@ for (const plan of plans) {
     const zones = ceilingZones.filter(z => z.room && z.level === (plan.sheet === "A1.1" ? "L1" : "L2")).map(z => ({ room: z.room, name: z.name, points: z.points.map(toFeet) }));
     roomShapes = B.scoreRoomShapes(zones, faces2(spaceLines));
   }
-  levels.push({ sheet: plan.sheet, walls: { count: walls.walls.length, feet: wallFeet }, wallWeight: walls.weight, dimensions, faces, lines, doors: doorScore, rooms: roomScore, roomShapes, wallFlags, glass, partitions, columns });
-  writeFileSync(resolve(out, `${plan.sheet}-model.json`), JSON.stringify({ walls: walls.walls, doors, glazing, partitions, columns }));
+  levels.push({ sheet: plan.sheet, walls: { count: walls.walls.length, feet: wallFeet }, wallWeight: walls.weight, dimensions, faces, lines, doors: doorScore, rooms: roomScore, roomShapes, wallFlags, glass, partitions, columns, openings });
+  writeFileSync(resolve(out, `${plan.sheet}-model.json`), JSON.stringify({ walls: walls.walls, doors, glazing, partitions, columns, openings }));
 
   // The model over the sheet: walls blue, glass teal, doors green, operable partitions orange, guardrails brown, columns black; red is what the checks say is missing.
   const OVERLAY = 1.5, shot = createCanvas(Math.ceil(vp.width * OVERLAY), Math.ceil(vp.height * OVERLAY)), g = shot.getContext("2d");
@@ -172,6 +174,7 @@ for (const plan of plans) {
   for (const w of glazing) stroke(w.a, w.b, "rgba(0,160,160,0.9)", 4);
   for (const d of doors) stroke(d.a, d.b, "rgba(20,160,60,0.95)", 5);
   for (const p of partitions) stroke(p.a, p.b, p.kind === "railing" ? "rgba(140,80,20,0.95)" : "rgba(240,120,0,0.95)", 6);
+  for (const at of openings) { g.strokeStyle = "rgba(120,0,200,0.95)"; g.lineWidth = 6; g.beginPath(); g.arc(at[0] * px, at[1] * px, 4 * px, 0, 7); g.moveTo((at[0] - 3) * px, (at[1] - 3) * px); g.lineTo((at[0] + 3) * px, (at[1] + 3) * px); g.moveTo((at[0] + 3) * px, (at[1] - 3) * px); g.lineTo((at[0] - 3) * px, (at[1] + 3) * px); g.stroke(); }
   for (const c of columns) { g.save(); g.translate(c.at[0] * px, c.at[1] * px); g.rotate(c.angle); g.fillStyle = "rgba(0,0,0,0.85)"; g.fillRect(-c.width * px / 2, -c.depth * px / 2, c.width * px, c.depth * px); g.restore(); }
   for (const m of [...faces.misses, ...lines.largestMissed]) stroke(m.a, m.b, "rgba(230,30,30,0.95)", 5);
   // Flagged walls and lone glass in magenta; a glass tag with no glass near it ringed in magenta.
