@@ -35,10 +35,24 @@ const named = R.levelRooms({ walls: [...box(0, 0, 20, 10), line([10, 0], [10, 10
 assert.deepEqual(named.map(r => [r.number, r.name, r.at]).sort(), [["", "", [15, 5]], ["103", "GYM", [4, 5]]]);
 assert.deepEqual(R.centroid([[0, 0], [20, 0], [20, 10], [0, 10]]), [10, 5]);
 
+// Points within reach are one node even in a chain. A partition's end beside the place where a wall meets its glass used to
+// split that corner: the third point fell between the two that meet, so the wall and the glass no longer joined (Project 1's 213).
+const threeSided = [line([0, 0], [20, 0]), line([0, 0], [0, 10]), line([0, 10], [20.3, 10]), line([20, 0], [20, 5.7])];
+assert.deepEqual(areas(R.levelRooms({ walls: [...threeSided, line([0, 5.3], [19.3, 5.3])], doors: [], glazing: [line([20.3, 6], [20.3, 10])], tags: [] })).length, 2, "A partition's end near a wall and glass meeting: two rooms");
+// An end with nothing ahead closes against a line under a door's width away (Project 1's Stair B and 215: a corner whose short return is too short to be a wall), and not across a door's width.
+const corner = gap => R.levelRooms({ walls: [line([0, 0], [20, 0]), line([0, 0], [0, 10]), line([0, 10], [20.1, 10]), line([20.1, gap], [20.1, 10]), line([20.1, gap], [30, gap])], doors: [], glazing: [], tags: [] });
+assert.equal(corner(2).length, 1, "A 2 ft gap at a corner closes");
+assert.equal(corner(3).length, 0, "A 3 ft gap at a corner is an opening");
+
 // A level's spaces follow the estimator's corrections: a wall marked not a wall merges the two rooms.
 const level = { walls: [...box(0, 0, 20, 10), line([10, 0], [10, 10])].map(w => ({ ...w, thickness: 0.5 })), doors: [], glazing: [], rooms: [] };
 assert.deepEqual(areas(S.levelSpaces(level)), [100, 100]);
 assert.deepEqual(areas(S.levelSpaces({ ...level, walls: level.walls.map((w, i) => i === 4 ? { ...w, excluded: true } : w) })), [200], "Not a wall: the rooms reflow");
 assert.deepEqual(S.levelSpaces({ walls: undefined, rooms: [] }), [], "A model built before walls were read has no spaces");
+// An operable partition divides the rooms either side of it, until the estimator says it isn't one.
+const divided = { walls: box(0, 0, 20, 10).map(w => ({ ...w, thickness: 0.5 })), doors: [], glazing: [], rooms: [], partitions: [{ ...line([10, 0], [10, 10]), thickness: 0.35 }] };
+assert.deepEqual(areas(S.levelSpaces(divided)), [100, 100], "A partition makes two rooms");
+assert.deepEqual(areas(S.levelSpaces({ ...divided, partitions: [{ ...divided.partitions[0], excluded: true }] })), [200], "Not a partition: one room");
+assert.deepEqual(areas(S.levelSpaces({ ...divided, partitions: undefined })), [200], "A model built before partitions were read still has its rooms");
 
 console.log("Room detection checked: enclosed spaces, short wall ends extended, doors close openings, cased openings closed, wide openings left open, glass encloses, open sides and wall slivers are not rooms, rooms named by their tags, corrections reflow the rooms.");

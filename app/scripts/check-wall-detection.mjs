@@ -111,6 +111,45 @@ const glazed = W.planGlazing([
 assert.deepEqual(glazed.map(g => [r(g.a[0]), r(g.b[0]), r(g.thickness * 12)]), [[30, 42, 1]], "One storefront run across its mullion; wall layers, a door leaf, a stub and heavy lines are not glass");
 assert.deepEqual(W.planGlazing(pane(0, 10, 0), PPF, null, []), [], "No wall weight (a scan): no glass");
 
+// ── A wall drawn in layers is one wall ────────────────────────────────────────────────────────────────
+const layered = lines => show(W.detectWalls(lines, { pointsPerFoot: PPF, minWeight: 1.1, layers: true }));
+const four = (x1, inner = x1) => [seg(0, 0, x1, 0), seg(0, 1.04, x1, 1.04), seg(0, 0.35, inner, 0.35), seg(0, 0.69, inner, 0.69)];
+// Four lines (Project 1's shaft walls): narrowest first gives a thin pair inside a thick one, which counted the wall twice.
+assert.equal(W.detectWalls(four(10), { pointsPerFoot: PPF, minWeight: 1.1 }).length, 2, "Without layers: a thin pair inside a thick one");
+assert.deepEqual(layered(four(10)), [[0, 0.52, 10, 0.52, 1.04]], "With layers: one wall, as thick as its outermost lines");
+assert.deepEqual(layered(four(10, 10.5)), [[0, 0.52, 10.5, 0.52, 1.04]], "A layer running on by a few inches goes with the rest");
+assert.deepEqual(layered(four(10, 12)), [[0, 0.52, 10, 0.52, 1.04], [10, 0.52, 12, 0.52, 0.34]], "A layer running on by feet stays, as itself");
+// Three lines (8" block on a 4" stud wall): the pair is the studs, and the block's far face is a spare line.
+const studs = [seg(0, 0, 10, 0), seg(0, 0.36, 10, 0.36)];
+assert.deepEqual(layered([...studs, seg(0, 1, 8, 1)]), [[8, 0.18, 10, 0.18, 0.36], [0, 0.5, 8, 0.5, 1]], "Thick where the third line runs, thin where it doesn't");
+assert.deepEqual(layered([...studs, seg(0, 1.9, 10, 1.9)]), [[0, 0.18, 10, 0.18, 0.36]], "A line 18 in past the face is something else");
+assert.deepEqual(layered([...studs, seg(2, 1, 4.5, 1)]), [[0, 0.18, 10, 0.18, 0.36]], "A short line beside a wall is a pier or a jamb");
+// Two walls touching are layers; a chase between two walls isn't.
+assert.deepEqual(layered([seg(0, 0, 10, 0), seg(0, 0.33, 10, 0.33), seg(0, 0.37, 10, 0.37), seg(0, 0.7, 10, 0.7)]), [[0, 0.35, 10, 0.35, 0.7]], "Touching: one wall");
+assert.deepEqual(layered(chase).map(w => w[4]), [0.36, 0.34], "A chase stays two walls");
+assert.deepEqual(W.planWalls([...four(50), seg(0, 40, 50, 40), seg(0, 40.4, 50, 40.4)], PPF).walls.map(w => r(w.thickness)).sort(), [0.4, 1.04], "A sheet's walls are read with their layers");
+
+// ── Operable partitions: light pairs across a room, in even panels ────────────────────────────────────
+const PART = 0.35, panels = (x0, x1, y, w = 0.48) => [seg(x0, y, x1, y, w), seg(x0, y + PART, x1, y + PART, w)];
+const joint = (x, y = 10, w = 0.24) => seg(x, y, x, y + PART, w);
+const roomWalls = [{ a: [-0.3, 0], b: [-0.3, 30], thickness: 0.4, weights: [] }, { a: [20.3, 0], b: [20.3, 30], thickness: 0.4, weights: [] }];
+const stack = [0, 4, 8, 12, 16].flatMap(x => panels(x, x + 4, 10)), joints = [4, 8, 12, 16].map(x => joint(x));
+const parts = (lines, walls = roomWalls, glazing = [], weight = 1.2) => W.planPartitions(lines, PPF, weight, walls, glazing);
+assert.deepEqual(parts([...stack, ...joints]).map(p => [r(p.a[0]), r(p.b[0]), r(p.a[1]), r(p.thickness)]), [[0, 20, 10.18, 0.35]], "Wall to wall in five panels: one partition");
+assert.equal(parts([...stack, ...joints], roomWalls.slice(0, 1)).length, 0, "One end reaches no wall: a roof edge above, not a partition");
+assert.equal(parts([...stack, ...joints], [roomWalls[0]], [{ a: [20.3, 0], b: [20.3, 30] }]).length, 1, "An end can close against glass");
+assert.equal(parts(stack).length, 0, "No joints: a stair's treads or a pair of light lines");
+assert.equal(parts([...stack, joint(4)]).length, 0, "One joint isn't a pattern");
+assert.equal(parts([...stack, ...[3, 6, 11.5, 15].map(x => joint(x))]).length, 0, "Uneven joints aren't panels");
+assert.equal(parts([...stack, ...[1, 2, 3].map(x => joint(x))]).length, 0, "Joints a foot apart aren't panels");
+assert.equal(parts([...stack, ...joints], roomWalls, [{ a: [2, 10.18], b: [18, 10.18] }]).length, 0, "With glass inside it's a storefront's frame");
+assert.equal(parts([...[0, 4, 8, 12, 16].flatMap(x => panels(x, x + 4, 10, 0.24)), ...joints]).length, 0, "In the lightest pen: a frame or something beyond the cut");
+assert.equal(parts([...[0, 4, 8, 12, 16].flatMap(x => panels(x, x + 4, 10, 1.2)), ...joints]).length, 0, "In the wall weight it's a wall");
+assert.equal(parts([...stack, ...joints], [...roomWalls, { a: [0, 10.18], b: [20, 10.18], thickness: 0.6, weights: [] }]).length, 0, "Inside a wall it's one of the wall's layers");
+assert.equal(parts([...panels(0, 6, 10), joint(2), joint(4)], [roomWalls[0], { a: [6.3, 0], b: [6.3, 30], thickness: 0.4, weights: [] }]).length, 0, "Under 8 ft isn't read");
+assert.deepEqual(W.planPartitions([...stack, ...joints], PPF, null, roomWalls, []), [], "No wall weight (a scan): nothing");
+assert.deepEqual(S.levelPartitions([...stack, ...joints], { widthPt: 3024, heightPt: 2160 }, { widthFeet: 336, heightFeet: 240 }, [], 1.2, roomWalls, []), [{ a: [0, 10.2], b: [20, 10.2], thickness: 0.35 }], "In the level's frame");
+
 // Corners and tees close: ends move to where the centerlines meet.
 const joined = W.joinWalls([
   { a: [0, 0], b: [19.8, 0], thickness: 0.4, weights: [] },   // stops short of the corner
@@ -129,4 +168,4 @@ assert.match(sized.note, /No printed scale was read, so wall sizes follow the bu
 const outlined = S.levelWalls(plan, sheet, { widthFeet: 336, heightFeet: 240 }, [[0, 0], [0.134, 0], [0.134, 0.104], [0, 0.104]], true); // 45 x 25 ft
 assert.equal(outlined.walls.length, 5, "Only walls within the read outline plus a margin (24 ft here) count");
 
-console.log("Wall detection checked: vector lines from pdf.js operators, faces paired narrowest first (chases stay two walls), dashed lines are not faces, openings, weights, angled walls, the automatic wall weight, plan area, joined corners and tees, the level's frame.");
+console.log("Wall detection checked: vector lines from pdf.js operators, faces paired narrowest first (chases stay two walls), dashed lines are not faces, openings, weights, angled walls, the automatic wall weight, plan area, layered walls as one wall, operable partitions, joined corners and tees, the level's frame.");

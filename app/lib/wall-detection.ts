@@ -17,6 +17,8 @@ export type WallOptions = {
   minOverlap?: number;
   /** Walls shorter than this are dropped (columns, tag boxes), in feet. */
   minLength?: number;
+  /** Read a wall drawn in layers as one wall (mergeLayers). */
+  layers?: boolean;
 };
 
 const ANGLE_TOLERANCE = (1 * Math.PI) / 180;
@@ -34,8 +36,19 @@ function frame(angle: number) {
   };
 }
 
+const distanceToLine = (p: Point, l: { a: Point; b: Point }) => {
+  const dx = l.b[0] - l.a[0], dy = l.b[1] - l.a[1], t = Math.max(0, Math.min(1, ((p[0] - l.a[0]) * dx + (p[1] - l.a[1]) * dy) / (dx * dx + dy * dy || 1)));
+  return Math.hypot(p[0] - (l.a[0] + t * dx), p[1] - (l.a[1] + t * dy));
+};
+/** Whether a point lies within a wall's thickness. */
+const withinWall = (p: Point, w: Wall) => {
+  const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) || 1, ux = (w.b[0] - w.a[0]) / L, uy = (w.b[1] - w.a[1]) / L;
+  const t = (p[0] - w.a[0]) * ux + (p[1] - w.a[1]) * uy, off = Math.abs((p[0] - w.a[0]) * uy - (p[1] - w.a[1]) * ux);
+  return t >= -0.2 && t <= L + 0.2 && off <= w.thickness / 2 + 0.05;
+};
+
 const segLength = (s: Segment) => Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]);
-const inBox = (box: [number, number, number, number] | undefined) => (s: Segment) =>
+const inBox =(box: [number, number, number, number] | undefined) => (s: Segment) =>
   !box || [s.a, s.b].every(([x, y]) => x >= box[0] && x <= box[2] && y >= box[1] && y <= box[3]);
 
 /**
@@ -63,7 +76,7 @@ export function wallWeight(segments: Segment[], pointsPerFoot: number, box?: [nu
 export function planWalls(segments: Segment[], pointsPerFoot: number, box?: [number, number, number, number]): { walls: Wall[]; weight: number | null; note: string } {
   const found = wallWeight(segments, pointsPerFoot, box);
   if (!found) return { walls: [], weight: null, note: "No line weight on this sheet pairs up like walls, so no walls were placed. It may be a scan, or drawn without line weights." };
-  const walls = joinWalls(detectWalls(segments.filter(inBox(box)), { pointsPerFoot, minWeight: found.weight - 0.005 }));
+  const walls = joinWalls(detectWalls(segments.filter(inBox(box)), { pointsPerFoot, minWeight: found.weight - 0.005, layers: true }));
   return { walls, weight: found.weight, note: `Walls are the ${found.weight} pt lines (${Math.round(found.paired * 100)}% of them pair at a wall's thickness).` };
 }
 
@@ -77,11 +90,7 @@ export function planGlazing(segments: Segment[], pointsPerFoot: number, wallWeig
   const light = segments.filter(inBox(box)).filter(s => s.width >= 0.3 && s.width < wallWeight - 0.005);
   const panes = detectWalls(light, { pointsPerFoot, minWeight: 0.3, minThickness: 0.05, maxThickness: 0.15, minOverlap: 1, minLength: 2 });
   // A wall's inner layers (insulation, sheathing) are light lines a pane's width apart too: glass is never inside a wall.
-  const insideWall = (p: Point) => walls.some(w => {
-    const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) || 1, ux = (w.b[0] - w.a[0]) / L, uy = (w.b[1] - w.a[1]) / L;
-    const t = (p[0] - w.a[0]) * ux + (p[1] - w.a[1]) * uy, off = Math.abs((p[0] - w.a[0]) * uy - (p[1] - w.a[1]) * ux);
-    return t >= -0.2 && t <= L + 0.2 && off <= w.thickness / 2 + 0.05;
-  });
+  const insideWall = (p: Point) => walls.some(w => withinWall(p, w));
   // An open door leaf is drawn as a thin rectangle a pane's width across: glass is never along a door's leaf.
   const alongLeaf = (g: Wall) => leaves.some(([h, o]) => {
     const L = Math.hypot(o[0] - h[0], o[1] - h[1]) || 1, ux = (o[0] - h[0]) / L, uy = (o[1] - h[1]) / L;
@@ -107,19 +116,55 @@ export function planGlazing(segments: Segment[], pointsPerFoot: number, wallWeig
   const glass = panes.flatMap(outsideWalls).filter(g => !alongLeaf(g));
   // Glass stands in a wall or a run of glass. A short pair of light lines touching nothing, in the middle of a room, is
   // something else (Project 1: a 3 ft pair in a vestibule, which split the room in two).
-  const nearLine = (p: Point, l: { a: Point; b: Point }) => {
-    const dx = l.b[0] - l.a[0], dy = l.b[1] - l.a[1], t = Math.max(0, Math.min(1, ((p[0] - l.a[0]) * dx + (p[1] - l.a[1]) * dy) / (dx * dx + dy * dy || 1)));
-    return Math.hypot(p[0] - (l.a[0] + t * dx), p[1] - (l.a[1] + t * dy)) <= GLASS_REACH_FEET;
-  };
+  const nearLine = (p: Point, l: { a: Point; b: Point }) => distanceToLine(p, l) <= GLASS_REACH_FEET;
   const standing = glass.filter(g => Math.hypot(g.b[0] - g.a[0], g.b[1] - g.a[1]) >= GLASS_ALONE_FEET || [g.a, g.b].some(p => walls.some(w => nearLine(p, w)) || glass.some(o => o !== g && nearLine(p, o))));
   // On a sheet that tags its glass, a thin pair far from every tag is something else: a roof edge below, a coping, a railing
   // (Project 1: a 42 ft run and a 20 ft run of roof edge). A sheet with few tags says nothing either way.
   if (tags.length < GLASS_TAGS_TO_TRUST) return standing;
-  const distanceTo = (p: Point, g: Wall) => {
-    const dx = g.b[0] - g.a[0], dy = g.b[1] - g.a[1], t = Math.max(0, Math.min(1, ((p[0] - g.a[0]) * dx + (p[1] - g.a[1]) * dy) / (dx * dx + dy * dy || 1)));
-    return Math.hypot(p[0] - (g.a[0] + t * dx), p[1] - (g.a[1] + t * dy));
-  };
-  return standing.filter(g => Math.hypot(g.b[0] - g.a[0], g.b[1] - g.a[1]) < GLASS_TAG_MIN_FEET || tags.some(t => distanceTo(t, g) <= GLASS_TAG_REACH_FEET));
+  return standing.filter(g => Math.hypot(g.b[0] - g.a[0], g.b[1] - g.a[1]) < GLASS_TAG_MIN_FEET || tags.some(t => distanceToLine(t, g) <= GLASS_TAG_REACH_FEET));
+}
+
+/** How close each end of an operable partition must come to the wall or glass it closes against. */
+const PARTITION_REACH_FEET = 1.5;
+/** A partition's panel joints: this far apart, and evenly spaced to within this. */
+const PANEL_MIN_FEET = 2.5, PANEL_MAX_FEET = 6, PANEL_SPREAD_FEET = 0.5;
+/** Fewer spaces between joints than this isn't a pattern. A partition of two panels isn't read. */
+const PANELS_TO_TRUST = 2;
+
+/**
+ * Operable partitions: two light lines 3-6.6" apart, 8 ft or longer, running across a room from wall to wall with panel joints
+ * drawn between them at even spacing (Project 1: 0.48 pt lines 4.2" apart, joints every 3.9 ft). The joints tell one from a
+ * storefront's frame, which also has them but holds glass; from a stair's treads, which have none; and from light lines that
+ * reach no wall (a roof edge above, in panels of its own). Nothing without a wall weight (a scan).
+ */
+export function planPartitions(segments: Segment[], pointsPerFoot: number, wallWeight: number | null, walls: Wall[], glazing: { a: Point; b: Point }[], box?: [number, number, number, number]): Wall[] {
+  if (wallWeight === null) return [];
+  const plan = segments.filter(inBox(box));
+  const reaches = (p: Point) => walls.some(w => distanceToLine(p, w) <= w.thickness / 2 + PARTITION_REACH_FEET) || glazing.some(g => distanceToLine(p, g) <= PARTITION_REACH_FEET);
+  const midpoint = (l: { a: Point; b: Point }): Point => [(l.a[0] + l.b[0]) / 2, (l.a[1] + l.b[1]) / 2];
+  const found: Wall[] = [];
+  for (const weight of new Set(plan.map(s => Math.round(s.width * 100) / 100))) {
+    if (weight < 0.3 || weight >= wallWeight - 0.005) continue;
+    const own = plan.filter(s => Math.abs(s.width - weight) < 0.005);
+    for (const pair of detectWalls(own, { pointsPerFoot, minWeight: 0, minThickness: 0.25, maxThickness: 0.55, minOverlap: 1, minLength: 8 })) {
+      const L = dist(pair.a, pair.b), ux = (pair.b[0] - pair.a[0]) / L, uy = (pair.b[1] - pair.a[1]) / L;
+      const along = (p: Point) => (p[0] - pair.a[0]) * ux + (p[1] - pair.a[1]) * uy, across = (p: Point) => Math.abs((p[0] - pair.a[0]) * uy - (p[1] - pair.a[1]) * ux);
+      const between = (p: Point, share: number) => along(p) > 0 && along(p) < L && across(p) <= share * pair.thickness;
+      if (walls.some(w => withinWall(midpoint(pair), w)) || !reaches(pair.a) || !reaches(pair.b)) continue;
+      if (glazing.some(g => between(midpoint(g), 0.5))) continue;
+      // Joints: short lines straight across, from face to face, away from the ends.
+      const joints = plan.flatMap(s => {
+        const a: Point = [s.a[0] / pointsPerFoot, s.a[1] / pointsPerFoot], b: Point = [s.b[0] / pointsPerFoot, s.b[1] / pointsPerFoot], length = dist(a, b), m = midpoint({ a, b });
+        if (length < 0.7 * pair.thickness || length > 1.4 * pair.thickness) return [];
+        if (Math.abs((b[0] - a[0]) * ux + (b[1] - a[1]) * uy) / length > 0.17 || !between(m, 0.3) || along(m) < 0.3 || along(m) > L - 0.3) return [];
+        return [along(m)];
+      }).sort((p, q) => p - q);
+      const at = joints.filter((t, i) => i === 0 || t - joints[i - 1] > 0.2), spaces = at.slice(1).map((t, i) => t - at[i]);
+      if (spaces.length < PANELS_TO_TRUST || Math.min(...spaces) < PANEL_MIN_FEET || Math.max(...spaces) > PANEL_MAX_FEET || Math.max(...spaces) - Math.min(...spaces) > PANEL_SPREAD_FEET) continue;
+      found.push(pair);
+    }
+  }
+  return found;
 }
 
 /** At least this many hexagon tags on a sheet before their absence means anything. */
@@ -261,8 +306,81 @@ function joinTouching(lines: Line[]): Line[] {
 /** How many times the pairing is redone after giving back faces held by pairs too short to be walls. */
 const PAIRING_PASSES = 4;
 
+/** A stretch along one direction, without what's in `taken`. */
+const minus = (parts: [number, number][], taken: [number, number][]) => {
+  for (const [c0, c1] of taken) parts = parts.flatMap(([a, b]): [number, number][] => c1 <= a || c0 >= b ? [[a, b]] : [[a, Math.max(a, c0)], [Math.min(b, c1), b]].filter(([x, y]) => y - x > 1e-6) as [number, number][]);
+  return parts;
+};
+
+type Band = { center: number; thickness: number; s0: number; s1: number; weights: number[] };
+
+/** Two walls this close across, or one inside the other, are layers of one wall. */
+const LAYER_TOUCH_FEET = 1 / 12;
+/** A spare line this close beside a wall is its far face: a layer of block up to 12" (Project 1: 8" block on a 4" stud wall). */
+const LAYER_REACH_FEET = 1;
+/** Side by side for less than this isn't a layered wall: a pier, a jamb. */
+const LAYER_MIN_FEET = 3;
+/** A layer running on past the others by less than this goes with them. */
+const LAYER_STUB_FEET = 1;
+
+/**
+ * One wall where a wall is drawn in layers. Pairing takes the narrowest pair first, which reads a layered wall wrongly in two
+ * ways: four lines (Project 1's shaft walls) give a thin pair inside a thick one, counting the wall twice, and three lines (8"
+ * block with 4" studs) give the thin layer alone, leaving the block's face over. On the stretch they share, the wall becomes
+ * as thick as its outermost lines. Only the total thickness is kept, not the layers.
+ */
+function mergeLayers(walls: Band[], spare: Band[]): Band[] {
+  const edges = (w: Band) => [w.center - w.thickness / 2, w.center + w.thickness / 2];
+  // p and q as one wall on the stretch they share; what either runs on beyond it stays as it was.
+  const merged = (p: Band, q: Band): Band[] => {
+    const s0 = Math.max(p.s0, q.s0), s1 = Math.min(p.s1, q.s1), [pl, ph] = edges(p), [ql, qh] = edges(q);
+    const lo = Math.min(pl, ql), hi = Math.max(ph, qh), one: Band = { center: (lo + hi) / 2, thickness: hi - lo, s0, s1, weights: [...p.weights, ...q.weights] };
+    const rest: Band[] = [];
+    for (const w of [p, q]) for (const [a, b] of [[w.s0, s0], [s1, w.s1]]) {
+      if (b - a >= LAYER_STUB_FEET) rest.push({ ...w, s0: a, s1: b });
+      else if (b - a > 0) { one.s0 = Math.min(one.s0, a); one.s1 = Math.max(one.s1, b); }
+    }
+    return [one, ...rest];
+  };
+  const out = [...walls];
+  const mergeTouching = () => {
+    for (let again = true; again;) {
+      again = false;
+      search: for (let i = 0; i < out.length; i++) for (let j = i + 1; j < out.length; j++) {
+        const [pl, ph] = edges(out[i]), [ql, qh] = edges(out[j]);
+        if (Math.min(out[i].s1, out[j].s1) - Math.max(out[i].s0, out[j].s0) < LAYER_MIN_FEET || Math.max(pl, ql) - Math.min(ph, qh) > LAYER_TOUCH_FEET) continue;
+        const parts = merged(out[i], out[j]);
+        out.splice(j, 1); out.splice(i, 1, ...parts);
+        again = true;
+        break search;
+      }
+    }
+  };
+  mergeTouching();
+  for (const line of spare) {
+    let open: [number, number][] = [[line.s0, line.s1]];
+    for (;;) {
+      // The nearest wall beside what's left of the line. A line inside a wall changes nothing.
+      let best: { wall: Band; gap: number; s0: number; s1: number } | null = null;
+      for (const wall of out) {
+        const [lo, hi] = edges(wall), gap = line.center < lo ? lo - line.center : line.center > hi ? line.center - hi : null;
+        if (gap === null || gap > LAYER_REACH_FEET) continue;
+        for (const [a, b] of open) {
+          const s0 = Math.max(a, wall.s0), s1 = Math.min(b, wall.s1);
+          if (s1 - s0 >= LAYER_MIN_FEET && (!best || gap < best.gap)) best = { wall, gap, s0, s1 };
+        }
+      }
+      if (!best) break;
+      out.splice(out.indexOf(best.wall), 1, ...merged(best.wall, { ...line, s0: best.s0, s1: best.s1 }));
+      open = minus(open, [[best.s0, best.s1]]);
+    }
+  }
+  mergeTouching();
+  return out;
+}
+
 export function detectWalls(segments: Segment[], opts: WallOptions): Wall[] {
-  const { pointsPerFoot, minWeight, minThickness = 0.2, maxThickness = 2, minOverlap = 1, minLength = 2 } = opts;
+  const { pointsPerFoot, minWeight, minThickness = 0.2, maxThickness = 2, minOverlap = 1, minLength = 2, layers = false } = opts;
   const ft = (p: Point): Point => [p[0] / pointsPerFoot, p[1] / pointsPerFoot];
 
   // Straight heavy lines, at least half a foot long, grouped by direction.
@@ -299,18 +417,15 @@ export function detectWalls(segments: Segment[], opts: WallOptions): Wall[] {
     // Narrowest first, and a stretch of line is a face of one wall only (a face has the room on its other
     // side): two 4" walls with a chase between them are two walls, not a third one across the chase.
     candidates.sort((p, q) => p.gap - q.gap);
-    const minus = (parts: [number, number][], taken: [number, number][]) => {
-      for (const [c0, c1] of taken) parts = parts.flatMap(([a, b]): [number, number][] => c1 <= a || c0 >= b ? [[a, b]] : [[a, Math.max(a, c0)], [Math.min(b, c1), b]].filter(([x, y]) => y - x > 1e-6) as [number, number][]);
-      return parts;
-    };
-    type Piece = { pair: string; center: number; thickness: number; s0: number; s1: number; weights: number[] };
-    type Run = Omit<Piece, "pair"> & { pieces: Piece[] };
+    type Piece = Band & { pair: string };
+    type Run = Band & { pieces: Piece[] };
     // A pair too short to be a wall (a stair's edge beside a face, a jamb) mustn't keep the face from its real partner: its
     // stretch is given back and the pairing done again without it.
     const refused = new Map<string, [number, number][]>();
     let runs: Run[] = [];
+    let claimed: [number, number][][] = [];
     for (let pass = 0; pass < PAIRING_PASSES; pass++) {
-      const claimed: [number, number][][] = lines.map(() => []);
+      claimed = lines.map(() => []);
       const pieces: Piece[] = [];
       for (const c of candidates) {
         const pair = `${c.i}:${c.j}`;
@@ -345,7 +460,9 @@ export function detectWalls(segments: Segment[], opts: WallOptions): Wall[] {
       if (!tooShort.length) break;
       for (const r of tooShort) for (const p of r.pieces) refused.set(p.pair, [...(refused.get(p.pair) ?? []), [p.s0, p.s1]]);
     }
-    for (const run of runs) if (run.s1 - run.s0 >= minLength) walls.push({ a: f.point(run.s0, run.center), b: f.point(run.s1, run.center), thickness: run.thickness, weights: [...new Set(run.weights)].sort((x, y) => x - y) });
+    const kept: Band[] = runs.filter(run => run.s1 - run.s0 >= minLength);
+    const spare = (): Band[] => lines.flatMap((l, i) => minus([[l.s0, l.s1]], claimed[i]).map(([s0, s1]) => ({ center: l.offset, thickness: 0, s0, s1, weights: [l.weight] })));
+    for (const run of layers ? mergeLayers(kept, spare()) : kept) walls.push({ a: f.point(run.s0, run.center), b: f.point(run.s1, run.center), thickness: run.thickness, weights: [...new Set(run.weights)].sort((x, y) => x - y) });
   }
   return walls;
 }

@@ -65,6 +65,11 @@ assert.equal(onWalls.feet, 120, "Both faces of both walls, and the stray 20 ft l
 assert.equal(onWalls.onWalls, 100);
 assert.equal(onWalls.largestMissed[0].feet, 20);
 
+// A line inside a wall's thickness is one of its layers: on that wall, not a wall missed.
+const middle = B.lineRuns([line(0, 180, 180, 180, 1.2)], 1.2);
+assert.equal(B.scoreWallLines(middle, [{ a: [0, 20], b: [20, 20], thickness: 1 }], FT).onWalls, 20, "On the centerline of a 12 in wall");
+assert.equal(B.scoreWallLines(middle, [{ a: [0, 21], b: [20, 21], thickness: 1 }], FT).onWalls, 0, "Half a foot past that wall's face isn't");
+
 // The real wall reader finds these walls from the same lines, so the check and the reader agree.
 const read = planWalls(drawn, FT).walls;
 assert.equal(B.scoreWallLines(B.lineRuns(drawn, 1.2), read, FT).onWalls, 100, "The app's own reader puts its walls on these faces");
@@ -134,8 +139,9 @@ assert.deepEqual([glassScore.runs, glassScore.feet, glassScore.tags, glassScore.
 assert.deepEqual(B.scoreGlass([], [pane], [], []).aloneRuns.map(g => g.feet), [20], "Glass touching nothing is reported");
 
 // ── The report ──
-const level = { sheet: "A1.1", walls: { count: 2, feet: 50 }, wallWeight: 1.2, dimensions: scored, faces: B.scoreDimensionedFaces(faceTicks, runs, walls, FT), lines: onWalls, doors, rooms: B.scoreRooms(tags, closed), wallFlags: beside, glass: glassScore };
+const level = { sheet: "A1.1", walls: { count: 2, feet: 50 }, wallWeight: 1.2, dimensions: scored, faces: B.scoreDimensionedFaces(faceTicks, runs, walls, FT), lines: onWalls, doors, rooms: B.scoreRooms(tags, closed), wallFlags: beside, glass: glassScore, partitions: [{ a: [0, 0], b: [23, 0] }] };
 const report = B.scoreboardReport([level, { ...level, sheet: "A1.2", doors: null, rooms: null }]);
+assert(report.includes("| Operable partitions read (no key: check by eye) | 1 (23 ft) | 1 (23 ft) |") && report.includes("- 23 ft at (0, 0) to (23, 0) ft"), "Partitions are listed, to check by eye");
 for (const expected of ["| Check | A1.1 | A1.2 |", "2 of 3 (67%)", "3 of 4 (75%)", "no schedule key", "no room key", "Scheduled doors not found: 103.", "Door widths off:", "104: scheduled 36 in, read 48 in", "Not scored yet"]) assert(report.includes(expected), `The report has: ${expected}`);
 assert(B.scoreboardReport([{ ...level, dimensions: B.scoreDimensions([], []), faces: { total: 0, found: 0, medianOffsetInches: null, misses: [] }, lines: { feet: 0, onWalls: 0, largestMissed: [] } }]).includes("none to check"), "Nothing to check isn't a score of zero");
 
