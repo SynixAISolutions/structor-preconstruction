@@ -434,6 +434,8 @@ export type LevelScore = {
   columns: { at: Point; width: number; depth: number }[];
   /** Where the plan marks the floor open to the level below. No key: a person checks them on the overlay. */
   openings?: Point[];
+  /** Stairs arriving from the level below, each as its flights' risers. No key: a person checks them against the stair sections. */
+  stairs?: { flights: { risers: number }[] }[];
   /** Rooms against an outline from another source; null with none to compare against. */
   roomShapes?: RoomShapeScore | null;
 };
@@ -464,12 +466,13 @@ export function scoreboardReport(levels: LevelScore[], title = "Drawings to 3D s
   row("Guardrails read (no key: check by eye)", l => runs(l.partitions.filter(p => p.kind === "railing")));
   row("Columns read (no key: check by eye)", l => String(l.columns.length));
   row("Floor openings read (no key: check by eye)", l => String(l.openings?.length ?? 0));
+  row("Stairs read, risers per flight shown (no key: check by eye)", l => l.stairs?.length ? `${l.stairs.length} (${l.stairs.map(s => s.flights.map(f => f.risers).join(" + ")).join("; ")})` : "0");
   out.push(
     "",
     "A value that disagrees is usually OCR misreading a stray line as a digit: look at its picture in the sheet's strips folder before believing it.",
     "A flagged wall is one to look at, not one known to be wrong: nothing on a drawing lists the walls, so false walls have no key.",
     "Rooms closed only counts rooms with a position in the key, and says nothing about a room's shape. Room outlines come from the ceiling plans, so a room with no ceiling drawn has no outline to compare.",
-    "Glass tags only say glass is near. Not scored yet: how much glass is missing between tags, wall types, level heights. Stairs, roofs and structure aren't read yet.",
+    "Glass tags only say glass is near. Not scored yet: how much glass is missing between tags, wall types, level heights. Roofs and structure aren't read yet; stairs are read, with no key to score them against.",
   );
   for (const l of levels) {
     out.push("", `## ${l.sheet}`, "", `Wall weight ${l.wallWeight ?? "not found"} pt. Median difference from printed dimensions ${inchesText(l.dimensions.medianDiffInches)}; median wall face offset ${inchesText(l.faces.medianOffsetInches)}.`);

@@ -28,6 +28,13 @@ assert.deepEqual(withCurves.curves.map(c => [c.from, c.c1, c.c2, c.to].map(rp)),
   [[0, 0], [0, 5], [5, 10], [10, 10]],
   [[10, 10], [16.67, 3.33], [23.33, 3.33], [30, 10]],
 ], "Door swings: cubic curves kept with their controls; a quadratic one raised to cubic");
+const filled = V.vectorsFromOperators(opList(
+  path(OPS.fill, 0, 0, 0, 1, 8, 4, 1, 0, 8, 4),                       // a small arrowhead
+  path(OPS.eoFill, 0, 0, 0, 1, 100, 0, 1, 100, 100, 1, 0, 100, 4),     // poché: too big
+  path(OPS.fill, 0, 0, 0, 2, 0, 5, 5, 10, 10, 10, 1, 0, 10),           // a curved fill: a letter or a dot, not an arrowhead
+  path(OPS.fillStroke, 0, 50, 50, 1, 55, 50, 1, 55, 55, 1, 50, 50, 4), // filled and stroked: kept as both
+), OPS, [1, 0, 0, 1, 0, 0]);
+assert.deepEqual([filled.fills.map(f => f.length), filled.segments.length], [[3, 3], 3], "Small straight-sided fills kept (arrowheads); large or curved ones not; a stroked fill is lines too");
 
 // ── Walls ─────────────────────────────────────────────────────────────────────────────────────────────
 const PPF = 9; // 1/8" = 1'-0"

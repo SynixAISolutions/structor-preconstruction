@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { polygonArea, type Point, type SchematicLevel } from "../../lib/schematic-model";
-import type { Room } from "../../lib/room-detection";
+import { inside, type Room } from "../../lib/room-detection";
+import { stairPieces } from "../../lib/stair-detection";
 
 export type SheetFrame = { width: number; height: number };
 export function openOutline(points: Point[]): Point[] {
@@ -160,20 +161,45 @@ export function schematicColumns(level: SchematicLevel): THREE.InstancedMesh | n
   mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingBox(); mesh.computeBoundingSphere();
   return mesh;
 }
-/** A level's rooms (levelSpaces) as flat floors just above the slab: named rooms warm, unnamed spaces grey. A space open to the level below has no floor. */
-export function schematicRoomFloors(rooms: Room[]): THREE.Group | null {
+/**
+ * The stairs arriving at a level (level.stairs, lib/stair-detection stairPieces) as one instanced mesh of treads and landings,
+ * in the level's frame: from its floor (0) down `rise` to the floor below. Also where the level's floor is open over them.
+ */
+export function schematicStairs(level: SchematicLevel, rise: number | null): { mesh: THREE.InstancedMesh; openings: Point[][] } | null {
+  if (!rise) return null;
+  const pieces = (level.stairs ?? []).filter(s => !s.excluded).map(s => stairPieces(s.flights, rise)).filter(p => p !== null);
+  const boxes = pieces.flatMap(p => [...p.treads, ...p.landings]);
+  if (!boxes.length) return null;
+  const place = new THREE.Object3D();
+  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#b8b1a4", roughness: .85 }), boxes.length);
+  boxes.forEach((b, i) => {
+    place.position.set(b.at[0], b.top - b.thickness / 2, -b.at[1]);
+    place.rotation.set(0, Math.atan2(b.along[1], b.along[0]), 0);
+    place.scale.set(Math.max(b.length, .01), b.thickness, Math.max(b.width, .01));
+    place.updateMatrix(); mesh.setMatrixAt(i, place.matrix);
+  });
+  mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingBox(); mesh.computeBoundingSphere();
+  return { mesh, openings: pieces.flatMap(p => p.openings) };
+}
+/**
+ * A level's rooms (levelSpaces) as flat floors just above the slab: named rooms warm, unnamed spaces grey. A space open to the
+ * level below has no floor; `openings` (a stair's well) are cut from the room they lie wholly inside.
+ */
+export function schematicRoomFloors(rooms: Room[], openings: Point[][] = []): THREE.Group | null {
   rooms = rooms.filter(r => !r.open);
   if (!rooms.length) return null;
   const group = new THREE.Group(), named = new THREE.MeshStandardMaterial({ color: "#e6cf9f", roughness: .9, side: THREE.DoubleSide }), unnamed = new THREE.MeshStandardMaterial({ color: "#cdd8d4", roughness: .9, side: THREE.DoubleSide });
   for (const room of rooms) {
-    const geometry = new THREE.ShapeGeometry(new THREE.Shape(room.outline.map(([x, y]) => new THREE.Vector2(x, y))));
+    const shape = new THREE.Shape(room.outline.map(([x, y]) => new THREE.Vector2(x, y)));
+    for (const hole of openings) if (hole.every(p => inside(p, room.outline))) shape.holes.push(new THREE.Path(hole.map(([x, y]) => new THREE.Vector2(x, y))));
+    const geometry = new THREE.ShapeGeometry(shape);
     geometry.rotateX(-Math.PI / 2);
     const floor = new THREE.Mesh(geometry, room.name ? named : unnamed); floor.position.y = .05; group.add(floor);
   }
   return group;
 }
 /** Count and total centerline length of a level's walls; null for a model built before walls were read. */
-export function wallTotals(level: SchematicLevel): { count: number; feet: number; doors: number | null; compartments: number; glassFeet: number | null; partitionFeet: number | null; railingFeet: number | null; columns: number | null } | null {
+export function wallTotals(level: SchematicLevel): { count: number; feet: number; doors: number | null; compartments: number; glassFeet: number | null; partitionFeet: number | null; railingFeet: number | null; columns: number | null; stairs: number | null } | null {
   if (!level.walls) return null;
   const doors = level.doors ?? null, walls = level.walls.filter(w => !w.excluded);
   const run = (lines: { a: Point; b: Point }[]) => Math.round(lines.reduce((sum, l) => sum + Math.hypot(l.b[0] - l.a[0], l.b[1] - l.a[1]), 0));
@@ -184,5 +210,6 @@ export function wallTotals(level: SchematicLevel): { count: number; feet: number
     partitionFeet: level.partitions ? run(level.partitions.filter(p => !p.excluded && p.kind !== "railing")) : null,
     railingFeet: level.partitions ? run(level.partitions.filter(p => !p.excluded && p.kind === "railing")) : null,
     columns: level.columns ? level.columns.filter(c => !c.excluded).length : null,
+    stairs: level.stairs ? level.stairs.filter(s => !s.excluded).length : null,
   };
 }
