@@ -136,7 +136,7 @@ function AddPrice({ project, onAdd, onClose }: { project: Project; onAdd: (input
         <label className="ui-field full">Item<input {...field("item")} placeholder="e.g. Single-ply membrane roofing"/></label>
         <label className="ui-field">Unit<input {...field("unit")}/></label>
         <label className="ui-field">Unit cost ($)<input {...field("rate")} inputMode="decimal"/></label>
-        <label className="ui-field">Division<select {...field("division")}><option value="">Not set</option>{Object.entries(CSI_DIVISIONS).map(([code, name]) => <option key={code} value={code}>{code} {name}</option>)}</select></label>
+        <label className="ui-field">Division<select {...field("division")}><option value="">Not set</option>{Object.entries(CSI_DIVISIONS).sort(([a], [b]) => a.localeCompare(b)).map(([code, name]) => <option key={code} value={code}>{code} {name}</option>)}</select></label>
         <label className="ui-field">Date of the price<input type="date" {...field("date")}/></label>
         <label className="ui-field">Job or source<input {...field("project")}/></label>
         <label className="ui-field">Location<input {...field("location")}/></label>

@@ -105,7 +105,8 @@ export function ScopeMatrixView({ review, actor, notify, onOpen }: { review: Ret
     for (const id of reviewing) { const message = review.removeScope(id, actor); if (message) { notify(message); return; } }
     setCrossovers(crossovers.filter(c => c.id !== crossover.id));
     setRemoving(null);
-    notify(`Crossover removed, with ${plural(reviewing.length, "line")} still in review. Approved lines stay in their bid forms.`);
+    const approved = crossover.lineIds.length - reviewing.length;
+    notify(`Crossover removed.${reviewing.length ? ` Its ${plural(reviewing.length, "line")} in review came out of the bid forms.` : ""}${approved ? ` ${plural(approved, "approved line")} ${approved === 1 ? "stays" : "stay"} for ${approved === 1 ? "its estimator" : "their estimators"} to reopen.` : ""}`);
   }
 
   if (!state.packages.length) return <Empty title="No bid packages yet" description="Upload the drawings and the project manual in Project files: the AI sets the bid packages and writes their scopes."/>;
