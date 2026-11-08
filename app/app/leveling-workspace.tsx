@@ -42,7 +42,7 @@ import "./ui/leveling-extras.css";
 import { bidSheetSummary } from "../lib/bid-sheet-summary";
 import { openComparisonCandidates } from "../lib/portal-comparisons";
 import { useBudget } from "../lib/use-budget";
-import { tradeBudgets } from "../lib/buyout";
+import { tradeBudgets } from "../lib/budget-comparison";
 import { useAward } from "../lib/use-award";
 import { activeAward } from "../lib/award";
 import { LevelingHome, LevelingViews } from "./ui/leveling-home";

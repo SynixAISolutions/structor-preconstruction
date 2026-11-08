@@ -12,7 +12,7 @@
 // stored twice.
 
 import { activeAward, awardStage, type AwardState } from "./award";
-import { tradeBids, tradeForBudgetLine } from "./budget-comparison";
+import { tradeBids, tradeBudgets } from "./budget-comparison";
 import type { BudgetState, LevelingCandidate } from "./budget";
 import type { Procurement } from "./procurement";
 import type { Submission } from "./submissions";
@@ -164,19 +164,6 @@ export function bestAndFinalFor(buyout: BuyoutState, submissions: Submission[], 
   const mine = [...(entry?.bafos ?? []), ...proposalBafos(submissions, packageId, entry?.scopeReview ?? null, directory)]
     .filter(b => (bidder.bidderId && b.bidderId === bidder.bidderId) || b.company.trim().toLowerCase() === company);
   return mine.reduce<Bafo | null>((latest, b) => !latest || b.receivedAt > latest.receivedAt ? b : latest, null);
-}
-
-/**
- * Each trade's own budget, by package id: the Budget summary's direct lines it carries (not those the owner carries). A trade
- * with none isn't in the map. Scope review & buyout measures the buyout against it; Bid leveling starts its variance from it.
- */
-export function tradeBudgets(budget: BudgetState, procurement: Procurement): Map<string, number> {
-  const sums = new Map<string, number>();
-  for (const line of budget.lines.filter(l => l.classification === "direct" && !l.byOwner)) {
-    const id = tradeForBudgetLine(budget, procurement, line)?.id;
-    if (id) sums.set(id, (sums.get(id) ?? 0) + line.budget);
-  }
-  return new Map([...sums].map(([id, sum]) => [id, cents(sum)]));
 }
 
 /** One row per trade, in procurement order: where its buyout stands and whose move it is. */

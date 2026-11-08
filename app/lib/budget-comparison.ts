@@ -38,6 +38,19 @@ export function tradeForBudgetLine(budget:BudgetState,procurement:Procurement,li
  return matches.length===1?matches[0]:null;
 }
 
+/**
+ * Each trade's own budget, by package id: the Budget summary's direct lines it carries (not those the owner carries). A trade
+ * with none isn't in the map. Scope review & buyout, Bid leveling and the Bid sheet summary all measure against it.
+ */
+export function tradeBudgets(budget: BudgetState, procurement: Procurement): Map<string, number> {
+  const sums = new Map<string, number>();
+  for (const line of budget.lines.filter(l => l.classification === "direct" && !l.byOwner)) {
+    const id = tradeForBudgetLine(budget, procurement, line)?.id;
+    if (id) sums.set(id, (sums.get(id) ?? 0) + line.budget);
+  }
+  return new Map([...sums].map(([id, sum]) => [id, Math.round(sum * 100) / 100]));
+}
+
 /** Shares are explicitly entered by the estimator; no inferred cost-center split. */
 export function setLowestSubSplit(budget:BudgetState,pkg:TradePackage,amounts:Record<string,number>,bid:number):BudgetState {
  const lines=budgetLinesForTrade(budget,pkg).lines;

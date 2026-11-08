@@ -7,7 +7,7 @@
 // leveling total, else the lowest submitted base bid, labelled by its basis. Nothing here picks a bidder.
 
 import type { BudgetState, LevelingCandidate } from "./budget";
-import { lowestBid, tradeBids, tradeForBudgetLine, type LowBid } from "./budget-comparison";
+import { lowestBid, tradeBids, tradeBudgets, type LowBid } from "./budget-comparison";
 import type { Procurement } from "./procurement";
 import type { Submission } from "./submissions";
 import { EMPTY_VE, type VeState } from "./value-engineering";
@@ -45,11 +45,10 @@ const cents = (v: number) => Math.round(v * 100) / 100;
 export function bidSheetSummary(input: BidSheetInput): BidSheetSummary {
   const { procurement, budget } = input;
   const sf = input.squareFeet && input.squareFeet > 0 ? input.squareFeet : null;
-  const direct = budget.lines.filter(l => l.classification === "direct" && !l.byOwner);
-  const owner = new Map(direct.map(l => [l.id, tradeForBudgetLine(budget, procurement, l)?.id ?? null]));
+  // The same figure Scope review & buyout and Bid leveling use (tradeBudgets).
+  const budgets = tradeBudgets(budget, procurement);
   const rows = procurement.packages.map(pkg => {
-    const lines = direct.filter(l => owner.get(l.id) === pkg.id);
-    const own = lines.length ? cents(lines.reduce((sum, l) => sum + l.budget, 0)) : null;
+    const own = budgets.get(pkg.id) ?? null;
     const bids = tradeBids(procurement, input.submissions, pkg.id, input.candidates, input.directory, input.ve ?? EMPTY_VE);
     const carried = lowestBid(bids);
     return {
