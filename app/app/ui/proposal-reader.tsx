@@ -6,12 +6,14 @@ import type { Procurement } from "../../lib/procurement";
 import type { ProposalState } from "../../lib/proposal-extraction";
 import { MAX_ATTACHMENT_BYTES } from "../../lib/submissions";
 import { getActiveProjectId } from "../../lib/project-scope";
+import { aiName, useAiReader } from "../../lib/ai-reader-client";
 import { AiPdfPicker, type LoadedPdf } from "./ai-pdf-picker";
 import { Button } from "./shared";
 
 export function ProposalReader({ pkg, invitations, proposals, companies, onRead }: {
   pkg: Procurement["packages"][number]; invitations: Procurement["invitations"]; proposals: ProposalState; companies: Map<string, string>; onRead: (result: ProposalReadResult, file: File) => string | null;
 }) {
+  const ai = useAiReader();
   const [invitationId, setInvitationId] = useState("");
   const [pdf, setPdf] = useState<LoadedPdf | null>(null);
   const [busy, setBusy] = useState(false);
@@ -46,7 +48,7 @@ export function ProposalReader({ pkg, invitations, proposals, companies, onRead 
       <label className="ui-field">Invited company<select disabled={busy} value={invitationId} onChange={e => { setInvitationId(e.target.value); setError(""); setDropped([]); }}><option value="">Choose the company that sent this proposal</option>{available.map(i => <option key={i.id} value={i.id}>{companies.get(i.bidderId) ?? i.bidderId}</option>)}</select></label>
       {pending && <p>There is already a proposal waiting for review for this company. Confirm or discard it before reading another.</p>}
       <AiPdfPicker label="Proposal PDF" disabled={busy} maxBytes={MAX_ATTACHMENT_BYTES} onChange={loaded => { setPdf(loaded); setError(""); setDropped([]); }}/>
-      <p className="ai-privacy">The PDF stays in this browser. Running AI sends its readable text and the published bid-form items to DeepSeek. The reading and citations are saved here; choose the PDF again after a reload.</p>
+      <p className="ai-privacy">The PDF stays in this browser. Running AI sends its readable text and the published bid-form items to {aiName(ai)}. The reading and citations are saved here; choose the PDF again after a reload.</p>
       <Button variant="primary" disabled={busy || !pdf || !invitation || pending} onClick={read}>{busy ? "Reading proposal…" : "Read proposal for review"}</Button>
     </>}
     {busy && <p role="status">Reading the proposal against bid form v{pkg.published?.version}… {progress} <Button onClick={() => controller.current?.abort()}>Stop reading</Button></p>}

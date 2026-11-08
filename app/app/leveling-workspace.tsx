@@ -777,7 +777,7 @@ export default function BidLevelingPage({ projectName, squareFeet }: { projectNa
             <div className="source-block"><span>Source reference</span><strong>{selected.source}</strong><p>Drawing and specification citations will attach here in the document-reader phase.</p></div>
             <label>Estimator note<textarea value={selected.estimatorNote} onChange={(event) => updateSelected({ estimatorNote: event.target.value })} rows={4} placeholder="Add a leveling decision or clarification…" /></label>
             <label className="required-check"><input type="checkbox" checked={selected.required} onChange={(event) => updateSelected({ required: event.target.checked })} />Required for complete scope</label>
-            <div className="review-state"><span><Check />Saved in this browser</span><small>{selected.sourceRow == null ? "This new row is included in JSON backups. Excel export will stop until it has a verified template row." : "This mapped source row is included in a safe Excel export."}</small></div>
+            <div className="review-state"><span><Check />Saved</span><small>{selected.sourceRow == null ? "This new row is included in JSON backups. Excel export will stop until it has a verified template row." : "This mapped source row is included in a safe Excel export."}</small></div>
           </aside>}
         </div>
       </section>

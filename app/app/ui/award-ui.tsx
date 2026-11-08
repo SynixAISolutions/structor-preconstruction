@@ -321,7 +321,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
       <Button onClick={() => navigate("settings")}>Company forms & logo</Button>{unread > 0 && <Button onClick={() => { setTab("Activity"); if (!award) notify(`${unread} recorded contract notifications across this project.`); }}><Bell size={16}/>{unread} unread</Button>}
       <Button onClick={() => navigate("leveling")}>Bid leveling<ArrowRight size={15}/></Button>
     </>}/>
-    <PreviewNote>Browser-only demo · Shares, signature requests, and notifications are recorded here; no email is sent. Typed signatures are demonstration records.</PreviewNote>
+    <PreviewNote>Shares, signature requests and notifications are recorded here; nothing is emailed, except by DocuSign when it is connected. Typed signatures are records, not legal signatures.</PreviewNote>
     <Stats items={[
       { label: "Trade packages", value: procurement.packages.length, detail: `${procurement.packages.filter(item => item.published).length} published bid forms` },
       { label: "Live awards", value: awardsLive.length, detail: "One active award per package" },
