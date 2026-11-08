@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { buildSchematicModel, useSchematicModel } from "../../lib/schematic-model-client";
-import { editColumn, editDoorNumber, editGlazing, editPartition, editWall, heightSheet, keptWalls, levelSpaces, moveOutlinePoint, polygonArea, setLevelHeight, setUntaggedWallType, type Point, type SchematicLevel, type SchematicModel } from "../../lib/schematic-model";
+import { editColumn, editDoorNumber, editGlazing, editPartition, editWall, heightSheet, keptWalls, levelSpaces, moveOutlinePoint, polygonArea, setLevelHeight, setOpenToBelow, setUntaggedWallType, type Point, type SchematicLevel, type SchematicModel } from "../../lib/schematic-model";
 import { glazingTotals, scheduleRow, wallTypeTotals } from "../../lib/tag-placement";
 import { openStoredPdf, renderStoredPage, useProjectDocuments } from "../../lib/project-files-client";
 import { drawingRegister, type StoredDocument } from "../../lib/project-files";
@@ -179,14 +179,15 @@ function OutlineSheet({ level, spaces, doc, frameKey, frames, saveFrame, onMove,
 }
 
 /** The rooms the walls enclose, with their areas, and the room names on the plan that have no enclosed space of their own. */
-function RoomsDetails({ level, spaces }: { level: SchematicLevel; spaces: Room[] }) {
+function RoomsDetails({ level, spaces, onOpen }: { level: SchematicLevel; spaces: Room[]; /** Missing on the lowest level, or while building. */ onOpen?: (space: Room, open: boolean) => void }) {
   const loose = level.rooms.filter(r => !spaces.some(s => s.name === r.name && s.number === r.number));
   const sorted = [...spaces].sort((a, b) => Number(!!b.name) - Number(!!a.name) || a.number.localeCompare(b.number, undefined, { numeric: true }) || b.area - a.area);
   const floors = spaces.filter(r => !r.open), open = spaces.length - floors.length;
+  const label = (r: Room) => `${r.number} ${r.name || "unnamed space"} (${r.area.toLocaleString()} SF)`.trim();
   return <details><summary>{spaces.length ? `Rooms · ${floors.length} enclosed by the walls, ${floors.filter(r => r.name).length} named · ${floors.reduce((n, r) => n + r.area, 0).toLocaleString()} SF${open ? ` · ${open} open to below, not counted` : ""}` : `${level.rooms.length} room names`} · Check against the plan</summary>
-    {!!spaces.length && <div className="sm-table-wrap"><table className="ui-table"><thead><tr><th>Number</th><th>Room</th><th>Area · SF</th></tr></thead><tbody>{sorted.map((r, i) => <tr key={i}><td>{r.number}</td><td>{r.open ? "Open to below" : r.name || "Unnamed space"}</td><td>{r.area.toLocaleString()}</td></tr>)}</tbody></table></div>}
+    {!!spaces.length && <div className="sm-table-wrap"><table className="ui-table"><thead><tr><th>Number</th><th>Room</th><th>Area · SF</th>{onOpen && <th>Floor</th>}</tr></thead><tbody>{sorted.map((r, i) => <tr key={i}><td>{r.number}</td><td>{r.name || "Unnamed space"}{r.open ? " · open to below" : ""}</td><td>{r.open ? <s>{r.area.toLocaleString()}</s> : r.area.toLocaleString()}</td>{onOpen && <td><button type="button" className="ui-btn secondary" aria-label={r.open ? `Restore the floor of ${label(r)}` : `Mark ${label(r)} open to below`} onClick={() => onOpen(r, !r.open)}>{r.open ? "Restore floor" : "Open to below"}</button></td>}</tr>)}</tbody></table></div>}
     {!!loose.length && <p>{spaces.length ? "Named on the plan without an enclosed space of their own (open to another space, or a wall wasn't read)" : "Room names read on the plan"}: {loose.map(r => `${r.number} ${r.name}`.trim()).join(" · ")}.</p>}
-    {!!spaces.length && <p>Areas are measured to the wall centerlines, from the walls, doors and glass read on the plan; marking something not a wall or not glass updates them.</p>}
+    {!!spaces.length && <p>Areas are measured to the wall centerlines, from the walls, doors and glass read on the plan; marking something not a wall or not glass updates them.{onOpen ? " A space open to the level below (a gym's upper volume, an atrium) has no floor in the model and isn't counted; the plan marks these with a large X, and you can correct them here." : ""}</p>}
   </details>;
 }
 
@@ -227,7 +228,7 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
         {!!level.glazing?.filter(g => !g.excluded).length && <p>Glass: {glazingTotals(level.glazing.filter(g => !g.excluded)).map(t => `${t.type} ${t.feet.toLocaleString()} ft`).join(" · ")}</p>}
         <p>Types come from the partition tags on the plan{current.partitionSheet ? `; what each one is, from the partition schedule on ${current.partitionSheet}` : ""}. Typical partitions are often not tagged; set them below once you have checked the general notes.</p>
         <form onSubmit={e => { e.preventDefault(); change(m => setUntaggedWallType(m, level.id, untaggedType)); }}><label className="ui-field">Set untagged walls to<input disabled={busy} maxLength={16} value={untaggedType} onChange={e => setUntaggedType(e.target.value)} placeholder="e.g. SA3.10"/></label><Button disabled={busy} type="submit">{untaggedType.trim() ? "Apply to untagged walls" : "Clear the type I set"}</Button></form>
-      </details>}<RoomsDetails level={level} spaces={spaces}/></Panel>}</aside></div>
+      </details>}<RoomsDetails level={level} spaces={spaces} onOpen={busy || level.order === Math.min(...current.levels.map(l => l.order)) ? undefined : (space, open) => change(m => setOpenToBelow(m, level.id, space, open))}/></Panel>}</aside></div>
       {current.warnings.length > 0 && <Panel title="Sizing and reading warnings"><ul>{current.warnings.map((warning, i) => <li key={i}>{warning}</li>)}</ul></Panel>}
       {showOutline && level && <Panel title={`${level.name} outline correction`} subtitle="Uses the original stored plan. Printed scale or your explicit alignment fixes the image-to-feet conversion.">{doc ? <OutlineSheet key={`${current.builtAt}:${level.id}`} level={level} spaces={spaces} doc={doc} frameKey={`${current.builtAt}:${level.id}`} frames={frames} saveFrame={(key, frame) => setFrames(values => ({ ...values, [key]: frame }))} editable={!busy} types={[...new Set([...current.levels.flatMap(l => (l.walls ?? []).map(w => w.type).filter((t): t is string => !!t)), ...(current.partitionTypes ?? []).map(t => t.tag)])].sort()} onEditWall={(index, edit) => change(m => editWall(m, level.id, index, edit))} onEditDoor={(index, number) => change(m => editDoorNumber(m, level.id, index, number))} onEditGlazing={(index, edit) => change(m => editGlazing(m, level.id, index, edit))} onEditPartition={(index, excluded) => change(m => editPartition(m, level.id, index, excluded))} onEditColumn={(index, excluded) => change(m => editColumn(m, level.id, index, excluded))} onMove={(index, point) => change(m => { const original = m.levels.find(l => l.id === level.id)!; const moved = moveOutlinePoint(m, level.id, index, point); return index === 0 && openOutline(original.outline).length !== original.outline.length ? moveOutlinePoint(moved, level.id, original.outline.length - 1, point) : moved; })}/> : <p role="alert">The original source document is unavailable. Restore it in Project files to correct this outline.</p>}</Panel>}
     </>}

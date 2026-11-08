@@ -109,6 +109,17 @@ assert.deepEqual(notPartition.levels[0].partitions.map(p => !!p.excluded), [fals
 assert.deepEqual(S.editPartition(notPartition, "L1", 1, false).levels[0].partitions.map(p => !!p.excluded), [false, false], "Restored");
 assert.throws(() => S.editPartition(partitionModel, "L1", 7, true), /partition is no longer/);
 
+// A space opened to the level below, or given its floor back: the plan's own X inside it goes too; the lowest level can't open.
+const room = { outline: [[0, 0], [30, 0], [30, 20], [0, 20]], at: [15, 10] }, lShape = { outline: [[0, 0], [30, 0], [30, 4], [4, 4], [4, 20], [0, 20]], at: [12, 10] };
+const twoLevels = { levels: [{ id: "L1", order: 1, openings: [] }, { id: "L2", order: 2, openings: [[5, 5], [100, 100]] }] };
+assert.deepEqual(S.setOpenToBelow(twoLevels, "L2", room, false).levels[1].openings, [[100, 100]], "The plan's X inside the room is removed; the one elsewhere stays");
+assert.deepEqual(S.setOpenToBelow(twoLevels, "L2", room, true).levels[1].openings, [[100, 100], [15, 10]], "Opened at its tag, once");
+assert.deepEqual(S.setOpenToBelow(twoLevels, "L2", lShape, true).levels[1].openings.at(-1), [2, 10], "A tag outside an L-shaped space: a point across its middle instead");
+assert.deepEqual(S.setOpenToBelow({ levels: [{ id: "L1", order: 1 }, { id: "L2", order: 2 }] }, "L2", room, true).levels[1].openings, [[15, 10]], "A model built before openings were read");
+assert.throws(() => S.setOpenToBelow(twoLevels, "L1", room, true), /lowest level/);
+const reopened = S.setOpenToBelow(twoLevels, "L2", room, true).levels[1];
+assert.deepEqual(S.levelSpaces({ ...reopened, walls: room.outline.map((p, i) => ({ a: p, b: room.outline[(i + 1) % 4], thickness: 0.4 })), rooms: [] }).map(r => !!r.open), [true], "The space reads as open to below");
+
 // Tiles over the plan's area, and tags read on a tile placed back in the level's feet.
 const sheet = { widthPt: 3024, heightPt: 2160 }, frame = { widthFeet: 336, heightFeet: 240 };
 const tiles = S.tagTiles(sheet, frame, [[0.2, 0.3], [0.8, 0.3], [0.8, 0.8], [0.2, 0.8]]);
