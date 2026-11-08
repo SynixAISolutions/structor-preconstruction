@@ -16,6 +16,11 @@ const base = { procurement: sampleProcurement, submissions: sampleSubmissions, c
 const row = (rows, id) => rows.find(r => r.packageId === id);
 const rows = Y.buyoutRows(base);
 
+// Each trade's own budget, shared with Bid leveling: the buyout rows measure against the same figures.
+const budgets = Y.tradeBudgets(sampleBudget, sampleProcurement);
+assert.deepEqual(rows.filter(r => r.budget !== null).map(r => [r.packageId, r.budget]), [...budgets].sort((p, q) => sampleProcurement.packages.findIndex(x => x.id === p[0]) - sampleProcurement.packages.findIndex(x => x.id === q[0])), "Buyout uses tradeBudgets");
+assert.ok(budgets.get("thermal") > 0 && !budgets.has("demolition-x"), "Roofing has a budget; a trade with no lines has none");
+
 // Every trade, in procurement order; status and ball in court follow the bids and the award.
 assert.deepEqual(rows.map(r => r.packageId), sampleProcurement.packages.map(p => p.id));
 assert.deepEqual(["demolition", "thermal", "concrete", "drywall"].map(id => [row(rows, id).status, row(rows, id).ballInCourt]),

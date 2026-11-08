@@ -166,11 +166,23 @@ export function bestAndFinalFor(buyout: BuyoutState, submissions: Submission[], 
   return mine.reduce<Bafo | null>((latest, b) => !latest || b.receivedAt > latest.receivedAt ? b : latest, null);
 }
 
+/**
+ * Each trade's own budget, by package id: the Budget summary's direct lines it carries (not those the owner carries). A trade
+ * with none isn't in the map. Scope review & buyout measures the buyout against it; Bid leveling starts its variance from it.
+ */
+export function tradeBudgets(budget: BudgetState, procurement: Procurement): Map<string, number> {
+  const sums = new Map<string, number>();
+  for (const line of budget.lines.filter(l => l.classification === "direct" && !l.byOwner)) {
+    const id = tradeForBudgetLine(budget, procurement, line)?.id;
+    if (id) sums.set(id, (sums.get(id) ?? 0) + line.budget);
+  }
+  return new Map([...sums].map(([id, sum]) => [id, cents(sum)]));
+}
+
 /** One row per trade, in procurement order: where its buyout stands and whose move it is. */
 export function buyoutRows(input: BuyoutInput): BuyoutRow[] {
   const { procurement, budget } = input;
-  const direct = budget.lines.filter(l => l.classification === "direct" && !l.byOwner);
-  const lineOwner = new Map(direct.map(l => [l.id, tradeForBudgetLine(budget, procurement, l)?.id ?? null]));
+  const budgets = tradeBudgets(budget, procurement);
   return procurement.packages.map(pkg => {
     const entry = input.buyout.entries.find(e => e.packageId === pkg.id) ?? null;
     const bids = tradeBids(procurement, input.submissions, pkg.id, input.candidates, input.directory);
@@ -194,8 +206,7 @@ export function buyoutRows(input: BuyoutInput): BuyoutRow[] {
     else if (!review.held) [status, ballInCourt, next] = ["review-scheduled", "contractor", `Scope review ${review.date}`];
     else if (!bestAndFinal) [status, ballInCourt, next] = ["negotiating", "subcontractor", "Waiting for best and final"];
     else [status, ballInCourt, next] = ["negotiating", "contractor", "Choose the subcontractor"];
-    const lines = direct.filter(l => lineOwner.get(l.id) === pkg.id);
-    const own = lines.length ? cents(lines.reduce((s, l) => s + l.budget, 0)) : null;
+    const own = budgets.get(pkg.id) ?? null;
     const awarded = award && stage !== "cancelled" ? { company: award.snapshot.company.name, amount: award.amount, at: award.createdAt } : null;
     const basis = awarded?.amount ?? bestAndFinal?.amount ?? bids[0]?.value ?? null;
     const executed = stage === "executed";

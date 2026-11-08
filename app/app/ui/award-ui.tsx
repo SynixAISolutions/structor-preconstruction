@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   AlertTriangle, ArrowRight, Award as AwardIcon, Bell, Check, CheckCircle2,
   Download, FileCheck2, FileText, History, MessageSquare, PenLine, Plus,
@@ -159,9 +159,14 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
   const [sending, setSending] = useState(false);
   const [checking, setChecking] = useState(false);
 
+  // The package another screen asked for (Scope review & buyout's "Choose subcontractor"), kept until it is shown: reading
+  // and clearing it in one pass lost it when the effect ran twice (React's development check), and Concrete opened instead.
+  const asked = useRef<string | null>(null);
   useEffect(() => {
-    const target = sessionStorage.getItem("contracts-package");
-    if (target && procurement.packages.some(p => p.id === target)) { setPackageId(target); sessionStorage.removeItem("contracts-package"); return; }
+    const note = sessionStorage.getItem("contracts-package");
+    if (note) { asked.current = note; sessionStorage.removeItem("contracts-package"); }
+    const target = asked.current;
+    if (target && procurement.packages.some(p => p.id === target)) { if (packageId === target) asked.current = null; else setPackageId(target); return; }
     if (procurement.packages.some(pkg => pkg.id === packageId)) return;
     const first = loadedPackageId || state.awards.find(award => !award.cancelled)?.packageId || procurement.packages.find(pkg => pkg.published)?.id || procurement.packages[0]?.id || "";
     setPackageId(first);
@@ -191,6 +196,8 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
   const stage = award ? awardStage(award) : null;
   const currentRevision = award ? award.exhibit.revisions.find(revision => revision.number === revisionNumber) ?? latestExhibit(award) : null;
   const directLines = budget.lines.filter(line => line.classification === "direct");
+  // A budget split by cost center (Project 1: New construction and Sitework) has the same line in each; name the cost center.
+  const centered = new Set(directLines.map(line => line.costCenter)).size > 1;
   const availableAllowances = budget.allowances.filter(item => item.status !== "excluded");
   const unread = state.notifications.filter(note => !note.read).length;
   // Marcel, 24 Oct: "amount = BAFO". A company's best and final is the award's value unless someone picks another.
@@ -349,7 +356,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
           {packageCandidates.length > 0 && <Panel title="Award basis and attachments" subtitle="These choices are frozen into the award snapshot and Exhibit A.">
             <div className="award-form-grid">
               <label className="ui-field"><span>Award value</span><select value={usingBafo ? "bafo" : basis} onChange={event => { const value = event.target.value; setLevelingValueChosen(value !== "bafo"); if (value !== "bafo") setBasis(value as LevelingBasis); }}>{candidateBafo && <option value="bafo">Best and final · {usd(candidateBafo.amount)}</option>}{(Object.keys(basisLabels) as LevelingBasis[]).map(value => <option value={value} key={value}>{basisLabels[value]}</option>)}</select><small>{selectedAmount === null ? "No value is available for this basis." : `${usd(selectedAmount)} will be the subcontract amount.`}</small></label>
-              <label className="ui-field"><span>Budget line · optional</span><select value={budgetLineId} onChange={event => setBudgetLineId(event.target.value)}><option value="">Do not link a budget line</option>{directLines.map(line => <option value={line.id} key={line.id}>{line.description} · {line.csiCode || "No CSI"}</option>)}</select><small>Once the subcontract is executed, its sum is this line's committed cost on the Budget page (pending until then). Left unlinked, it goes to the trade's budget line.</small></label>
+              <label className="ui-field"><span>Budget line · optional</span><select value={budgetLineId} onChange={event => setBudgetLineId(event.target.value)}><option value="">Do not link a budget line</option>{directLines.map(line => <option value={line.id} key={line.id}>{line.description} · {line.csiCode || "No CSI"}{centered && line.costCenter ? ` · ${line.costCenter}` : ""}</option>)}</select><small>Once the subcontract is executed, its sum is this line's committed cost on the Budget page (pending until then). Left unlinked, it goes to the trade's budget line.</small></label>
             </div>
             <div className="award-allowances"><header><strong>Allowances included in the award</strong><small>Excluded allowances cannot be selected.</small></header>{availableAllowances.length ? availableAllowances.map(item => <label key={item.id}><input type="checkbox" checked={allowanceIds.includes(item.id)} onChange={event => setAllowanceIds(current => event.target.checked ? [...current, item.id] : current.filter(id => id !== item.id))}/><span><strong>{item.name}</strong><small>{item.source || "No source recorded"}</small></span><b>{usd(item.amount)}</b></label>) : <p>No reviewable or included allowances are recorded.</p>}</div>
             <ErrorSummary errors={errors}/>
