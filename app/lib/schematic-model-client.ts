@@ -5,8 +5,9 @@
 
 import { useCallback, useRef } from "react";
 import { aiJob } from "./ai-more-client";
-import type { PartitionTypeRead, PlanReading, PlanTag } from "./ai-jobs-more";
-import { mergePartitionTypes, scheduleRow, type PartitionType } from "./tag-placement";
+import type { PartitionKeyRead, PartitionTypeRead, PlanReading, PlanTag } from "./ai-jobs-more";
+import type { WallLayer } from "./wall-assemblies";
+import { mergePartitionTypes, scheduleRow, tagKey, type PartitionType } from "./tag-placement";
 import { drawingRegister, type StoredDocument } from "./project-files";
 import { openStoredPdf, readStoredText, renderStoredPage, renderStoredRegion, renderStoredTiles } from "./project-files-client";
 import type { Project } from "./projects";
@@ -135,17 +136,40 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
   return { levels, warnings, builtAt: new Date().toISOString(), ...(partitionTypes ? { partitionTypes, partitionSheet: typeSheet!.sheet } : {}) };
 }
 
-/** The wall types a partition type sheet schedules, read on the parts of the sheet that hold drawing (lib/ai-jobs-more "partition-types"). */
+/**
+ * The partition type sheet read again for each wall type's layers, for a model built before layers were read: that one
+ * sheet's parts and one text reading, not a rebuild. Pass the result to setPartitionTypes.
+ */
+export async function readWallLayers(documents: StoredDocument[], signal?: AbortSignal): Promise<{ partitionTypes: PartitionType[]; partitionSheet: string }> {
+  const typeSheet = partitionTypeSheet(drawingRegister(documents));
+  if (!typeSheet) throw new Error("No partition type sheet was found in the project's drawings. Upload the sheet that schedules the wall types.");
+  return { partitionTypes: await readPartitionTypes(typeSheet.doc, typeSheet.page, typeSheet.sheet, signal), partitionSheet: typeSheet.sheet };
+}
+
+/**
+ * The wall types a partition type sheet schedules, read on the parts of the sheet that hold drawing (lib/ai-jobs-more
+ * "partition-types"), with each type's layers worked out from the sheet's legend and typical sections ("wall-layers": one
+ * text-only reading). Without layers the types still come back: the schedule alone describes them.
+ */
 async function readPartitionTypes(doc: StoredDocument, pageNumber: number, sheetName: string, signal?: AbortSignal): Promise<PartitionType[]> {
   const [pdfjs, pdf] = await Promise.all([import("pdfjs-dist"), openStoredPdf(doc)]);
   const page = await pdf.getPage(pageNumber), viewport = page.getViewport({ scale: 1 });
   const { segments } = vectorsFromOperators(await page.getOperatorList(), pdfjs.OPS as unknown as Record<string, number>, viewport.transform);
-  const rows: PartitionType[] = [];
+  const rows: PartitionType[] = [], legend: string[] = [], sections: PartitionKeyRead["sections"] = [];
   const tiles = contentTiles(segments, { widthPt: viewport.width, heightPt: viewport.height });
   for (let i = 0; i < tiles.length; i += 3) await Promise.all(tiles.slice(i, i + 3).map(async tile => {
-    rows.push(...(await aiJob<{ types: PartitionTypeRead[] }>("partition-types", { sheet: sheetName, image: await renderStoredRegion(doc, pageNumber, tile, 2000) }, signal)).types);
+    const read = await aiJob<{ types: PartitionTypeRead[] } & Partial<PartitionKeyRead>>("partition-types", { sheet: sheetName, image: await renderStoredRegion(doc, pageNumber, tile, 2000) }, signal);
+    rows.push(...read.types);
+    // Tiles overlap: a legend line or a section read twice counts once.
+    for (const line of read.legend ?? []) if (!legend.includes(line)) legend.push(line);
+    for (const section of read.sections ?? []) if (!sections.some(s => s.title === section.title && s.labels.join() === section.labels.join())) sections.push(section);
   }));
-  return mergePartitionTypes(rows);
+  const types = mergePartitionTypes(rows);
+  if (!types.length) return types;
+  try {
+    const read = await aiJob<{ types: { tag: string; layers: WallLayer[] }[] }>("wall-layers", { types, legend, sections }, signal);
+    return types.map(t => { const found = read.types.find(r => tagKey(r.tag) === tagKey(t.tag)); return found ? { ...t, layers: found.layers } : t; });
+  } catch (error) { if (signal?.aborted) throw error; return types; }
 }
 
 /**

@@ -4,6 +4,7 @@
 // number goes to the nearest door, one number per door. Pure; feet, y down as on the plan.
 
 import type { Curve, Point, Segment } from "./plan-vectors";
+import type { WallLayer } from "./wall-assemblies";
 
 export type PlacedTag = { text: string; kind: "wall" | "door" | "glazing" | "room"; at: Point; name?: string };
 /** A tag oval (a stadium): its two semicircle ends' centers and their radius, in feet. */
@@ -98,7 +99,8 @@ export function normalTag(text: string): string {
  */
 export const tagKey = (text: string) => text.toUpperCase().replace(/[\s.\-_]+/g, "");
 
-export type PartitionType = { tag: string; description: string; thickness: string; rating: string };
+/** A wall type from the partition type sheet; `layers` from its side the tag is on to the other (lib/wall-assemblies), when read. */
+export type PartitionType = { tag: string; description: string; thickness: string; rating: string; layers?: WallLayer[] };
 
 /** Rows of the partition type schedule read on several tiles, one per code: the fullest reading wins. */
 export function mergePartitionTypes(rows: PartitionType[]): PartitionType[] {

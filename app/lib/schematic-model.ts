@@ -568,6 +568,22 @@ function pointInside(space: { outline: Point[]; at: Point }): Point {
 /** The walls that count: everything read from the plan except what the estimator marked not a wall. */
 export const keptWalls = (level: SchematicLevel) => (level.walls ?? []).filter(w => !w.excluded);
 
+/** The longest wall of a type on a level (its index in level.walls, "Untagged" for walls without one), to open in 3D; -1 when none. */
+export function longestWallOfType(level: SchematicLevel, type: string): number {
+  let best = -1, longest = -1;
+  (level.walls ?? []).forEach((w, i) => {
+    const length = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]);
+    if (!w.excluded && (w.type ?? "Untagged") === type && length > longest) { best = i; longest = length; }
+  });
+  return best;
+}
+
+/** The partition types read again from their sheet (now with each type's layers), in place of those read at build. Walls keep their types. */
+export function setPartitionTypes(model: SchematicModel, partitionTypes: PartitionType[], partitionSheet: string): SchematicModel {
+  if (!partitionTypes.length) throw new Error(`No wall types were read on ${partitionSheet}.`);
+  return { ...model, partitionTypes, partitionSheet };
+}
+
 export function setLevelHeight(model: SchematicModel, levelId: string, height: number): SchematicModel {
   if (!(Number.isFinite(height) && height >= 6 && height <= 60)) throw new Error("Use a floor-to-floor height between 6 and 60 ft.");
   const levels = model.levels.map(l => l.id === levelId ? { ...l, height } : l);
