@@ -100,6 +100,10 @@ for (let i = 0; i < 6; i++) plan.push(seg(0, i * 20 + 5, 60, i * 20 + 5, 1.8)); 
 for (let i = 0; i < 40; i++) plan.push(seg(0, i * 3 + 1, 50, i * 3 + 1, 0.48));                                          // 0.48 pt hatching, 3 ft apart
 assert.deepEqual(W.wallWeight(plan, PPF), { weight: 1.2, paired: 1 });
 assert.equal(W.wallWeight(plan.filter(s => s.width !== 1.2), PPF), null, "Nothing pairs: no wall weight");
+// A sheet frame and title block divider in the wall pen (Davey Lopes' A102) don't count against it; long walls that pair still do.
+const withFrame = [...plan.filter(s => s.width !== 1.8), ...[[-10, -10, 300, -10], [300, -10, 300, 200], [300, 200, -10, 200], [-10, 200, -10, -10], [250, -10, 250, 200]].map(([x1, y1, x2, y2]) => seg(x1, y1, x2, y2))];
+assert.equal(W.wallWeight(withFrame, PPF)?.weight, 1.2, "The frame, 1,240 ft of single lines against 960 ft of walls, is left out");
+assert.equal(W.wallWeight([...withFrame, seg(0, 150, 280, 150), seg(0, 150.4, 280, 150.4)], PPF)?.paired > 0.9, true, "A long wall the length of the frame is still a wall");
 assert.match(W.planWalls(plan.filter(s => s.width !== 1.2), PPF).note, /^No line weight on this sheet pairs up like walls/);
 const found = W.planWalls(plan, PPF);
 assert.deepEqual([found.weight, found.walls.length, found.note], [1.2, 12, "Walls are the 1.2 pt lines (100% of them pair at a wall's thickness)."]);

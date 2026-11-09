@@ -127,8 +127,22 @@ assert.deepEqual([Math.round(pieces.treads[0].top * 1000) / 1000, Math.round(pie
 
 // In a level's frame, read from a plan: only flights drawn whole with an arrow are stairs arriving there.
 const sheetB = { widthPt: 3024, heightPt: 2160 }, frameB = { widthFeet: 336, heightFeet: 240 };
-assert.deepEqual(S.levelStairs([...u8, ...flightLines(40, 44, 40, 10)], [up.fill], sheetB, frameB, [], 1.2).map(s => s.flights.map(f => f.risers)), [[8, 8]], "Evenly spaced lines with no arrow aren't a stair");
-assert.deepEqual(S.levelStairs(cutLines, [arrow(2, 3, 1).fill], sheetB, frameB, [], 1.2), [], "A flight rising from this level belongs to the level above");
+assert.deepEqual(S.stairsArriving(S.levelFlights([...u8, ...flightLines(40, 44, 40, 10)], [up.fill], sheetB, frameB, [], 1.2), null).map(s => s.flights.map(f => f.risers)), [[8, 8]], "Evenly spaced lines with no arrow aren't a stair");
+const risingHere = S.levelFlights([...cutLines, arrow(2, 3, 1).shaft], [arrow(2, 3, 1).fill], sheetB, frameB, [], 1.2);
+assert.deepEqual([S.stairsArriving(risingHere, null), risingHere.rising.map(f => [f.risers, f.arrow])], [[], [[8, "b"]]], "A flight rising from this level belongs to the level above; its UP arrow is kept for that level");
+
+// An open arrowhead (Davey Lopes: two 0.71 ft strokes at 45 degrees, the walkline behind the point) reads like a filled one.
+const vHead = (x, y, dir) => [tl([x, y], [x - 0.5, y - dir * 0.5]), tl([x, y], [x + 0.5, y - dir * 0.5]), tl([x, y], [x, y - dir * 3])];
+assert.deepEqual(ST.planFlights([...flightLines(0, 4, 0, 8), ...vHead(2, 1, -1)], [], PPF, 1.2, null).map(f => f.arrow), ["a"], "An open V pointing up the sheet, toward the first tread line");
+assert.deepEqual(ST.planFlights([...flightLines(0, 4, 0, 8), tl([2, 1], [1.5, 1.5]), tl([2, 1], [2.5, 1.5])], [], PPF, 1.2, null).map(f => f.arrow), [null], "No walkline behind it: not an arrow");
+
+// A stair its plan draws without an arrow (Davey Lopes' A102) takes its direction from the flight rising to it on the plan below,
+// whose UP arrow points to its top: walking down, it runs toward that flight's foot.
+const plainUpper = { arriving: [{ flights: [{ a: [2, 0], b: [2, 9], width: 4, risers: 10, arrow: null }] }], rising: [] };
+const lowerWithUp = { arriving: [], rising: [{ a: [2.2, 5], b: [2.2, 9], width: 4, risers: 5, arrow: "a" }] };
+assert.deepEqual(S.stairsArriving(plainUpper, lowerWithUp).map(s => s.flights.map(f => f.arrow)), [["b"]], "Rising toward a (the top of the sheet) from b: the stair runs down to b");
+assert.deepEqual(S.stairsArriving(plainUpper, { ...lowerWithUp, rising: [{ ...lowerWithUp.rising[0], a: [9, 5], b: [9, 9] }] }), [], "A flight rising somewhere else says nothing about this one");
+assert.deepEqual(S.stairsArriving(plainUpper, null), [], "No plan below, no direction: not kept");
 const twoLevels = { levels: [{ id: "L1", order: 1, elevation: 0 }, { id: "L2", order: 2, elevation: 13.94, stairs: [{ flights: B }] }] };
 assert.deepEqual([S.stairRise(twoLevels, twoLevels.levels[1]), S.stairRise(twoLevels, twoLevels.levels[0])], [13.94, null], "A stair rises from the level below; the lowest has none");
 assert.equal(S.editStair(twoLevels, "L2", 0, true).levels[1].stairs[0].excluded, true, "Not a stair, kept so it can be restored");

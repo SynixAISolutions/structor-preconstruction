@@ -14,7 +14,7 @@ import { mergeTags, placeTags, tagOvals, type PartitionType, type PlacedTag } fr
 import type { Curve, Segment } from "./plan-vectors";
 import type { RegisterRow } from "./project-files";
 import { inside, levelRooms, type Room } from "./room-detection";
-import { groupFlights, planFlights } from "./stair-detection";
+import { borrowArrows, groupFlights, planFlights, type Flight } from "./stair-detection";
 import { hexagonTags, planColumns, planGlazing, planPartitions, planRailings, planWalls } from "./wall-detection";
 
 export type Point = [number, number];
@@ -52,7 +52,7 @@ export type SchematicLevel = {
   columns?: SchematicColumn[];
   /** Where the plan marks the floor open to the level below (levelOpenings). Missing on models built before 6 Nov. */
   openings?: Point[];
-  /** Stairs that arrive at this level from the one below, read from its plan (levelStairs). Missing on models built before 9 Nov. */
+  /** Stairs that arrive at this level from the one below, read from its plan (levelFlights, stairsArriving). Missing on models built before 9 Nov. */
   stairs?: SchematicStair[];
 };
 /**
@@ -301,14 +301,26 @@ export function levelOpenings(segments: Segment[], page: { widthPt: number; heig
 }
 
 /**
- * The stairs arriving at a level (lib/stair-detection), in the same frame as its walls: the flights drawn whole on its plan,
- * grouped into stairs, each with its walkline arrow. A flight the plan's cut line crosses rises from this level instead, and
- * belongs to the level above. Evenly spaced lines with no arrow (sections' coursing, bleachers, a tile pattern) aren't stairs.
+ * A level's flights (lib/stair-detection), in the same frame as its walls: `arriving`, the flights drawn whole on its plan,
+ * grouped into stairs; `rising`, the flights its plan's cut line crosses that show an UP arrow, which rise from this level to
+ * the one above.
  */
-export function levelStairs(segments: Segment[], fills: Point[][], page: { widthPt: number; heightPt: number }, frame: Frame, outline: Point[], wallWeight: number | null): SchematicStair[] {
+export type LevelFlights = { arriving: SchematicStair[]; rising: SchematicStair["flights"] };
+export function levelFlights(segments: Segment[], fills: Point[][], page: { widthPt: number; heightPt: number }, frame: Frame, outline: Point[], wallWeight: number | null): LevelFlights {
   const { pointsPerFoot, box } = planArea(page, frame, outline);
-  return groupFlights(planFlights(segments, fills, pointsPerFoot, wallWeight, box).filter(f => !f.cut)).filter(flights => flights.some(f => f.arrow))
-    .map(flights => ({ flights: flights.map(f => ({ a: f.a, b: f.b, width: f.width, risers: f.risers, arrow: f.arrow })) }));
+  const flights = planFlights(segments, fills, pointsPerFoot, wallWeight, box);
+  const kept = (f: Flight) => ({ a: f.a, b: f.b, width: f.width, risers: f.risers, arrow: f.arrow });
+  return { arriving: groupFlights(flights.filter(f => !f.cut)).map(group => ({ flights: group.map(kept) })), rising: flights.filter(f => f.cut && f.arrow).map(kept) };
+}
+
+/**
+ * The stairs arriving at a level, each with the walkline arrow its plan draws; a stair drawn with none takes its direction from
+ * the flight rising to it on the plan of the level below (`below`), when there is one. Evenly spaced lines with no direction
+ * either way (sections' coursing, bleachers, a tile pattern) aren't stairs.
+ */
+export function stairsArriving(found: LevelFlights, below: LevelFlights | null): SchematicStair[] {
+  return found.arriving.map(stair => stair.flights.some(f => f.arrow) ? stair : { ...stair, flights: borrowArrows(stair.flights, below?.rising ?? []) })
+    .filter(stair => stair.flights.some(f => f.arrow));
 }
 
 /** A level's columns (wall-detection planColumns), in the same frame as its walls. */

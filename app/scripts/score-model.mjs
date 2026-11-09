@@ -16,7 +16,7 @@ import { relative, resolve } from "node:path";
 
 register("./ts-resolver.mjs", import.meta.url);
 const { vectorsFromOperators } = await import("../lib/plan-vectors.ts");
-const { feetPerInch, levelColumns, levelDoors, levelGlazing, levelOpenings, levelPartitions, levelStairs, levelWalls } = await import("../lib/schematic-model.ts");
+const { feetPerInch, levelColumns, levelDoors, levelGlazing, levelOpenings, levelFlights, levelPartitions, levelWalls, stairsArriving } = await import("../lib/schematic-model.ts");
 const B = await import("../lib/model-scoreboard.ts");
 const { hexagonTags } = await import("../lib/wall-detection.ts");
 const { jelleffTruth, JELLEFF_PLAN_SHEETS } = await import("../lib/drawing-score.ts");
@@ -72,6 +72,7 @@ function stripImage(raster, span) {
 }
 
 const levels = [];
+let flightsBelow = null;
 for (const plan of plans) {
   console.log(`\n${plan.sheet} (PDF page ${plan.page})`);
   const page = await pdf.getPage(plan.page), vp = page.getViewport({ scale: 1 });
@@ -98,8 +99,10 @@ for (const plan of plans) {
   const columns = levelColumns(segments, sheet, frame, outline, walls.weight, walls.walls);
   // The lowest level listed has no floor below it to open onto.
   const openings = plan === plans[0] ? [] : levelOpenings(segments, sheet, frame, outline);
-  // Stairs arrive at a level from the one below, so the lowest has none.
-  const stairs = plan === plans[0] ? [] : levelStairs(segments, fills, sheet, frame, outline, walls.weight);
+  // Stairs arrive at a level from the one below, so the lowest has none; one drawn without an arrow takes the plan below's.
+  const flights = levelFlights(segments, fills, sheet, frame, outline, walls.weight);
+  const stairs = plan === plans[0] ? [] : stairsArriving(flights, flightsBelow);
+  flightsBelow = flights;
   const wallFeet = Math.round(walls.walls.reduce((t, w) => t + Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), 0));
   console.log(`  read ${walls.walls.length} walls (${wallFeet} ft), ${doors.filter(d => d.kind === "door").length} doors, ${glazing.length} glass runs`);
 
