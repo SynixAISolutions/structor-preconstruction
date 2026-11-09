@@ -19,7 +19,7 @@ test("specification reader is available before any run and cannot send an unsele
   const html = renderToStaticMarkup(<SpecificationReader pkg={drywall} onRun={() => null}/>);
   assert.match(html, /Project manual PDF/);
   assert.match(html, /disabled=""[^>]*>Read selected sections/);
-  assert.match(html, /selected section text to DeepSeek/);
+  assert.match(html, /selected section text to Structor.s AI/, "Names the AI once the server says which; before that, Structor's AI");
 });
 
 test("proposal upload requires a published form and an eligible invited company", () => {

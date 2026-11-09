@@ -12,7 +12,7 @@
 // stored twice.
 
 import { activeAward, awardStage, type AwardState } from "./award";
-import { tradeBids, tradeForBudgetLine } from "./budget-comparison";
+import { tradeBids, tradeBudgets } from "./budget-comparison";
 import type { BudgetState, LevelingCandidate } from "./budget";
 import type { Procurement } from "./procurement";
 import type { Submission } from "./submissions";
@@ -169,8 +169,7 @@ export function bestAndFinalFor(buyout: BuyoutState, submissions: Submission[], 
 /** One row per trade, in procurement order: where its buyout stands and whose move it is. */
 export function buyoutRows(input: BuyoutInput): BuyoutRow[] {
   const { procurement, budget } = input;
-  const direct = budget.lines.filter(l => l.classification === "direct" && !l.byOwner);
-  const lineOwner = new Map(direct.map(l => [l.id, tradeForBudgetLine(budget, procurement, l)?.id ?? null]));
+  const budgets = tradeBudgets(budget, procurement);
   return procurement.packages.map(pkg => {
     const entry = input.buyout.entries.find(e => e.packageId === pkg.id) ?? null;
     const bids = tradeBids(procurement, input.submissions, pkg.id, input.candidates, input.directory);
@@ -194,8 +193,7 @@ export function buyoutRows(input: BuyoutInput): BuyoutRow[] {
     else if (!review.held) [status, ballInCourt, next] = ["review-scheduled", "contractor", `Scope review ${review.date}`];
     else if (!bestAndFinal) [status, ballInCourt, next] = ["negotiating", "subcontractor", "Waiting for best and final"];
     else [status, ballInCourt, next] = ["negotiating", "contractor", "Choose the subcontractor"];
-    const lines = direct.filter(l => lineOwner.get(l.id) === pkg.id);
-    const own = lines.length ? cents(lines.reduce((s, l) => s + l.budget, 0)) : null;
+    const own = budgets.get(pkg.id) ?? null;
     const awarded = award && stage !== "cancelled" ? { company: award.snapshot.company.name, amount: award.amount, at: award.createdAt } : null;
     const basis = awarded?.amount ?? bestAndFinal?.amount ?? bids[0]?.value ?? null;
     const executed = stage === "executed";

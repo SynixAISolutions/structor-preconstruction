@@ -286,7 +286,7 @@ export function RfiWorkspace({ projectName, notify }: ViewProps) {
 
   return <div className="rfi-view">
     <PageHeader eyebrow={`${projectName} / Quality & coordination`} title="Structor Check & RFIs" description="Review document issues, package approved questions for the architect, and return answers to the affected subcontractors." actions={<><Button onClick={() => setNotificationsOpen(true)}><Bell size={16}/>{unread.length ? `${unread.length} unread` : "Notifications"}</Button><Button variant="primary" onClick={newIssue}><Plus size={16}/>Add issue</Button></>}/>
-    <PreviewNote>Demo workflow · Sending and sharing are recorded in this browser. No email is sent.</PreviewNote>
+    <PreviewNote>Sending and sharing are recorded here. No email is sent.</PreviewNote>
     <Stats items={[
       { label: "Awaiting contractor review", value: summary.pendingReview, detail: "AI and subcontractor issues", tone: summary.pendingReview ? "orange" : "green" },
       { label: "Reviewed open issues", value: summary.open, detail: `${summary.openHigh} high severity` },

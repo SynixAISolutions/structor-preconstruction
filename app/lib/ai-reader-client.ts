@@ -20,3 +20,6 @@ export function useAiReader(): AiReader | null {
   useEffect(() => { let live = true; aiReader().then(r => { if (live) setReader(r); }, () => {}); return () => { live = false; }; }, []);
   return reader;
 }
+
+/** The AI a person's text goes to, for the notes beside an AI action: Claude when the server has it, else DeepSeek. */
+export const aiName = (reader: AiReader | null): string => reader?.reader === "claude" ? "Claude (Anthropic)" : reader ? "DeepSeek" : "Structor's AI";

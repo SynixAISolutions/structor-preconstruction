@@ -5,12 +5,14 @@ import { extractTradeScope, chunkPages, type ScopeRunResult } from "../../lib/ai
 import { manualSections, sectionsFromBidForm, sectionsInDivision } from "../../lib/manual-sections";
 import type { TradePackage } from "../../lib/procurement";
 import { getActiveProjectId } from "../../lib/project-scope";
+import { aiName, useAiReader } from "../../lib/ai-reader-client";
 import { AiPdfPicker, type LoadedPdf } from "./ai-pdf-picker";
 import { Button } from "./shared";
 
 export function SpecificationReader({ pkg, onRun }: {
   pkg: TradePackage; onRun: (result: ScopeRunResult, file: File) => string | null;
 }) {
+  const ai = useAiReader();
   const [pdf, setPdf] = useState<LoadedPdf | null>(null);
   const [bidForm, setBidForm] = useState<LoadedPdf | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
@@ -55,7 +57,7 @@ export function SpecificationReader({ pkg, onRun }: {
       <div className="ai-section-actions"><Button disabled={busy} onClick={() => setSelected(sectionsInDivision(sections, pkg.division).map(s => s.section))}>Select Division {pkg.division}</Button><Button disabled={busy} onClick={() => setSelected([])}>Clear selection</Button></div>
       <div className="ai-section-list">{visible.map(section => <label key={section.section}><input type="checkbox" disabled={busy} checked={selected.includes(section.section)} onChange={e => setSelected(e.target.checked ? [...selected, section.section] : selected.filter(s => s !== section.section))}/><span><strong>{section.section} · {section.title}</strong><small>PDF pages {section.firstPage}–{section.lastPage} · {section.pages.length} readable pages</small></span></label>)}{!visible.length && <p>No sections match your search.</p>}</div>
     </> : <p role="alert">No specification section headers were found. Choose a project manual with section numbers and readable text.</p>)}
-    <p className="ai-privacy">The PDF stays in this browser. Running AI sends the selected section text to DeepSeek. Findings and their citations are saved here for review; choose the PDF again after a reload.</p>
+    <p className="ai-privacy">The PDF stays in this browser. Running AI sends the selected section text to {aiName(ai)}. Findings and their citations are saved here for review; choose the PDF again after a reload.</p>
     <Button variant="primary" disabled={busy || !chosen.length} onClick={read}>{busy ? "Reading specifications…" : "Read selected sections"}</Button>
     {busy && <><p role="status">Reading request {progress.done} of {progress.total}…</p><Button onClick={() => controller.current?.abort()}>Stop reading and keep completed findings</Button></>}
     {error && <p role="alert" className="proc-source-error">{error}</p>}

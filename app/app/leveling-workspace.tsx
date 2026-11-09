@@ -42,6 +42,7 @@ import "./ui/leveling-extras.css";
 import { bidSheetSummary } from "../lib/bid-sheet-summary";
 import { openComparisonCandidates } from "../lib/portal-comparisons";
 import { useBudget } from "../lib/use-budget";
+import { tradeBudgets } from "../lib/budget-comparison";
 import { useAward } from "../lib/use-award";
 import { activeAward } from "../lib/award";
 import { LevelingHome, LevelingViews } from "./ui/leveling-home";
@@ -428,7 +429,9 @@ export default function BidLevelingPage({ projectName, squareFeet }: { projectNa
       procurement,
       submissions,
       directory,
-      budget: project.name === projectName && !project.isDemo ? project.budget : 0,
+      // The trade's own budget: what the estimator typed for it here, else its lines in the Budget summary. Never the last
+      // trade's: the budget box used to carry over when another trade was opened.
+      budget: (loadedPackageId === packageId && project.name === projectName && !project.isDemo ? project.budget : tradeComparisons[packageId]?.project.budget) || tradeBudgets(budget, procurement).get(packageId) || 0,
       revisions,
     });
     const previous = loadedPackageId === packageId && Object.keys(submissionProvenance).length ? { project, items, bidders, provenance: submissionProvenance } : tradeComparisons[packageId];
@@ -717,7 +720,7 @@ export default function BidLevelingPage({ projectName, squareFeet }: { projectNa
           <div><span>Budget</span><input aria-label="Project budget" type="number" value={project.budget} onChange={(event) => setProject({ ...project, budget: Number(event.target.value) })} /></div>
           <div><span>Low submitted bid</span><strong>{lowSubmittedBid == null ? "—" : money.format(lowSubmittedBid)}</strong><small>Before adjustments</small></div>
           <div><span>Reviewed leveled low</span><strong>{lowBid ? money.format(lowBid.reviewedTotal) : "—"}</strong><small>{lowBid?.bidder.name ?? "No reviewed bids yet"}</small></div>
-          <div><span>Variance to budget</span><strong className={lowBid && lowBid.reviewedTotal > project.budget ? "over" : "under"}>{lowBid ? money.format(lowBid.reviewedTotal - project.budget) : "—"}</strong><small>{lowBid && project.budget ? `${(((lowBid.reviewedTotal - project.budget) / project.budget) * 100).toFixed(1)}%` : ""}</small></div>
+          <div><span>Variance to budget</span><strong className={lowBid && project.budget ? (lowBid.reviewedTotal > project.budget ? "over" : "under") : undefined}>{lowBid && project.budget ? money.format(lowBid.reviewedTotal - project.budget) : "—"}</strong><small>{lowBid && project.budget ? `${(((lowBid.reviewedTotal - project.budget) / project.budget) * 100).toFixed(1)}%` : lowBid ? "Enter the budget" : ""}</small></div>
           <div className="progress-summary"><span>Review progress</span><strong>{reviewPercent}%</strong><div className="progress-track" aria-label={`${reviewPercent}% of required bidder responses reviewed`}><i style={{ width: `${reviewPercent}%` }} /></div><small>{openReviewCount} open checks · {reviewedBidderCount}/{reviewBidders.length} active bidders rank-ready</small></div>
         </section>
 
@@ -774,7 +777,7 @@ export default function BidLevelingPage({ projectName, squareFeet }: { projectNa
             <div className="source-block"><span>Source reference</span><strong>{selected.source}</strong><p>Drawing and specification citations will attach here in the document-reader phase.</p></div>
             <label>Estimator note<textarea value={selected.estimatorNote} onChange={(event) => updateSelected({ estimatorNote: event.target.value })} rows={4} placeholder="Add a leveling decision or clarification…" /></label>
             <label className="required-check"><input type="checkbox" checked={selected.required} onChange={(event) => updateSelected({ required: event.target.checked })} />Required for complete scope</label>
-            <div className="review-state"><span><Check />Saved in this browser</span><small>{selected.sourceRow == null ? "This new row is included in JSON backups. Excel export will stop until it has a verified template row." : "This mapped source row is included in a safe Excel export."}</small></div>
+            <div className="review-state"><span><Check />Saved</span><small>{selected.sourceRow == null ? "This new row is included in JSON backups. Excel export will stop until it has a verified template row." : "This mapped source row is included in a safe Excel export."}</small></div>
           </aside>}
         </div>
       </section>

@@ -74,7 +74,7 @@ export function AggregateLimitsView({ navigate }: ViewProps) {
     <Stats items={[
       { label: "Subcontractors", value: rows.length, detail: `${rows.filter(r => r.limit).length} with limits set` },
       { label: "Over a limit", value: over.length, detail: over.length ? over.map(r => r.company).join(", ") : "Everyone is within their limits", tone: over.length ? "red" : "green" },
-      { label: "Open contract value", value: usd(rows.reduce((n, r) => n + r.open, 0)), detail: `Across ${projects.length} project${projects.length === 1 ? "" : "s"}` },
+      { label: "Open contract value", value: usd(rows.reduce((n, r) => n + r.open, 0)), detail: (n => `Across ${n} project${n === 1 ? "" : "s"}`)(new Set(rows.flatMap(r => r.contracts.map(c => c.projectId))).size) },
     ]}/>
     <Panel title="Limits and open contract value" subtitle="Open contract value: each awarded contract's amount less its percent complete, on every project. Cancelled awards don't count.">
       {rows.length ? <div className="ui-table-wrap"><table className="ui-table cm-limits-table"><thead><tr><th>Subcontractor</th><th>Single-project limit</th><th>Aggregate limit</th><th>Open contract value</th><th>Largest project</th><th>Headroom</th><th>Status</th><th/></tr></thead><tbody>{rows.map(r => <tr key={r.companyId}>
