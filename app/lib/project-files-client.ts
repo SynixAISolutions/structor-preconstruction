@@ -15,6 +15,7 @@ import { inAiPool } from "./ai-pool";
 import { useActiveProject } from "./project-scope";
 import { pageTextBoxes, type TextBox } from "./text-anchor";
 import { paintPage } from "./pdf-paint";
+import { eachPageInRuns, freeCanvas, openLocalPdf, PAGES_PER_OPEN } from "./local-pdf";
 import {
   chunkFor, emptyIndex, kindForCategory, MAX_RANGE_BYTES, sourcePath, TEXT_CHUNK,
   textSource, type PageText, type ProjectFileIndex, type StoredDocument, type StoredSheet,
@@ -110,35 +111,31 @@ function sheetFromItems(items: TextItem[], width: number, height: number): strin
 
 /**
  * Every page's text, and for drawings the sheet number in each title block. Several pdf.js readers share the pages
- * (Danial, 30 Oct: reading a 2,074-page manual on one core took 7–8 minutes); each holds its own copy of the file,
- * so their number is kept to about a gigabyte of copies and to the computer's cores.
+ * (Danial, 30 Oct: reading a 2,074-page manual on one core took 7–8 minutes). Each reads the file in the ranges its pages
+ * need and opens it afresh every few pages (lib/local-pdf): a full copy each ran Marcel's Chrome tab out of memory (9 Nov).
  */
 async function readPages(file: File, kind: StoredDocument["kind"], onPage: (done: number, total: number) => void) {
   const pdfjs = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = (await import("./pdf-worker")).pdfWorkerSrc();
-  const data = await file.arrayBuffer();
-  const open = () => pdfjs.getDocument({ data: new Uint8Array(data.slice(0)) });
-  const first = open();
+  const first = openLocalPdf(pdfjs, file);
   const total = (await first.promise).numPages;
+  await first.destroy();
   const cores = typeof navigator === "undefined" ? 4 : navigator.hardwareConcurrency || 4;
-  const readers = Math.max(1, Math.min(6, cores - 2, Math.floor(1_000_000_000 / Math.max(1, file.size)), Math.ceil(total / 40)));
-  const tasks = [first, ...Array.from({ length: readers - 1 }, open)];
+  const readers = Math.max(1, Math.min(6, cores - 2, Math.ceil(total / 40)));
+  const workers = Array.from({ length: readers }, () => new pdfjs.PDFWorker());
   const pages: PageText[] = new Array(total), sheets: StoredSheet[] = new Array(total);
-  let next = 1, done = 0;
+  let done = 0;
   try {
-    await Promise.all(tasks.map(async task => {
-      const doc = await task.promise;
-      for (let i = next++; i <= total; i = next++) {
-        const page = await doc.getPage(i);
-        const content = await page.getTextContent();
-        const items = content.items.filter((item): item is typeof item & TextItem => "str" in item);
-        pages[i - 1] = { page: i, text: items.map(item => item.str + ("hasEOL" in item && item.hasEOL ? "\n" : "")).join("") };
-        if (kind === "drawings") { const view = page.getViewport({ scale: 1 }); sheets[i - 1] = { page: i, sheet: sheetFromItems(items, view.width, view.height), title: "", date: "" }; }
-        page.cleanup();
-        onPage(++done, total);
-      }
-    }));
-  } finally { await Promise.all(tasks.map(task => task.destroy())); }
+    await eachPageInRuns(reader => openLocalPdf(pdfjs, file, { worker: workers[reader] }), Array.from({ length: total }, (_, i) => i + 1), readers, async (doc, i) => {
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      const items = content.items.filter((item): item is typeof item & TextItem => "str" in item);
+      pages[i - 1] = { page: i, text: items.map(item => item.str + ("hasEOL" in item && item.hasEOL ? "\n" : "")).join("") };
+      if (kind === "drawings") { const view = page.getViewport({ scale: 1 }); sheets[i - 1] = { page: i, sheet: sheetFromItems(items, view.width, view.height), title: "", date: "" }; }
+      page.cleanup();
+      onPage(++done, total);
+    });
+  } finally { workers.forEach(worker => worker.destroy()); }
   return { pages, sheets: kind === "drawings" ? sheets : [] };
 }
 
@@ -207,39 +204,48 @@ async function storePdf(args: Parameters<typeof uploadProjectPdf>[0]): Promise<S
   return named;
 }
 
-/** Reads every sheet's title block (right-hand strip, lower half) with the AI, six at a time. */
+/**
+ * Reads every sheet's title block (right-hand strip, lower half) with the AI, six at a time. The file is opened afresh for
+ * every PAGES_PER_OPEN sheets, so it holds only what those sheets need (lib/local-pdf).
+ */
 async function readTitleBlocks(file: File, sheets: StoredSheet[], onProgress: (done: number, total: number) => void): Promise<StoredSheet[]> {
   const pdfjs = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = (await import("./pdf-worker")).pdfWorkerSrc();
-  const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
-  const pdf = await task.promise;
   const out = sheets.map(s => ({ ...s }));
-  let next = 0, done = 0;
-  try {
-    await Promise.all(Array.from({ length: 6 }, async () => {
-      while (next < out.length) {
-        const sheet = out[next++];
-        try {
-          const page = await pdf.getPage(sheet.page);
-          const view = page.getViewport({ scale: 1 });
-          const scale = 2200 / Math.max(view.width, view.height);
-          const viewport = page.getViewport({ scale });
-          // Render the whole sheet, then copy out the title-block strip (right 8.5%, lower half).
-          const full = document.createElement("canvas");
-          full.width = Math.ceil(viewport.width); full.height = Math.ceil(viewport.height);
-          await paintPage(page, full, full.getContext("2d")!, viewport);
-          page.cleanup();
-          const strip = { x: Math.floor(full.width * 0.915), y: Math.floor(full.height * 0.5) };
-          const canvas = document.createElement("canvas");
-          canvas.width = full.width - strip.x; canvas.height = full.height - strip.y;
-          canvas.getContext("2d")!.drawImage(full, strip.x, strip.y, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
-          const read = await readTitleBlock(canvas.toDataURL("image/jpeg", 0.8));
-          if (read.sheet) Object.assign(sheet, { sheet: read.sheet, title: read.title, date: read.date });
-        } catch { /* keep what the text layer gave; the sheet can be named in List of drawings */ }
-        onProgress(++done, out.length);
-      }
-    }));
-  } finally { await task.destroy(); }
+  let done = 0;
+  for (let start = 0; start < out.length; start += PAGES_PER_OPEN) {
+    const task = openLocalPdf(pdfjs, file), run = out.slice(start, start + PAGES_PER_OPEN);
+    let next = 0;
+    try {
+      const pdf = await task.promise;
+      await Promise.all(Array.from({ length: 6 }, async () => {
+        while (next < run.length) {
+          const sheet = run[next++];
+          try {
+            const page = await pdf.getPage(sheet.page);
+            const view = page.getViewport({ scale: 1 });
+            const scale = 2200 / Math.max(view.width, view.height);
+            const viewport = page.getViewport({ scale });
+            // Render the whole sheet, then copy out the title-block strip (right 8.5%, lower half).
+            const full = document.createElement("canvas");
+            full.width = Math.ceil(viewport.width); full.height = Math.ceil(viewport.height);
+            await paintPage(page, full, full.getContext("2d")!, viewport);
+            page.cleanup();
+            const strip = { x: Math.floor(full.width * 0.915), y: Math.floor(full.height * 0.5) };
+            const canvas = document.createElement("canvas");
+            canvas.width = full.width - strip.x; canvas.height = full.height - strip.y;
+            canvas.getContext("2d")!.drawImage(full, strip.x, strip.y, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+            freeCanvas(full);
+            const image = canvas.toDataURL("image/jpeg", 0.8);
+            freeCanvas(canvas);
+            const read = await readTitleBlock(image);
+            if (read.sheet) Object.assign(sheet, { sheet: read.sheet, title: read.title, date: read.date });
+          } catch { /* keep what the text layer gave; the sheet can be named in List of drawings */ }
+          onProgress(++done, out.length);
+        }
+      }));
+    } finally { await task.destroy(); }
+  }
   return out;
 }
 
@@ -344,6 +350,8 @@ export function readPageTextBoxes(doc: StoredDocument, pageNumber: number): Prom
 }
 
 const renders = new Map<string, Promise<{ image: string; aspect: number }>>();
+/** Page renders kept for the viewer and the AI, newest last: each is a JPEG of up to a few megabytes. */
+const RENDERS_KEPT = 16;
 
 /** A page of a stored PDF as a JPEG data URL, longest side `size` pixels. */
 export function renderStoredPage(doc: StoredDocument, pageNumber: number, size = 2000): Promise<{ image: string; aspect: number }> {
@@ -360,11 +368,13 @@ export function renderStoredPage(doc: StoredDocument, pageNumber: number, size =
       if (!context) throw new Error("This browser cannot render a drawing page.");
       await paintPage(page, canvas, context, viewport);
       page.cleanup();
-      return { image: canvas.toDataURL("image/jpeg", 0.82), aspect: original.width / original.height };
+      const image = canvas.toDataURL("image/jpeg", 0.82);
+      freeCanvas(canvas);
+      return { image, aspect: original.width / original.height };
     })();
     job.catch(() => renders.delete(key));
     renders.set(key, job);
-    if (renders.size > 40) renders.delete(renders.keys().next().value!);
+    if (renders.size > RENDERS_KEPT) renders.delete(renders.keys().next().value!);
   }
   return renders.get(key)!;
 }
@@ -383,7 +393,10 @@ export async function renderStoredRegion(doc: StoredDocument, pageNumber: number
   const context = canvas.getContext("2d");
   if (!context) throw new Error("This browser cannot render a drawing page.");
   await paintPage(page, canvas, context, viewport);
-  return canvas.toDataURL("image/jpeg", 0.82);
+  page.cleanup();
+  const image = canvas.toDataURL("image/jpeg", 0.82);
+  freeCanvas(canvas);
+  return image;
 }
 
 /**
