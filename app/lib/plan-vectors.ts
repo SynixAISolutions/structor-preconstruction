@@ -30,10 +30,23 @@ export function segmentsFromOperators(ops: { fnArray: number[]; argsArray: unkno
   return vectorsFromOperators(ops, OPS, viewport).segments;
 }
 
-/** Stroked lines and stroked cubic curves (quadratic ones raised to cubic), as segmentsFromOperators. */
-export function vectorsFromOperators(ops: { fnArray: number[]; argsArray: unknown[] }, OPS: Record<string, number>, viewport: number[]): { segments: Segment[]; curves: Curve[] } {
+/** Filled shapes up to this size (points) with straight sides are kept: arrowheads (a stair's walkline), not hatches or poché. */
+export const SMALL_FILL_PT = 24;
+
+/**
+ * Stroked lines and stroked cubic curves (quadratic ones raised to cubic), as segmentsFromOperators; and `fills`, the small
+ * filled polygons of 3 to 8 straight sides (SMALL_FILL_PT across at most), such as the solid arrowhead on a stair's walkline.
+ */
+export function vectorsFromOperators(ops: { fnArray: number[]; argsArray: unknown[] }, OPS: Record<string, number>, viewport: number[]): { segments: Segment[]; curves: Curve[]; fills: Point[][] } {
   const strokes = new Set(["stroke", "closeStroke", "fillStroke", "eoFillStroke", "closeFillStroke", "closeEOFillStroke"].map(k => OPS[k]));
-  const out: Segment[] = [], curves: Curve[] = [];
+  const filled = new Set(["fill", "eoFill", "fillStroke", "eoFillStroke", "closeFillStroke", "closeEOFillStroke"].map(k => OPS[k]));
+  const out: Segment[] = [], curves: Curve[] = [], fills: Point[][] = [];
+  const keepFill = (pts: Point[], straight: boolean) => {
+    const p = pts.length > 1 && pts[0][0] === pts[pts.length - 1][0] && pts[0][1] === pts[pts.length - 1][1] ? pts.slice(0, -1) : pts;
+    if (!straight || p.length < 3 || p.length > 8) return;
+    const xs = p.map(q => q[0]), ys = p.map(q => q[1]);
+    if (Math.max(...xs) - Math.min(...xs) <= SMALL_FILL_PT && Math.max(...ys) - Math.min(...ys) <= SMALL_FILL_PT) fills.push(p);
+  };
   let state = { ctm: [1, 0, 0, 1, 0, 0] as Matrix, width: 1, color: "#000000" };
   const stack: typeof state[] = [];
   const view = viewport as Matrix;
@@ -44,10 +57,24 @@ export function vectorsFromOperators(ops: { fnArray: number[]; argsArray: unknow
     else if (fn === OPS.transform) state = { ...state, ctm: multiply(args as Matrix, state.ctm) };
     else if (fn === OPS.setLineWidth) state = { ...state, width: args[0] };
     else if (fn === OPS.setStrokeRGBColor) state = { ...state, color: String(args[0]) };
-    else if (fn === OPS.constructPath && strokes.has(args[0])) {
+    else if (fn === OPS.constructPath && (strokes.has(args[0]) || filled.has(args[0]))) {
       const data: ArrayLike<number> = Array.isArray(args[1]) ? args[1][0] : args[1];
       if (!data) continue;
       const m = multiply(state.ctm, view);
+      if (filled.has(args[0])) {
+        let pts: Point[] = [], straight = true;
+        for (let j = 0; j < data.length;) {
+          const code = data[j];
+          if (code === MOVE) { keepFill(pts, straight); pts = [apply(m, data[j + 1], data[j + 2])]; straight = true; j += 3; }
+          else if (code === LINE) { pts.push(apply(m, data[j + 1], data[j + 2])); j += 3; }
+          else if (code === CURVE) { straight = false; j += 7; }
+          else if (code === QUAD) { straight = false; j += 5; }
+          else if (code === CLOSE) { j += 1; }
+          else break;
+        }
+        keepFill(pts, straight);
+      }
+      if (!strokes.has(args[0])) continue;
       const width = state.width * Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
       let start: Point | null = null, at: Point | null = null;
       for (let j = 0; j < data.length;) {
@@ -68,5 +95,5 @@ export function vectorsFromOperators(ops: { fnArray: number[]; argsArray: unknow
       }
     }
   }
-  return { segments: out, curves };
+  return { segments: out, curves, fills };
 }

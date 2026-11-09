@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as THREE from "three";
-import { alignSheetFrame, footprintValid, openOutline, printedSheetFrame, schematicColumns, schematicDoors, schematicGeometry, schematicGlazing, schematicPartitions, schematicRailings, schematicRoomFloors, schematicWalls, sheetPoint, wallTotals } from "./schematic-geometry";
+import { alignSheetFrame, footprintValid, openOutline, printedSheetFrame, schematicColumns, schematicDoors, schematicGeometry, schematicGlazing, schematicPartitions, schematicRailings, schematicRoomFloors, schematicStairs, schematicWalls, sheetPoint, wallTotals } from "./schematic-geometry";
 import { moveOutlinePoint, setLevelHeight, type Point, type SchematicLevel, type SchematicModel } from "../../lib/schematic-model";
 
 const level: SchematicLevel = { id: "L1", name: "Level 01", order: 1, elevation: 0, height: 14, outline: [[10, 20], [50, 20], [50, 60], [10, 60]], rooms: [{ name: "Lobby", number: "101", at: [20, 30] }], source: { documentId: "qa", sheet: "A1.1", page: 1 }, sizing: "Printed scale, 8 ft per inch" };
@@ -24,7 +24,7 @@ test("walls read from the drawing become boxes along their centerlines, at full 
   mesh.getMatrixAt(1, m); m.decompose(p, q, s);
   const along = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
   assert.deepEqual([p.toArray(), along.toArray(), s.toArray()].map(v => v.map(n => Math.round(n * 1e6) / 1e6)), [[30, 7, -40], [0, 0, -1], [40, 14, .4]], "Plan y runs toward world -z, as the outline does");
-  assert.deepEqual(wallTotals(walled), { count: 2, feet: 80, doors: null, compartments: 0, glassFeet: null, partitionFeet: null, railingFeet: null, columns: null });
+  assert.deepEqual(wallTotals(walled), { count: 2, feet: 80, doors: null, compartments: 0, glassFeet: null, partitionFeet: null, railingFeet: null, columns: null, stairs: null });
   assert.equal(schematicWalls({ ...level, walls: [] }), null, "A scan: no walls");
   const excluded: SchematicLevel = { ...walled, walls: [walled.walls![0], { ...walled.walls![1], excluded: true }] };
   assert.deepEqual([schematicWalls(excluded)!.count, wallTotals(excluded)!.count, wallTotals(excluded)!.feet], [1, 1, 40], "A wall the estimator marked not a wall leaves the 3D and the totals");
@@ -76,7 +76,7 @@ test("doors read from the drawing: a header over each opening and each leaf stan
   const door = { a: [10, 20] as Point, b: [13, 20] as Point, width: 3, leaves: 1, hinges: [[10, 20]] as Point[], openTo: [[10, 23]] as Point[], kind: "door" as const, thickness: .4 };
   const stall = { ...door, a: [30, 20] as Point, b: [32, 20] as Point, width: 2, hinges: [[30, 20]] as Point[], openTo: [[30, 22]] as Point[], kind: "compartment" as const };
   const doored: SchematicLevel = { ...level, walls: [{ a: [0, 20], b: [10, 20], thickness: .4 }], doors: [door, stall] };
-  assert.deepEqual(wallTotals(doored), { count: 1, feet: 10, doors: 1, compartments: 1, glassFeet: null, partitionFeet: null, railingFeet: null, columns: null });
+  assert.deepEqual(wallTotals(doored), { count: 1, feet: 10, doors: 1, compartments: 1, glassFeet: null, partitionFeet: null, railingFeet: null, columns: null, stairs: null });
   const group = schematicDoors(doored)!;
   const [headers, leaves] = group.children as THREE.InstancedMesh[];
   assert.deepEqual([headers.count, leaves.count], [1, 1], "Toilet-stall doors are not drawn as building doors");
@@ -119,4 +119,22 @@ test("rooms become flat floors just above the slab, named rooms apart from unnam
   assert.deepEqual([gym.geometry.boundingBox!.min.toArray(), gym.geometry.boundingBox!.max.toArray()].map(v => v.map(n => Math.round(n * 1e6) / 1e6 || 0)), [[0, 0, -10], [20, 0, 0]], "Plan y is world -z, as for the walls");
   assert.equal(gym.position.y, .05);
   assert.notEqual((gym.material as THREE.MeshStandardMaterial).color.getHex(), (other.material as THREE.MeshStandardMaterial).color.getHex());
+});
+test("stairs arriving at a level: treads and landings hanging down to the floor below, and the floor open over them", () => {
+  // Project 1's Stair B as read: two flights of 8 risers side by side, the walkline arrow on the south one.
+  const stairB = { flights: [{ a: [203.33, 103.76] as Point, b: [196.91, 103.76] as Point, width: 4.05, risers: 8, arrow: null }, { a: [203.33, 108.03] as Point, b: [196.91, 108.03] as Point, width: 3.86, risers: 8, arrow: "b" as const }] };
+  const upper: SchematicLevel = { ...level, id: "L2", order: 2, elevation: 13.94, walls: [], stairs: [stairB] };
+  const stairs = schematicStairs(upper, 13.9375)!;
+  assert.equal(stairs.mesh.count, 21 + 2, "Three runs of 7 treads (one round again under the first) and two landings");
+  stairs.mesh.computeBoundingBox();
+  const box = stairs.mesh.boundingBox!;
+  assert.deepEqual([Math.round(box.max.y * 100) / 100, Math.round(box.min.y * 10) / 10], [-0.58, -14.4], "From one riser below the arriving floor down to the floor below (less the bottom tread's slab)");
+  assert.deepEqual([schematicStairs(upper, null), schematicStairs({ ...upper, stairs: [{ ...stairB, excluded: true }] }, 13.9375), schematicStairs({ ...upper, stairs: [{ flights: stairB.flights.map(f => ({ ...f, arrow: null })) }] }, 13.9375)], [null, null, null], "None on the lowest level, none marked not a stair, none without a walkline arrow");
+  assert.equal(wallTotals(upper)!.stairs, 1);
+  // The stair's room keeps its floor where the stair arrives, and is open over the flights and the landing past them.
+  const room = { outline: [[191, 101.4], [209, 101.4], [209, 110.5], [191, 110.5]] as Point[], area: 164, name: "Stair B", number: "S202", at: [205, 105] as Point };
+  const floor = schematicRoomFloors([room], stairs.openings)!.children[0] as THREE.Mesh;
+  const area = (g: THREE.BufferGeometry) => { const p = g.getAttribute("position"), index = g.getIndex()!; let sum = 0; for (let i = 0; i < index.count; i += 3) { const [a, b, c] = [0, 1, 2].map(k => new THREE.Vector3().fromBufferAttribute(p, index.getX(i + k))); sum += new THREE.Vector3().crossVectors(b.clone().sub(a), c.clone().sub(a)).length() / 2; } return sum; };
+  assert.equal(Math.round(area(floor.geometry)), Math.round(18 * 9.1 - (6.32 * 3.76 + 6.32 * 3.95 + 3.95 * 8.125)), "The room's floor less the two flights and the west landing");
+  assert.equal((schematicRoomFloors([{ ...room, outline: [[195, 101.4], [209, 101.4], [209, 110.5], [195, 110.5]] }], stairs.openings)!.children[0] as THREE.Mesh).geometry.getAttribute("position").count, 4 + 4 * 2, "An opening reaching past the room's outline isn't cut from it");
 });

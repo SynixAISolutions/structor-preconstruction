@@ -13,7 +13,8 @@ import { floorOpenings } from "./floor-openings";
 import { mergeTags, placeTags, tagOvals, type PartitionType, type PlacedTag } from "./tag-placement";
 import type { Curve, Segment } from "./plan-vectors";
 import type { RegisterRow } from "./project-files";
-import { levelRooms, type Room } from "./room-detection";
+import { inside, levelRooms, type Room } from "./room-detection";
+import { groupFlights, planFlights } from "./stair-detection";
 import { hexagonTags, planColumns, planGlazing, planPartitions, planRailings, planWalls } from "./wall-detection";
 
 export type Point = [number, number];
@@ -51,7 +52,14 @@ export type SchematicLevel = {
   columns?: SchematicColumn[];
   /** Where the plan marks the floor open to the level below (levelOpenings). Missing on models built before 6 Nov. */
   openings?: Point[];
+  /** Stairs that arrive at this level from the one below, read from its plan (levelStairs). Missing on models built before 9 Nov. */
+  stairs?: SchematicStair[];
 };
+/**
+ * A stair's flights as the plan of the level it arrives at shows them (lib/stair-detection), in feet: each from a to b along
+ * the middle of its first and last tread lines, `arrow` the end its walkline arrow points to (down, on this plan).
+ */
+export type SchematicStair = { flights: { a: Point; b: Point; width: number; risers: number; arrow: "a" | "b" | null }[]; excluded?: boolean };
 /** A run of glass from a to b, in feet; `type` from the plan's storefront/window tags (SF-10). */
 export type SchematicGlazing = { a: Point; b: Point; type?: string | null; excluded?: boolean };
 /**
@@ -292,6 +300,17 @@ export function levelOpenings(segments: Segment[], page: { widthPt: number; heig
   return floorOpenings(segments, pointsPerFoot, box).map(([x, y]) => [r1(x), r1(y)]);
 }
 
+/**
+ * The stairs arriving at a level (lib/stair-detection), in the same frame as its walls: the flights drawn whole on its plan,
+ * grouped into stairs, each with its walkline arrow. A flight the plan's cut line crosses rises from this level instead, and
+ * belongs to the level above. Evenly spaced lines with no arrow (sections' coursing, bleachers, a tile pattern) aren't stairs.
+ */
+export function levelStairs(segments: Segment[], fills: Point[][], page: { widthPt: number; heightPt: number }, frame: Frame, outline: Point[], wallWeight: number | null): SchematicStair[] {
+  const { pointsPerFoot, box } = planArea(page, frame, outline);
+  return groupFlights(planFlights(segments, fills, pointsPerFoot, wallWeight, box).filter(f => !f.cut)).filter(flights => flights.some(f => f.arrow))
+    .map(flights => ({ flights: flights.map(f => ({ a: f.a, b: f.b, width: f.width, risers: f.risers, arrow: f.arrow })) }));
+}
+
 /** A level's columns (wall-detection planColumns), in the same frame as its walls. */
 export function levelColumns(segments: Segment[], page: { widthPt: number; heightPt: number }, frame: Frame, outline: Point[], wallWeight: number | null, walls: SchematicWall[]): SchematicColumn[] {
   const { pointsPerFoot, box } = planArea(page, frame, outline), r2 = (n: number) => Math.round(n * 100) / 100 || 0;
@@ -494,6 +513,44 @@ export function editColumn(model: SchematicModel, levelId: string, index: number
     if (!l.columns?.[index]) throw new Error("That column is no longer in the model.");
     return { ...l, columns: l.columns.map((c, i) => i === index ? { ...c, excluded } : c) };
   });
+}
+
+/** The estimator's correction of one stair: that it isn't one (kept, so it can be restored). */
+export function editStair(model: SchematicModel, levelId: string, index: number, excluded: boolean): SchematicModel {
+  return editLevel(model, levelId, l => {
+    if (!l.stairs?.[index]) throw new Error("That stair is no longer in the model.");
+    return { ...l, stairs: l.stairs.map((s, i) => i === index ? { ...s, excluded } : s) };
+  });
+}
+
+/** How far a level's stairs rise: from the floor of the level below it to its own; null for the lowest level. */
+export function stairRise(model: SchematicModel, level: SchematicLevel): number | null {
+  const below = model.levels.filter(l => l.order < level.order).sort((p, q) => q.order - p.order)[0];
+  return below ? Math.round((level.elevation - below.elevation) * 1000) / 1000 : null;
+}
+
+/**
+ * The estimator's correction of a space's floor: open to the level below (no floor, not counted in the floor area), or
+ * given its floor back. Openings are points, as read from the plan's X; opening a space adds a point inside it, giving it
+ * a floor removes every opening inside it, the plan's own included. Not for the lowest level, which has nothing below it.
+ */
+export function setOpenToBelow(model: SchematicModel, levelId: string, space: { outline: Point[]; at: Point }, open: boolean): SchematicModel {
+  return editLevel(model, levelId, l => {
+    if (l.order === Math.min(...model.levels.map(m => m.order))) throw new Error("The lowest level has no level below it.");
+    const inSpace = (p: Point) => inside(p, space.outline), kept = (l.openings ?? []).filter(p => !inSpace(p));
+    return { ...l, openings: open ? [...kept, pointInside(space)] : kept };
+  });
+}
+
+/** A point inside a space: its tag or middle when that is inside, else the middle of the widest run across its middle height. */
+function pointInside(space: { outline: Point[]; at: Point }): Point {
+  if (inside(space.at, space.outline)) return space.at;
+  const ys = space.outline.map(p => p[1]), y = (Math.min(...ys) + Math.max(...ys)) / 2, xs: number[] = [];
+  space.outline.forEach((p, i) => { const q = space.outline[(i + 1) % space.outline.length]; if ((p[1] > y) !== (q[1] > y)) xs.push(p[0] + (y - p[1]) / (q[1] - p[1]) * (q[0] - p[0])); });
+  xs.sort((a, b) => a - b);
+  let best: Point = space.at, width = -1;
+  for (let i = 0; i + 1 < xs.length; i += 2) if (xs[i + 1] - xs[i] > width) { width = xs[i + 1] - xs[i]; best = [Math.round((xs[i] + xs[i + 1]) / 2 * 10) / 10, Math.round(y * 10) / 10]; }
+  return best;
 }
 
 /** The walls that count: everything read from the plan except what the estimator marked not a wall. */
