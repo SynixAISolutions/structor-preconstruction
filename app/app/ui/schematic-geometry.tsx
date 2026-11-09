@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { polygonArea, type Point, type SchematicLevel } from "../../lib/schematic-model";
 import { inside, type Room } from "../../lib/room-detection";
 import { stairPieces } from "../../lib/stair-detection";
+import { layerColor, layerGap, layerSlabs, openedCenter, type WallLayer } from "../../lib/wall-assemblies";
 
 export type SheetFrame = { width: number; height: number };
 export function openOutline(points: Point[]): Point[] {
@@ -61,7 +62,42 @@ export function schematicWalls(level: SchematicLevel): THREE.InstancedMesh | nul
     place.updateMatrix(); mesh.setMatrixAt(i, place.matrix);
   });
   mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingBox(); mesh.computeBoundingSphere();
+  // Which wall each instance is, by its index in level.walls, so a click on the model finds the wall.
+  mesh.userData.walls = (level.walls ?? []).flatMap((w, i) => w.excluded ? [] : [i]);
   return mesh;
+}
+/**
+ * One wall, opened into its layers (lib/wall-assemblies): a slab per layer at the wall's length and the level's height,
+ * coloured by what it's made of, placed where schematicWalls places the wall. Each slab's userData holds its place across the
+ * wall closed and opened (local z, feet) and its layer number; the view slides it from one to the other. A violet outline
+ * keeps the wall's own place. Without layers, the wall alone, highlighted.
+ */
+export function wallLayerGroup(level: SchematicLevel, index: number, layers: WallLayer[]): THREE.Group | null {
+  const wall = level.walls?.[index];
+  if (!wall) return null;
+  const dx = wall.b[0] - wall.a[0], dy = wall.b[1] - wall.a[1], length = Math.max(Math.hypot(dx, dy), .01), thick = Math.max(wall.thickness, .05);
+  const group = new THREE.Group();
+  group.position.set((wall.a[0] + wall.b[0]) / 2, level.height / 2, -(wall.a[1] + wall.b[1]) / 2);
+  group.rotation.set(0, Math.atan2(dy, dx), 0);
+  group.userData = { length, height: level.height, gap: 0 };
+  const outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(length, level.height, thick)), new THREE.LineBasicMaterial({ color: "#7c3aed" }));
+  group.add(outline);
+  if (!layers.length) {
+    const whole = new THREE.Mesh(new THREE.BoxGeometry(length, level.height, thick), new THREE.MeshStandardMaterial({ color: "#a78bfa", roughness: .8 }));
+    whole.userData.whole = true; group.add(whole);
+    return group;
+  }
+  const slabs = layerSlabs(layers, wall.thickness), gap = layerGap(length);
+  group.userData.gap = gap;
+  slabs.forEach((slab, i) => {
+    // Insulation in the stud cavity stops just short of the framing's ends and top, so the two faces don't fight.
+    const inset = slab.inside ? .97 : 1;
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(length * inset, level.height * inset, Math.max(slab.depth, .01)), new THREE.MeshStandardMaterial({ color: layerColor(slab.material), roughness: .85 }));
+    mesh.position.z = slab.center;
+    mesh.userData = { layer: i, closed: slab.center, opened: openedCenter(slab, i, slabs.length, gap) };
+    group.add(mesh);
+  });
+  return group;
 }
 /** Door height used until the door schedule supplies each door's own (most doors are 7'-0"). */
 export const DEFAULT_DOOR_HEIGHT = 7;

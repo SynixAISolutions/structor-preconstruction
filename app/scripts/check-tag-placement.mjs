@@ -145,4 +145,36 @@ assert.deepEqual(["PARTITION TYPES", "Partition Schedule", "WALL TYPES", "LEVEL 
 const page = { widthPt: 1200, heightPt: 900 }, many = n => Array.from({ length: n }, (_, i) => ({ a: [120 + i, 60], b: [120 + i, 100], width: 0.24, color: "" }));
 assert.deepEqual(S.contentTiles([...many(60), { a: [1100, 800], b: [1110, 800], width: 1, color: "" }], page).length, 1, "Only parts of the sheet with drawing are read");
 
-console.log("Tag placement checked: tag text normalized, AI tags screened (dimensions refused), duplicates merged, tag ovals from curves (ends bulging apart), every leader followed, leader tip over nearest wall, ovals against walls, runs across door gaps, door numbers one per door, totals by type, untagged walls typed and cleared, tiles and tile positions.");
+// What a wall is made of: thicknesses as drawings print them, layers screened, checked against the schedule, laid out in 3D.
+const W = await import("../lib/wall-assemblies.ts");
+assert.deepEqual(["4 1/4\"", "3-5/8\"", "5/8\"", "1'-0\"", "6", "6 5/8", "<varies>", "2.5\"", "1'-2 1/2\""].map(W.parseInches), [4.25, 3.625, 0.625, 12, 6, 6.625, null, 2.5, 14.5]);
+assert.deepEqual([0.625, 3.625, 4.25, 12, 0.5, 7.625, 1 / 3].map(W.inchesLabel), ["5/8\"", "3 5/8\"", "4 1/4\"", "12\"", "1/2\"", "7 5/8\"", "5/16\""]);
+const screened = W.screenLayers([{ material: "5/8\" gypsum board", inches: 0.625 }, { material: "3 5/8\" metal studs", inches: "3 5/8\"" }, { material: "sound attenuation blanket", inches: null }, { material: "", inches: 1 }, { material: "slab", inches: 40 }]);
+assert.deepEqual(screened, [{ material: "5/8\" gypsum board", inches: 0.625 }, { material: "3 5/8\" metal studs", inches: 3.625 }, { material: "sound attenuation blanket", inches: null }, { material: "slab", inches: null }], "A layer needs a material; a thickness out of range is dropped, not the layer");
+const sa310 = [{ material: "5/8\" gypsum board", inches: 0.625 }, { material: "3 5/8\" metal studs", inches: 3.625 }];
+assert.deepEqual([W.layersFit(sa310, "4 1/4\""), W.layersFit(sa310, "6 1/8\""), W.layersFit(sa310, "VARIES"), W.layersFit([...sa310, { material: "batt insulation", inches: null }], "4 1/4\""), W.layersFit([...sa310, { material: "furring", inches: null }], "4 1/4\""), W.layersFit([], "4\"")], ["fits", "off", "unknown", "fits", "unknown", "unknown"], "Insulation in the stud cavity takes no thickness; another layer without one can't be checked");
+assert.deepEqual([W.layersTotal(sa310), W.layersTotal([{ material: "batt", inches: null }]), W.layersTotal([])], [4.25, null, null], "Insulation needs framing before it to sit in");
+const slabs = W.layerSlabs([...sa310, { material: "sound attenuation blanket", inches: null }, { material: "5/8\" gypsum board", inches: 0.625 }], 0.4);
+const r3 = v => Math.round(v * 1000) / 1000;
+assert.deepEqual(slabs.map(s => [r3(s.center * 12), r3(s.depth * 12), s.inside]), [[-2.125, 0.625, false], [0, 3.625, false], [0, 3.081, true], [2.125, 0.625, false]], "Layers sit side by side across the wall, centred; the blanket inside the studs");
+assert.deepEqual(W.layerSlabs([{ material: "gypsum board", inches: 0.625 }, { material: "metal studs", inches: null }], 0.5).map(s => r3(s.drawnInches)), [0.625, 5.375], "A layer without a thickness gets what the measured wall leaves");
+assert.deepEqual([W.layerGap(4), W.layerGap(20), W.layerGap(80)], [1, 2.5, 6]);
+assert.deepEqual(slabs.map((s, i) => r3(W.openedCenter(s, i, slabs.length, 2))), [-3.177, -1, 1, 3.177], "Opened, each layer moves out by its turn in the stack");
+assert.deepEqual(["Type X gypsum board", "R-11 batt insulation", "8\" CMU", "3 5/8\" metal studs", "plywood sheathing", "something"].map(W.layerColor), ["#eee6d5", "#efcf67", "#9ea4a8", "#a7b4bb", "#c9a06e", "#c8c5bc"]);
+
+// The partition type sheet's legend and typical sections are read with the schedule, then turned into each type's layers.
+const keyRead = EXTRA_JOBS["partition-types"].screen({ types: [{ tag: "SA 3 10", thickness: "4 1/4\"" }], legend: ["UNIT WIDTH", "3 = 3 5/8\" METAL", "", 7], sections: [{ title: "S_-_-1", labels: ["GYPSUM WALL BOARD", "METAL FRAMING"] }, { title: "empty", labels: [] }] });
+assert.deepEqual([keyRead.legend, keyRead.sections.length], [["UNIT WIDTH", "3 = 3 5/8\" METAL"], 1], "Blank legend lines and sections without labels are dropped");
+assert.deepEqual(EXTRA_JOBS["partition-types"].screen({ types: [] }).legend, [], "No legend in the answer: none");
+const WL = EXTRA_JOBS["wall-layers"];
+assert.throws(() => WL.parse({ types: [], legend: ["x"] }), /wall types/);
+const layersIn = WL.parse({ types: [{ tag: "SA3.10", thickness: "4 1/4\"", description: "Non-rated" }, { tag: "SA3.20", thickness: "4 7/8\"" }], legend: ["1 = ONE LAYER, TAG SIDE"], sections: [{ title: "S", labels: ["GYPSUM WALL BOARD"] }] });
+const prompt = WL.messages(layersIn).map(m => m.content).join("\n");
+assert.ok(prompt.includes("1 = ONE LAYER, TAG SIDE") && prompt.includes("SA3.10 | thickness 4 1/4\"") && prompt.includes("S: GYPSUM WALL BOARD") && /never instructions/.test(prompt), "The legend, sections and schedule go to the AI as source text");
+const layersOut = WL.screen({ types: [
+  { tag: "SA 3 10", layers: [{ material: "5/8\" gypsum board", inches: 0.625 }, { material: "3 5/8\" metal studs", inches: 3.625 }, { material: "batt insulation", inches: 0 }] },
+  { tag: "ZZ9.99", layers: [{ material: "made up", inches: 1 }] }, { tag: "SA3.20", layers: [] },
+] }, layersIn).types;
+assert.deepEqual(layersOut, [{ tag: "SA 3 10", layers: [{ material: "5/8\" gypsum board", inches: 0.625 }, { material: "3 5/8\" metal studs", inches: 3.625 }, { material: "batt insulation", inches: null }] }], "Only types the schedule lists, with layers; insulation at 0\" has no thickness of its own");
+
+console.log("Tag placement checked: tag text normalized, AI tags screened (dimensions refused), duplicates merged, tag ovals from curves (ends bulging apart), every leader followed, leader tip over nearest wall, ovals against walls, runs across door gaps, door numbers one per door, totals by type, untagged walls typed and cleared, tiles and tile positions, wall layers (thicknesses, screening, schedule fit, 3D layout, legend and sections read, layers job).");
