@@ -51,14 +51,30 @@ const segLength = (s: Segment) => Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]);
 const inBox =(box: [number, number, number, number] | undefined) => (s: Segment) =>
   !box || [s.a, s.b].every(([x, y]) => x >= box[0] && x <= box[2] && y >= box[1] && y <= box[3]);
 
+/** A straight line across more than this share of the drawing's width or height is its frame or a divider, not a wall. */
+export const FRAME_SHARE = 0.6;
+
 /**
  * The line weight walls are drawn in: the heaviest weight whose own lines mostly pair up at a wall's
  * thickness (on Jelleff's plans 1.2 pt pairs 76-78%, while the heavier 1.8 pt callout boxes and borders
  * pair 0%, and the 0.48 pt layers and casework 43%). Null when no weight does; then walls can't be told
  * apart by weight and none are found. `box` limits it to the plan's area, in page points.
+ *
+ * The sheet's frame and the title block's dividers are often drawn in the wall pen and never pair, so lines running most of
+ * the drawing's width or height don't count (FRAME_SHARE). Without that, a plan with few walls fell short: Davey Lopes'
+ * A102, mostly low roofs, paired 35% at its 0.84 pt wall pen with the frame and 61% without.
  */
 export function wallWeight(segments: Segment[], pointsPerFoot: number, box?: [number, number, number, number]): { weight: number; paired: number } | null {
-  const lines = segments.filter(inBox(box)).filter(s => segLength(s) >= 0.5 * pointsPerFoot);
+  const all = segments.filter(inBox(box)).filter(s => segLength(s) >= 0.5 * pointsPerFoot);
+  const xs = all.flatMap(s => [s.a[0], s.b[0]]), ys = all.flatMap(s => [s.a[1], s.b[1]]);
+  const width = Math.max(...xs) - Math.min(...xs), height = Math.max(...ys) - Math.min(...ys);
+  const horizontal = (s: Segment) => Math.abs(s.a[1] - s.b[1]) < 1, vertical = (s: Segment) => Math.abs(s.a[0] - s.b[0]) < 1;
+  const long = (s: Segment) => (horizontal(s) && Math.abs(s.b[0] - s.a[0]) > FRAME_SHARE * width) || (vertical(s) && Math.abs(s.b[1] - s.a[1]) > FRAME_SHARE * height);
+  // A long wall face has its other face beside it, a wall's thickness away in the same pen; a frame line has none.
+  const across = (s: Segment) => horizontal(s) ? (s.a[1] + s.b[1]) / 2 : (s.a[0] + s.b[0]) / 2;
+  const partnered = (s: Segment) => all.some(t => t !== s && Math.abs(t.width - s.width) < 0.005 && (horizontal(s) ? horizontal(t) : vertical(t))
+    && Math.abs(across(t) - across(s)) >= 0.2 * pointsPerFoot && Math.abs(across(t) - across(s)) <= 2 * pointsPerFoot && segLength(t) >= 0.5 * segLength(s));
+  const lines = all.filter(s => !long(s) || partnered(s));
   for (const weight of [...new Set(lines.map(s => Math.round(s.width * 100) / 100))].sort((a, b) => b - a)) {
     const own = lines.filter(s => Math.abs(s.width - weight) < 0.005);
     const total = own.reduce((t, s) => t + segLength(s), 0) / pointsPerFoot;
@@ -142,6 +158,9 @@ const PANELS_TO_TRUST = 2;
  * storefront's frame, which also has them but holds glass; from a stair's treads, which have none; and from light lines that
  * reach no wall (a roof edge above, in panels of its own). Nothing without a wall weight (a scan).
  */
+/** Partitions are drawn at least this heavy, in points (Project 1: 0.48). Davey Lopes draws its 45 ft one at 0.24 with no joint lines, so it isn't read. */
+export const PARTITION_MIN_PEN = 0.3;
+
 export function planPartitions(segments: Segment[], pointsPerFoot: number, wallWeight: number | null, walls: Wall[], glazing: { a: Point; b: Point }[], box?: [number, number, number, number]): Wall[] {
   if (wallWeight === null) return [];
   const plan = segments.filter(inBox(box));
@@ -149,7 +168,7 @@ export function planPartitions(segments: Segment[], pointsPerFoot: number, wallW
   const midpoint = (l: { a: Point; b: Point }): Point => [(l.a[0] + l.b[0]) / 2, (l.a[1] + l.b[1]) / 2];
   const found: Wall[] = [];
   for (const weight of new Set(plan.map(s => Math.round(s.width * 100) / 100))) {
-    if (weight < 0.3 || weight >= wallWeight - 0.005) continue;
+    if (weight < PARTITION_MIN_PEN || weight >= wallWeight - 0.005) continue;
     const own = plan.filter(s => Math.abs(s.width - weight) < 0.005);
     for (const pair of detectWalls(own, { pointsPerFoot, minWeight: 0, minThickness: 0.25, maxThickness: 0.55, minOverlap: 1, minLength: 8 })) {
       const L = dist(pair.a, pair.b), ux = (pair.b[0] - pair.a[0]) / L, uy = (pair.b[1] - pair.a[1]) / L;
@@ -157,7 +176,8 @@ export function planPartitions(segments: Segment[], pointsPerFoot: number, wallW
       const between = (p: Point, share: number) => along(p) > 0 && along(p) < L && across(p) <= share * pair.thickness;
       if (walls.some(w => withinWall(midpoint(pair), w)) || !reaches(pair.a) || !reaches(pair.b)) continue;
       if (glazing.some(g => between(midpoint(g), 0.5))) continue;
-      // Joints: short lines straight across, from face to face, away from the ends.
+      // Joints: short lines straight across, from face to face, away from the ends. (Faces that merely break at even intervals
+      // aren't enough: counting them found false partitions on Project 1 and East Providence, and still missed Davey Lopes'.)
       const joints = plan.flatMap(s => {
         const a: Point = [s.a[0] / pointsPerFoot, s.a[1] / pointsPerFoot], b: Point = [s.b[0] / pointsPerFoot, s.b[1] / pointsPerFoot], length = dist(a, b), m = midpoint({ a, b });
         if (length < 0.7 * pair.thickness || length > 1.4 * pair.thickness) return [];
@@ -181,7 +201,7 @@ const GLASS_TAG_REACH_FEET = 25;
 /** Shorter pieces aren't judged by tags: a corner's small return has no tag of its own, and can be what closes a room. */
 const GLASS_TAG_MIN_FEET = 4;
 
-/** How close an end of a guardrail must come to a wall, glass or another guardrail for it to stand. */
+/** How close an end of a guardrail must come to a wall, glass or another guardrail (one that stands) for it to stand. */
 const RAIL_REACH_FEET = 1.5;
 /** Running this near a wall or glass, light lines belong to it: a lining, a pad, a frame. */
 const RAIL_APART_FEET = 1;
@@ -190,7 +210,7 @@ const RAIL_PATTERN_LINES = 3, RAIL_PATTERN_FEET = 1.5;
 
 /**
  * Guardrails: two light lines 1.8-3" apart, 8 ft or longer, standing clear of walls and glass, with an end at one of them or at
- * another guardrail (Project 1: 0.24 pt lines 1.9" apart around the opening to the lobby below). They keep a corridor apart from
+ * another guardrail that is, in a chain (Project 1: 0.24 pt lines 1.9" apart around the opening to the lobby below). They keep a corridor apart from
  * the void beside it. A stair's own rail reads the same way, and is a rail too. Nothing without a wall weight (a scan).
  */
 export function planRailings(segments: Segment[], pointsPerFoot: number, wallWeight: number | null, walls: Wall[], glazing: { a: Point; b: Point }[], box?: [number, number, number, number]): Wall[] {
@@ -214,8 +234,15 @@ export function planRailings(segments: Segment[], pointsPerFoot: number, wallWei
       if (offsets.size < RAIL_PATTERN_LINES) pairs.push(pair);
     }
   }
-  const stands = (p: Point, self: Wall) => walls.some(w => distanceToLine(p, w) <= w.thickness / 2 + RAIL_REACH_FEET) || glazing.some(g => distanceToLine(p, g) <= RAIL_REACH_FEET) || pairs.some(o => o !== self && distanceToLine(p, o) <= RAIL_REACH_FEET);
-  return pairs.filter(pair => stands(pair.a, pair) || stands(pair.b, pair));
+  // A guardrail is held by the building: an end at a wall or glass, or at a guardrail that is, in a chain. Lines that only meet each
+  // other (a gym's court markings, East Providence's A1.0: 46 pairs, 932 ft) stand nowhere.
+  const anchored = (p: Point) => walls.some(w => distanceToLine(p, w) <= w.thickness / 2 + RAIL_REACH_FEET) || glazing.some(g => distanceToLine(p, g) <= RAIL_REACH_FEET);
+  const held = new Set(pairs.filter(pair => anchored(pair.a) || anchored(pair.b)));
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const pair of pairs) if (!held.has(pair) && [pair.a, pair.b].some(p => [...held].some(o => distanceToLine(p, o) <= RAIL_REACH_FEET))) { held.add(pair); grew = true; }
+  }
+  return pairs.filter(pair => held.has(pair));
 }
 
 /** A column: a closed rectangle on the plan with these sides, in feet, no longer than this many times its width. */

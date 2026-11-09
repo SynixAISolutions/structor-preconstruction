@@ -37,7 +37,7 @@ export function planFlights(segments: Line[], fills: Point[][], pointsPerFoot: n
   const inBox = (p: Point) => !box || (p[0] >= box[0] && p[0] <= box[2] && p[1] >= box[1] && p[1] <= box[3]);
   const thin = (s: Line) => s.width < (wallWeight ? wallWeight * 0.9 : 1);
   const lines = segments.filter(s => thin(s) && inBox(s.a) && inBox(s.b)).map(s => ({ a: f(s.a), b: f(s.b), width: s.width }));
-  const triangles = fills.filter(p => p.length === 3 && p.every(inBox)).map(p => p.map(f));
+  const heads = arrowheads(fills.filter(p => p.length === 3 && p.every(inBox)).map(p => p.map(f)), lines);
   const treads = lines.filter(l => { const L = len(sub(l.b, l.a)); return L >= TREAD_MIN_FEET && L <= TREAD_MAX_FEET; })
     .map(l => { let angle = Math.atan2(l.b[1] - l.a[1], l.b[0] - l.a[0]); if (angle < 0) angle += Math.PI; if (angle >= Math.PI - 0.01) angle -= Math.PI; return { ...l, angle }; })
     .sort((p, q) => p.angle - q.angle);
@@ -69,7 +69,7 @@ export function planFlights(segments: Line[], fills: Point[][], pointsPerFoot: n
           const s0 = run.reduce((s, r) => s + r.s0, 0) / run.length, s1 = run.reduce((s, r) => s + r.s1, 0) / run.length, sm = (s0 + s1) / 2;
           const at = (o: number): Point => [d[0] * sm + n[0] * o, d[1] * sm + n[1] * o];
           const flight = { a: at(run[0].o), b: at(run[run.length - 1].o), width: s1 - s0, risers: run.length, going: (run[run.length - 1].o - run[0].o) / (run.length - 1), arrow: null, cut: false } as Flight;
-          if (!grid(flight, lines)) flights.push({ ...flight, arrow: arrowOn(flight, triangles, lines), cut: cutAcross(flight, lines) });
+          if (!grid(flight, lines)) flights.push({ ...flight, arrow: arrowOn(flight, heads, lines), cut: cutAcross(flight, lines) });
         }
         start = gap >= GOING_MIN_FEET && gap <= GOING_MAX_FEET ? k - 1 : k;
       }
@@ -118,26 +118,53 @@ function cutAcross(fl: Flight, lines: Line[]): boolean {
   return from <= -fl.width * 0.35 && to >= fl.width * 0.35;
 }
 
+/** An arrowhead on a plan: its point, the middle of its back, and the unit direction it points. */
+type Arrowhead = { tip: Point; base: Point; dir: Point };
+
 /**
- * The end of the flight its walkline arrow points to: a filled triangle near the middle of the flight's width (the walkline
- * runs along it; Project 1's within 0.15 ft) whose point lies along the run (within 3 degrees; a leader's arrow is aslant)
+ * A plan's arrowheads: filled triangles (Project 1's walklines), and open ones drawn as two short strokes meeting at a point
+ * (Davey Lopes': 0.71 ft strokes at 45 degrees either side), 0.15 to 2 ft from point to back.
+ */
+function arrowheads(triangles: Point[][], lines: Line[]): Arrowhead[] {
+  const heads: Arrowhead[] = [];
+  const add = (tip: Point, base: Point) => { const axis = sub(tip, base), size = len(axis); if (size >= 0.15 && size <= 2) heads.push({ tip, base, dir: [axis[0] / size, axis[1] / size] }); };
+  for (const tri of triangles) {
+    const angleAt = (k: number) => { const p = tri[k], q = sub(tri[(k + 1) % 3], p), r = sub(tri[(k + 2) % 3], p); return Math.acos(Math.max(-1, Math.min(1, dot(q, r) / (len(q) * len(r) || 1)))); };
+    const k = [0, 1, 2].sort((p, q) => angleAt(p) - angleAt(q))[0];
+    if (len(sub(tri[k], mid(tri[(k + 1) % 3], tri[(k + 2) % 3]))) >= 0.3) add(tri[k], mid(tri[(k + 1) % 3], tri[(k + 2) % 3]));
+  }
+  // Open heads: strokes 0.2-1.5 ft long, alike within half again, sharing an end, 30-120 degrees apart.
+  const strokes = lines.map(l => ({ a: l.a, b: l.b, L: len(sub(l.b, l.a)) })).filter(l => l.L >= 0.2 && l.L <= 1.5);
+  const cell = (p: Point) => `${Math.round(p[0] / 0.05)},${Math.round(p[1] / 0.05)}`, ends = new Map<string, { i: number; at: Point; other: Point }[]>();
+  strokes.forEach((l, i) => { for (const [at, other] of [[l.a, l.b], [l.b, l.a]] as [Point, Point][]) ends.set(cell(at), [...(ends.get(cell(at)) ?? []), { i, at, other }]); });
+  for (const [key, here] of ends) {
+    const [cx, cy] = key.split(",").map(Number), near = [-1, 0, 1].flatMap(dx => [-1, 0, 1].flatMap(dy => ends.get(`${cx + dx},${cy + dy}`) ?? []));
+    for (const p of here) for (const q of near) {
+      if (q.i <= p.i || len(sub(p.at, q.at)) > 0.03) continue;
+      const lp = strokes[p.i].L, lq = strokes[q.i].L, vp = sub(p.other, p.at), vq = sub(q.other, q.at);
+      const angle = Math.acos(Math.max(-1, Math.min(1, dot(vp, vq) / (lp * lq)))) * 180 / Math.PI;
+      if (Math.max(lp, lq) / Math.min(lp, lq) <= 1.5 && angle >= 30 && angle <= 120) add(p.at, mid(p.other, q.other));
+    }
+  }
+  return heads;
+}
+
+/**
+ * The end of the flight its walkline arrow points to: an arrowhead (filled or open) near the middle of the flight's width (the
+ * walkline runs along it; Project 1's within 0.15 ft) pointing along the run (within 3 degrees; a leader's arrow is aslant),
  * with a line behind it along the same axis (the walkline itself).
  */
-function arrowOn(fl: Flight, fills: Point[][], lines: Line[]): "a" | "b" | null {
+function arrowOn(fl: Flight, heads: Arrowhead[], lines: Line[]): "a" | "b" | null {
   const { u, inside, local } = frame(fl);
-  for (const tri of fills) {
-    if (tri.length !== 3 || !inside(tri[0], 0.3) || Math.abs(local(tri[0])[1]) > fl.width * 0.3) continue;
-    const angleAt = (k: number) => { const p = tri[k], q = sub(tri[(k + 1) % 3], p), r = sub(tri[(k + 2) % 3], p); return Math.acos(Math.max(-1, Math.min(1, dot(q, r) / (len(q) * len(r) || 1)))); };
-    const k = [0, 1, 2].sort((p, q) => angleAt(p) - angleAt(q))[0], tip = tri[k], base = mid(tri[(k + 1) % 3], tri[(k + 2) % 3]), axis = sub(tip, base), size = len(axis);
-    if (size < 0.3 || size > 2 || Math.abs(dot(axis, u)) / size < Math.cos(3 * Math.PI / 180)) continue;
-    const dir: Point = [axis[0] / size, axis[1] / size];
+  for (const { tip, base, dir } of heads) {
+    if (!inside(tip, 0.3) || Math.abs(local(tip)[1]) > fl.width * 0.3 || Math.abs(dot(dir, u)) < Math.cos(3 * Math.PI / 180)) continue;
     const shaft = lines.some(l => {
       const d = sub(l.b, l.a), L = len(d);
       if (L < 0.2 || Math.abs(dot(d, dir)) / L < Math.cos(3 * Math.PI / 180)) return false;
       const side = (p: Point) => Math.abs(dot(sub(p, base), [-dir[1], dir[0]]));
       if (side(l.a) > 0.15 || side(l.b) > 0.15) return false;
       const t = [dot(sub(l.a, base), dir), dot(sub(l.b, base), dir)].sort((p, q) => p - q);
-      return t[0] <= 0.3 && t[1] >= -0.3 && t[0] < 0; // reaches the arrow's base from behind it
+      return t[0] <= 0.3 && t[1] >= -0.3 && t[0] < 0; // reaches the arrow's back from behind it
     });
     if (shaft) return dot(dir, u) > 0 ? "b" : "a";
   }
@@ -238,4 +265,27 @@ export function stairPieces(flights: StairFlight[], rise: number): { treads: Sta
   });
   const risers = walk.runs.reduce((s, x) => s + x.risers, 0);
   return { treads, landings, openings, risers, riser: r, runs: walk.runs.length, repeated: walk.repeated };
+}
+
+/** A stair on two plans of one set lines up within this, across its run. */
+export const RISING_ALIGN_FEET = 0.75;
+
+/**
+ * Directions for a stair arriving at a level whose plan draws no walkline arrow on it (Davey Lopes' A102), from the plan of the
+ * level below: each flight lying over a flight that rises there with an UP arrow runs down toward that flight's foot. Plans of
+ * one set share their layout, so the same stair sits at the same place on both (within RISING_ALIGN_FEET across its run).
+ */
+export function borrowArrows(flights: StairFlight[], rising: StairFlight[]): StairFlight[] {
+  return flights.map(f => {
+    if (f.arrow) return f;
+    const fr = frame(f);
+    const under = rising.find(r => {
+      if (!r.arrow || Math.abs(dot(fr.u, frame(r).u)) < Math.cos(3 * Math.PI / 180)) return false;
+      const [ta, wa] = fr.local(r.a), [tb, wb] = fr.local(r.b);
+      return Math.abs((wa + wb) / 2) <= RISING_ALIGN_FEET && Math.max(ta, tb) >= -fr.length / 2 && Math.min(ta, tb) <= fr.length / 2;
+    });
+    if (!under) return f;
+    const foot = under.arrow === "a" ? under.b : under.a; // an UP arrow points to the top of the flight; its other end is the foot
+    return { ...f, arrow: len(sub(f.a, foot)) <= len(sub(f.b, foot)) ? "a" as const : "b" as const };
+  });
 }
