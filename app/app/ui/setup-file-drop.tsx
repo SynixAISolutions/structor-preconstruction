@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { openLocalPdf } from "../../lib/local-pdf";
 import { FileUp, X } from "lucide-react";
 import { DOCUMENT_CATEGORIES, MAX_SOURCE_BYTES, type StoredDocument } from "../../lib/project-files";
 import { uploadProjectPdf, type UploadProgress } from "../../lib/project-files-client";
@@ -16,7 +17,8 @@ export async function inspectSetupPdf(file: File): Promise<FileGuess> {
   if (file.size > MAX_SOURCE_BYTES) throw new Error("This PDF exceeds the project-file size limit.");
   const pdfjs = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = (await import("../../lib/pdf-worker")).pdfWorkerSrc();
-  const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
+  // Only the first pages are read, so only their part of the file is loaded (lib/local-pdf), not a copy of all of it.
+  const task = openLocalPdf(pdfjs, file);
   try {
     const pdf = await task.promise;
     const texts: string[] = []; let sheetsRead = 0;

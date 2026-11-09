@@ -223,4 +223,25 @@ assert.equal(updated.id, sampleProjectRecords[0].id);
   assert.deepEqual(F.parseSheetsAndSections({ sheets: [{ page: 2, sheet: "A2.1", title: "T" }, { page: "x" }], sections: [{ section: "09 30 13", title: "Tiling", first: 3, last: 9 }] }), { sheets: [{ page: 2, sheet: "A2.1", title: "T", date: "" }], sections: [{ section: "09 30 13", title: "Tiling", first: 3, last: 9 }] });
 }
 
+// A PDF on this computer is read in the ranges its pages need, by readers that each open it afresh for every run of pages
+// (lib/local-pdf): a full copy per reader ran Marcel's Chrome tab out of memory on a 166 MB drawing set (9 Nov).
+{
+  const L = await import("../lib/local-pdf.ts");
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const { PDFDocument, StandardFonts } = await import("pdf-lib");
+  const made = await PDFDocument.create(), font = await made.embedFont(StandardFonts.Helvetica);
+  for (let n = 1; n <= 45; n++) made.addPage([612, 792]).drawText(`Sheet ${n}`, { x: 72, y: 700, size: 24, font });
+  const file = new Blob([await made.save()], { type: "application/pdf" });
+  const opens = [], read = [];
+  await L.eachPageInRuns(reader => { opens.push(reader); return L.openLocalPdf(pdfjs, file, { verbosity: 0 }); }, Array.from({ length: 45 }, (_, i) => i + 1), 3, async (doc, n) => {
+    read.push([n, (await (await doc.getPage(n)).getTextContent()).items.map(i => i.str).join("")]);
+  });
+  assert.deepEqual(read.map(([n]) => n).sort((a, b) => a - b), Array.from({ length: 45 }, (_, i) => i + 1), "Every page once");
+  assert.ok(read.every(([n, text]) => text === `Sheet ${n}`), "Each page's own text, from its ranges of the file");
+  assert.equal(opens.length, Math.ceil(45 / L.PAGES_PER_OPEN), "Opened afresh for each run of 20 pages");
+  const canvas = { width: 2200, height: 1467 };
+  L.freeCanvas(canvas);
+  assert.deepEqual(canvas, { width: 0, height: 0 }, "A canvas gives its pixels back once used");
+}
+
 console.log("Project files checked: identical uploads reuse the stored copy, sheet keys, revisions, drawing log (sets, sheet versions, partial sets, naming pages), sheet/manual/section lookup, stored-file validation, index upsert, sections by trade.");

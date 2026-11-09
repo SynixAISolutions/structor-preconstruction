@@ -1,12 +1,13 @@
 "use client";
 
 import { paintPage } from "./pdf-paint";
+import { freeCanvas, openLocalPdf } from "./local-pdf";
 
 /** One rendered page; the file and render are never written to the server or committed. */
 export async function renderDrawingPage(file: File, page: number): Promise<{ image: string; aspect: number }> {
   const pdfjs = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-  const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
+  const task = openLocalPdf(pdfjs, file);
   try {
     const document = await task.promise, sheet = await document.getPage(page);
     const original = sheet.getViewport({ scale: 1 });
@@ -16,6 +17,8 @@ export async function renderDrawingPage(file: File, page: number): Promise<{ ima
     const context = canvas.getContext("2d");
     if (!context) throw new Error("This browser cannot render a drawing page.");
     await paintPage(sheet, canvas, context, viewport);
-    return { image: canvas.toDataURL("image/jpeg", 0.85), aspect: original.width / original.height };
+    const image = canvas.toDataURL("image/jpeg", 0.85);
+    freeCanvas(canvas);
+    return { image, aspect: original.width / original.height };
   } finally { await task.destroy(); }
 }
