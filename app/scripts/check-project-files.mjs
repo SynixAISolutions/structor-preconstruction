@@ -242,6 +242,8 @@ assert.equal(updated.id, sampleProjectRecords[0].id);
   const canvas = { width: 2200, height: 1467 };
   L.freeCanvas(canvas);
   assert.deepEqual(canvas, { width: 0, height: 0 }, "A canvas gives its pixels back once used");
+  // Marcel's two volumes (222,316 KB and 124,604 KB) get one and four readers; a small file keeps all it asks for.
+  assert.deepEqual([L.readersFor(227_651_584, 6), L.readersFor(127_594_496, 6), L.readersFor(20e6, 6), L.readersFor(20e6, 3), L.readersFor(2e9, 6)], [1, 4, 6, 3, 1], "Open readers fit the document budget: never more than the file's size allows, never fewer than one");
 }
 
 console.log("Project files checked: identical uploads reuse the stored copy, sheet keys, revisions, drawing log (sets, sheet versions, partial sets, naming pages), sheet/manual/section lookup, stored-file validation, index upsert, sections by trade.");

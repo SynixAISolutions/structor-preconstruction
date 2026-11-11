@@ -15,7 +15,7 @@ import { inAiPool } from "./ai-pool";
 import { useActiveProject } from "./project-scope";
 import { pageTextBoxes, type TextBox } from "./text-anchor";
 import { paintPage } from "./pdf-paint";
-import { eachPageInRuns, freeCanvas, openLocalPdf, PAGES_PER_OPEN } from "./local-pdf";
+import { eachPageInRuns, freeCanvas, openLocalPdf, PAGES_PER_OPEN, readersFor } from "./local-pdf";
 import {
   chunkFor, emptyIndex, kindForCategory, MAX_RANGE_BYTES, sourcePath, TEXT_CHUNK,
   textSource, type PageText, type ProjectFileIndex, type StoredDocument, type StoredSheet,
@@ -112,7 +112,8 @@ function sheetFromItems(items: TextItem[], width: number, height: number): strin
 /**
  * Every page's text, and for drawings the sheet number in each title block. Several pdf.js readers share the pages
  * (Danial, 30 Oct: reading a 2,074-page manual on one core took 7–8 minutes). Each reads the file in the ranges its pages
- * need and opens it afresh every few pages (lib/local-pdf): a full copy each ran Marcel's Chrome tab out of memory (9 Nov).
+ * need and opens it afresh every few pages (lib/local-pdf). Each open document costs its file's full size in committed
+ * memory (Windows), so the readers a file gets are capped by its size (readersFor): Marcel's Chrome tab ran out of memory on 9 Nov.
  */
 async function readPages(file: File, kind: StoredDocument["kind"], onPage: (done: number, total: number) => void) {
   const pdfjs = await import("pdfjs-dist");
@@ -121,7 +122,7 @@ async function readPages(file: File, kind: StoredDocument["kind"], onPage: (done
   const total = (await first.promise).numPages;
   await first.destroy();
   const cores = typeof navigator === "undefined" ? 4 : navigator.hardwareConcurrency || 4;
-  const readers = Math.max(1, Math.min(6, cores - 2, Math.ceil(total / 40)));
+  const readers = readersFor(file.size, Math.max(1, Math.min(6, cores - 2, Math.ceil(total / 40))));
   const workers = Array.from({ length: readers }, () => new pdfjs.PDFWorker());
   const pages: PageText[] = new Array(total), sheets: StoredSheet[] = new Array(total);
   let done = 0;
