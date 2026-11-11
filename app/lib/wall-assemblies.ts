@@ -88,8 +88,17 @@ export function layerSlabs(layers: WallLayer[], measuredFeet: number): LayerSlab
   });
 }
 
-/** How far apart the layers of a wall this long slide when it opens, in feet: an eighth of its length, 1 to 6 ft. */
-export const layerGap = (lengthFeet: number) => Math.min(6, Math.max(1, lengthFeet / 8));
+/**
+ * How far apart the layers of a wall slide when it opens, in feet: a sixth of its length or its height, whichever is more,
+ * 1.5 to 6 ft. (By its length alone, a short wall's layers moved a foot apart on a 14 ft face and read as one panel.)
+ */
+export const layerGap = (lengthFeet: number, heightFeet = 0) => Math.min(6, Math.max(1.5, Math.max(lengthFeet, heightFeet) / 6));
+
+/**
+ * How far each opened layer steps back from the wall's end nearer the viewer, in feet, so every layer's face shows beside
+ * the one in front: the nearest layer is cut back most, the farthest not at all, never more than 40% of the wall.
+ */
+export const layerStep = (lengthFeet: number, count: number) => count > 1 ? Math.min(3, lengthFeet * 0.4 / (count - 1)) : 0;
 
 /** Where layer `index` of `count` ends up when the wall opens: its place in the wall, moved out by its turn in the stack. */
 export const openedCenter = (slab: Pick<LayerSlab, "center">, index: number, count: number, gap: number) => slab.center + (index - (count - 1) / 2) * gap;

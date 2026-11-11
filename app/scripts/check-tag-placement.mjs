@@ -158,7 +158,8 @@ const slabs = W.layerSlabs([...sa310, { material: "sound attenuation blanket", i
 const r3 = v => Math.round(v * 1000) / 1000;
 assert.deepEqual(slabs.map(s => [r3(s.center * 12), r3(s.depth * 12), s.inside]), [[-2.125, 0.625, false], [0, 3.625, false], [0, 3.081, true], [2.125, 0.625, false]], "Layers sit side by side across the wall, centred; the blanket inside the studs");
 assert.deepEqual(W.layerSlabs([{ material: "gypsum board", inches: 0.625 }, { material: "metal studs", inches: null }], 0.5).map(s => r3(s.drawnInches)), [0.625, 5.375], "A layer without a thickness gets what the measured wall leaves");
-assert.deepEqual([W.layerGap(4), W.layerGap(20), W.layerGap(80)], [1, 2.5, 6]);
+assert.deepEqual([W.layerGap(4), W.layerGap(20), W.layerGap(80), W.layerGap(7.1, 14), r3(W.layerGap(17.5, 14))], [1.5, 20 / 6, 6, 14 / 6, 2.917], "A short, tall wall's layers move apart by a sixth of its height");
+assert.deepEqual([W.layerStep(7.1, 2), W.layerStep(17.5, 3), r3(W.layerStep(17.5, 4)), W.layerStep(30, 2), W.layerStep(12, 1)], [2.84, 3, 2.333, 3, 0], "The nearest layer steps back at most 40% of the wall, 3 ft a layer");
 assert.deepEqual(slabs.map((s, i) => r3(W.openedCenter(s, i, slabs.length, 2))), [-3.177, -1, 1, 3.177], "Opened, each layer moves out by its turn in the stack");
 assert.deepEqual(["Type X gypsum board", "R-11 batt insulation", "8\" CMU", "3 5/8\" metal studs", "plywood sheathing", "something"].map(W.layerColor), ["#eee6d5", "#efcf67", "#9ea4a8", "#a7b4bb", "#c9a06e", "#c8c5bc"]);
 
