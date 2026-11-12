@@ -102,7 +102,7 @@ async function readTiles(doc: StoredDocument, page: number, enough: (words: Text
     while (read.tiles.length < read.boxes.length && !signal?.aborted) {
       onProgress?.({ done: read.tiles.length, total: read.boxes.length });
       const box = read.boxes[read.tiles.length];
-      const image = await renderStoredRegion(doc, page, [box.x, box.y, box.width, box.height], read.size);
+      const image = await renderStoredRegion(doc, page, [box.x, box.y, box.width, box.height], read.size, true);
       const [{ width, height }, { data }] = await Promise.all([imageSize(image), ocr.recognize(image, {}, { blocks: true })]);
       const words = (data.blocks ?? []).flatMap(b => b.paragraphs.flatMap(p => p.lines.flatMap(l => l.words)));
       read.tiles.push({ box, width, height, words: words.map(word => ({ text: word.text, confidence: word.confidence, bbox: word.bbox })) });

@@ -2,11 +2,20 @@
 
 import { paintPage } from "./pdf-paint";
 import { freeCanvas, openLocalPdf } from "./local-pdf";
+import { pageTurn } from "./page-turns";
 
-/** One rendered page; the file and render are never written to the server or committed. */
-export async function renderDrawingPage(file: File, page: number): Promise<{ image: string; aspect: number }> {
+/**
+ * One rendered page; the file and render are never written to the server or committed. The file is opened inside the
+ * page's turn (lib/page-turns): each open commits a buffer as long as the whole file, so a drawing reader asking for three
+ * sheets of a 222 MB set at once held three. A reader working through many sheets passes `behind`.
+ */
+export async function renderDrawingPage(file: File, page: number, behind = false): Promise<{ image: string; aspect: number }> {
   const pdfjs = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+  return pageTurn(() => drawPage(pdfjs, file, page), behind);
+}
+
+async function drawPage(pdfjs: typeof import("pdfjs-dist"), file: File, page: number): Promise<{ image: string; aspect: number }> {
   const task = openLocalPdf(pdfjs, file);
   try {
     const document = await task.promise, sheet = await document.getPage(page);

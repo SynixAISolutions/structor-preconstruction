@@ -26,7 +26,7 @@ export function DrawingReader({ pkg, onRun, onPages }: { pkg: TradePackage; onRu
     const id = ++request.current, project = getActiveProjectId();
     setBusy(true); setDone(0); setError(""); setNotice(""); setResult(null); rememberPdf(pdf.file, project);
     try {
-      const outcome = await extractDrawingScope({ pkg, document: pdf.file.name, pageCount: pdf.text.pageCount, pages: chosen.map(page => ({ ...page, sheet: page.sheet || `PDF ${page.page}` })), render: page => import("../../lib/pdf-drawing").then(lib => lib.renderDrawingPage(pdf.file, page)), signal: controller.current.signal, onProgress: count => { if (id === request.current) setDone(count); } });
+      const outcome = await extractDrawingScope({ pkg, document: pdf.file.name, pageCount: pdf.text.pageCount, pages: chosen.map(page => ({ ...page, sheet: page.sheet || `PDF ${page.page}` })), render: page => import("../../lib/pdf-drawing").then(lib => lib.renderDrawingPage(pdf.file, page, true)), signal: controller.current.signal, onProgress: count => { if (id === request.current) setDone(count); } });
       if (id !== request.current || project !== getActiveProjectId()) return;
       const pageProblem = onPages(outcome.drawingPages ?? [], pdf.file.name);
       if (pageProblem) throw new Error(pageProblem);

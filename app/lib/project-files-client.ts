@@ -16,6 +16,7 @@ import { useActiveProject } from "./project-scope";
 import { pageTextBoxes, type TextBox } from "./text-anchor";
 import { paintPage } from "./pdf-paint";
 import { eachPageInRuns, freeCanvas, openLocalPdf, PAGES_PER_OPEN, readersFor } from "./local-pdf";
+import { pageTurn } from "./page-turns";
 import {
   chunkFor, emptyIndex, kindForCategory, MAX_RANGE_BYTES, sourcePath, TEXT_CHUNK,
   textSource, type PageText, type ProjectFileIndex, type StoredDocument, type StoredSheet,
@@ -207,7 +208,8 @@ async function storePdf(args: Parameters<typeof uploadProjectPdf>[0]): Promise<S
 
 /**
  * Reads every sheet's title block (right-hand strip, lower half) with the AI, six at a time. The file is opened afresh for
- * every PAGES_PER_OPEN sheets, so it holds only what those sheets need (lib/local-pdf).
+ * every PAGES_PER_OPEN sheets, so it holds only what those sheets need (lib/local-pdf), and each sheet is drawn in its turn
+ * (lib/page-turns): six drawn at once took 3.3 GB on Project 1's set (11 Nov, on the live site).
  */
 async function readTitleBlocks(file: File, sheets: StoredSheet[], onProgress: (done: number, total: number) => void): Promise<StoredSheet[]> {
   const pdfjs = await import("pdfjs-dist");
@@ -223,22 +225,26 @@ async function readTitleBlocks(file: File, sheets: StoredSheet[], onProgress: (d
         while (next < run.length) {
           const sheet = run[next++];
           try {
-            const page = await pdf.getPage(sheet.page);
-            const view = page.getViewport({ scale: 1 });
-            const scale = 2200 / Math.max(view.width, view.height);
-            const viewport = page.getViewport({ scale });
-            // Render the whole sheet, then copy out the title-block strip (right 8.5%, lower half).
-            const full = document.createElement("canvas");
-            full.width = Math.ceil(viewport.width); full.height = Math.ceil(viewport.height);
-            await paintPage(page, full, full.getContext("2d")!, viewport);
-            page.cleanup();
-            const strip = { x: Math.floor(full.width * 0.915), y: Math.floor(full.height * 0.5) };
-            const canvas = document.createElement("canvas");
-            canvas.width = full.width - strip.x; canvas.height = full.height - strip.y;
-            canvas.getContext("2d")!.drawImage(full, strip.x, strip.y, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
-            freeCanvas(full);
-            const image = canvas.toDataURL("image/jpeg", 0.8);
-            freeCanvas(canvas);
+            // Six sheets wait on the AI at once, but each is drawn in its turn.
+            const image = await pageTurn(async () => {
+              const page = await pdf.getPage(sheet.page);
+              const view = page.getViewport({ scale: 1 });
+              const scale = 2200 / Math.max(view.width, view.height);
+              const viewport = page.getViewport({ scale });
+              // Render the whole sheet, then copy out the title-block strip (right 8.5%, lower half).
+              const full = document.createElement("canvas");
+              full.width = Math.ceil(viewport.width); full.height = Math.ceil(viewport.height);
+              await paintPage(page, full, full.getContext("2d")!, viewport);
+              page.cleanup();
+              const strip = { x: Math.floor(full.width * 0.915), y: Math.floor(full.height * 0.5) };
+              const canvas = document.createElement("canvas");
+              canvas.width = full.width - strip.x; canvas.height = full.height - strip.y;
+              canvas.getContext("2d")!.drawImage(full, strip.x, strip.y, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+              freeCanvas(full);
+              const jpeg = canvas.toDataURL("image/jpeg", 0.8);
+              freeCanvas(canvas);
+              return jpeg;
+            }, true);
             const read = await readTitleBlock(image);
             if (read.sheet) Object.assign(sheet, { sheet: read.sheet, title: read.title, date: read.date });
           } catch { /* keep what the text layer gave; the sheet can be named in List of drawings */ }
@@ -354,12 +360,14 @@ const renders = new Map<string, Promise<{ image: string; aspect: number }>>();
 /** Page renders kept for the viewer and the AI, newest last: each is a JPEG of up to a few megabytes. */
 const RENDERS_KEPT = 16;
 
-/** A page of a stored PDF as a JPEG data URL, longest side `size` pixels. */
-export function renderStoredPage(doc: StoredDocument, pageNumber: number, size = 2000): Promise<{ image: string; aspect: number }> {
+/**
+ * A page of a stored PDF as a JPEG data URL, longest side `size` pixels. Pages are drawn a few at a time in the whole tab
+ * (lib/page-turns); a reader working through many sheets passes `behind`, so a page someone opens is drawn ahead of its queue.
+ */
+export function renderStoredPage(doc: StoredDocument, pageNumber: number, size = 2000, behind = false): Promise<{ image: string; aspect: number }> {
   const key = `${doc.id}:${pageNumber}:${size}`;
   if (!renders.has(key)) {
-    const job = (async () => {
-      const pdf = await openStoredPdf(doc);
+    const job = openStoredPdf(doc).then(pdf => pageTurn(async () => {
       const page = await pdf.getPage(pageNumber);
       const original = page.getViewport({ scale: 1 });
       const viewport = page.getViewport({ scale: size / Math.max(original.width, original.height) });
@@ -372,7 +380,7 @@ export function renderStoredPage(doc: StoredDocument, pageNumber: number, size =
       const image = canvas.toDataURL("image/jpeg", 0.82);
       freeCanvas(canvas);
       return { image, aspect: original.width / original.height };
-    })();
+    }, behind));
     job.catch(() => renders.delete(key));
     renders.set(key, job);
     if (renders.size > RENDERS_KEPT) renders.delete(renders.keys().next().value!);
@@ -382,34 +390,40 @@ export function renderStoredPage(doc: StoredDocument, pageNumber: number, size =
 
 type Box = [number, number, number, number];
 
-/** One part of a page, `box` = [x, y, width, height] in 0–1 page fractions, as a JPEG with longest side `size`. */
-export async function renderStoredRegion(doc: StoredDocument, pageNumber: number, box: Box, size = 2000): Promise<string> {
-  const page = await (await openStoredPdf(doc)).getPage(pageNumber);
-  const original = page.getViewport({ scale: 1 });
-  const [x, y, w, h] = box;
-  const scale = size / Math.max(w * original.width, h * original.height);
-  const viewport = page.getViewport({ scale, offsetX: -x * original.width * scale, offsetY: -y * original.height * scale });
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.ceil(w * original.width * scale); canvas.height = Math.ceil(h * original.height * scale);
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("This browser cannot render a drawing page.");
-  await paintPage(page, canvas, context, viewport);
-  page.cleanup();
-  const image = canvas.toDataURL("image/jpeg", 0.82);
-  freeCanvas(canvas);
-  return image;
+/**
+ * One part of a page, `box` = [x, y, width, height] in 0–1 page fractions, as a JPEG with longest side `size`. Drawn in
+ * its turn like a whole page (lib/page-turns): drawing a part still reads the whole page. `behind` as in renderStoredPage.
+ */
+export async function renderStoredRegion(doc: StoredDocument, pageNumber: number, box: Box, size = 2000, behind = false): Promise<string> {
+  const pdf = await openStoredPdf(doc);
+  return pageTurn(async () => {
+    const page = await pdf.getPage(pageNumber);
+    const original = page.getViewport({ scale: 1 });
+    const [x, y, w, h] = box;
+    const scale = size / Math.max(w * original.width, h * original.height);
+    const viewport = page.getViewport({ scale, offsetX: -x * original.width * scale, offsetY: -y * original.height * scale });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.ceil(w * original.width * scale); canvas.height = Math.ceil(h * original.height * scale);
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("This browser cannot render a drawing page.");
+    await paintPage(page, canvas, context, viewport);
+    page.cleanup();
+    const image = canvas.toDataURL("image/jpeg", 0.82);
+    freeCanvas(canvas);
+    return image;
+  }, behind);
 }
 
 /**
  * A page cut into `cols` × `rows` slightly overlapping tiles, each a JPEG with longest side `size`, so
  * small print (level markers, room tags) is legible without one huge image. Boxes are 0–1 page fractions.
  */
-export async function renderStoredTiles(doc: StoredDocument, pageNumber: number, cols: number, rows: number, size = 2000, overlap = 0.06): Promise<{ image: string; box: Box }[]> {
+export async function renderStoredTiles(doc: StoredDocument, pageNumber: number, cols: number, rows: number, size = 2000, overlap = 0.06, behind = false): Promise<{ image: string; box: Box }[]> {
   const w = Math.min(1, 1 / cols + overlap), h = Math.min(1, 1 / rows + overlap);
   const boxes: Box[] = [];
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) boxes.push([Math.min(1 - w, Math.max(0, c / cols - overlap / 2)), Math.min(1 - h, Math.max(0, r / rows - overlap / 2)), w, h]);
   const tiles: { image: string; box: Box }[] = [];
-  for (const box of boxes) tiles.push({ image: await renderStoredRegion(doc, pageNumber, box, size), box });
+  for (const box of boxes) tiles.push({ image: await renderStoredRegion(doc, pageNumber, box, size, behind), box });
   return tiles;
 }
 

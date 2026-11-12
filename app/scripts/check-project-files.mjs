@@ -246,4 +246,25 @@ assert.equal(updated.id, sampleProjectRecords[0].id);
   assert.deepEqual([L.readersFor(227_651_584, 6), L.readersFor(127_594_496, 6), L.readersFor(20e6, 6), L.readersFor(20e6, 3), L.readersFor(2e9, 6)], [1, 4, 6, 3, 1], "Open readers fit the document budget: never more than the file's size allows, never fewer than one");
 }
 
+// Pages are drawn a few at a time in the whole tab (lib/page-turns): eighteen of Marcel's 42" × 30" sheets drawn at once, as
+// the automatic run began, took 5 GB and ran his Chrome tab out of memory (12 Nov).
+{
+  const T = await import("../lib/page-turns.ts");
+  let drawing = 0, most = 0;
+  const order = [];
+  const draw = name => async () => { drawing++; most = Math.max(most, drawing); await new Promise(r => setTimeout(r, 5)); drawing--; order.push(name); return name; };
+  const jobs = [
+    ...Array.from({ length: 6 }, (_, i) => T.pageTurn(draw(`reader ${i + 1}`), true)),
+    T.pageTurn(draw("viewer")),
+    T.pageTurn(async () => { throw new Error("bad page"); }, true).catch(error => error.message),
+  ];
+  assert.deepEqual(T.pageTurns(), { busy: T.PAGES_AT_ONCE, waiting: jobs.length - T.PAGES_AT_ONCE }, "The rest wait for a turn");
+  const results = await Promise.all(jobs);
+  assert.equal(most, T.PAGES_AT_ONCE, "Never more pages being drawn than the tab's turns");
+  assert.equal(order.indexOf("viewer"), T.PAGES_AT_ONCE, "A page someone asked to see goes next, ahead of the readers' queue");
+  assert.deepEqual(order.filter(n => n !== "viewer"), Array.from({ length: 6 }, (_, i) => `reader ${i + 1}`), "Readers keep their order");
+  assert.deepEqual([results[6], results[7]], ["viewer", "bad page"], "Each caller gets its own page, or its own error");
+  assert.deepEqual(T.pageTurns(), { busy: 0, waiting: 0 }, "A page that fails gives its turn up");
+}
+
 console.log("Project files checked: identical uploads reuse the stored copy, sheet keys, revisions, drawing log (sets, sheet versions, partial sets, naming pages), sheet/manual/section lookup, stored-file validation, index upsert, sections by trade.");

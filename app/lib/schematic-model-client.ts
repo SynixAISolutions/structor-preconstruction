@@ -10,6 +10,7 @@ import type { WallLayer } from "./wall-assemblies";
 import { mergePartitionTypes, scheduleRow, tagKey, type PartitionType } from "./tag-placement";
 import { drawingRegister, type StoredDocument } from "./project-files";
 import { openStoredPdf, readStoredText, renderStoredPage, renderStoredRegion, renderStoredTiles } from "./project-files-client";
+import { pageTurn } from "./page-turns";
 import type { Project } from "./projects";
 import { vectorsFromOperators } from "./plan-vectors";
 import { consensusMarkers, feetPerInch, heightSheet, levelHeights, levelName, contentTiles, levelColumns, levelDoors, levelGlazing, levelOpenings, levelPartitions, levelFlights, levelPlanSheets, levelTags, levelWalls, stairsArriving, type LevelFlights, partitionTypeSheet, tagTiles, toFeet, type Marker, type SchematicLevel, type SchematicModel, type SchematicRoom } from "./schematic-model";
@@ -28,7 +29,7 @@ async function pageSize(doc: StoredDocument, page: number) {
  */
 export async function readLevelMarkers(doc: StoredDocument, page: number, sheet: string, title: string, signal?: AbortSignal): Promise<{ markers: Marker[]; read: number; warnings: string[] }> {
   const ask = (image: string) => aiJob<{ levels: Marker[] }>("level-heights", { sheet, title, image }, signal).then(r => r.levels);
-  const tiles = await renderStoredTiles(doc, page, 3, 2, 2000);
+  const tiles = await renderStoredTiles(doc, page, 3, 2, 2000, 0.06, true);
   const readings: Marker[][] = [], boxes: [number, number, number, number][] = [];
   let failed = 0;
   for (let i = 0; i < tiles.length; i += 3) {
@@ -44,7 +45,7 @@ export async function readLevelMarkers(doc: StoredDocument, page: number, sheet:
   for (const { reading, at } of found.disputed.slice(0, 3)) {
     const [bx, by, bw, bh] = boxes[reading], px = bx + at[0] * bw, py = by + at[1] * bh;
     const box: [number, number, number, number] = [Math.min(0.85, Math.max(0, px - 0.075)), Math.min(0.92, Math.max(0, py - 0.04)), 0.15, 0.08];
-    const closeUp = await renderStoredRegion(doc, page, box, 1600).then(ask).catch(() => null);
+    const closeUp = await renderStoredRegion(doc, page, box, 1600, true).then(ask).catch(() => null);
     if (closeUp) { readings.push(closeUp); weights.push(2); }
   }
   if (weights.length > boxes.length) found = consensusMarkers(readings, weights);
@@ -75,7 +76,7 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
   type PlanRead = { level: number; row: (typeof plans)[number]["row"]; reading: PlanReading; page: { widthIn: number; heightIn: number }; scale: number | null; scaleAt: [number, number] | null; borrowed?: string };
   // The printed scale is read close up (at full-sheet size 1/8" was misread as 3/32"): around where it
   // was seen, else along the bottom of the sheet, where drawing titles sit (the title block is on the right).
-  const scaleIn = (row: PlanRead["row"], box: [number, number, number, number]) => renderStoredRegion(row.doc, row.page, box, 2000)
+  const scaleIn = (row: PlanRead["row"], box: [number, number, number, number]) => renderStoredRegion(row.doc, row.page, box, 2000, true)
     .then(image => aiJob<{ scale: string; title: string }>("drawing-scale", { sheet: row.sheet, image }, args.signal)).catch(() => null);
   const scaleNear = async (row: PlanRead["row"], [sx, sy]: [number, number]) => feetPerInch((await scaleIn(row, [Math.min(0.84, Math.max(0, sx - 0.08)), Math.min(0.95, Math.max(0, sy - 0.025)), 0.16, 0.05]))?.scale ?? "");
   const scaleAlongBottom = async (row: PlanRead["row"]) => {
@@ -86,7 +87,7 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
   const plansRead: PlanRead[] = [];
   for (const { level, row } of plans) {
     args.onProgress?.(`Reading the ${levelName(level)} plan (${row.sheet})…`);
-    const [{ image }, page, text] = await Promise.all([renderStoredPage(row.doc, row.page, 1800), pageSize(row.doc, row.page), readStoredText(row.doc, { first: row.page, last: row.page })]);
+    const [{ image }, page, text] = await Promise.all([renderStoredPage(row.doc, row.page, 1800, true), pageSize(row.doc, row.page), readStoredText(row.doc, { first: row.page, last: row.page })]);
     const ask = () => aiJob<PlanReading>("plan-outline", { sheet: row.sheet, title: row.title, image }, args.signal);
     // ponytail: one retry; readings vary between requests, and an unusable outline is the usual failure.
     const reading = await ask().catch(error => { if (args.signal?.aborted) throw error; return ask(); });
@@ -154,11 +155,11 @@ export async function readWallLayers(documents: StoredDocument[], signal?: Abort
 async function readPartitionTypes(doc: StoredDocument, pageNumber: number, sheetName: string, signal?: AbortSignal): Promise<PartitionType[]> {
   const [pdfjs, pdf] = await Promise.all([import("pdfjs-dist"), openStoredPdf(doc)]);
   const page = await pdf.getPage(pageNumber), viewport = page.getViewport({ scale: 1 });
-  const { segments } = vectorsFromOperators(await page.getOperatorList(), pdfjs.OPS as unknown as Record<string, number>, viewport.transform);
+  const { segments } = vectorsFromOperators(await pageTurn(() => page.getOperatorList(), true), pdfjs.OPS as unknown as Record<string, number>, viewport.transform);
   const rows: PartitionType[] = [], legend: string[] = [], sections: PartitionKeyRead["sections"] = [];
   const tiles = contentTiles(segments, { widthPt: viewport.width, heightPt: viewport.height });
   for (let i = 0; i < tiles.length; i += 3) await Promise.all(tiles.slice(i, i + 3).map(async tile => {
-    const read = await aiJob<{ types: PartitionTypeRead[] } & Partial<PartitionKeyRead>>("partition-types", { sheet: sheetName, image: await renderStoredRegion(doc, pageNumber, tile, 2000) }, signal);
+    const read = await aiJob<{ types: PartitionTypeRead[] } & Partial<PartitionKeyRead>>("partition-types", { sheet: sheetName, image: await renderStoredRegion(doc, pageNumber, tile, 2000, true) }, signal);
     rows.push(...read.types);
     // Tiles overlap: a legend line or a section read twice counts once.
     for (const line of read.legend ?? []) if (!legend.includes(line)) legend.push(line);
@@ -181,7 +182,7 @@ async function planVectorWalls(doc: StoredDocument, pageNumber: number, sheetNam
   const [pdfjs, pdf] = await Promise.all([import("pdfjs-dist"), openStoredPdf(doc)]);
   const page = await pdf.getPage(pageNumber);
   const viewport = page.getViewport({ scale: 1 }), sheet = { widthPt: viewport.width, heightPt: viewport.height };
-  const { segments, curves, fills } = vectorsFromOperators(await page.getOperatorList(), pdfjs.OPS as unknown as Record<string, number>, viewport.transform);
+  const { segments, curves, fills } = vectorsFromOperators(await pageTurn(() => page.getOperatorList(), true), pdfjs.OPS as unknown as Record<string, number>, viewport.transform);
   const walls = levelWalls(segments, sheet, frame, outline, printedScale);
   const doors = levelDoors(segments, curves, sheet, frame, outline, walls.walls);
   const glazing = levelGlazing(segments, sheet, frame, outline, walls.weight, walls.walls, doors);
@@ -195,7 +196,7 @@ async function planVectorWalls(doc: StoredDocument, pageNumber: number, sheetNam
   for (let i = 0; i < tiles.length; i += 3) {
     onProgress?.(`Reading the door, wall and room tags on ${sheetName} (part ${Math.min(i + 3, tiles.length)} of ${tiles.length})…`);
     await Promise.all(tiles.slice(i, i + 3).map(async tile => {
-      try { read.push({ tile, tags: (await aiJob<{ tags: PlanTag[] }>("plan-tags", { sheet: sheetName, image: await renderStoredRegion(doc, pageNumber, tile, 1200) }, signal)).tags }); }
+      try { read.push({ tile, tags: (await aiJob<{ tags: PlanTag[] }>("plan-tags", { sheet: sheetName, image: await renderStoredRegion(doc, pageNumber, tile, 1200, true) }, signal)).tags }); }
       catch (error) { if (signal?.aborted) throw error; failed++; }
     }));
   }

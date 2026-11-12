@@ -92,7 +92,7 @@ export async function readTradeScope(args: {
       const drawn = await extractDrawingScope({
         pkg, document: doc.name, pageCount: doc.pageCount, signal, onProgress: d => { counts.sheetsRead = done + d; say("sheets", `Reading drawing sheet ${Math.min(done + d + 1, sheets.length)} of ${sheets.length}`); },
         pages: rows.map(r => ({ page: r.page, sheet: r.sheet, text: text.find(p => p.page === r.page)?.text ?? "" })),
-        render: page => renderStoredPage(doc, page, 2000).then(r => { aspects.set(page, r.aspect); return { image: r.image }; }),
+        render: page => renderStoredPage(doc, page, 2000, true).then(r => { aspects.set(page, r.aspect); return { image: r.image }; }),
       });
       done += rows.length;
       counts.sheetsRead = done; counts.sheetsSettled = done;
