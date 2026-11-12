@@ -76,7 +76,7 @@ export async function locateScopes(args: {
     try {
       const pageId = args.pageIdFor(row.sheet);
       if (!pageId) throw new Error(`Sheet ${row.sheet} is not a Drawing Flip page.`);
-      const [{ image }, text] = await Promise.all([renderStoredPage(row.doc, row.page, 2000), readStoredText(row.doc, { first: row.page, last: row.page }).then(p => p.find(x => x.page === row.page)?.text ?? "").catch(() => "")]);
+      const [{ image }, text] = await Promise.all([renderStoredPage(row.doc, row.page, 2000, true), readStoredText(row.doc, { first: row.page, last: row.page }).then(p => p.find(x => x.page === row.page)?.text ?? "").catch(() => "")]);
       const result = await aiJob<{ regions: import("./drawing-ai").LocatedRegion[]; dropped: import("./ai-jobs").Dropped[] }>("scope-locate", { pkg: args.pkg, document: row.doc.name, sheet: row.sheet, page: row.page, text: text.slice(0, 60_000), image, items }, args.signal);
       // Each mark goes where its evidence is printed (every place, for a tag); otherwise the AI's outline, approximate.
       const boxes = await readPageTextBoxes(row.doc, row.page).catch(() => null);
