@@ -3,15 +3,16 @@
 // Reading the words off a drawing sheet that has no text layer (27 Oct, live test: sheet A12.1 is an image, the
 // AI read "CERAMIC TILE" from the picture, and the viewer had no word positions to highlight). Tesseract, the
 // open-source OCR engine, runs in this browser on the sheet rendered at 300 dpi in tiles (lib/text-anchor
-// ocrTiles) and gives every word with its box, the same TextBox shape as a text layer (sheetWords). It reads
+// ocrTiles; a row of tiles is drawn as one strip and cut apart, ocrStrips) and gives every word with its box, the same
+// TextBox shape as a text layer (sheetWords). It reads
 // tile by tile and stops once the quotes are found; what it read is kept for the session, so the next quote
 // on the sheet starts from there. The AI scope run uses it too, to check the quotes the AI read from a sheet's
 // image (lib/scope-reading). The sheet never leaves the browser; only the OCR engine and its English model are
 // downloaded once, from jsDelivr.
 
 import type { StoredDocument } from "./project-files";
-import { openStoredPdf, renderStoredRegion } from "./project-files-client";
-import { findOnSheet, MAX_TAG_MARKS, ocrTiles, sheetWords, type Box, type OcrTile, type TextBox } from "./text-anchor";
+import { openStoredPdf, renderStoredRow, type RowPart } from "./project-files-client";
+import { findOnSheet, MAX_TAG_MARKS, ocrStrips, ocrTiles, sheetWords, type Box, type OcrTile, type TextBox } from "./text-anchor";
 import { workerPool } from "./worker-pool";
 
 export type OcrProgress = { done: number; total: number };
@@ -46,22 +47,17 @@ const busy = (slot: number, change: 1 | -1) => {
 };
 export const ocrWork = () => ({ ...work, busyMs: work.busyMs + using.reduce((ms, n, slot) => ms + (n ? Date.now() - busySince[slot] : 0), 0) });
 
-const imageSize = (src: string) => new Promise<{ width: number; height: number }>((resolve, reject) => {
-  const image = new Image();
-  image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
-  image.onerror = () => reject(new Error("A sheet tile could not be read."));
-  image.src = src;
-});
-
-/** One page's OCR so far: its tiles, the ones read, and a queue so two lookups don't read the same tile twice. */
-type SheetRead = { boxes: Box[]; size: number; tiles: OcrTile[]; queue: Promise<unknown> };
+/** One page's OCR so far: its tiles, how they are grouped into strips to draw (lib/text-anchor ocrStrips), the ones read,
+ * and a queue so two lookups don't read the same tile twice. */
+type SheetRead = { boxes: Box[]; size: number; strips: number[][]; tiles: OcrTile[]; queue: Promise<unknown> };
 const reads = new Map<string, Promise<SheetRead>>();
 function sheetRead(doc: StoredDocument, page: number): Promise<SheetRead> {
   const key = `${doc.id}:${page}`;
   if (!reads.has(key)) {
     const job = (async () => {
       const view = (await (await openStoredPdf(doc)).getPage(page)).getViewport({ scale: 1 });
-      return { ...ocrTiles(view.width, view.height), tiles: [], queue: Promise.resolve() };
+      const tiles = ocrTiles(view.width, view.height);
+      return { ...tiles, strips: ocrStrips(tiles.boxes, view.width, view.height, tiles.size), tiles: [], queue: Promise.resolve() };
     })();
     job.catch(() => reads.delete(key));
     reads.set(key, job);
@@ -102,13 +98,22 @@ async function readTiles(doc: StoredDocument, page: number, enough: (words: Text
     } finally { workers.release(); }
   });
   async function readAll(ocr: Worker) {
+    // The tiles still to read of the strip just drawn, each used once; any left when the reading stops are let go.
+    const drawn = new Map<number, RowPart>();
     while (read.tiles.length < read.boxes.length && !signal?.aborted) {
-      onProgress?.({ done: read.tiles.length, total: read.boxes.length });
-      const box = read.boxes[read.tiles.length];
-      const image = await renderStoredRegion(doc, page, [box.x, box.y, box.width, box.height], read.size, true);
-      const [{ width, height }, { data }] = await Promise.all([imageSize(image), ocr.recognize(image, {}, { blocks: true })]);
+      const i = read.tiles.length;
+      onProgress?.({ done: i, total: read.boxes.length });
+      if (!drawn.has(i)) {
+        const strip = read.strips.find(s => s.includes(i))!.filter(k => k >= i);
+        const parts = await renderStoredRow(doc, page, strip.map(k => { const b = read.boxes[k]; return [b.x, b.y, b.width, b.height] as [number, number, number, number]; }), read.size, true);
+        strip.forEach((k, n) => drawn.set(k, parts[n]));
+      }
+      const part = drawn.get(i)!;
+      drawn.delete(i);
+      const { data } = await ocr.recognize(part.image, {}, { blocks: true });
       const words = (data.blocks ?? []).flatMap(b => b.paragraphs.flatMap(p => p.lines.flatMap(l => l.words)));
-      read.tiles.push({ box, width, height, words: words.map(word => ({ text: word.text, confidence: word.confidence, bbox: word.bbox })) });
+      const [x, y, width, height] = part.box; // where the tile was drawn, so the words land where they are printed
+      read.tiles.push({ box: { x, y, width, height }, width: part.width, height: part.height, words: words.map(word => ({ text: word.text, confidence: word.confidence, bbox: word.bbox })) });
       work.tiles++; readHere++;
       if (enough(sheetWords(read.tiles))) break;
     }
