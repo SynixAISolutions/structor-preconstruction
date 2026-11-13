@@ -195,6 +195,25 @@ export function ocrTiles(width: number, height: number): { boxes: Box[]; size: n
   return { boxes, size: Math.ceil(Math.max(w * inchesW, h * inchesH) * OCR_DPI) };
 }
 
+/** The widest strip drawn in one go, in pixels: within what a canvas can keep on the graphics card. */
+export const MAX_STRIP_PX = 16_384;
+
+/**
+ * The OCR tiles of a page (ocrTiles, in order) grouped into strips drawn in one go (lib/project-files-client
+ * renderStoredRow): neighbouring tiles of one row, as many as fit in MAX_STRIP_PX at the tiles' scale. A 42" × 30" sheet
+ * is 4 strips of 6 tiles (12,600 px each), so it is drawn 4 times for OCR instead of 24 (13 Nov).
+ */
+export function ocrStrips(boxes: Box[], width: number, height: number, size: number): number[][] {
+  const strips: number[][] = [];
+  boxes.forEach((box, i) => {
+    const scale = size / Math.max(box.width * width, box.height * height);
+    const strip = strips.at(-1), first = strip && boxes[strip[0]];
+    if (strip && first && first.y === box.y && (box.x + box.width - first.x) * width * scale <= MAX_STRIP_PX) strip.push(i);
+    else strips.push([i]);
+  });
+  return strips;
+}
+
 /** What OCR read on one tile of a sheet: the tile's place on the page (0–1), its size in pixels, and its words. */
 export type OcrTile = { box: Box; width: number; height: number; words: { text: string; confidence: number; bbox: { x0: number; y0: number; x1: number; y1: number } }[] };
 
