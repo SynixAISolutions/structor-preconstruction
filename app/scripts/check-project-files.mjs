@@ -292,6 +292,18 @@ assert.equal(updated.id, sampleProjectRecords[0].id);
   a = answers(401, 206);
   assert.equal(await fetchRange("/f", 0, 3, [1, 1], a.get).catch(e => e.message), "The stored file could not be read (401).", "Signed out or gone: not tried again");
   assert.equal(a.asked.length, 1, "A 4xx answer is asked once");
+
+  // pdf.js takes one answer per range (13 Nov: a 4 MB slice was taken as the whole range, and a sheet with a larger image
+  // waited for ever), so a long range is read in slices and handed over joined.
+  const { fetchWholeRange } = await import("../lib/range-fetch.ts");
+  const file = Uint8Array.from({ length: 23 }, (_, i) => i);
+  const asked = [];
+  const serve = async (url, init) => { const [, s, e] = /bytes=(\d+)-(\d+)/.exec(init.headers.range).map(Number); asked.push([s, e]); return { status: e - s + 1 > 4 ? 416 : 206, arrayBuffer: async () => file.slice(s, e + 1).buffer }; };
+  assert.deepEqual([...await fetchWholeRange("/f", 2, 13, 4, [], serve)], [...file.slice(2, 13)], "A range longer than a slice comes back whole, in order");
+  assert.deepEqual(asked, [[2, 5], [6, 9], [10, 12]], "Each slice asks the server for at most its limit");
+  asked.length = 0;
+  assert.deepEqual([...await fetchWholeRange("/f", 20, 23, 4, [], serve)], [20, 21, 22], "A short range is one request");
+  assert.equal(asked.length, 1);
 }
 
 // The OCR workers end once idle (lib/worker-pool): four idle Tesseract workers held 560 MB of Marcel's tab for the rest of the
