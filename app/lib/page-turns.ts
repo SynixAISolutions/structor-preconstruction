@@ -19,20 +19,38 @@
 /** Pages being drawn at once in the whole tab: the automatic run's trades, OCR, an upload's title blocks, a viewer. */
 export const PAGES_AT_ONCE = 1;
 
+/**
+ * A page still drawing after this long gives its turn to the next one and finishes in the background (13 Nov). A Whittier
+ * sheet takes a few seconds even in 300 dpi tiles; one that takes minutes is waiting for something that may never come,
+ * such as a part of the file the server failed to send, and must not stop every other page in the tab.
+ */
+export const STUCK_AFTER_MS = 120_000;
+let stuckAfter = STUCK_AFTER_MS;
+/** For the checks only. */
+export const setStuckAfter = (ms: number) => { stuckAfter = ms; };
+
 let busy = 0;
 /** Waiting for a turn: pages a person asked to see, then the readers working through many sheets. */
 const asked: (() => void)[] = [], line: (() => void)[] = [];
 
 /**
  * Runs `draw` (one page drawn, or its drawing read) once one of the tab's PAGES_AT_ONCE turns is free, and gives the turn
- * up when it ends or fails. A reader working through many sheets (the automatic run, OCR, a model build) passes `behind`:
- * it waits behind any page a person has asked to see, which goes next.
+ * up when it ends or fails, or once it has been stuck for STUCK_AFTER_MS. A reader working through many sheets (the
+ * automatic run, OCR, a model build) passes `behind`: it waits behind any page a person has asked to see, which goes next.
  */
 export async function pageTurn<T>(draw: () => Promise<T>, behind = false): Promise<T> {
   if (busy < PAGES_AT_ONCE) busy++;
   else await new Promise<void>(resolve => { (behind ? line : asked).push(resolve); });
+  let given = false;
+  const giveUp = () => { // the turn passes straight on, once
+    if (given) return;
+    given = true;
+    const next = asked.shift() ?? line.shift();
+    if (next) next(); else busy--;
+  };
+  const stuck = setTimeout(giveUp, stuckAfter);
   try { return await draw(); }
-  finally { const next = asked.shift() ?? line.shift(); if (next) next(); else busy--; } // the turn passes straight on
+  finally { clearTimeout(stuck); giveUp(); }
 }
 
 /** Pages being drawn and waiting, for the checks. */

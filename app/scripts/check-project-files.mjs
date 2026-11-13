@@ -265,6 +265,33 @@ assert.equal(updated.id, sampleProjectRecords[0].id);
   assert.deepEqual(order.filter(n => n !== "viewer"), Array.from({ length: 6 }, (_, i) => `reader ${i + 1}`), "Readers keep their order");
   assert.deepEqual([results[6], results[7]], ["viewer", "bad page"], "Each caller gets its own page, or its own error");
   assert.deepEqual(T.pageTurns(), { busy: 0, waiting: 0 }, "A page that fails gives its turn up");
+
+  // A page stuck waiting (13 Nov: a part of the file the server failed to send) gives its turn up after a while.
+  T.setStuckAfter(30);
+  let release;
+  const stuck = T.pageTurn(() => new Promise(resolve => { release = resolve; }), true);
+  const after = T.pageTurn(async () => "next page", true);
+  assert.equal(await after, "next page", "The next page is drawn once the stuck one has held the turn too long");
+  assert.deepEqual(T.pageTurns(), { busy: 0, waiting: 0 }, "The stuck page's turn is counted as given up");
+  release("late page");
+  assert.equal(await stuck, "late page", "A stuck page that finishes late still reaches its caller");
+  assert.deepEqual(T.pageTurns(), { busy: 0, waiting: 0 }, "A late page doesn't give its turn up twice");
+  T.setStuckAfter(T.STUCK_AFTER_MS);
+}
+
+// A byte range the server failed to send is asked for again (lib/range-fetch): one 502 left a page, and with it the whole
+// scope run, waiting for ever (13 Nov).
+{
+  const { fetchRange } = await import("../lib/range-fetch.ts");
+  const answers = (...codes) => { const asked = []; const get = async (url, init) => { asked.push(init.headers.range); const code = codes.shift(); if (code === "drop") throw new TypeError("Failed to fetch"); return { status: code, arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer }; }; return { asked, get }; };
+  let a = answers(502, "drop", 429, 206);
+  assert.deepEqual([...await fetchRange("/f", 10, 13, [1, 1, 1, 1], a.get)], [1, 2, 3], "Server errors and dropped connections are tried again until the range comes");
+  assert.deepEqual(a.asked, ["bytes=10-12", "bytes=10-12", "bytes=10-12", "bytes=10-12"], "Every try asks for the same bytes");
+  a = answers(502, 502, 502);
+  assert.equal(await fetchRange("/f", 0, 3, [1, 1], a.get).catch(e => e.message), "The stored file could not be read (502).", "After the last wait the error reaches pdf.js's caller");
+  a = answers(401, 206);
+  assert.equal(await fetchRange("/f", 0, 3, [1, 1], a.get).catch(e => e.message), "The stored file could not be read (401).", "Signed out or gone: not tried again");
+  assert.equal(a.asked.length, 1, "A 4xx answer is asked once");
 }
 
 // The OCR workers end once idle (lib/worker-pool): four idle Tesseract workers held 560 MB of Marcel's tab for the rest of the
