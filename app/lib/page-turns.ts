@@ -8,9 +8,16 @@
 // Tried and left out (12 Nov): cleaning the document (pdf.cleanup()) every few pages. It lowered the peak by about a quarter
 // (Vol 1 2.4 → 1.85 GB, Vol 2's heaviest sheets 3.6 → 2.7 GB) but drew Vol 2's line-heavy sheets 2.5 times slower, as their
 // fonts were read again after each cleanup; memory falls back to about 0.5 GB within seconds of a burst anyway.
+// One at a time since 13 Nov. With two, Marcel's run got much further but still ran out of memory in its last minute,
+// while the AI's quotes were checked on the sheets with OCR (lib/sheet-ocr): each check draws a sheet in 24 tiles at
+// 300 dpi, and every tile draws the whole sheet's linework (up to 260,000 drawing steps on Whittier's sheets) to keep
+// the part that shows. Measured on 8 Whittier sheets, 192 tiles: two tiles at once held a median 2.4 GB of committed
+// memory (90th percentile 2.9 GB) with OCR, one at once 1.9 GB (2.6 GB), about 15% slower; whole sheets at 2,000 px
+// take the same time either way (above). Drawing into a canvas kept in ordinary memory (willReadFrequently) held 1.1 GB
+// but drew 2.6 times slower, so it was left out.
 
 /** Pages being drawn at once in the whole tab: the automatic run's trades, OCR, an upload's title blocks, a viewer. */
-export const PAGES_AT_ONCE = 2;
+export const PAGES_AT_ONCE = 1;
 
 let busy = 0;
 /** Waiting for a turn: pages a person asked to see, then the readers working through many sheets. */

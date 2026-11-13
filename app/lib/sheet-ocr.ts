@@ -12,27 +12,28 @@
 import type { StoredDocument } from "./project-files";
 import { openStoredPdf, renderStoredRegion } from "./project-files-client";
 import { findOnSheet, MAX_TAG_MARKS, ocrTiles, sheetWords, type Box, type OcrTile, type TextBox } from "./text-anchor";
+import { workerPool } from "./worker-pool";
 
 export type OcrProgress = { done: number; total: number };
 
 type Worker = Awaited<ReturnType<typeof import("tesseract.js")["createWorker"]>>;
-/** OCR workers for the session, made on first use; sheets read at once share them in turn (30 Oct: one worker read 43 scanned sheets in about 40 minutes). */
+/** OCR workers, made on first use; sheets read at once share them in turn (30 Oct: one worker read 43 scanned sheets in about 40 minutes). */
 export const OCR_WORKERS = typeof navigator === "undefined" ? 2 : Math.max(1, Math.min(4, Math.floor((navigator.hardwareConcurrency || 4) / 3)));
-const workers: (Promise<Worker> | undefined)[] = [];
-let turn = 0;
-function ocrWorker(): { slot: number; worker: Promise<Worker> } {
-  const i = turn++ % OCR_WORKERS;
-  const made = workers[i] ??= (async () => {
-    const { createWorker, PSM } = await import("tesseract.js");
-    const created = await createWorker("eng");
-    // Drawings are labels and schedules scattered over a sheet, not paragraphs. Tesseract's notes on every tile
-    // ("Estimating resolution as 297") went to the console as errors, about 500 a run, burying real ones: they go nowhere.
-    await created.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT, debug_file: "/dev/null" });
-    return created;
-  })();
-  made.catch(() => { workers[i] = undefined; });
-  return { slot: i, worker: made };
-}
+/**
+ * The workers end once no sheet has needed them for this long, and are made again when one does.
+ * Each keeps the memory it grew to while reading: measured 13 Nov on 8 Whittier sheets, four idle workers held 560 MB
+ * of the tab's committed memory (1.33 GB → 0.77 GB when they ended). Marcel's tab kept them for the whole scope run
+ * and ran out of memory in its last minute, while the AI's quotes were being checked on the sheets with OCR.
+ */
+export const OCR_IDLE_MS = 15_000;
+const workers = workerPool<Worker>(async () => {
+  const { createWorker, PSM } = await import("tesseract.js");
+  const created = await createWorker("eng");
+  // Drawings are labels and schedules scattered over a sheet, not paragraphs. Tesseract's notes on every tile
+  // ("Estimating resolution as 297") went to the console as errors, about 500 a run, burying real ones: they go nowhere.
+  await created.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT, debug_file: "/dev/null" });
+  return created;
+}, OCR_WORKERS, OCR_IDLE_MS);
 
 /** What the OCR workers have done since the tab opened, for the automatic run's time left (lib/run-time-left): tiles
  * read and the time workers were busy reading them, quote checks and the tiles they took, scanned sheets and theirs. */
@@ -93,10 +94,12 @@ async function readTiles(doc: StoredDocument, page: number, enough: (words: Text
   let readHere = 0;
   const run = read.queue.then(async () => {
     if (enough(sheetWords(read.tiles))) return;
-    const { slot, worker } = ocrWorker();
-    const ocr = await worker;
-    busy(slot, 1);
-    try { await readAll(ocr); } finally { busy(slot, -1); }
+    const { slot, worker } = workers.claim();
+    try {
+      const ocr = await worker;
+      busy(slot, 1);
+      try { await readAll(ocr); } finally { busy(slot, -1); }
+    } finally { workers.release(); }
   });
   async function readAll(ocr: Worker) {
     while (read.tiles.length < read.boxes.length && !signal?.aborted) {
