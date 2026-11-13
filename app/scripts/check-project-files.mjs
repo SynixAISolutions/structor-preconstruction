@@ -267,4 +267,37 @@ assert.equal(updated.id, sampleProjectRecords[0].id);
   assert.deepEqual(T.pageTurns(), { busy: 0, waiting: 0 }, "A page that fails gives its turn up");
 }
 
+// The OCR workers end once idle (lib/worker-pool): four idle Tesseract workers held 560 MB of Marcel's tab for the rest of the
+// scope run (13 Nov).
+{
+  const { workerPool } = await import("../lib/worker-pool.ts");
+  let made = 0, ended = 0, failNext = false;
+  const pool = workerPool(async () => { made++; if (failNext) { failNext = false; throw new Error("no engine"); } return { terminate: async () => { ended++; } }; }, 2, 20);
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const jobs = [pool.claim(), pool.claim(), pool.claim()];
+  assert.deepEqual(jobs.map(j => j.slot), [0, 1, 0], "Jobs share the workers in turn");
+  assert.equal(made, 2, "A worker is made once and shared");
+  await Promise.all(jobs.map(j => j.worker));
+  pool.release(); pool.release();
+  await wait(40);
+  assert.deepEqual([pool.alive(), ended], [2, 0], "Workers stay while a job still has one, however long it takes");
+  pool.release();
+  await wait(10);
+  pool.claim(); pool.release(); // a new job inside the idle time keeps them
+  await wait(15);
+  assert.deepEqual([pool.alive(), ended], [2, 0], "Work within the idle time keeps the workers");
+  await wait(30);
+  assert.deepEqual([pool.alive(), ended], [0, 2], "Once idle, every worker ends");
+  failNext = true;
+  const failed = pool.claim();
+  assert.equal(await failed.worker.catch(error => error.message), "no engine", "A worker that fails to start says why");
+  pool.release();
+  const again = pool.claim();
+  await again.worker;
+  assert.equal(made, 4, "A worker that failed to start is made again for the next job");
+  pool.release();
+  await wait(40);
+  assert.equal(pool.alive(), 0, "The pool ends its workers again after the next idle spell");
+}
+
 console.log("Project files checked: identical uploads reuse the stored copy, sheet keys, revisions, drawing log (sets, sheet versions, partial sets, naming pages), sheet/manual/section lookup, stored-file validation, index upsert, sections by trade.");
