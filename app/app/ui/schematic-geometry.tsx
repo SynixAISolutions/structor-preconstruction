@@ -87,7 +87,7 @@ export function wallLayerGroup(level: SchematicLevel, index: number, layers: Wal
     whole.userData.whole = true; group.add(whole);
     return group;
   }
-  const slabs = layerSlabs(layers, wall.thickness), gap = layerGap(length);
+  const slabs = layerSlabs(layers, wall.thickness), gap = layerGap(length, level.height);
   group.userData.gap = gap;
   slabs.forEach((slab, i) => {
     // Insulation in the stud cavity stops just short of the framing's ends and top, so the two faces don't fight.
