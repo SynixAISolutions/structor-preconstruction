@@ -2,12 +2,27 @@
 // has no way to be told one failed: a single 502 from the file route left a page waiting for ever, and with pages drawn
 // one at a time (lib/page-turns) the whole automatic scope run stopped with it, in a test on Marcel's Whittier set.
 
+/**
+ * Bytes `begin` to `end` (exclusive) in one piece, read in slices of at most `slice` bytes (the file route answers 4 MB at
+ * most). pdf.js takes exactly one answer per range it asks for (PDFDataTransportStreamRangeReader._enqueue ends the request
+ * with its first chunk), so the slices are joined first. Handing them over one by one (9 Nov to 13 Nov) gave pdf.js the
+ * first 4 MB of any longer range and threw the rest away; a page needing a bigger object, such as a large scanned image on
+ * Whittier's civil sheets, then waited for its missing bytes for ever.
+ */
+export async function fetchWholeRange(url: string, begin: number, end: number, slice: number, waits: number[] = RANGE_RETRY_WAITS, get?: typeof fetch): Promise<Uint8Array> {
+  if (end - begin <= slice) return fetchRange(url, begin, end, waits, get);
+  const whole = new Uint8Array(end - begin);
+  for (let start = begin; start < end; start += slice) whole.set(await fetchRange(url, start, Math.min(end, start + slice), waits, get), start - begin);
+  return whole;
+}
+
 /** Waits before each new try, about a minute in all: long enough for a busy or restarting server to answer again. */
 export const RANGE_RETRY_WAITS = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000];
 
 /** Bytes `start` to `stop` (exclusive) of `url`. Server errors (5xx, 429) and dropped connections are tried again after each
  * wait; other answers (signed out, file gone) fail at once, as trying again wouldn't change them. */
 export async function fetchRange(url: string, start: number, stop: number, waits: number[] = RANGE_RETRY_WAITS, get: typeof fetch = (...args) => fetch(...args)): Promise<Uint8Array> {
+  get ??= (...args) => fetch(...args);
   for (let attempt = 0; ; attempt++) {
     let failure: Error;
     try {

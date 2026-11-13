@@ -17,7 +17,7 @@ import { pageTextBoxes, type TextBox } from "./text-anchor";
 import { paintPage } from "./pdf-paint";
 import { eachPageInRuns, freeCanvas, openLocalPdf, PAGES_PER_OPEN, readersFor } from "./local-pdf";
 import { pageTurn } from "./page-turns";
-import { fetchRange } from "./range-fetch";
+import { fetchWholeRange } from "./range-fetch";
 import {
   chunkFor, emptyIndex, kindForCategory, MAX_RANGE_BYTES, sourcePath, TEXT_CHUNK,
   textSource, type PageText, type ProjectFileIndex, type StoredDocument, type StoredSheet,
@@ -318,14 +318,10 @@ export function openStoredPdf(doc: StoredDocument): Promise<PdfDoc> {
     pdfjs.GlobalWorkerOptions.workerSrc = (await import("./pdf-worker")).pdfWorkerSrc();
     const transport = new pdfjs.PDFDataRangeTransport(doc.size, null);
     const url = `/api/project-files/source?project=${encodeURIComponent(doc.projectId)}&doc=${encodeURIComponent(doc.id)}`;
+    // Each range in one answer, read in 4 MB slices and tried again on a server error (lib/range-fetch).
+    // ponytail: the slices are read one after another; in parallel if large sheets feel slow.
     transport.requestDataRange = (begin: number, end: number) => {
-      // ponytail: ranges over 4 MB are fetched in sequential slices; parallel slices if large sheets feel slow.
-      (async () => {
-        for (let start = begin; start < end; start += MAX_RANGE_BYTES) {
-          const stop = Math.min(end, start + MAX_RANGE_BYTES);
-          transport.onDataRange(start, await fetchRange(url, start, stop)); // tried again on a server error (lib/range-fetch)
-        }
-      })().catch(error => console.error(error));
+      fetchWholeRange(url, begin, end, MAX_RANGE_BYTES).then(bytes => transport.onDataRange(begin, bytes), error => console.error(error));
     };
     return pdfjs.getDocument({ range: transport, rangeChunkSize: 1 << 20, disableAutoFetch: true, disableStream: true }).promise as Promise<PdfDoc>;
   })();
