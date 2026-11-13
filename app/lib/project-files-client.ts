@@ -17,6 +17,7 @@ import { pageTextBoxes, type TextBox } from "./text-anchor";
 import { paintPage } from "./pdf-paint";
 import { eachPageInRuns, freeCanvas, openLocalPdf, PAGES_PER_OPEN, readersFor } from "./local-pdf";
 import { pageTurn } from "./page-turns";
+import { fetchRange } from "./range-fetch";
 import {
   chunkFor, emptyIndex, kindForCategory, MAX_RANGE_BYTES, sourcePath, TEXT_CHUNK,
   textSource, type PageText, type ProjectFileIndex, type StoredDocument, type StoredSheet,
@@ -322,9 +323,7 @@ export function openStoredPdf(doc: StoredDocument): Promise<PdfDoc> {
       (async () => {
         for (let start = begin; start < end; start += MAX_RANGE_BYTES) {
           const stop = Math.min(end, start + MAX_RANGE_BYTES);
-          const response = await fetch(url, { headers: { range: `bytes=${start}-${stop - 1}` } });
-          if (response.status !== 206) throw new Error(`The stored file could not be read (${response.status}).`);
-          transport.onDataRange(start, new Uint8Array(await response.arrayBuffer()));
+          transport.onDataRange(start, await fetchRange(url, start, stop)); // tried again on a server error (lib/range-fetch)
         }
       })().catch(error => console.error(error));
     };
