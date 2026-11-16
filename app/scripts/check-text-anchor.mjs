@@ -90,6 +90,15 @@ const covers = (x, y) => sheet42.boxes.some(b => x >= b.x && x <= b.x + b.width 
 assert([0.001, 0.25, 0.5, 0.75, 0.999].every(x => [0.001, 0.33, 0.66, 0.999].every(y => covers(x, y))), "The tiles cover the whole sheet");
 assert.equal(T.ocrTiles(612, 792).boxes.length, 4, "A letter page: 2 × 2");
 
+// A row of tiles is drawn as one strip and cut apart (13 Nov: each tile drawn alone drew a 42" sheet's linework 24 times).
+const strips42 = T.ocrStrips(sheet42.boxes, 3024, 2160, sheet42.size);
+assert.deepEqual(strips42, [[0, 1, 2, 3, 4, 5], [6, 7, 8, 9, 10, 11], [12, 13, 14, 15, 16, 17], [18, 19, 20, 21, 22, 23]], "A 42 × 30 sheet: one strip per row, so it is drawn 4 times, not 24");
+const wide = T.ocrTiles(144 * 72, 30 * 72), wideStrips = T.ocrStrips(wide.boxes, 144 * 72, 30 * 72, wide.size);
+assert.deepEqual(wideStrips.flat(), wide.boxes.map((_, i) => i), "Every tile is in one strip, in reading order");
+assert(wideStrips.length > 4 && wideStrips.every(s => s.every(i => wide.boxes[i].y === wide.boxes[s[0]].y)), "A row too wide for one strip is split; a strip never spans two rows");
+assert(wideStrips.every(s => { const a = wide.boxes[s[0]], z = wide.boxes[s.at(-1)], scale = wide.size / Math.max(a.width * 144 * 72, a.height * 30 * 72); return (z.x + z.width - a.x) * 144 * 72 * scale <= T.MAX_STRIP_PX; }), "No strip is wider than a canvas keeps on the graphics card");
+assert.deepEqual(T.ocrStrips(T.ocrTiles(612, 792).boxes, 612, 792, T.ocrTiles(612, 792).size), [[0, 1], [2, 3]], "A letter page: a strip per row");
+
 // Words read by OCR may be a letter or two off: found close, never something unlike them.
 assert.deepEqual(T.approximateFind("XXCERAMICTILEYY", "CERAMICTILE", 0), { at: 2, end: 13 });
 assert.deepEqual(T.approximateFind("XXCERAMlCTlLEYY", "CERAMICTILE", 2), { at: 2, end: 13 });
