@@ -238,6 +238,15 @@ assert.equal(updated.id, sampleProjectRecords[0].id);
   });
   assert.deepEqual(read.map(([n]) => n).sort((a, b) => a - b), Array.from({ length: 45 }, (_, i) => i + 1), "Every page once");
   assert.ok(read.every(([n, text]) => text === `Sheet ${n}`), "Each page's own text, from its ranges of the file");
+
+  // pdf.js's image decoders (16 Nov: without `wasmUrl`, JBIG2 and JPEG 2000 images were left out of drawn sheets, a whole
+  // schedule table on Whittier's CIV0707). In the browser they come from jsDelivr for the installed version; Node reads its own.
+  assert.deepEqual(L.pdfDecoders(pdfjs.version), {}, "In Node, pdf.js keeps reading its decoders from disk");
+  globalThis.window = {};
+  try { assert.deepEqual(L.pdfDecoders(pdfjs.version), { wasmUrl: `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/wasm/` }, "In the browser: the decoders of the pdf.js version installed"); }
+  finally { delete globalThis.window; }
+  const { existsSync } = await import("node:fs");
+  assert.ok(["jbig2.wasm", "openjpeg.wasm"].every(f => existsSync(new URL(`../node_modules/pdfjs-dist/wasm/${f}`, import.meta.url))), "The installed pdf.js ships the decoders that path names");
   assert.equal(opens.length, Math.ceil(45 / L.PAGES_PER_OPEN), "Opened afresh for each run of 20 pages");
   const canvas = { width: 2200, height: 1467 };
   L.freeCanvas(canvas);

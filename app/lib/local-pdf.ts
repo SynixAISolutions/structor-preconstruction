@@ -10,7 +10,20 @@ type PdfJs = {
     onDataRange: (begin: number, chunk: Uint8Array) => void;
   };
   getDocument: (source: object) => { promise: Promise<unknown>; destroy: () => Promise<void> };
+  version?: string;
 };
+
+/**
+ * Where pdf.js finds its image decoders (16 Nov). pdf.js 6 decodes JBIG2 and JPEG 2000 images, the formats scanned parts of
+ * drawings use, with WebAssembly files it loads by name from `wasmUrl`. Without it those images are left out of the page
+ * with only a console warning ("JBig2 failed to initialize"): Whittier Vol 1 sheet CIV0707 (PDF page 81) lost a whole
+ * schedule table, so the AI and OCR never saw it, and the page took 75 s to draw instead of 40 s. The files come from
+ * jsDelivr for the pdf.js version installed, like Tesseract's engine (lib/sheet-ocr). Browser only: in Node (the checks)
+ * pdf.js would read `wasmUrl` from disk.
+ */
+export function pdfDecoders(version: string | undefined): { wasmUrl?: string } {
+  return typeof window === "undefined" || !version ? {} : { wasmUrl: `https://cdn.jsdelivr.net/npm/pdfjs-dist@${version}/wasm/` };
+}
 
 /**
  * pdf.js loading `file` a megabyte range at a time, as its pages ask, rather than all of it at once. `options` go to
@@ -21,7 +34,7 @@ export function openLocalPdf<T extends PdfJs>(pdfjs: T, file: Blob, options: obj
   transport.requestDataRange = (begin: number, end: number) => {
     file.slice(begin, end).arrayBuffer().then(buffer => transport.onDataRange(begin, new Uint8Array(buffer)), error => console.error(error));
   };
-  return pdfjs.getDocument({ ...options, range: transport, rangeChunkSize: 1 << 20, disableAutoFetch: true, disableStream: true }) as ReturnType<T["getDocument"]>;
+  return pdfjs.getDocument({ ...pdfDecoders(pdfjs.version), ...options, range: transport, rangeChunkSize: 1 << 20, disableAutoFetch: true, disableStream: true }) as ReturnType<T["getDocument"]>;
 }
 
 /** A reader opens the file afresh for every this many pages: a document keeps every range it has read until it closes. */
