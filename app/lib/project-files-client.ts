@@ -15,7 +15,7 @@ import { inAiPool } from "./ai-pool";
 import { useActiveProject } from "./project-scope";
 import { pageTextBoxes, type TextBox } from "./text-anchor";
 import { paintPage } from "./pdf-paint";
-import { eachPageInRuns, freeCanvas, openLocalPdf, PAGES_PER_OPEN, readersFor } from "./local-pdf";
+import { eachPageInRuns, freeCanvas, openLocalPdf, PAGES_PER_OPEN, pdfDecoders, readersFor } from "./local-pdf";
 import { pageTurn } from "./page-turns";
 import { fetchWholeRange } from "./range-fetch";
 import {
@@ -323,7 +323,7 @@ export function openStoredPdf(doc: StoredDocument): Promise<PdfDoc> {
     transport.requestDataRange = (begin: number, end: number) => {
       fetchWholeRange(url, begin, end, MAX_RANGE_BYTES).then(bytes => transport.onDataRange(begin, bytes), error => console.error(error));
     };
-    return pdfjs.getDocument({ range: transport, rangeChunkSize: 1 << 20, disableAutoFetch: true, disableStream: true }).promise as Promise<PdfDoc>;
+    return pdfjs.getDocument({ ...pdfDecoders(pdfjs.version), range: transport, rangeChunkSize: 1 << 20, disableAutoFetch: true, disableStream: true }).promise as Promise<PdfDoc>;
   })();
   promise.catch(() => opened.delete(doc.id));
   opened.set(doc.id, promise);
