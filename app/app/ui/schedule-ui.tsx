@@ -10,6 +10,8 @@ import {
   type ActivityInput, type ImportResult, type LinkType, type ProcurementLink, type ScheduleErrors, type ScheduleRow,
 } from "../../lib/schedule";
 import { addProcurementActivities, packagesWithoutBuyout, procurementSchedule } from "../../lib/schedule-procurement";
+import { addProjectMilestones } from "../../lib/schedule";
+import type { Project } from "../../lib/projects";
 import { useAward } from "../../lib/use-award";
 import { useSchedule } from "../../lib/use-schedule";
 import { useProcurement } from "../../lib/use-procurement";
@@ -33,7 +35,7 @@ function calendarMonths(start: string, finish: string) {
   return months;
 }
 
-export function ScheduleView({ projectName, notify }: ViewProps) {
+export function ScheduleView({ projectName, notify, project }: ViewProps & { project?: Project }) {
   const { state, run } = useSchedule();
   const { state: procurement } = useProcurement();
   const { state: awards } = useAward();
@@ -89,6 +91,14 @@ export function ScheduleView({ projectName, notify }: ViewProps) {
     } catch (cause) { setError(cause instanceof ScheduleRuleError ? firstError(cause.errors) : "Could not read this XML file."); }
     finally { if (filePicker.current) filePicker.current.value = ""; }
   }
+  // Marcel's feedback log, 7 Nov: the milestones set in Project information are what the schedule is built around.
+  const milestones = project?.milestones ?? [];
+  const scheduled = new Set(state.activities.filter(a => a.duration === 0).map(a => a.name.trim().toLowerCase()));
+  const toAdd = milestones.filter(m => m.start && !scheduled.has(m.name.trim().toLowerCase()));
+  const undated = milestones.filter(m => !m.start).length;
+  function addMilestones() {
+    apply(current => addProjectMilestones(current, milestones, ACTOR), `${toAdd.length} project milestone${toAdd.length === 1 ? "" : "s"} added.`);
+  }
   function addBuyout() {
     apply(current => addProcurementActivities(current, procurement, today, ACTOR), `Bids-due and buyout activities added for ${withoutBuyout.length} trade${withoutBuyout.length === 1 ? "" : "s"}.`);
   }
@@ -99,8 +109,8 @@ export function ScheduleView({ projectName, notify }: ViewProps) {
     setWarnings(result.warnings); setSelectedId(""); setPhase(""); setOwner(""); setStatus(""); setCriticalOnly(false); setLateOnly(false); setPendingImport(null);
   }
   return <div className="sched-view">
-    <PageHeader eyebrow={`${projectName} / Operations`} title="Project schedule" description="Plan activities, link their timing, and see what shifts when a predecessor changes." actions={<div className="sched-header-actions"><input ref={filePicker} hidden type="file" accept=".xml,text/xml,application/xml" aria-label="Import MS Project XML" onChange={event => void importFile(event.target.files?.[0])}/><ScheduleAiSuggest procurement={procurement} defaultStart={today} today={today} onUse={result => setPendingImport({ fileName: "AI suggested schedule", result })}/><Button onClick={() => filePicker.current?.click()}><FileUp size={15}/>Import XML</Button><Button onClick={() => downloadText("project-schedule.xml", toMsProjectXml(plan.state, projectName), "application/xml")}><Download size={15}/>Export XML</Button><Button onClick={() => downloadText("project-schedule.csv", toCsv(plan.state, today), "text/csv")}><Download size={15}/>Export CSV</Button>{withoutBuyout.length > 0 && <Button onClick={addBuyout} aria-label={`Add bids-due and buyout activities for ${withoutBuyout.length} trades`}><Plus size={15}/>Buyout activities</Button>}<Button variant="primary" onClick={() => { setError(""); setEditing("new"); }}><Plus size={15}/>Add activity</Button></div>}/>
-    <PreviewNote>Weekdays only; holidays are not modeled. MS Project XML can also be exchanged with P6.</PreviewNote>
+    <PageHeader eyebrow={`${projectName} / Operations`} title="Project schedule" description="Plan activities, link their timing, and see what shifts when a predecessor changes." actions={<div className="sched-header-actions"><input ref={filePicker} hidden type="file" accept=".xml,text/xml,application/xml" aria-label="Import MS Project XML" onChange={event => void importFile(event.target.files?.[0])}/><ScheduleAiSuggest procurement={procurement} defaultStart={today} today={today} onUse={result => setPendingImport({ fileName: "AI suggested schedule", result })}/><Button onClick={() => filePicker.current?.click()}><FileUp size={15}/>Import XML</Button><Button onClick={() => downloadText("project-schedule.xml", toMsProjectXml(plan.state, projectName), "application/xml")}><Download size={15}/>Export XML</Button><Button onClick={() => downloadText("project-schedule.csv", toCsv(plan.state, today), "text/csv")}><Download size={15}/>Export CSV</Button>{toAdd.length > 0 && <Button onClick={addMilestones}><Plus size={15}/>Project milestones ({toAdd.length})</Button>}{withoutBuyout.length > 0 && <Button onClick={addBuyout} aria-label={`Add bids-due and buyout activities for ${withoutBuyout.length} trades`}><Plus size={15}/>Buyout activities</Button>}<Button variant="primary" onClick={() => { setError(""); setEditing("new"); }}><Plus size={15}/>Add activity</Button></div>}/>
+    <PreviewNote>Weekdays only; holidays are not modeled. MS Project XML can also be exchanged with P6.{milestones.length > 0 && ` Project milestones: ${milestones.length - undated} of ${milestones.length} dated${undated ? "; add the rest in Project information" : ""}. AI suggest builds around them.`}</PreviewNote>
     {error && !editing && <p className="sched-error" role="alert"><AlertTriangle size={15}/>{error}</p>}
     {warnings.length > 0 && <details className="sched-import-warnings"><summary>{warnings.length} import warning{warnings.length === 1 ? "" : "s"}</summary>{warnings.map((warning, index) => <p key={index}>{warning}</p>)}</details>}
     <Stats items={[{ label: "Activities", value: allRows.length, detail: `${phases.length} phases` }, { label: "Project finish", value: span ? displayDate(span.finish) : "—", detail: span ? `${span.workdays} working days` : "No activities yet" }, { label: "Critical path", value: allRows.filter(item => item.critical).length, detail: "Activities with no float", tone: "amber" }, { label: "Late", value: allRows.filter(item => item.late).length, detail: `As of ${displayDate(today)}`, tone: "amber" }]}/>

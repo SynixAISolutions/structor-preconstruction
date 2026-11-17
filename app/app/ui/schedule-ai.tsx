@@ -35,6 +35,7 @@ export function ScheduleAiSuggest({ procurement, defaultStart, today, onUse }: {
       packages: procurement.packages.map(k => ({ id: k.id, code: k.code, name: k.name })),
       drawings: drawingRegister(documents).map(r => `${r.sheet} ${r.title}`.trim()),
       specs: manual?.sections.map(s => `${s.section} ${s.title}`) ?? [],
+      milestones: project.milestones ?? [],
     };
     setBusy(true); setError(""); setSuggestion(null);
     try {
