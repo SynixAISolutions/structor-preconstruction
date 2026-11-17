@@ -55,10 +55,28 @@ const inBox =(box: [number, number, number, number] | undefined) => (s: Segment)
 export const FRAME_SHARE = 0.6;
 
 /**
- * The line weight walls are drawn in: the heaviest weight whose own lines mostly pair up at a wall's
- * thickness (on Jelleff's plans 1.2 pt pairs 76-78%, while the heavier 1.8 pt callout boxes and borders
- * pair 0%, and the 0.48 pt layers and casework 43%). Null when no weight does; then walls can't be told
- * apart by weight and none are found. `box` limits it to the plan's area, in page points.
+ * The thickest wall a plan's walls are read at, in feet (17 Nov). A historic building's masonry runs 2 to 3 ft: on Whittier's
+ * existing school (A-111A) the 0.72 pt wall pen paired only 40% at 2 ft, so no wall weight was found and the sheet read no
+ * walls; at 3 ft its 24-36" walls are read (dimensioned faces 88% where 2 ft read 57%). Project 1 and two public sets read the
+ * same at either.
+ */
+export const MAX_WALL_FEET = 3;
+
+/**
+ * A heavier pen is the wall pen only while it pairs at least this share of the wall length the best-pairing pen does (17 Nov).
+ * Whittier's addition draws its concrete walls and steel columns in a 2.52 pt pen that pairs 50-83%, but only 360-1,200 ft of
+ * it, against 2,200-3,700 ft in the 0.72 pt pen that draws every wall; taking the heaviest pen read the concrete and nothing
+ * else (26 walls on A-111B instead of 240).
+ */
+export const WALL_PEN_SHARE = 0.5;
+
+/**
+ * The line weight walls are drawn in: of the weights whose own lines mostly pair up at a wall's thickness, the heaviest that
+ * pairs a real share of the walls (WALL_PEN_SHARE). On Jelleff's plans 1.2 pt pairs 84-86%, while the heavier 1.8 pt callout
+ * boxes and borders pair 0%, and the 0.48 pt layers and casework 45%. The sheet's lightest weight is never the wall pen when it
+ * has others: it draws what lies beyond the cut (casework, finishes, hatching), and on Whittier's existing school it pairs as
+ * well as the walls do. Null when no weight pairs; then walls can't be told apart by weight and none are found. `box` limits it
+ * to the plan's area, in page points.
  *
  * The sheet's frame and the title block's dividers are often drawn in the wall pen and never pair, so lines running most of
  * the drawing's width or height don't count (FRAME_SHARE). Without that, a plan with few walls fell short: Davey Lopes'
@@ -73,16 +91,20 @@ export function wallWeight(segments: Segment[], pointsPerFoot: number, box?: [nu
   // A long wall face has its other face beside it, a wall's thickness away in the same pen; a frame line has none.
   const across = (s: Segment) => horizontal(s) ? (s.a[1] + s.b[1]) / 2 : (s.a[0] + s.b[0]) / 2;
   const partnered = (s: Segment) => all.some(t => t !== s && Math.abs(t.width - s.width) < 0.005 && (horizontal(s) ? horizontal(t) : vertical(t))
-    && Math.abs(across(t) - across(s)) >= 0.2 * pointsPerFoot && Math.abs(across(t) - across(s)) <= 2 * pointsPerFoot && segLength(t) >= 0.5 * segLength(s));
+    && Math.abs(across(t) - across(s)) >= 0.2 * pointsPerFoot && Math.abs(across(t) - across(s)) <= MAX_WALL_FEET * pointsPerFoot && segLength(t) >= 0.5 * segLength(s));
   const lines = all.filter(s => !long(s) || partnered(s));
-  for (const weight of [...new Set(lines.map(s => Math.round(s.width * 100) / 100))].sort((a, b) => b - a)) {
+  const pens = [...new Set(lines.map(s => Math.round(s.width * 100) / 100))].sort((a, b) => b - a).map(weight => {
     const own = lines.filter(s => Math.abs(s.width - weight) < 0.005);
-    const total = own.reduce((t, s) => t + segLength(s), 0) / pointsPerFoot;
-    if (total < 100) continue; // a handful of lines says nothing
-    const paired = 2 * detectWalls(own, { pointsPerFoot, minWeight: 0 }).reduce((t, w) => t + Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), 0) / total;
-    if (paired >= 0.5) return { weight, paired };
-  }
-  return null;
+    return { weight, own, total: own.reduce((t, s) => t + segLength(s), 0) / pointsPerFoot };
+  }).filter(pen => pen.total >= 100); // a handful of lines says nothing
+  const pairing = (pens.length > 1 ? pens.slice(0, -1) : pens).map(pen => {
+    const feet = 2 * detectWalls(pen.own, { pointsPerFoot, minWeight: 0, maxThickness: MAX_WALL_FEET }).reduce((t, w) => t + Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), 0);
+    return { weight: pen.weight, paired: feet / pen.total, feet };
+  }).filter(pen => pen.paired >= 0.5);
+  if (!pairing.length) return null;
+  const most = Math.max(...pairing.map(pen => pen.feet));
+  const pen = pairing.find(p => p.feet >= WALL_PEN_SHARE * most)!; // heaviest first
+  return { weight: pen.weight, paired: pen.paired };
 }
 
 /**
@@ -92,7 +114,7 @@ export function wallWeight(segments: Segment[], pointsPerFoot: number, box?: [nu
 export function planWalls(segments: Segment[], pointsPerFoot: number, box?: [number, number, number, number]): { walls: Wall[]; weight: number | null; note: string } {
   const found = wallWeight(segments, pointsPerFoot, box);
   if (!found) return { walls: [], weight: null, note: "No line weight on this sheet pairs up like walls, so no walls were placed. It may be a scan, or drawn without line weights." };
-  const walls = joinWalls(detectWalls(segments.filter(inBox(box)), { pointsPerFoot, minWeight: found.weight - 0.005, layers: true }));
+  const walls = joinWalls(detectWalls(segments.filter(inBox(box)), { pointsPerFoot, minWeight: found.weight - 0.005, layers: true, maxThickness: MAX_WALL_FEET }));
   return { walls, weight: found.weight, note: `Walls are the ${found.weight} pt lines (${Math.round(found.paired * 100)}% of them pair at a wall's thickness).` };
 }
 
@@ -360,31 +382,42 @@ const GLASS_REACH_FEET = 2;
 /** Glass this long is glass even standing alone (a freestanding storefront). */
 const GLASS_ALONE_FEET = 20;
 
+/** A joined wall is kept at least this long, in feet: an end that would pull it shorter stays where it was drawn. */
+export const JOINED_MIN_FEET = 0.5;
+
 /**
  * Extends wall ends to meet the wall they run into, so corners and tees close: an end moves to the
  * crossing of the two centerlines when that crossing is within the other wall's half-thickness plus a
  * foot of the end, and lies on (or a foot past the end of) the other wall.
+ *
+ * Never so far that the wall shrinks under JOINED_MIN_FEET (17 Nov). A short piece lying across a thick wall (a jamb return in
+ * old masonry) had both ends pulled onto the thick wall's centerline, one point, so it had no direction. Every wall that then
+ * looked at it got NaN for where they meet, NaN passed the reach test (a comparison with NaN is never true), and the NaN spread
+ * from wall to wall: on Whittier's A-113A, 167 of 200 walls came out with no position and were drawn from the sheet's corner.
  */
 export function joinWalls(walls: Wall[]): Wall[] {
   const out = walls.map(w => ({ ...w, a: [...w.a] as Point, b: [...w.b] as Point }));
   const dir = (w: Wall) => { const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]); return [(w.b[0] - w.a[0]) / L, (w.b[1] - w.a[1]) / L]; };
+  const finite = (v: number[]) => v.every(Number.isFinite);
   for (const w of out) {
     const d = dir(w);
+    if (!finite(d)) continue;
     for (const end of ["a", "b"] as const) {
       const p = w[end], outward = end === "b" ? d : [-d[0], -d[1]];
       let best: { at: Point; reach: number } | null = null;
       for (const o of out) {
         if (o === w) continue;
         const e = dir(o), cross = d[0] * e[1] - d[1] * e[0];
-        if (Math.abs(cross) < Math.sin((20 * Math.PI) / 180)) continue; // roughly parallel: not a junction
+        if (!finite(e) || Math.abs(cross) < Math.sin((20 * Math.PI) / 180)) continue; // roughly parallel: not a junction
         // p + t·outward meets o.a + u·e
         const t = ((o.a[0] - p[0]) * e[1] - (o.a[1] - p[1]) * e[0]) / (outward[0] * e[1] - outward[1] * e[0]);
         const u = ((o.a[0] - p[0]) * outward[1] - (o.a[1] - p[1]) * outward[0]) / (outward[0] * e[1] - outward[1] * e[0]);
         const oLen = Math.hypot(o.b[0] - o.a[0], o.b[1] - o.a[1]);
-        if (t < -o.thickness / 2 - 0.25 || t > o.thickness / 2 + 1 || u < -1 || u > oLen + 1) continue;
+        if (!finite([t, u]) || t < -o.thickness / 2 - 0.25 || t > o.thickness / 2 + 1 || u < -1 || u > oLen + 1) continue;
         if (!best || Math.abs(t) < best.reach) best = { at: [p[0] + t * outward[0], p[1] + t * outward[1]], reach: Math.abs(t) };
       }
-      if (best) w[end] = best.at;
+      const other = end === "a" ? w.b : w.a;
+      if (best && dist(best.at, other) >= JOINED_MIN_FEET) w[end] = best.at;
     }
   }
   return out;

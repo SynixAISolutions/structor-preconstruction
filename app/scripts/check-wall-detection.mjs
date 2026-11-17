@@ -97,7 +97,7 @@ assert.deepEqual([diag.length, r(diag[0].thickness), r(len(diag[0]))], [1, 0.57,
 const plan = [];
 for (let i = 0; i < 12; i++) plan.push(seg(0, i * 10, 40, i * 10), seg(0, i * 10 + 0.4, 40, i * 10 + 0.4));            // 1.2 pt walls
 for (let i = 0; i < 6; i++) plan.push(seg(0, i * 20 + 5, 60, i * 20 + 5, 1.8));                                          // 1.8 pt callout lines
-for (let i = 0; i < 40; i++) plan.push(seg(0, i * 3 + 1, 50, i * 3 + 1, 0.48));                                          // 0.48 pt hatching, 3 ft apart
+for (let i = 0; i < 40; i++) plan.push(seg(0, i * 3.6 + 1, 50, i * 3.6 + 1, 0.48));                                      // 0.48 pt hatching, 3.6 ft apart: wider than any wall (MAX_WALL_FEET)
 assert.deepEqual(W.wallWeight(plan, PPF), { weight: 1.2, paired: 1 });
 assert.equal(W.wallWeight(plan.filter(s => s.width !== 1.2), PPF), null, "Nothing pairs: no wall weight");
 // A sheet frame and title block divider in the wall pen (Davey Lopes' A102) don't count against it; long walls that pair still do.
@@ -108,6 +108,25 @@ assert.match(W.planWalls(plan.filter(s => s.width !== 1.2), PPF).note, /^No line
 const found = W.planWalls(plan, PPF);
 assert.deepEqual([found.weight, found.walls.length, found.note], [1.2, 12, "Walls are the 1.2 pt lines (100% of them pair at a wall's thickness)."]);
 assert.equal(W.planWalls(plan, PPF, [0, 0, 45 * PPF, 35 * PPF]).walls.length, 4, "Only the plan's area counts");
+
+// The wall pen pairs a real share of the walls (17 Nov, Whittier's addition): a heavy pen drawing only the concrete walls and
+// columns pairs well but little, and the pen that draws every wall is the wall pen. The heavier one is still read with it.
+const pairs = (n, x0, x1, gap, width, step = 10) => Array.from({ length: n }, (_, i) => [seg(x0, i * step, x1, i * step, width), seg(x0, i * step + gap, x1, i * step + gap, width)]).flat();
+// Hatching in the lightest pen, 3.6 ft apart, with a line far off so the walls span less than the frame's share of the drawing.
+const hatch = [...Array.from({ length: 40 }, (_, i) => seg(0, i * 3.6 + 1, 20, i * 3.6 + 1, 0.24)), seg(60, 0, 70, 0, 0.24)];
+const addition = [...pairs(12, 0, 40, 0.4, 0.72), ...pairs(3, 60, 80, 1, 2.52), ...hatch]; // 960 ft of walls, 120 ft of concrete
+assert.equal(W.wallWeight(addition, PPF)?.weight, 0.72, "A 2.52 pt pen pairing 120 ft against 960 ft is an accent, not the walls");
+assert.deepEqual(W.planWalls(addition, PPF).walls.map(w => r(w.thickness)).sort(), [...Array(12).fill(0.4), 1, 1, 1], "Read in the 0.72 pt pen, the concrete walls are read too");
+assert.equal(W.wallWeight([...pairs(12, 0, 40, 0.4, 1.2), ...pairs(3, 60, 85, 0.3, 0.36), ...hatch], PPF)?.weight, 1.2, "The heavier pen when it draws the walls: a little light pairing (handrails) doesn't take over");
+// The lightest pen draws what lies beyond the cut, however well it pairs (Whittier's existing school: as well as its walls).
+assert.equal(W.wallWeight([...pairs(12, 0, 40, 0.4, 0.72), ...pairs(30, 100, 140, 0.3, 0.24, 5)], PPF)?.weight, 0.72, "2,400 ft of hairline pairs don't beat 960 ft of walls");
+assert.equal(W.wallWeight(pairs(12, 0, 40, 0.4, 0.72), PPF)?.weight, 0.72, "A sheet drawn in one pen can still have walls");
+// A historic building's masonry, 2 to 3 ft thick (MAX_WALL_FEET), is walls; lines further apart are not.
+assert.equal(W.MAX_WALL_FEET, 3);
+const masonry = W.planWalls([...pairs(12, 0, 40, 2.5, 0.72), ...hatch], PPF);
+assert.deepEqual([masonry.weight, masonry.walls.length, r(masonry.walls[0].thickness)], [0.72, 12, 2.5], "2'-6\" walls read");
+assert.equal(W.wallWeight([...pairs(12, 0, 40, 3.5, 0.72), ...hatch], PPF), null, "Lines 3'-6\" apart aren't a wall's faces");
+assert.equal(W.wallWeight(pairs(12, 0, 40, 2.5, 0.72), PPF)?.weight, 0.72, "A 2'-6\" wall the length of the drawing has its other face beside it: a wall, not the frame");
 
 // Glass: a pane is two lines ~1" apart drawn lighter than the walls; never inside a wall or along a door leaf.
 const pane = (x0, x1, y, w = 0.72) => [seg(x0, y, x1, y, w), seg(x0, y + 1 / 12, x1, y + 1 / 12, w)];
@@ -211,6 +230,16 @@ const joined = W.joinWalls([
   { a: [30, 0], b: [40, 0], thickness: 0.4, weights: [] },    // parallel to the first: never joined to it
 ]);
 assert.deepEqual(show(joined), [[0, 0, 20, 0, 0.4], [20, 0, 20, 15, 0.4], [10, 0, 10, 8, 0.3], [30, 0, 40, 0, 0.4]].sort((p, q) => p[1] - q[1] || p[0] - q[0]));
+// A short piece lying across a thick wall (a jamb return in old masonry) isn't pulled to a point at both ends, and no wall
+// turns to NaN (17 Nov: on Whittier's A-113A the collapsed piece's NaN spread to 167 of 200 walls).
+const jambJoined = W.joinWalls([
+  { a: [0, 0], b: [20, 0], thickness: 2.5, weights: [] },   // 2'-6" masonry
+  { a: [5, -1], b: [5, 1], thickness: 0.4, weights: [] },   // both ends within its reach
+  { a: [0, 50], b: [10, 50], thickness: 0.4, weights: [] }, // a wall far away
+]);
+assert.equal(jambJoined.every(w => [...w.a, ...w.b, w.thickness].every(Number.isFinite)), true, "Every wall keeps a position");
+assert.equal(jambJoined.every(w => len(w) >= W.JOINED_MIN_FEET), true, "No wall is pulled shorter than half a foot");
+assert.deepEqual(show(jambJoined.slice(1)), [[5, 0, 5, 1, 0.4], [0, 50, 10, 50, 0.4]], "One end meets the masonry's centerline, the other stays; the far wall is untouched");
 
 // ── In the level's frame: walls sit on the outline, from the printed scale or the building area ───────
 const sheet = { widthPt: 3024, heightPt: 2160 };
