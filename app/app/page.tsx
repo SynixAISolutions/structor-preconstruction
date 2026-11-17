@@ -11,6 +11,7 @@ import { CommercialView } from "./ui/commercial";
 import { BuyoutView } from "./ui/buyout-ui";
 import { ComplianceView } from "./ui/compliance-ui";
 import { AssumptionsView } from "./ui/assumptions-ui";
+import { WorkloadView } from "./ui/workload-ui";
 import { UnitCostsView } from "./ui/unit-costs";
 import { ContractCompareView } from "./ui/contract-compare";
 import { UserManual } from "./ui/user-manual";
@@ -86,6 +87,7 @@ export default function StructorApp(){
      {screen==="buyout"&&<BuyoutView key={project.id} {...props}/>}
      {screen==="compliance"&&<ComplianceView key={project.id} {...props} project={project}/>}
      {screen==="assumptions"&&<AssumptionsView key={project.id} {...props} project={project}/>}
+     {screen==="workload"&&<WorkloadView {...props} projects={projects}/>}
      {screen==="rfp-requirements"&&<RfpRequirementsView key={project.id} {...props} project={project}/>}
      {screen==="leveling"&&<><PageHeader eyebrow="BID & AWARD" title="Bid leveling" description="A complete scope. A comparable price. A confident decision." actions={<Button onClick={()=>navigate("budget")}><Wallet size={16}/>Budget summary<ArrowRight size={16}/></Button>}/><BidLevelingPage key={project.id} projectName={project.name} squareFeet={project.squareFeet}/></>}
      {screen==="unit-costs"&&<UnitCostsView key={project.id} {...props} project={project}/>}

@@ -25,6 +25,25 @@ export const pageGuides = [
     related: ["leveling", "contracts", "turnover"],
   },
   {
+    id: "workload",
+    group: "Workspace",
+    title: "Estimator workload",
+    purpose: "See who is carrying what across every project, so no estimator is over or under worked: the trades each person owns, the bids due soon, and whether that's more than your team's limits.",
+    steps: [
+      "Everyone on a project team (Project information) or owning a trade package (Scopes & bid forms) is listed, the busiest first.",
+      "Each person shows their projects, their open trades (a trade drops off once it's awarded), the trades due in the next 14 days and the project bids due in the next 30.",
+      "Over capacity means more than your limits; Has room means nothing due in the next 30 days. Choose Capacity limits to set them to how your team works (6 trades in 14 days and 2 bids in 30 to start).",
+      "Choose a name to see their projects and trades with the due dates. Export CSV for a copy.",
+    ],
+    terms: [
+      { name: "Open trade", meaning: "A trade package someone owns that hasn't been awarded yet." },
+      { name: "Capacity limit", meaning: "Your team's own rule for how much one person can carry at once; the app doesn't guess it." },
+    ],
+    example: "Sadie owns 8 trades due in the next 14 days across Project 1 and Project 2, over the limit of 6, so she shows Over capacity. Victor has nothing due for a month and shows Has room: give him the next trade.",
+    reality: "Built from the project teams, trade owners and bid dates saved for your team. It doesn't track hours.",
+    related: ["projects", "information", "scopes"],
+  },
+  {
     id: "assumptions",
     group: "Preconstruction",
     title: "Assumptions & clarifications",

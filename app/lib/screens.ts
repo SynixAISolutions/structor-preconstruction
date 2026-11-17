@@ -14,7 +14,7 @@ export type Screen =
   | "contracts" | "contract-compare" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
   | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
   | "architect" | "ratings" | "prequalification" | "drawing-flip" | "buyout" | "model-mep" | "model-structural" | "model-exterior"
-  | "rfp-requirements" | "compliance" | "assumptions";
+  | "rfp-requirements" | "compliance" | "assumptions" | "workload";
 
 export type ViewProps = { navigate: (screen: Screen) => void; notify: (message: string) => void; projectName: string };
 
@@ -44,6 +44,8 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "bidders", label: "Subcontractor directory", icon: "Users", keywords: ["bidder directory", "companies", "trade partners"] },
     { id: "ratings", label: "Subcontractor ratings", icon: "Gauge", keywords: ["rate subcontractors", "reviews", "scorecard"] },
     { id: "prequalification", label: "Subcontractor aggregate limits", icon: "ClipboardCheck", keywords: ["aggregate limit", "single project limit", "open contract value", "Textura", "bonding capacity", "Subcontractor prequalification", "prequal"] },
+    // Marcel's features list, item 33: "track capacity of all estimators to make sure they are not over or under worked".
+    { id: "workload", label: "Estimator workload", icon: "Users", keywords: ["resource tracking", "capacity", "estimators", "workload", "who is free", "over worked"] },
     // Marcel's process doc: rates kept from each job as a benchmark for the next.
     { id: "unit-costs", label: "Unit cost database", icon: "Gauge", keywords: ["unit prices", "benchmark", "cost database", "cost per square foot", "historical rates", "price book"] },
   ]},
