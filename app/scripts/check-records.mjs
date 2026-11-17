@@ -178,7 +178,7 @@ assert.equal(STANDARD_MILESTONES[0], "Interior gut or selective demolition");
 assert.deepEqual(normalizeProject({ id: "d", name: "D", kickoff: { demolitionStart: "2027-03-15" } }).milestones[0], { name: "Interior gut or selective demolition", start: "2027-03-15" }, "An old demolition start becomes the demolition milestone");
 const planned = parseProjectForm(form({ ...valid, start: "2027-03-01", milestoneName: ["Earthwork", "  ", "Steel erection"], milestoneStart: ["2027-03-10", "2027-04-01", ""] })).project;
 assert.deepEqual(planned.milestones, [{ name: "Earthwork", start: "2027-03-10" }, { name: "Steel erection", start: "" }], "Unnamed rows are dropped; dates are optional");
-assert.match(parseProjectForm(form({ ...valid, start: "2027-03-01", milestoneName: ["Earthwork", "Site demolition"], milestoneStart: ["2027-02-20", "2027-02-25"] })).errors.milestones, /^Earthwork, Site demolition can't start before the construction start \(2027-03-01\)\.$/);
+assert.match(parseProjectForm(form({ ...valid, start: "2027-03-01", milestoneName: ["Earthwork", "Site demolition"], milestoneStart: ["2027-02-20", "2027-02-25"] })).errors.milestones, /^Earthwork, Site demolition can't start before the construction start, Mar 1, 2027\.$/);
 assert.equal(parseProjectForm(form({ ...valid, milestoneName: ["Earthwork"], milestoneStart: ["2027-02-20"] })).errors.milestones, undefined, "Without a construction start there's nothing to be early for");
 assert.deepEqual(parseProjectForm(form({ ...valid }), { ...jel, milestones: [{ name: "Raze", start: "2026-05-01" }] }).project.milestones, [{ name: "Raze", start: "2026-05-01" }], "A form without milestone inputs keeps the saved ones");
 // 9. An empty RFP file input keeps the RFP already recorded.

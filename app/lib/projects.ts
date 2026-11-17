@@ -6,6 +6,9 @@
 // programs and year. `null` means "not recorded" — used for records saved before these
 // fields existed, never for a newly created project (the form requires them).
 
+/** "Mar 1, 2027" for a yyyy-mm-dd date, as lib/format's displayDate says it (this module is loaded without imports by the checks). */
+const displayDate = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
 export type WorkType = "new" | "renovation" | "addition" | "both";
 export type TaxStatus = "taxable" | "non-taxable";
 /**
@@ -320,7 +323,7 @@ export function parseProjectForm(form: FormData, existing?: Project): { project?
   }
   if (!errors.scopesDue && kickoff.scopesDue && dates.due && kickoff.scopesDue > dates.due) errors.scopesDue = "Scopes go to subcontractors before the bid due date.";
   // Feedback log, 7 Nov: "make sure that the user can not input a date that is prior to RFI deadline".
-  if (!errors.rfiResponses && !errors.rfi && kickoff.rfiResponses && dates.rfi && kickoff.rfiResponses < dates.rfi) errors.rfiResponses = `RFI responses can't come before the pre-bid RFI deadline (${dates.rfi}).`;
+  if (!errors.rfiResponses && !errors.rfi && kickoff.rfiResponses && dates.rfi && kickoff.rfiResponses < dates.rfi) errors.rfiResponses = `RFI responses can't come before the pre-bid RFI deadline, ${displayDate(dates.rfi)}.`;
   if (!errors.jobWalk && !errors.due && kickoff.jobWalk && dates.due && kickoff.jobWalk > dates.due) errors.jobWalk = "The job walk must be on or before the bid deadline.";
   if (form.has(f.jobWalkNote)) kickoff.jobWalkNote = get(f.jobWalkNote).slice(0, 300);
   if (form.has(f.minBidders)) {
@@ -356,7 +359,7 @@ export function parseProjectForm(form: FormData, existing?: Project): { project?
     // Feedback log, 7 Nov: "make sure that these milestones can not start before project start date initially set".
     const early = !errors.start && dates.start ? milestones.filter(m => m.start && ISO_DATE.test(m.start) && m.start < dates.start) : [];
     if (badDate) errors.milestones = `Use a valid date for ${badDate.name}.`;
-    else if (early.length) errors.milestones = `${early.map(m => m.name).join(", ")} can't start before the construction start (${dates.start}).`;
+    else if (early.length) errors.milestones = `${early.map(m => m.name).join(", ")} can't start before the construction start, ${displayDate(dates.start)}.`;
   }
   const names = form.getAll(f.teamName).map(v => String(v).trim());
   const roles = form.getAll(f.teamRole).map(v => String(v).trim());

@@ -6,5 +6,4 @@
 .compliance-table select { max-width: 150px; }
 .compliance-table .compliance-note { display: block; margin-top: 4px; }
 .compliance-table tfoot th, .compliance-table tfoot td { border-top: 2px solid #dfe6e0; background: #f7f9f6; }
-.ui-stat strong.orange { color: #c4521f; }
 .cm-bidder-certs { margin-top: 4px !important; color: #3f8f5b !important; font-size: 10px !important; font-weight: 600; }

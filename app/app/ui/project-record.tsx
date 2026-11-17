@@ -176,11 +176,14 @@ export function ProjectForm({ project, onSave, onCancel, onBusyChange }: { proje
 
     <section className="project-form-section">
       <div className="project-form-section-head"><div><h3>Project milestones</h3><p>When each part of the work starts. Leave a date blank until it's known and fill it in later from Project information; remove what doesn't apply. The AI uses these to build the schedule.</p></div><Button onClick={() => setMilestones(rows => [...rows, { name: "", start: "" }])}><Plus size={14}/>Add milestone</Button></div>
-      <div className="project-repeat-list">{milestones.map((milestone, index) => <div className="project-repeat-row milestone" key={index}>
-        <label className="ui-field">Milestone<input name={f.milestoneName} value={milestone.name} maxLength={120} placeholder="e.g. Steel erection" onChange={e => setMilestones(rows => rows.map((row, i) => i === index ? { ...row, name: e.target.value } : row))}/></label>
-        <label className="ui-field">Starts<input type="date" name={f.milestoneStart} value={milestone.start} min={dates.start || undefined} aria-invalid={!!errors.milestones && !!dates.start && !!milestone.start && milestone.start < dates.start} onChange={e => setMilestones(rows => rows.map((row, i) => i === index ? { ...row, start: e.target.value } : row))}/></label>
-        <button type="button" className="ui-icon-btn" aria-label={`Remove ${milestone.name || `milestone ${index + 1}`}`} onClick={() => setMilestones(rows => rows.filter((_, i) => i !== index))}><Trash2 size={15}/></button>
-      </div>)}</div>
+      <div className="project-milestones" role="group" aria-label="Project milestones">
+        {milestones.length > 0 && <div className="project-milestone-head" aria-hidden><span>Milestone</span><span>Starts</span></div>}
+        {milestones.map((milestone, index) => <div className="project-repeat-row milestone" key={index}>
+          <label className="ui-field"><input name={f.milestoneName} value={milestone.name} maxLength={120} placeholder="e.g. Steel erection" aria-label={`Milestone ${index + 1}`} onChange={e => setMilestones(rows => rows.map((row, i) => i === index ? { ...row, name: e.target.value } : row))}/></label>
+          <label className="ui-field"><input type="date" name={f.milestoneStart} value={milestone.start} min={dates.start || undefined} aria-label={`${milestone.name || `Milestone ${index + 1}`} starts`} aria-invalid={!!errors.milestones && !!dates.start && !!milestone.start && milestone.start < dates.start} onChange={e => setMilestones(rows => rows.map((row, i) => i === index ? { ...row, start: e.target.value } : row))}/></label>
+          <button type="button" className="ui-icon-btn" aria-label={`Remove ${milestone.name || `milestone ${index + 1}`}`} onClick={() => setMilestones(rows => rows.filter((_, i) => i !== index))}><Trash2 size={15}/></button>
+        </div>)}
+      </div>
       {dates.start && <small className="project-form-note">Milestones can't start before the construction start, {displayDate(dates.start)}.</small>}
       <FieldError errors={errors} field="milestones"/>
     </section>

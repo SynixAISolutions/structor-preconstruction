@@ -58,7 +58,7 @@ export function ComplianceView({ project, navigate, notify, projectName }: ViewP
       detail: p.required === null ? (p.target === null ? "No % required set" : "Needs a budget or project value") : p.met ? `Met: ${usd(p.required)} required` : `${usd(p.shortfall ?? 0)} still needed of ${usd(p.required)}`,
       tone: p.met === null ? "" : p.met ? "green" : "orange",
     })),
-    { label: "Wage scale", value: wage.required === true ? `${wage.compliant} of ${report.awarded}` : wage.required === false ? "None" : "Not confirmed", detail: wage.required === true ? `${wage.type || "Type not recorded"} · compliant${wage.notCompliant ? ` · ${wage.notCompliant} not compliant` : ""}` : wage.required === false ? "No wage scale on this project" : "Set it in Project information", tone: wage.required === true && wage.notCompliant ? "orange" : wage.required === true && wage.compliant === report.awarded && report.awarded ? "green" : "" },
+    { label: "Wage scale", value: wage.required === true ? `${wage.compliant} of ${report.awarded}` : wage.required === false ? "None" : "Not confirmed", detail: wage.required === true ? `compliant${wage.notCompliant ? ` · ${wage.notCompliant} not compliant` : ""} · ${wage.type || "which wage scale isn't recorded"}` : wage.required === false ? "No wage scale on this project" : "Set it in Project information", tone: wage.required === true && wage.notCompliant ? "orange" : wage.required === true && wage.compliant === report.awarded && report.awarded ? "green" : "" },
   ];
 
   return <>
