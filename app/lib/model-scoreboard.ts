@@ -25,6 +25,13 @@ export type DimensionSpan = { a: Point; b: Point; feet: number };
 const OVERSHOOT_POINTS = 6;
 
 /**
+ * Tick strokes are heavier than this, in points (17 Nov; was 0.6). Project 1 draws its ticks at 1.2 pt; Whittier's are 0.36 pt
+ * over a 0.24 pt dimension line, so none of its dimensions were found and its walls couldn't be scored. Project 1 and the two
+ * public sets find the same dimensions at 0.3.
+ */
+export const TICK_MIN_WEIGHT = 0.3;
+
+/**
  * A dimension line drawn from tick to tick, the way Revit exports them: a tick is two short strokes leaving one point in
  * opposite directions, about 45 degrees to the line. Dimensions drawn with arrows aren't found, and the check says so.
  */
@@ -37,7 +44,7 @@ export function dimensionSpans(segments: Segment[], pointsPerFoot: number): Dime
   };
   for (const s of segments) {
     const L = dist(s.a, s.b);
-    if (L >= 1 && L <= 6 && s.width > 0.6) { add(s.a, s.b); add(s.b, s.a); }
+    if (L >= 1 && L <= 6 && s.width > TICK_MIN_WEIGHT) { add(s.a, s.b); add(s.b, s.a); }
   }
   const ticks = new Map<string, { at: Point; angle: number }>();
   for (const [k, list] of strokes) {

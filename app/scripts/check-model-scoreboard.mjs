@@ -31,6 +31,10 @@ const c = Math.cos(0.5), s = Math.sin(0.5), turn = (x, y) => [x * c - y * s, x *
 const [ra, rb] = [turn(100, 50), turn(190, 50)];
 const rotated = (p) => { const [ux, uy] = [c * Math.SQRT1_2 - s * Math.SQRT1_2, s * Math.SQRT1_2 + c * Math.SQRT1_2]; return [line(p[0], p[1], p[0] + 2.4 * ux, p[1] + 2.4 * uy, 1.2), line(p[0], p[1], p[0] - 2.4 * ux, p[1] - 2.4 * uy, 1.2)]; };
 assert.equal(B.dimensionSpans([line(ra[0], ra[1], rb[0], rb[1]), ...rotated(ra), ...rotated(rb)], FT)[0].feet.toFixed(2), "10.00", "A dimension at an angle is measured along its line");
+// Ticks lighter than Project 1's (17 Nov): Whittier draws them at 0.36 pt over a 0.24 pt line. Hairline strokes still aren't ticks.
+const lightTick = (x, y, w) => [line(x, y, x + 1.7, y - 1.7, w), line(x, y, x - 1.7, y + 1.7, w)];
+assert.equal(B.dimensionSpans([line(97, 50, 280, 50, 0.24), ...lightTick(100, 50, 0.36), ...lightTick(277, 50, 0.36)], FT).length, 1, "0.36 pt ticks make a span");
+assert.equal(B.dimensionSpans([line(97, 50, 280, 50, 0.24), ...lightTick(100, 50, 0.24), ...lightTick(277, 50, 0.24)], FT).length, 0, "Hairline strokes aren't ticks");
 
 // ── Printed against measured ──
 const scored = B.scoreDimensions([{ feet: 23, a: [0, 0], b: [207, 0] }, { feet: 2, a: [0, 0], b: [18, 0] }, { feet: 8, a: [0, 0], b: [72, 0] }, { feet: 8, a: [0, 0], b: [72, 0] }], [`23' - 0"`, `2' - 6"`, "unreadable", `8' - 0 1/4"`]);
