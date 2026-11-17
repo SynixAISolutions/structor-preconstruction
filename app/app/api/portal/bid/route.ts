@@ -3,6 +3,7 @@ import { readIndex } from "../../../../lib/project-files-store";
 import { changeRow, NO_MESSAGES, readRow, startingProcurement, startingSubmissions } from "../../../../lib/portal-store";
 import type { Procurement } from "../../../../lib/procurement";
 import { submissionFor, SubmissionRuleError, type Submission } from "../../../../lib/submissions";
+import { sampleProjectRecords } from "../../../../lib/projects";
 import { bidSession, json, type BidSession } from "./session";
 
 // A subcontractor's side of a bid: the private link opens exactly one invitation, with no password and no access to
@@ -20,16 +21,26 @@ async function documentsFor(projectId: string): Promise<BidDocument[]> {
 const submissionsOf = (s: BidSession) => (change: (current: Submission[]) => Submission[]) => changeRow(s.store, s.claim.projectId, "submissions", startingSubmissions(s.claim.projectId), change);
 const procurementOf = (s: BidSession) => (change: (current: Procurement) => Procurement) => changeRow(s.store, s.claim.projectId, "procurement", startingProcurement(s.claim.projectId), change);
 
+/** The certification programs the project requires, from its shared record (the sample project's own when never edited). */
+async function programsFor(s: BidSession): Promise<string[]> {
+  try {
+    const { value } = await readRow<{ certifications?: unknown } | null>(s.store, s.claim.projectId, "project", null);
+    const list = value?.certifications ?? sampleProjectRecords.find(p => p.id === s.claim.projectId)?.certifications ?? [];
+    return Array.isArray(list) ? list.filter((c): c is string => typeof c === "string") : [];
+  } catch { return []; }
+}
+
 async function view(s: BidSession) {
   const { projectId } = s.claim;
-  const [messages, documents, submissions, { value: procurement }] = await Promise.all([
+  const [messages, documents, submissions, { value: procurement }, certifications] = await Promise.all([
     readRow(s.store, projectId, BID_MESSAGES_KEY, NO_MESSAGES).then(r => r.value),
     documentsFor(projectId),
     // The first look opens their bid, and later ones line a draft up with a revised form.
     submissionsOf(s)(current => ensureSubmission(current, s.procurement, projectId, s.invitationId)),
     readRow(s.store, projectId, "procurement", startingProcurement(projectId)),
+    programsFor(s),
   ]);
-  return portalView({ invite: s.invite, procurement, submissions, messages, documents, invitationId: s.invitationId });
+  return portalView({ invite: s.invite, procurement, submissions, messages, documents, invitationId: s.invitationId, certifications });
 }
 
 export async function GET(request: Request) {

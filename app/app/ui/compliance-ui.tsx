@@ -10,7 +10,8 @@ import { useAward } from "../../lib/use-award";
 import { useLocalDraft } from "../../lib/use-local-draft";
 import { initialBidders, type Bidder } from "../../lib/data/commercial";
 import { REMOVED_COMPANIES_KEY, withStartingCompanies } from "../../lib/directory";
-import { ComplianceRuleError, EMPTY_COMPLIANCE, complianceReport, complianceRows, setCompanyCertification, setWageScaleCompliance, type ComplianceRow, type ComplianceState, type WageScaleStatus } from "../../lib/compliance";
+import { useSubmissions } from "../../lib/use-submissions";
+import { ComplianceRuleError, EMPTY_COMPLIANCE, complianceReport, declaredByAward, complianceRows, setCompanyCertification, setWageScaleCompliance, type ComplianceRow, type ComplianceState, type WageScaleStatus } from "../../lib/compliance";
 import type { Project } from "../../lib/projects";
 import "./compliance.css";
 
@@ -24,6 +25,7 @@ const percentText = (n: number) => `${Number.isInteger(n) ? n : n.toFixed(2)}%`;
 export function ComplianceView({ project, navigate, notify, projectName }: ViewProps & { project: Project }) {
   const { state: budget } = useBudget();
   const { state: awards } = useAward();
+  const { submissions } = useSubmissions();
   const [saved, setDirectory] = useLocalDraft<Bidder[]>("directory", initialBidders);
   const [removed] = useLocalDraft<string[]>(REMOVED_COMPANIES_KEY, []);
   const [state, setState] = useLocalDraft<ComplianceState>("compliance", EMPTY_COMPLIANCE);
@@ -32,7 +34,7 @@ export function ComplianceView({ project, navigate, notify, projectName }: ViewP
   const [error, setError] = useState("");
   const directory = withStartingCompanies(saved, removed);
   const total = budgetTotals(budget).totalBudget;
-  const report = complianceReport({ project, budgetTotal: total, awards: awards.awards, directory, state });
+  const report = complianceReport({ project, budgetTotal: total, awards: awards.awards, directory, state, declared: declaredByAward(awards.awards, submissions) });
   const awardIds = report.rows.map(r => r.awardId);
   const targetsSet = report.programs.some(p => p.target !== null);
 
@@ -78,7 +80,8 @@ export function ComplianceView({ project, navigate, notify, projectName }: ViewP
           <td className="num">{usd(row.amount)}</td>
           {project.kickoff?.wageScale === true && <td><select aria-label={`Wage scale, ${row.company}`} value={row.wageScale ?? ""} onChange={e => setWage(row, (e.target.value || null) as WageScaleStatus | null)}><option value="">Not confirmed</option><option value="compliant">Compliant</option><option value="not-compliant">Not compliant</option></select><button type="button" className="cm-text-button compliance-note" onClick={() => setWageNote(row)}>{row.note ? "Edit note" : "Add note"}</button>{row.note && <small>{row.note}</small>}</td>}
           {row.programs.map(p => <td key={p.program} className="num">
-            {p.percent === null ? <Badge tone="neutral">Not recorded</Badge> : <><strong>{percentText(p.percent)}</strong><small>{usd(p.counted ?? 0)} counts</small></>}
+            {p.percent === null ? <Badge tone="neutral">Not recorded</Badge> : <><strong>{percentText(p.percent)}</strong><small>{usd(p.counted ?? 0)} counts{p.source === "bid" ? " · declared on the bid" : ""}</small></>}
+            {p.source === "bid" && row.companyId && <button type="button" className="cm-text-button" onClick={() => run(() => setDirectory(setCompanyCertification(directory, row.companyId!, p.program, p.percent)), `${row.company}'s ${p.program} share is confirmed in the directory.`)}>Confirm</button>}
             <button type="button" className="cm-text-button" disabled={!row.companyId} onClick={() => { setError(""); setEditing({ row, program: p.program }); }}>Set %</button>
           </td>)}
         </tr>)}</tbody>

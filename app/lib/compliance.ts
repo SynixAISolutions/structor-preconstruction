@@ -20,10 +20,27 @@ export type ComplianceState = { records: ComplianceRecord[] };
 export const EMPTY_COMPLIANCE: ComplianceState = { records: [] };
 
 /** An award as compliance needs it (lib/award's Award has all of these). */
-export type AwardedContract = { id: string; packageId: string; bidderId: string; amount: number; cancelled: unknown; snapshot: { packageName: string; packageCode: string; company: { name: string } } };
+export type AwardedContract = { id: string; packageId: string; bidderId: string; amount: number; cancelled: unknown; submissionId?: string; revisionNumber?: number; snapshot: { packageName: string; packageCode: string; company: { name: string } } };
+/** A bid as compliance reads it: the certifications declared on each submitted revision (lib/submissions). */
+export type DeclaringSubmission = { id: string; revisions: { number: number; certifications?: CompanyCertification[] }[] };
+
+/**
+ * What each awarded company declared about its certifications on the bid it was awarded on (the bid portal asks, Marcel's
+ * feedback log 7 Nov), by award id: the awarded revision's, else the latest one's.
+ */
+export function declaredByAward(awards: AwardedContract[], submissions: DeclaringSubmission[]): Record<string, CompanyCertification[]> {
+  const out: Record<string, CompanyCertification[]> = {};
+  for (const award of awards) {
+    const submission = submissions.find(s => s.id === award.submissionId);
+    const revision = submission?.revisions.find(r => r.number === award.revisionNumber) ?? submission?.revisions.at(-1);
+    if (revision?.certifications?.length) out[award.id] = revision.certifications;
+  }
+  return out;
+}
 export type DirectoryCompany = { id: string; company: string; certifications?: CompanyCertification[] };
 
-export type ProgramShare = { program: string; percent: number | null; counted: number | null };
+/** `source`: where the percent came from — the company in the directory (confirmed), or only its bid (declared). */
+export type ProgramShare = { program: string; percent: number | null; counted: number | null; source: "directory" | "bid" | null };
 export type ComplianceRow = {
   awardId: string; packageId: string; trade: string; code: string; company: string; companyId: string | null;
   amount: number; wageScale: WageScaleStatus | null; note: string;
@@ -74,7 +91,7 @@ export const certificationPercent = (company: DirectoryCompany | null, program: 
  * counted dollars are each contract's amount times the company's percent for it; the targets are shares of the budget
  * summary's total when there is one, else of the internal project value.
  */
-export function complianceReport(input: { project: Pick<Project, "certifications" | "certificationTargets" | "kickoff" | "value">; budgetTotal: number | null; awards: AwardedContract[]; directory: DirectoryCompany[]; state: ComplianceState }): ComplianceReport {
+export function complianceReport(input: { project: Pick<Project, "certifications" | "certificationTargets" | "kickoff" | "value">; budgetTotal: number | null; awards: AwardedContract[]; directory: DirectoryCompany[]; state: ComplianceState; declared?: Record<string, CompanyCertification[]> }): ComplianceReport {
   const { project, awards, directory, state } = input;
   const base = input.budgetTotal && input.budgetTotal > 0 ? input.budgetTotal : project.value > 0 ? project.value : null;
   const baseSource = input.budgetTotal && input.budgetTotal > 0 ? "budget" : project.value > 0 ? "project value" : null;
@@ -86,7 +103,13 @@ export function complianceReport(input: { project: Pick<Project, "certifications
       awardId: award.id, packageId: award.packageId, trade: award.snapshot.packageName, code: award.snapshot.packageCode,
       company: company?.company ?? award.snapshot.company.name, companyId: company?.id ?? null, amount: award.amount,
       wageScale: record?.wageScale ?? null, note: record?.note ?? "",
-      programs: programs.map(program => { const percent = certificationPercent(company, program); return { program, percent, counted: percent === null ? null : cents(award.amount * percent / 100) }; }),
+      // The directory's percent is the confirmed one; until there is one, what the company declared on its bid counts.
+      programs: programs.map(program => {
+        const confirmed = certificationPercent(company, program);
+        const declared = input.declared?.[award.id]?.find(c => sameName(c.program, program))?.percent ?? null;
+        const percent = confirmed ?? declared;
+        return { program, percent, counted: percent === null ? null : cents(award.amount * percent / 100), source: confirmed !== null ? "directory" as const : declared !== null ? "bid" as const : null };
+      }),
     };
   }).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }) || a.trade.localeCompare(b.trade));
   const totals: ProgramTotal[] = programs.map((program, i) => {
@@ -136,6 +159,26 @@ export function setCompanyCertification<C extends DirectoryCompany>(directory: C
     if (c.id !== companyId) return c;
     const others = (c.certifications ?? []).filter(x => !sameName(x.program, name));
     return { ...c, certifications: percent === null ? others : [...others, { program: name, percent }] };
+  });
+}
+
+/** What a bid declared on one of its revisions (the given one, else the latest). */
+export const declaredOn = (submissions: DeclaringSubmission[], submissionId: string | null | undefined, revisionNumber?: number | null): CompanyCertification[] => {
+  const submission = submissions.find(s => s.id === submissionId);
+  return (submission?.revisions.find(r => r.number === revisionNumber) ?? submission?.revisions.at(-1))?.certifications ?? [];
+};
+
+/**
+ * A bidder's share for each of the project's programs, for choosing between bidders (Marcel's feedback log, 7 Nov: "when
+ * we are choosing subs, I would like the software to say how much % CBE we are getting per the chosen subs"): the
+ * directory's confirmed percent, else what its bid declared. `counted` is the dollars at `amount`.
+ */
+export function bidderCertifications(programs: string[], company: DirectoryCompany | null, declared: CompanyCertification[], amount: number | null): ProgramShare[] {
+  return programs.map(program => {
+    const confirmed = certificationPercent(company, program);
+    const stated = declared.find(c => sameName(c.program, program))?.percent ?? null;
+    const percent = confirmed ?? stated;
+    return { program, percent, counted: percent === null || amount === null ? null : cents(amount * percent / 100), source: confirmed !== null ? "directory" : stated !== null ? "bid" : null };
   });
 }
 

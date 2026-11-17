@@ -41,6 +41,7 @@ import { EXHIBITS, missingContractFiles, setContractFiles } from "../../lib/cont
 import { assetUrl } from "../../lib/document-assets";
 import { applyBestAndFinal, applyEnvelope, AwardRuleError, envelopeRequest, recordEnvelope, type AwardBestAndFinal } from "../../lib/award";
 import { bestAndFinalFor, type Bafo } from "../../lib/buyout";
+import { bidderCertifications, companyFor, declaredOn, type ProgramShare } from "../../lib/compliance";
 import { useBuyout } from "../../lib/use-buyout";
 import { canCheck, envelopeLive, type EnvelopeSigners } from "../../lib/docusign";
 import { readEnvelopeStatus, sendEnvelope, useDocusign, voidEnvelopeNow } from "../../lib/docusign-client";
@@ -96,6 +97,12 @@ function DocumentPreview({ content, status, company }: { content: DocumentConten
     </section>)}
     <footer>Prepared in Structor · Browser demo document</footer>
   </article>;
+}
+
+/** The bidder's share of each certification program the project requires, and the dollars it would count at its price. */
+function CandidateCertifications({ shares }: { shares: ProgramShare[] }) {
+  if (!shares.length) return null;
+  return <p className="award-candidate-certs">{shares.map(s => <span key={s.program} className={s.percent === null ? "unknown" : ""}>{s.program} {s.percent === null ? "not stated" : `${Number.isInteger(s.percent) ? s.percent : s.percent.toFixed(2)}%`}{s.counted !== null && s.percent ? ` · ${usd(s.counted)}` : ""}{s.source === "bid" ? " (declared on the bid)" : ""}</span>)}</p>;
 }
 
 function CandidateValues({ candidate }: { candidate: LevelingCandidate }) {
@@ -350,6 +357,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
               <input type="radio" name="award-candidate" checked={selectedCandidateId === candidate.levelingBidderId} onChange={() => { setCandidateId(candidate.levelingBidderId); setErrors({}); }}/>
               <span className="award-candidate-heading"><span><strong>{candidate.bidderName}</strong><small>Portal submission · revision {candidate.revisionNumber ?? "—"}</small></span><Badge tone={awardable ? "green" : "amber"}>{awardable ? "Ready" : "Blocked"}</Badge></span>
               <CandidateValues candidate={candidate}/>
+              <CandidateCertifications shares={bidderCertifications(project.certifications, companyFor(directory, { bidderId: candidate.bidderId ?? "", snapshot: { packageName: "", packageCode: "", company: { name: candidate.bidderName } } }), declaredOn(submissions, candidate.submissionId, candidate.revisionNumber), candidate.reviewedTotal ?? candidate.provisionalTotal ?? candidate.baseBid)}/>
               {!awardable && <p className="award-candidate-reasons">{reasons.join(" ")}</p>}
             </label>)}</div> : <Empty title={loadedPackageId && loadedPackageId !== packageId ? "Another package is loaded in leveling" : "No reviewed portal bid is ready"} description={loadedPackageId && loadedPackageId !== packageId ? `Bid leveling currently contains ${procurement.packages.find(item => item.id === loadedPackageId)?.name ?? "another trade"}. Load ${pkg.name} before selecting an award.` : workspaceMessage || "Publish the bid form, receive a portal submission, and complete its leveling review."} action={<Button onClick={() => navigate("leveling")}>Open Bid leveling<ArrowRight size={15}/></Button>}/>} 
           </Panel>

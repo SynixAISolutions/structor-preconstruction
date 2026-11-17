@@ -29,9 +29,9 @@ const many = C.complianceReport({
 });
 assert.deepEqual([many.base, many.baseSource], [80_000_000, "budget"], "The budget summary's total wins over the project value");
 assert.deepEqual(many.rows.map(r => r.trade), ["Concrete", "Steel", "Doors", "Drywall"], "Rows in CSI order; the cancelled Paint award is gone");
-assert.deepEqual(many.rows.find(r => r.trade === "Concrete").programs, [{ program: "CBE", percent: 40, counted: 1_000_000 }, { program: "First Source", percent: 100, counted: 2_500_000 }], "40% of $2.5M counts $1M; program names match whatever their case");
+assert.deepEqual(many.rows.find(r => r.trade === "Concrete").programs, [{ program: "CBE", percent: 40, counted: 1_000_000, source: "directory" }, { program: "First Source", percent: 100, counted: 2_500_000, source: "directory" }], "40% of $2.5M counts $1M; program names match whatever their case");
 assert.equal(many.rows.find(r => r.trade === "Doors").companyId, "dc", "A company is found by name when its id doesn't match");
-assert.deepEqual(many.rows.find(r => r.trade === "Steel").programs[0], { program: "CBE", percent: null, counted: null }, "No certification recorded: nothing counted");
+assert.deepEqual(many.rows.find(r => r.trade === "Steel").programs[0], { program: "CBE", percent: null, counted: null, source: null }, "No certification recorded: nothing counted");
 const many35 = many.programs[0];
 assert.deepEqual([many35.required, many35.counted, many35.shortfall, many35.share, many35.unknown], [28_000_000, 2_500_000, 25_500_000, 3.13, 1]);
 assert.equal(C.complianceReport({ project: project({ value: 0 }), budgetTotal: 0, awards: [], directory, state: C.EMPTY_COMPLIANCE }).base, null, "No budget and no value: no base");
@@ -59,6 +59,28 @@ assert.equal(dir.find(c => c.id === "dc"), directory.find(c => c.id === "dc"), "
 assert.throws(() => C.setCompanyCertification(directory, "dc", "CBE", 120), /percent from 0 to 100/);
 assert.throws(() => C.setCompanyCertification(directory, "nobody", "CBE", 10), /isn't in the subcontractor directory/);
 assert.throws(() => C.setCompanyCertification(directory, "dc", " ", 10), /Name the certification/);
+
+// What a company declared on its bid (the bid portal asks) counts until the directory has a confirmed percent.
+const awarded = [{ ...award("b1", "none", "Northern Steel", 2_000_000, "Steel", "05"), submissionId: "s1", revisionNumber: 1 }, { ...award("b2", "dc", "District Drywall", 1_000_000), submissionId: "s2", revisionNumber: 2 }];
+const subs = [
+  { id: "s1", revisions: [{ number: 1, certifications: [{ program: "cbe", percent: 50 }] }, { number: 2, certifications: [{ program: "CBE", percent: 100 }] }] },
+  { id: "s2", revisions: [{ number: 1 }, { number: 2, certifications: [{ program: "CBE", percent: 30 }] }] },
+];
+const declared = C.declaredByAward(awarded, subs);
+assert.deepEqual(declared, { b1: [{ program: "cbe", percent: 50 }], b2: [{ program: "CBE", percent: 30 }] }, "The awarded revision's declaration, not a later one");
+const withBids = C.complianceReport({ project: project(), budgetTotal: null, awards: awarded, directory, state: C.EMPTY_COMPLIANCE, declared });
+assert.deepEqual(withBids.rows.find(r => r.trade === "Steel").programs[0], { program: "CBE", percent: 50, counted: 1_000_000, source: "bid" }, "Declared on the bid: counted, and marked as such");
+assert.deepEqual(withBids.rows.find(r => r.trade === "Drywall").programs[0], { program: "CBE", percent: 100, counted: 1_000_000, source: "directory" }, "The directory's confirmed percent wins over the bid's");
+assert.equal(withBids.programs[0].counted, 2_000_000);
+assert.deepEqual(C.declaredByAward([{ ...awarded[0], submissionId: "gone" }], subs), {}, "No bid, nothing declared");
+
+// Choosing between bidders: each one's share per program and the dollars it would count at its price.
+assert.deepEqual(C.declaredOn(subs, "s1", 2), [{ program: "CBE", percent: 100 }], "The candidate's own revision");
+assert.deepEqual(C.declaredOn(subs, "s1", 7), [{ program: "CBE", percent: 100 }], "Else its latest");
+assert.deepEqual(C.declaredOn(subs, null, 1), []);
+assert.deepEqual(C.bidderCertifications(["CBE", "First Source"], directory.find(c => c.id === "none"), [{ program: "CBE", percent: 100 }], 750_000),
+  [{ program: "CBE", percent: 100, counted: 750_000, source: "bid" }, { program: "First Source", percent: null, counted: null, source: null }]);
+assert.deepEqual(C.bidderCertifications(["CBE"], directory.find(c => c.id === "jv"), [{ program: "CBE", percent: 100 }], null), [{ program: "CBE", percent: 40, counted: null, source: "directory" }], "The directory's confirmed share wins; no price, no dollars");
 
 // The directory's company form takes certifications as words.
 assert.deepEqual(C.parseCertificationText("CBE 100, First Source; MBE 51%, cbe 20"), [{ program: "CBE", percent: 100 }, { program: "First Source", percent: 100 }, { program: "MBE", percent: 51 }], "A bare program is 100%; a repeat is ignored");
