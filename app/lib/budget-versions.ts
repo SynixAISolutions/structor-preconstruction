@@ -25,6 +25,47 @@ function contributions(budget: BudgetState) {
   ];
 }
 
+/** An accepted value-engineering idea as the trend reads it (lib/value-engineering's VeIdea has these). */
+export type TrendVe = { number: string; description: string; decision: { outcome: string; at: string; acceptedImpact: number | null } | null };
+export type TrendStep = {
+  id: string; name: string; stage: string; at: string; reason: string; by: string; total: number;
+  /** Change from the step before; null for the first. */
+  delta: number | null;
+  /** The lines that moved the most since the step before, largest first (at most five). */
+  drivers: { description: string; center: string; change: string; delta: number }[];
+  /** Value engineering accepted after the step before and up to this one. */
+  ve: { number: string; description: string; impact: number | null }[];
+};
+
+/**
+ * The budget's story across its saved versions, oldest first (Marcel's features list, item 15: "show trend of budget
+ * from SD phase to GMP phase, also it would show if there were any accepted VEs and it would basically be a story line
+ * with graphs that shows why the budget went up or down during different iterations"). Each step says what the total
+ * was, by how much it moved, which lines moved it, and which VE was accepted in between, with the reason the team gave
+ * when it saved the version. `current`, when given and different from the last version, ends the story as "Working budget".
+ */
+export function budgetTrend(versions: BudgetVersion[], ve: TrendVe[] = [], current?: { budget: BudgetState; at: string }): TrendStep[] {
+  const sorted = [...versions].sort((a, b) => a.at.localeCompare(b.at));
+  const all: BudgetVersion[] = [...sorted];
+  if (current && sorted.length) {
+    const last = sorted[sorted.length - 1];
+    const now: BudgetVersion = { id: "working", projectId: last.projectId, name: "Working budget", stage: last.stage, reason: "Not saved as a version yet.", by: "", at: current.at, budget: current.budget };
+    if (compareBudgetVersions(last, now).rows.some(r => r.change !== "Unchanged")) all.push(now);
+  }
+  const accepted = ve.filter(v => v.decision?.outcome === "accepted");
+  return all.map((v, i) => {
+    const prev = i ? all[i - 1] : null;
+    const total = budgetTotals(v.budget).totalBudget;
+    const comparison = prev ? compareBudgetVersions(prev, v) : null;
+    return {
+      id: v.id, name: v.name, stage: BUDGET_VERSION_STAGES.find(s => s.value === v.stage)?.label ?? v.stage, at: v.at, reason: v.reason, by: v.by, total,
+      delta: comparison ? comparison.delta : null,
+      drivers: comparison ? comparison.rows.filter(r => r.delta !== 0).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 5).map(r => ({ description: r.description, center: r.center, change: r.change, delta: r.delta })) : [],
+      ve: prev ? accepted.filter(x => x.decision!.at > prev.at && x.decision!.at <= v.at).map(x => ({ number: x.number, description: x.description, impact: x.decision!.acceptedImpact })) : [],
+    };
+  });
+}
+
 export function compareBudgetVersions(before: BudgetVersion, after: BudgetVersion) {
   if (before.projectId !== after.projectId) throw new Error("Choose versions from the same project.");
   const old = new Map(contributions(before.budget).map(l => [l.id, l]));
