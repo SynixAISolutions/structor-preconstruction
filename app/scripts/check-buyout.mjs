@@ -57,6 +57,14 @@ fails(() => Y.recordBafo(Y.EMPTY_BUYOUT, sampleProcurement, "openings", { compan
 fails(() => Y.recordBafo(Y.EMPTY_BUYOUT, sampleProcurement, "openings", { company: " ", amount: 10 }, "S", at), /Name the company/);
 fails(() => Y.setBuyoutPlan(Y.EMPTY_BUYOUT, sampleProcurement, "openings", { dropDeadAward: "soon" }, "S", at), /drop-dead/);
 
+// Target buyout date (Marcel's features list, item 7): set by the team, late once passed with the trade not executed.
+fails(() => Y.setBuyoutPlan(Y.EMPTY_BUYOUT, sampleProcurement, "openings", { targetBuyout: "end of month" }, "S", at), /target buyout/);
+const targeted = Y.setBuyoutPlan(s, sampleProcurement, "thermal", { targetBuyout: "2026-11-20" }, "Victor", at);
+assert.equal(targeted.entries.find(e => e.packageId === "thermal").anticipatedAward, "2026-10-30", "Setting the target keeps the rest of the plan");
+assert.deepEqual((({ targetBuyout, buyoutLate }) => [targetBuyout, buyoutLate])(row(Y.buyoutRows({ ...base, buyout: targeted }, "2026-11-17"), "thermal")), ["2026-11-20", false], "Not late before the date");
+assert.deepEqual((({ targetBuyout, buyoutLate }) => [targetBuyout, buyoutLate])(row(Y.buyoutRows({ ...base, buyout: targeted }, "2026-11-21"), "thermal")), ["2026-11-20", true], "Late once the date has passed and the trade isn't executed");
+assert.deepEqual((({ targetBuyout, buyoutLate }) => [targetBuyout, buyoutLate])(row(Y.buyoutRows({ ...base, buyout: s }, "2030-01-01"), "thermal")), ["", false], "No target, never late; entries saved before the field read as unset");
+
 // Step 7 of the to-do follows the buyout.
 const todo = (buyout) => deriveTodo({ project: sampleProjectRecords[0], documents: sampleFiles, procurement: sampleProcurement, submissions: sampleSubmissions, leveling: null, budget: sampleBudget, awards: sampleAwards, buyout })
   .tasks.filter(t => t.group === "scope-review").map(t => [t.id, t.status, t.screen]);
