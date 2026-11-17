@@ -25,6 +25,28 @@ export const pageGuides = [
     related: ["leveling", "contracts", "turnover"],
   },
   {
+    id: "compliance",
+    group: "Preconstruction",
+    title: "Compliance",
+    purpose: "See whether the subcontractors you've awarded meet the project's wage scale and certification requirements, such as 35% CBE participation, and how many dollars are still needed from the trades not yet awarded.",
+    steps: [
+      "Set the requirements in Project information: choose Edit information, add each certification program with its % required (for example CBE, 35), and record whether there is a wage scale and which one.",
+      "Each awarded trade appears here with its subcontractor and contract value. Award trades in Contracts & exhibits; a cancelled award drops off.",
+      "Record each company's certifications: choose Set % beside a program and enter the share of its work that counts (100 for a certified firm, less for a joint venture). It is saved on the company in the Subcontractor directory, so other projects use it too.",
+      "Mark each contract's wage scale as Compliant, Not compliant or Not confirmed, with a note if needed.",
+      "The totals show, for each program, the dollars required (the % required of the budget summary's total, or of the internal project value when there is no budget yet), the dollars counted from awarded contracts, and what is still needed.",
+      "Choose Export CSV for a copy of the table and the totals.",
+    ],
+    terms: [
+      { name: "CBE", meaning: "Certified Business Enterprise: a local firm certified by the jurisdiction. Public owners often require a share of the project to go to CBE firms." },
+      { name: "Participation", meaning: "The dollars of a contract that count toward a program: the contract value times the company's percent for that program." },
+      { name: "Wage scale", meaning: "A required wage rate schedule, such as Davis-Bacon prevailing wages, that every subcontractor on the job must pay." },
+    ],
+    example: "The RFP asks for 35% CBE on a $100M budget, so $35M must go to CBE firms. Awarding drywall at $1,000,000 to a 100% CBE company counts $1,000,000; the page shows $34,000,000 still needed from the other trades.",
+    reality: "Certification percents are typed in by your team for now; subcontractors don't enter them themselves yet. Wage scale compliance is what your team records, not a payroll check.",
+    related: ["buyout", "contracts", "bidders", "information"],
+  },
+  {
     id: "documents",
     group: "Preconstruction",
     title: "Project files · document library",

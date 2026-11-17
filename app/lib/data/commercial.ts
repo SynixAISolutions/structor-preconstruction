@@ -10,7 +10,11 @@ import { STANDARD_TRADES } from "../procurement";
 /** Every trade a company can be listed under: the standard bid packages, plus the sample's older "Site work". */
 export const trades = [...STANDARD_TRADES.map(t => t.name), "Site work"];
 
-export type Bidder = { id: string; company: string; name: string; email: string; trade: string; location: string; status: string };
+/**
+ * A company in the organization-wide directory. `certifications`: the programs it is certified for and the share of its
+ * work that counts toward each (100 for a certified firm), as compliance reads them (lib/compliance, 17 Nov).
+ */
+export type Bidder = { id: string; company: string; name: string; email: string; trade: string; location: string; status: string; certifications?: { program: string; percent: number }[] };
 
 /** Two clearly marked placeholder companies for every standard trade, so each bid package has someone to invite. */
 export const sampleTradeCompanies: Bidder[] = STANDARD_TRADES.flatMap(t => [1, 2].map(n => ({

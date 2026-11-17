@@ -46,7 +46,7 @@ const guideIds = new Set(ids);
 const unique = (values, message) => assert.equal(new Set(values).size, values.length, message);
 const nonempty = (value, message) => assert(typeof value === "string" && value.trim(), message);
 
-assert.equal(screens.length, 33, "Expected coverage of all 33 current app screens (RFP requirements, Contract comparison and Unit cost database joined, 4 Nov)");
+assert.equal(screens.length, 34, "Expected coverage of all 34 current app screens (RFP requirements, Contract comparison and Unit cost database joined, 4 Nov; Compliance, 17 Nov)");
 unique(screens, "Screen ids must be unique");
 unique(ids, "Manual article ids must be unique");
 unique(manualGroups, "Manual group names must be unique");
@@ -84,7 +84,9 @@ const precon = SCREEN_GROUPS.find(group => group.label === "PRECONSTRUCTION").it
 assert.equal(precon[0].id, "turnover", "Preconstruction to-do opens the Preconstruction group");
 assert.deepEqual(precon.slice(-4).map(item => item.id), ["model", "model-mep", "model-structural", "model-exterior"], "The 3D model studio closes the Preconstruction group");
 const sectionIds = section => precon.filter(item => item.section === section).map(item => item.id);
-assert.deepEqual(sectionIds("Subcontractor outreach"), ["packages", "leveling", "buyout", "contracts", "drawings", "specifications"], "Marcel, 24 Oct: Compliance and contracts folded into one outreach flow");
+assert.deepEqual(sectionIds("Subcontractor outreach"), ["packages", "leveling", "buyout", "contracts", "drawings", "specifications", "compliance"], "Marcel, 24 Oct: Compliance and contracts folded into one outreach flow; 7 Nov: Compliance (certifications and wage scale) closes it");
+const checksAt = precon.findIndex(item => item.id === "checks");
+assert(checksAt > precon.findIndex(item => item.id === "revisions") && checksAt < precon.findIndex(item => item.id === "packages") && !precon[checksAt].section, "Marcel, 8 Nov: Structor Check & RFIs sits in Preconstruction proper, above Subcontractor outreach");
 assert.deepEqual(sectionIds("Preconstruction budget"), ["takeoffs", "budget", "allowances", "value-engineering"]);
 assert.deepEqual(sectionIds("Compliance and contracts"), [], "That section is gone");
 assert(!SCREEN_GROUPS.some(group => group.items.some(item => item.id === "portal")), "The Subcontractor portal is not in the contractor's sidebar");

@@ -14,7 +14,7 @@ export type Screen =
   | "contracts" | "contract-compare" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
   | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
   | "architect" | "ratings" | "prequalification" | "drawing-flip" | "buyout" | "model-mep" | "model-structural" | "model-exterior"
-  | "rfp-requirements";
+  | "rfp-requirements" | "compliance";
 
 export type ViewProps = { navigate: (screen: Screen) => void; notify: (message: string) => void; projectName: string };
 
@@ -57,6 +57,9 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "drawing-flip", label: "Drawing Flip", icon: "Layers3", keywords: ["drawing review", "trade overlay", "trade colors", "scope on drawings"] },
     // Marcel, 15 Oct: "move that up to pre-construction" — beside Drawing Flip, above Subcontractor outreach.
     { id: "revisions", label: "Revision comparison", icon: "GitCompareArrows", keywords: ["compare drawings", "overlay", "changes between revisions"] },
+    // Marcel's feedback log, 8 Nov: "Move to Preconstruction under there". It sat after List of specifications, where it
+    // read as part of Subcontractor outreach; now it's with the other drawing reviews, above outreach.
+    { id: "checks", label: "Structor Check & RFIs", icon: "ShieldCheck", keywords: ["rfi", "rfi log", "issues", "issue review", "questions", "design team"] },
     // Marcel's process doc: what changed since the previous contract with the same client.
     { id: "contract-compare", label: "Contract comparison", icon: "GitCompareArrows", keywords: ["previous contract", "owner contract", "prime contract", "contract changes", "redline", "same client"] },
     { id: "packages", label: "Bid packages", icon: "Box", section: OUTREACH, keywords: ["invited bidders", "invitations", "messages", "conversations"] },
@@ -66,7 +69,8 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "contracts", label: "Contracts & exhibits", icon: "FileCheck2", section: OUTREACH, keywords: ["exhibit a", "award"] },
     { id: "drawings", label: "List of drawings", icon: "FileText", section: OUTREACH, keywords: ["drawing register", "sheets"] },
     { id: "specifications", label: "List of specifications", icon: "FileText", section: OUTREACH, keywords: ["spec register", "project manual", "specification sections"] },
-    { id: "checks", label: "Structor Check & RFIs", icon: "ShieldCheck", keywords: ["rfi", "rfi log", "issues", "issue review", "questions", "design team"] },
+    // Marcel's feedback log, 7 Nov: "a section at the end of Subcontractor outreach called compliance".
+    { id: "compliance", label: "Compliance", icon: "BadgeCheck", section: OUTREACH, keywords: ["CBE", "MBE", "WBE", "SBE", "First Source", "participation", "certification", "wage scale", "Davis-Bacon", "prevailing wage"] },
     { id: "takeoffs", label: "Quantity takeoffs", icon: "Ruler", section: BUDGET, keywords: ["estimate", "in-house estimate", "mcn estimate"] },
     { id: "budget", label: "Budget summary", icon: "Wallet", section: BUDGET },
     { id: "allowances", label: "Allowances", icon: "ClipboardList", section: BUDGET },
