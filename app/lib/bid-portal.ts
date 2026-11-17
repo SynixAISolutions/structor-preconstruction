@@ -23,6 +23,8 @@ export type PortalBidView = {
   package: { name: string; code: string; due: string; owner: string };
   invitation: { id: string; status: string };
   form: Pick<PublishedForm, "version" | "items"> | null;
+  /** The certification programs the project requires (CBE, First Source…), which the bid asks the company about. */
+  certifications: string[];
   /** Why they can't bid right now; empty when they can. */
   blockers: string[];
   submission: Submission | null;
@@ -57,7 +59,7 @@ export const ownSubmission = (submission: Submission | undefined | null): Submis
   revisions: submission.revisions.map(r => ({ ...r, attachments: hidePaths(r.attachments) })),
 } : null;
 
-export function portalView(input: { invite: PortalInvite; procurement: Procurement; submissions: Submission[]; messages: BidMessage[]; documents: BidDocument[]; invitationId: string }): PortalBidView {
+export function portalView(input: { invite: PortalInvite; procurement: Procurement; submissions: Submission[]; messages: BidMessage[]; documents: BidDocument[]; invitationId: string; certifications?: string[] }): PortalBidView {
   const invitation = input.procurement.invitations.find(i => i.id === input.invitationId) ?? fail("This invitation no longer exists.");
   const pkg = input.procurement.packages.find(p => p.id === invitation.packageId) ?? fail("This trade package no longer exists.");
   return {
@@ -66,6 +68,7 @@ export function portalView(input: { invite: PortalInvite; procurement: Procureme
     package: { name: pkg.name, code: pkg.code, due: pkg.due, owner: pkg.owner },
     invitation: { id: invitation.id, status: invitation.status },
     form: pkg.published ? { version: pkg.published.version, items: pkg.published.items } : null,
+    certifications: (input.certifications ?? []).filter(p => typeof p === "string" && p.trim()).slice(0, 12),
     blockers: invitationIssues(input.procurement, invitation.id).map(i => i.message),
     submission: ownSubmission(submissionFor(input.submissions, invitation.id)),
     messages: input.messages.filter(m => m.invitationId === invitation.id),
@@ -105,7 +108,7 @@ export function saveBidDraft(submissions: Submission[], procurement: Procurement
   const answers = new Map(clean.responses.map(r => [r.scopeItemId, r]));
   if (clean.baseBid !== null && (clean.baseBid < 0 || clean.baseBid > 1e11)) fail("Check the base bid.");
   return updateDraft(submissions, current.id, {
-    baseBid: clean.baseBid, exclusions: clean.exclusions, alternates: clean.alternates, clarifications: clean.clarifications,
+    baseBid: clean.baseBid, exclusions: clean.exclusions, alternates: clean.alternates, clarifications: clean.clarifications, certifications: clean.certifications ?? [],
     responses: form.items.map(item => answers.get(item.id) ?? { scopeItemId: item.id, answer: null, note: "" }),
   }, at);
 }

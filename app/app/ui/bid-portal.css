@@ -15,3 +15,5 @@
 .bid-thread-unread{display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 5px;border-radius:9px;background:#e9703e;color:#fff;font-size:10px;font-weight:700}
 .bid-link-box{display:flex;flex-direction:column;gap:12px}.bid-link-box input{width:100%;font-size:12px}.bid-link-actions{display:flex;gap:8px;flex-wrap:wrap}
 @media(max-width:700px){.bid-portal-main{padding:14px 12px 22px}.bid-portal-main h1{font-size:20px}}
+/* The bid's certification declarations (17 Nov), padded like the other panels' bodies. */
+.bid-portal-certs { padding: 0 24px 22px; }

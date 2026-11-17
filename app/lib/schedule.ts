@@ -269,6 +269,31 @@ export function addBuyoutActivities(state: ScheduleState, packages: { id: string
   return commit(state, activities, `Added ${added} bids-due and buyout activit${added === 1 ? "y" : "ies"} from the bid packages`, by, at);
 }
 
+/**
+ * The project's dated milestones (Project information, Marcel's feedback log 7 Nov) as schedule milestones, phase
+ * "Milestones", each on its start date. One already in the schedule under the same name is left as it is, so this can
+ * be run again after more dates are set; undated milestones wait for a date. The state comes back unchanged when there
+ * is nothing to add.
+ */
+export function addProjectMilestones(state: ScheduleState, milestones: { name: string; start: string }[], by: string, at = now()): ScheduleState {
+  needBy(by);
+  const activities = [...state.activities];
+  const have = new Set(activities.filter(a => a.duration === 0).map(a => a.name.trim().toLowerCase()));
+  let added = 0, number = Math.max(1000, ...activities.map(a => Number(a.code.replace(/\D/g, "")) || 0));
+  for (const m of milestones) {
+    const name = m.name.trim();
+    if (!name || !isDate(m.start) || have.has(name.toLowerCase())) continue;
+    number += 10;
+    while (activities.some(a => a.code === `A${number}`)) number += 10;
+    activities.push({ id: newId(), code: `A${number}`, name, phase: "Milestones", owner: "", packageId: null, start: addWorkdays(m.start, 0), duration: 0, progress: 0, predecessors: [] });
+    have.add(name.toLowerCase());
+    added++;
+  }
+  if (!added) return state;
+  if (activities.length > MAX_ACTIVITIES) fail({ activity: `A schedule holds at most ${MAX_ACTIVITIES} activities.` });
+  return commit(state, activities, `Added ${added} project milestone${added === 1 ? "" : "s"}`, by, at);
+}
+
 /** Deletes an activity and every link to it. */
 export function removeActivity(state: ScheduleState, id: string, by: string, at = now()): ScheduleState {
   needBy(by);

@@ -1,0 +1,9 @@
+/* Compliance (17 Nov): awarded subcontractors against wage scale and certification targets. */
+.compliance-base { margin: -4px 0 16px; color: #6f7f79; font-size: 11px; }
+.compliance-table th small, .compliance-table td small { display: block; margin-top: 2px; color: #7a8881; font-size: 10px; font-weight: 400; }
+.compliance-table td.num, .compliance-table th.num { text-align: right; white-space: nowrap; }
+.compliance-table td.num .cm-text-button { display: block; margin: 4px 0 0 auto; }
+.compliance-table select { max-width: 150px; }
+.compliance-table .compliance-note { display: block; margin-top: 4px; }
+.compliance-table tfoot th, .compliance-table tfoot td { border-top: 2px solid #dfe6e0; background: #f7f9f6; }
+.cm-bidder-certs { margin-top: 4px !important; color: #3f8f5b !important; font-size: 10px !important; font-weight: 600; }

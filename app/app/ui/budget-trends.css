@@ -1,0 +1,30 @@
+/* Budget trends (17 Nov, Marcel's features list item 15): one series, thin line, 8 px markers, recessive grid, hover tooltip. */
+.trend-chart { position: relative; padding: 4px 4px 0; }
+.trend-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.trend-grid { stroke: #e8ede8; stroke-width: 1; }
+.trend-axis { fill: #8a969a; font-size: 11px; }
+.trend-line { fill: none; stroke: #2f6f73; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.trend-dot { fill: #2f6f73; stroke: #fff; stroke-width: 2; }
+.trend-dot.working { fill: #fff; stroke: #2f6f73; }
+.trend-hit { fill: transparent; cursor: pointer; outline: none; }
+.trend-hit:focus-visible { stroke: #2f6f73; stroke-width: 1.5; stroke-dasharray: 3 3; }
+.trend-label { fill: #344d56; font-size: 12px; font-weight: 600; }
+.trend-tooltip { position: absolute; transform: translate(-50%, calc(-100% - 14px)); display: grid; gap: 2px; min-width: 150px; padding: 8px 10px; border-radius: 8px; background: #213b42; color: #eff7ef; font-size: 11px; pointer-events: none; box-shadow: 0 6px 18px #152d3833; white-space: nowrap; }
+.trend-tooltip span { color: #c4d4cf; }
+.trend-tooltip .trend-tip-total { color: #fff; font-size: 13px; font-weight: 600; }
+.trend-story { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.trend-card { border: 1px solid #e3e8e3; border-radius: 10px; padding: 12px 14px; background: #fff; }
+.trend-card header { display: flex; justify-content: space-between; gap: 12px; }
+.trend-card header strong { display: block; font-size: 13px; color: #2f474f; }
+.trend-card header small { color: #7a8881; font-size: 10px; }
+.trend-total { text-align: right; }
+.trend-total span { display: block; font-size: 14px; font-weight: 650; color: #2f474f; }
+.trend-total small { display: inline-flex; align-items: center; gap: 2px; color: #5f726c; font-size: 11px; font-weight: 600; }
+.trend-reason { margin: 8px 0 0; padding: 8px 10px; border-left: 3px solid #dfe6e0; background: #f7f9f6; color: #44585f; font-size: 12px; }
+.trend-section h4 { margin: 10px 0 4px; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: #7a8881; }
+.trend-section ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.trend-section li { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: #344d56; }
+.trend-section li small { color: #7a8881; }
+.trend-section li > span:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.trend-first { margin: 8px 0 0; color: #8a969a; font-size: 11px; }
+@media (max-width: 700px) { .trend-card header { flex-direction: column; } .trend-total { text-align: left; } }

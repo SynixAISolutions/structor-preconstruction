@@ -3,3 +3,6 @@
 .buyout-trade-body{padding:0 22px 22px}.buyout-view>.ui-btn{align-self:flex-start}@media(max-width:650px){.buyout-trade-body{padding:0 16px 16px}}
 /* Scope review attendees from the directory (buyout-attendees.tsx). */
 .buyout-attendee-options{display:grid;gap:6px;margin-top:4px}.buyout-attendee-options small{font-size:9px;color:#99a4a8;font-weight:400}.buyout-attendee-options>div{display:flex;flex-wrap:wrap;gap:6px}.buyout-attendee-options button{display:inline-flex;align-items:center;gap:5px;border:1px solid #dde4df;background:#fff;border-radius:999px;padding:4px 10px;font-size:10px!important;color:#3e525d!important;cursor:pointer}.buyout-attendee-options button:hover{background:#f4f7f5}.buyout-attendee-options em{font-style:normal;color:#99a4a8;font-size:9px}
+/* Target buyout date that has passed with the trade not yet executed (17 Nov). */
+.product-app .buyout-table td.buyout-late { color: #b4441b; font-weight: 600; }
+.product-app .buyout-table td.buyout-late small { color: #b4441b !important; font-weight: 600; }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Activity, ArrowRight, ArrowUpRight, Bell, BookOpen, BookOpenText, Box, Building2, CalendarDays, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, ClipboardCheck, ClipboardList, Clock3, Command, FileCheck2, FileStack, FileText, FolderOpen, Gauge, GitCompareArrows, HardHat, Layers3, LayoutDashboard, Lightbulb, ListChecks, LogOut, MapPin, Menu, MessageSquare, Plus, Ruler, Search, Settings2, ShieldCheck, Sparkles, Star, TrendingUp, Upload, UserCheck, Users, Wallet, X } from "lucide-react";
+import { Activity, ArrowRight, BadgeCheck, ArrowUpRight, Bell, BookOpen, BookOpenText, Box, Building2, CalendarDays, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, ClipboardCheck, ClipboardList, Clock3, Command, FileCheck2, FileStack, FileText, FolderOpen, Gauge, GitCompareArrows, HardHat, Layers3, LayoutDashboard, Lightbulb, ListChecks, LogOut, MapPin, Menu, MessageSquare, Plus, Ruler, Search, Settings2, ShieldCheck, Sparkles, Star, TrendingUp, Upload, UserCheck, Users, Wallet, X } from "lucide-react";
 import BidLevelingPage from "./leveling-workspace";
 import { IntelligenceView } from "./ui/intelligence";
 import { ActivityInbox } from "./ui/activity-inbox";
@@ -9,6 +9,9 @@ import { AiRunCard } from "./ui/ai-run-card";
 import { UploadBanner } from "./ui/upload-banner";
 import { CommercialView } from "./ui/commercial";
 import { BuyoutView } from "./ui/buyout-ui";
+import { ComplianceView } from "./ui/compliance-ui";
+import { AssumptionsView } from "./ui/assumptions-ui";
+import { WorkloadView } from "./ui/workload-ui";
 import { UnitCostsView } from "./ui/unit-costs";
 import { ContractCompareView } from "./ui/contract-compare";
 import { UserManual } from "./ui/user-manual";
@@ -34,7 +37,7 @@ import dynamic from "next/dynamic";
 const ModelStudio = dynamic(() => import("./ui/model-studio"), { ssr: false, loading: () => <div className="ui-empty">Opening model studio…</div> });
 
 // Nav structure and project data now live in lib/. This map is the UI half: icon name -> component.
-const ICONS: Record<string, typeof Box> = { LayoutDashboard, Box, FolderOpen, Building2, FileStack, ListChecks, Ruler, Layers3, ShieldCheck, FileText, BookOpenText, GitCompareArrows, Users, Gauge, Wallet, ClipboardList, FileCheck2, CalendarDays, MessageSquare, ClipboardCheck, HardHat, Settings2, Lightbulb, Star, UserCheck };
+const ICONS: Record<string, typeof Box> = { BadgeCheck, LayoutDashboard, Box, FolderOpen, Building2, FileStack, ListChecks, Ruler, Layers3, ShieldCheck, FileText, BookOpenText, GitCompareArrows, Users, Gauge, Wallet, ClipboardList, FileCheck2, CalendarDays, MessageSquare, ClipboardCheck, HardHat, Settings2, Lightbulb, Star, UserCheck };
 function NavIcon({name,size,id}:{name:string;size:number;id?:Screen}){const iconName=id==="specifications"?"BookOpenText":id==="value-engineering"?"Lightbulb":id==="ratings"?"Star":id==="prequalification"?"UserCheck":id==="model"?"Layers3":id==="model-mep"?"Ruler":id==="model-structural"?"Building2":id==="model-exterior"?"Box":name;const Icon=ICONS[iconName]??Box;return <Icon size={size}/>;}
 
 function BuildingModel({small=false}:{small?:boolean}) { return <div className={`model-stage ${small?"small":""}`} aria-label="Illustrative 3D building model" role="img"><div className="model-orbit"><div className="model-ground"><div className="model-grid"/><div className="model-walkway"/><div className="model-building main"><i className="roof"/><i className="front"/><i className="side"/><i className="window-line"/></div><div className="model-building wing"><i className="roof"/><i className="front"/><i className="side"/></div><div className="model-building tower"><i className="roof"/><i className="front"/><i className="side"/></div><div className="model-tree t1"/><div className="model-tree t2"/><div className="model-tree t3"/><div className="model-tree t4"/><div className="model-outline"/></div></div><span className="model-caption"><span/>CONCEPT MODEL <span className="model-coordinate">38.917° N / 77.068° W</span></span></div>; }
@@ -58,7 +61,7 @@ export default function StructorApp(){
  const [newProjectBusy,setNewProjectBusy]=useState(false);
  const props={navigate,notify,projectName:project.name};
  function inspectModel(target:ModelInspection){navigate("model");setModelInspection(target);}
- function createProject(p:Project){setProjects(v=>[...v,p]);selectProject(p.id);setNewProject(false);navigate("turnover");notify("Project created. Start with your drawings or project manual.");}
+ function createProject(p:Project,uploading=0){setProjects(v=>[...v,p]);selectProject(p.id);setNewProject(false);navigate("turnover");notify(uploading?`Project created. ${uploading===1?"Your file is":`${uploading} files are`} uploading in the background; keep working and we'll tell you when it's done.`:"Project created. Start with your drawings or project manual.");}
  return <div className={`product-app ${reduced?"motion-off":""}`}>
   {menuOpen&&<button className="mobile-scrim" aria-label="Close navigation" onClick={()=>setMenuOpen(false)}/>}
   <aside className={`product-sidebar ${menuOpen?"is-open":""}`}>
@@ -82,6 +85,9 @@ export default function StructorApp(){
       {['documents','scopes','drawing-flip','takeoffs','specs','checks','drawings','specifications','revisions'].includes(screen)&&<IntelligenceView key={project.id} {...props} project={project} screen={screen} quantityFilters={quantityFilters} onQuantityFilters={setQuantityFilters} onInspectModel={inspectModel}/>}
      {['packages','bidders','ratings','prequalification','portal','budget','allowances','value-engineering','contracts','schedule'].includes(screen)&&<CommercialView {...props} screen={screen} project={project}/>}
      {screen==="buyout"&&<BuyoutView key={project.id} {...props}/>}
+     {screen==="compliance"&&<ComplianceView key={project.id} {...props} project={project}/>}
+     {screen==="assumptions"&&<AssumptionsView key={project.id} {...props} project={project}/>}
+     {screen==="workload"&&<WorkloadView {...props} projects={projects}/>}
      {screen==="rfp-requirements"&&<RfpRequirementsView key={project.id} {...props} project={project}/>}
      {screen==="leveling"&&<><PageHeader eyebrow="BID & AWARD" title="Bid leveling" description="A complete scope. A comparable price. A confident decision." actions={<Button onClick={()=>navigate("budget")}><Wallet size={16}/>Budget summary<ArrowRight size={16}/></Button>}/><BidLevelingPage key={project.id} projectName={project.name} squareFeet={project.squareFeet}/></>}
      {screen==="unit-costs"&&<UnitCostsView key={project.id} {...props} project={project}/>}
@@ -92,7 +98,7 @@ export default function StructorApp(){
   </div>
   {toast&&<div className="product-toast" role="status"><CheckCheck size={18}/><span>{toast}</span><button onClick={()=>setToast("")} aria-label="Dismiss notification"><X size={16}/></button></div>}
    {searchOpen&&<Modal title="Find your next step" subtitle="Jump to any part of your workspace." onClose={()=>setSearchOpen(false)}><SearchBox value={search} onChange={setSearch} placeholder="Search scopes, budget, drawings…"/><div className="command-list">{searchScreens(search).map(s=><button key={s.id} onClick={()=>navigate(s.id)}><NavIcon id={s.id} name={s.icon} size={19}/>{s.label}<ArrowRight size={15}/></button>)}</div></Modal>}
-  <div className="work-status"><UploadBanner onOpenFiles={() => navigate("documents")}/><AiRunCard projectId={activeId}/></div>
+  <div className="work-status"><UploadBanner onOpenFiles={id => { if (id && id !== activeId) selectProject(id); navigate("documents"); }}/><AiRunCard projectId={activeId}/></div>
   <UserManual open={helpOpen} onOpen={()=>setHelpOpen(true)} onClose={()=>setHelpOpen(false)} currentScreen={screen} onNavigate={id=>{const next=resolveScreen(id);if(next&&next!==screen)navigate(next);}}/>
   <PageVoiceFeedback page={{screen,projectId:projectOpen?project.id:null,projectName:projectOpen?project.name:null}} notify={notify} onOpenPage={message=>{if(message.projectId){if(!projects.some(p=>p.id===message.projectId)){notify(`The message is for ${message.projectName}. That project is not saved in this browser.`);return false;}selectProject(message.projectId);}navigate(message.screen);return true;}}/>
    {newProject&&<Modal title="A new project starts here" subtitle="Set up the workspace, then add your RFP and project documents." wide onClose={()=>{if(!newProjectBusy)setNewProject(false);}}><ProjectForm onBusyChange={setNewProjectBusy} onCancel={()=>setNewProject(false)} onSave={createProject}/></Modal>}

@@ -10,6 +10,9 @@ import { useProjectDocuments } from "../../lib/project-files-client";
 import type { SetupState } from "../../lib/project-setup";
 import type { Project } from "../../lib/projects";
 import { useProjectSetup } from "../../lib/use-project-setup";
+import { useProcurement } from "../../lib/use-procurement";
+import { useLocalDraft } from "../../lib/use-local-draft";
+import { EMPTY_ASSUMPTIONS, assumptionsByTrade, type AssumptionsState } from "../../lib/assumptions";
 import { Button, PageHeader, downloadText, type ViewProps } from "./shared";
 import "./basis-of-estimate.css";
 
@@ -33,7 +36,9 @@ export function BasisOfEstimatePreview({ project, budget, documents, setup, read
     heading.current?.focus();
   }, []);
   // No project-level not-carried decision is exposed yet; bidder exclusions alone are not that decision.
-  const estimate = basisOfEstimate({ project, documents, budget, setup });
+  const { state: procurement } = useProcurement();
+  const [notes] = useLocalDraft<AssumptionsState>("assumptions", EMPTY_ASSUMPTIONS);
+  const estimate = basisOfEstimate({ project, documents, budget, setup, trades: assumptionsByTrade(notes, procurement.packages) });
   const noBudget = budget.lines.length === 0;
   const noDocuments = documents.length === 0;
   const empty = noBudget && noDocuments && budget.allowances.length === 0;

@@ -205,6 +205,8 @@ export type ScheduleSuggestInput = {
   start: string; notes: string;
   packages: { id: string; code: string; name: string }[];
   drawings: string[]; specs: string[];
+  /** The project milestones the team has set (Project information): the schedule is built around the dated ones. */
+  milestones?: { name: string; start: string }[];
 };
 export type ScheduleSuggestion = { summary: string; activities: (SuggestedActivity & { basis: string })[] };
 const scheduleSuggest = job({
@@ -218,9 +220,10 @@ const scheduleSuggest = job({
     if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) fail("Choose the schedule's start date.");
     const packages = (Array.isArray(o.packages) ? o.packages : []).slice(0, 60).map((k: any) => ({ id: str(k?.id, 60), code: str(k?.code, 20), name: str(k?.name, 120) })).filter((k: { id: string; name: string }) => k.id && k.name);
     const list = (v: unknown, n: number) => (Array.isArray(v) ? v : []).slice(0, n).map(x => str(x, 160)).filter(Boolean);
-    return { project, start, notes: str(o.notes, 1500), packages, drawings: list(o.drawings, 300), specs: list(o.specs, 250) };
+    const milestones = (Array.isArray(o.milestones) ? o.milestones : []).slice(0, 40).map((m: any) => ({ name: str(m?.name, 120), start: /^\d{4}-\d{2}-\d{2}$/.test(str(m?.start, 10)) ? str(m?.start, 10) : "" })).filter((m: { name: string }) => m.name);
+    return { project, start, notes: str(o.notes, 1500), packages, drawings: list(o.drawings, 300), specs: list(o.specs, 250), milestones };
   },
-  messages: ({ project, start, notes, packages, drawings, specs }) => [
+  messages: ({ project, start, notes, packages, drawings, specs, milestones = [] }) => [
     { role: "system", content: [
       "You are a senior construction scheduler at a general contractor (CM at-risk). Draft a realistic first project schedule from preconstruction to closeout for the team to review.",
       "Use 30 to 60 activities in phases Preconstruction, Procurement, Construction and Closeout. Procurement covers buyout, submittals and long-lead fabrication and delivery for items the drawings or specifications show (for example curtain wall, elevators, switchgear, rooftop units, pool equipment). Construction follows the build sequence: mobilization, demolition, sitework, foundations, structure, envelope and roofing, MEP rough-in, interior framing and drywall, finishes, MEP trim, commissioning, punch list. End with a Substantial completion milestone (duration 0).",
@@ -235,6 +238,7 @@ const scheduleSuggest = job({
       `Area: ${project.squareFeet ? `${project.squareFeet.toLocaleString("en-US")} SF` : "not recorded"}${project.workType ? `; work type ${project.workType}` : ""}${project.renovationSquareFeet ? `; renovation ${project.renovationSquareFeet.toLocaleString("en-US")} SF` : ""}${project.additionSquareFeet ? `; addition ${project.additionSquareFeet.toLocaleString("en-US")} SF` : ""}${project.value ? `; budget about $${project.value.toLocaleString("en-US")}` : ""}.`,
       `Schedule starts ${start}.`,
       notes && `Team notes: ${notes}`,
+      milestones.length > 0 && `Project milestones the team has set. Build the schedule around them: every dated one starts on its date (as a milestone activity with that name or the first activity of that work); undated ones are work the project includes, to place yourself:\n${milestones.map(m => `- ${m.name}: ${m.start || "no date yet"}`).join("\n")}`,
       `Bid packages (packageId: code name):\n${packages.map(k => `- ${k.id}: ${k.code} ${k.name}`).join("\n") || "(none)"}`,
       `Drawing sheets:\n${drawings.join("\n") || "(none stored)"}`,
       `Specification sections:\n${specs.join("\n") || "(none stored)"}`,

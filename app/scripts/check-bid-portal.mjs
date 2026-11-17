@@ -225,6 +225,12 @@ const sampleToken = new URL((await sampleLink.json()).path, origin).searchParams
 const sampleView = (await open(sampleToken)).body.view;
 const sampleSave = await act(sampleToken, { action: "save", draft: { baseBid: 123456, responses: sampleView.submission.draft.responses }, expectedUpdatedAt: sampleView.submission.updatedAt });
 assert.equal(sampleSave.status, 200);
+// Certifications (Marcel's feedback log, 7 Nov): the bid asks about the project's own programs, from its record.
+assert.deepEqual(sampleView.certifications, ["First Source"], "The sample project's programs when its record was never saved");
+const declaredSave = await act(sampleToken, { action: "save", draft: { baseBid: 123456, responses: sampleView.submission.draft.responses, certifications: [{ program: "First Source", percent: 100 }, { program: "first source", percent: 10 }] }, expectedUpdatedAt: sampleSave.body.submission.updatedAt });
+assert.deepEqual(declaredSave.body.submission.draft.certifications, [{ program: "First Source", percent: 100 }], "The declaration is saved with the draft, once per program");
+await store.save("jelleff", "project", T.packRow({ id: "jelleff", name: "Project 1", certifications: ["CBE", "First Source"] }), 0, "test");
+assert.deepEqual((await open(sampleToken)).body.view.certifications, ["CBE", "First Source"], "A saved project record's programs win");
 const kept = (await T.readRow(store, "jelleff", "submissions", null)).value;
 assert(sampleSubmissions.length > 0 && sampleSubmissions.every(s => kept.some(k => k.id === s.id)), "The first real save doesn't replace the sample's bids");
 

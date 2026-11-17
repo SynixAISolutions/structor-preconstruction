@@ -28,6 +28,12 @@ export type BidContent = {
   /** Qualifications, assumptions and questions attached to the price. */
   clarifications: string[];
   attachments: AttachmentMeta[];
+  /**
+   * The company's certifications for the project's programs, as it declares them with its bid (Marcel's feedback log,
+   * 7 Nov: "when the subs sign on to our platform it would ask them for relevant certifications and they would have
+   * their % of CBE"): the share of its work that counts toward each, 100 for a certified firm. Absent on older bids.
+   */
+  certifications?: { program: string; percent: number }[];
 };
 
 export type SubmittedRevision = BidContent & {
@@ -89,8 +95,8 @@ export const submissionFor = (submissions: Submission[], invitationId: string) =
 export const submissionsForPackage = (submissions: Submission[], packageId: string) => submissions.filter(s => s.packageId === packageId);
 export const latestRevision = (submission: Submission): SubmittedRevision | undefined => submission.revisions.at(-1);
 
-const contentOf = ({ baseBid, responses, exclusions, alternates, clarifications, attachments }: BidContent): BidContent =>
-  ({ baseBid, responses, exclusions, alternates, clarifications, attachments });
+const contentOf = ({ baseBid, responses, exclusions, alternates, clarifications, attachments, certifications = [] }: BidContent): BidContent =>
+  ({ baseBid, responses, exclusions, alternates, clarifications, attachments, certifications });
 const sameContent = (a: BidContent, b: BidContent) => JSON.stringify(contentOf(a)) === JSON.stringify(contentOf(b));
 
 /** The bidder has edited since their last submission (always false before the first one). */
@@ -206,6 +212,12 @@ export function sanitizeBidContent(raw: unknown): BidContent {
     exclusions: lines(o.exclusions),
     alternates: list(o.alternates).map(a => ({ id: text(a?.id, 200) || newId(), kind: a?.kind === "deduct" ? "deduct" as const : "add" as const, description: text(a?.description, 1000), amount: num(a?.amount) ?? 0 })),
     clarifications: lines(o.clarifications),
+    certifications: list(o.certifications).slice(0, 12).flatMap(c => {
+      const program = text(c?.program, 40), percent = num(c?.percent);
+      if (!program || percent === null || percent < 0 || percent > 100 || seen.has(`cert:${program.toLowerCase()}`)) return [];
+      seen.add(`cert:${program.toLowerCase()}`);
+      return [{ program, percent }];
+    }),
     attachments: list(o.attachments).slice(0, MAX_ATTACHMENTS).flatMap(a => {
       const name = text(a?.name, 255), size = num(a?.size);
       return name && size !== null ? [{ id: text(a?.id, 200) || newId(), name, size, type: text(a?.type, 200), addedAt: text(a?.addedAt, 40), storageKey: typeof a?.storageKey === "string" ? a.storageKey : null }] : [];

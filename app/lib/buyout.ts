@@ -26,6 +26,11 @@ export type BuyoutEntry = {
   /** Recommended subcontractor for award and the other companies still in the running (directory ids or names). */
   recommended: string; targets: string[];
   anticipatedAward: string; dropDeadAward: string;
+  /**
+   * When the trade should be bought out (subcontract executed), as the team sets it (Marcel's features list, item 7:
+   * "add a section for target buy out date that would be user inputed"). "" until set; absent on older entries.
+   */
+  targetBuyout?: string;
   notes: string;
   /** The welcome email to the awarded subcontractor has gone out (Whittier tracker column). */
   welcomeSent: boolean;
@@ -57,6 +62,8 @@ export type BuyoutRow = {
   /** Every company's current best and final, typed or from its revised proposal, lowest first. */
   bafos: Bafo[];
   award: { company: string; amount: number; at: string } | null;
+  /** The target buyout date ("" when not set), and whether it has passed with the trade not yet executed. */
+  targetBuyout: string; buyoutLate: boolean;
   /** The trade's in-house budget (its own budget lines; the GMP amount) minus the award, else the best and final, else the low bid: the purchasing contingency. Positive = under budget. */
   budget: number | null; delta: number | null;
   entry: BuyoutEntry | null;
@@ -71,7 +78,7 @@ const newId = () => Math.random().toString(36).slice(2, 10);
 const cents = (v: number) => Math.round(v * 100) / 100;
 
 const blank = (packageId: string, by: string, at: string): BuyoutEntry =>
-  ({ packageId, recommended: "", targets: [], anticipatedAward: "", dropDeadAward: "", notes: "", welcomeSent: false, scopeReview: null, bafos: [], updatedAt: at, updatedBy: by });
+  ({ packageId, recommended: "", targets: [], anticipatedAward: "", dropDeadAward: "", targetBuyout: "", notes: "", welcomeSent: false, scopeReview: null, bafos: [], updatedAt: at, updatedBy: by });
 
 function change(state: BuyoutState, procurement: Procurement, packageId: string, by: string, at: string, apply: (entry: BuyoutEntry) => BuyoutEntry): BuyoutState {
   if (!procurement.packages.some(p => p.id === packageId)) fail("Choose a trade package.");
@@ -81,9 +88,10 @@ function change(state: BuyoutState, procurement: Procurement, packageId: string,
 }
 
 /** The buyout plan for a trade: recommended sub, other targets, award dates and notes. */
-export function setBuyoutPlan(state: BuyoutState, procurement: Procurement, packageId: string, plan: Partial<Pick<BuyoutEntry, "recommended" | "targets" | "anticipatedAward" | "dropDeadAward" | "notes" | "welcomeSent">>, by: string, at = new Date().toISOString()): BuyoutState {
+export function setBuyoutPlan(state: BuyoutState, procurement: Procurement, packageId: string, plan: Partial<Pick<BuyoutEntry, "recommended" | "targets" | "anticipatedAward" | "dropDeadAward" | "targetBuyout" | "notes" | "welcomeSent">>, by: string, at = new Date().toISOString()): BuyoutState {
   if (plan.anticipatedAward !== undefined && !isDate(plan.anticipatedAward)) fail("Use a date for the anticipated award.");
   if (plan.dropDeadAward !== undefined && !isDate(plan.dropDeadAward)) fail("Use a date for the drop-dead award.");
+  if (plan.targetBuyout !== undefined && !isDate(plan.targetBuyout)) fail("Use a date for the target buyout.");
   if (plan.notes !== undefined && plan.notes.length > 4000) fail("Keep the notes under 4,000 characters.");
   return change(state, procurement, packageId, by, at, e => ({
     ...e, ...plan,
@@ -166,8 +174,8 @@ export function bestAndFinalFor(buyout: BuyoutState, submissions: Submission[], 
   return mine.reduce<Bafo | null>((latest, b) => !latest || b.receivedAt > latest.receivedAt ? b : latest, null);
 }
 
-/** One row per trade, in procurement order: where its buyout stands and whose move it is. */
-export function buyoutRows(input: BuyoutInput): BuyoutRow[] {
+/** One row per trade, in procurement order: where its buyout stands and whose move it is. `today` (yyyy-mm-dd) decides late. */
+export function buyoutRows(input: BuyoutInput, today = new Date().toISOString().slice(0, 10)): BuyoutRow[] {
   const { procurement, budget } = input;
   const budgets = tradeBudgets(budget, procurement);
   return procurement.packages.map(pkg => {
@@ -200,9 +208,11 @@ export function buyoutRows(input: BuyoutInput): BuyoutRow[] {
     const contractSent = executed || stage === "signature-pending" || stage === "subcontractor-signed" || stage === "countersigned";
     const bic = executed ? "Closed" : ballInCourt === "contractor" ? "Our team"
       : ballInCourt === "subcontractor" ? awarded?.company ?? (entry?.recommended || bestAndFinal?.company || bids[0]?.name || "Bidders") : null;
+    const targetBuyout = entry?.targetBuyout ?? "";
     return {
       packageId: pkg.id, trade: pkg.name, code: pkg.code, owner: pkg.owner, status, ballInCourt, next, bic, contractSent, executed,
       bids: bids.length, low: bids[0] ? { name: bids[0].name, value: bids[0].value } : null, bestAndFinal, bafos, award: awarded,
+      targetBuyout, buyoutLate: !!targetBuyout && !executed && targetBuyout < today,
       budget: own, delta: own !== null && basis !== null ? cents(own - basis) : null, entry,
     };
   });

@@ -194,4 +194,14 @@ fails(() => S.scheduleFromSuggestion([sug[0], sug[0]], "2026-11-02"), "code", /s
 fails(() => S.scheduleFromSuggestion(sug, "2026-02-30"), "start", /start date/);
 fails(() => S.scheduleFromSuggestion([], "2026-11-02"), "file", /no activities/);
 
+// Project milestones (Marcel's feedback log, 7 Nov) become schedule milestones on their dates; running it again adds only new ones.
+const ms = [{ name: "Earthwork", start: "2027-03-15" }, { name: "Superstructure erection", start: "2027-03-20" }, { name: "Interior finishes", start: "" }, { name: " ", start: "2027-04-01" }];
+const withMs = S.addProjectMilestones(base, ms, "Victor", at);
+const msAdded = withMs.activities.slice(base.activities.length);
+assert.deepEqual(msAdded.map(a => [a.name, a.start, a.duration, a.phase]), [["Earthwork", "2027-03-15", 0, "Milestones"], ["Superstructure erection", "2027-03-22", 0, "Milestones"]], "Dated ones only, as milestones; a Saturday moves to the Monday");
+assert.equal(new Set(withMs.activities.map(a => a.code)).size, withMs.activities.length, "New codes don't collide");
+assert.match(withMs.log.at(-1).action, /Added 2 project milestones/);
+assert.equal(S.addProjectMilestones(withMs, ms, "Victor", at), withMs, "Nothing new: the schedule is unchanged");
+assert.equal(S.addProjectMilestones(withMs, [{ name: "earthwork", start: "2027-05-01" }, { name: "Interior finishes", start: "2027-09-01" }], "Victor", at).activities.length, withMs.activities.length + 1, "One already scheduled by name stays; a newly dated one is added");
+
 console.log(`Schedule checked: ${base.activities.length} sample activities; working days, FS/SS/FF/SF and lags, push-only date shift, critical path and float, progress, look-ahead, phases, MS Project XML in and out, CSV.`);

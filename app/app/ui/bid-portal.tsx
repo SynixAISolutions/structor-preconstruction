@@ -5,14 +5,14 @@ import { AlertTriangle, ArrowRight, Check, Download, FileText, MessageSquareText
 import type { BidDocument, PortalBidView } from "../../lib/bid-portal";
 import { bidAction, bidFileUrl, downloadBidDocument, loadBid, PortalRequestError, uploadBidFile } from "../../lib/bid-portal-client";
 import { displayDate, usd } from "../../lib/format";
-import { latestRevision, type Submission, type SubmissionIssue, type Submitter } from "../../lib/submissions";
+import { latestRevision, updateDraft, type Submission, type SubmissionIssue, type Submitter } from "../../lib/submissions";
 import { bytes, ProposalForm, ScopeResponseForm, submittedAt } from "./bid-form";
 import { Badge, Button, Empty, Modal, Panel, Tabs } from "./shared";
 import "./product.css";
 import "./bid-portal.css";
 
 const CHECK_EVERY = 30_000, SAVE_AFTER = 900;
-const contentOf = ({ baseBid, responses, exclusions, alternates, clarifications }: Submission["draft"]) => ({ baseBid, responses, exclusions, alternates, clarifications });
+const contentOf = ({ baseBid, responses, exclusions, alternates, clarifications, certifications }: Submission["draft"]) => ({ baseBid, responses, exclusions, alternates, clarifications, certifications });
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 /**
@@ -193,6 +193,7 @@ export function BidPortal() {
           files={{ add: files => void addFiles(files), remove: id => void removeFile(id), href: id => bidFileUrl(token, id), status: fileStatus }}
           submitter={<div className="ui-form-grid"><label className="ui-field">Your name<input required maxLength={120} autoComplete="name" value={person.name} onChange={event => setPerson({ ...person, name: event.target.value })}/></label><label className="ui-field">Your email<input required type="email" maxLength={200} autoComplete="email" value={person.email} onChange={event => setPerson({ ...person, email: event.target.value })}/></label></div>}/>
       </div>
+      {view.certifications.length > 0 && <CertificationsPanel programs={view.certifications} submission={submission} run={run}/>}
       {submission.revisions.length > 0 && <Panel title="Your submitted versions" subtitle="What the estimator has. Later versions don't change earlier ones."><div className="bid-portal-versions">{[...submission.revisions].reverse().map(r => <article key={r.number}><Badge tone="blue">{`V${r.number}`}</Badge><span><strong>{usd(r.baseBid ?? 0)}</strong><small>{submittedAt(r.submittedAt)} · {r.submitter.name}</small></span>{r.attachments.map(file => <a key={file.id} href={bidFileUrl(token, file.id)}><FileText size={13}/>{file.name} · {bytes(file.size)}</a>)}</article>)}</div></Panel>}
     </>)}
 
@@ -200,6 +201,30 @@ export function BidPortal() {
 
     {declining && <DeclineDialog onClose={() => setDeclining(false)} onDecline={async reason => { await act({ action: "decline", author: person.name, reason }); setDeclining(false); setTab("Invitation"); setNotice("The estimator has been told you aren't bidding. Thank you for letting them know."); }}/>}
   </Shell>;
+}
+
+/**
+ * The project's certification programs, each with the share of the company's work that counts toward it (Marcel's
+ * feedback log, 7 Nov: subs are asked "for relevant certifications" and "their % of CBE"). Saved with the draft and sent
+ * with the bid; the estimator's Compliance screen counts it.
+ */
+function CertificationsPanel({ programs, submission, run }: { programs: string[]; submission: Submission; run: (action: (current: Submission[]) => Submission[]) => SubmissionIssue[] }) {
+  const declared = submission.draft.certifications ?? [];
+  const [text, setText] = useState<Record<string, string>>(() => Object.fromEntries(programs.map(p => [p, String(declared.find(c => c.program.toLowerCase() === p.toLowerCase())?.percent ?? "")])));
+  function change(program: string, value: string) {
+    const clean = value.replace(/[^\d.]/g, "").slice(0, 6);
+    setText(current => ({ ...current, [program]: clean }));
+    const percent = clean === "" ? null : Number(clean);
+    if (percent !== null && !(percent >= 0 && percent <= 100)) return;
+    const next = [...declared.filter(c => c.program.toLowerCase() !== program.toLowerCase()), ...(percent === null ? [] : [{ program, percent }])];
+    run(current => updateDraft(current, submission.id, { certifications: next }));
+  }
+  return <Panel title="Your certifications" subtitle="This project counts work by certified firms. For each program, enter the share of your work that counts: 100 if your company is certified, less for a joint venture. Leave it blank if you're not.">
+    <div className="ui-form-grid bid-portal-certs">{programs.map(program => {
+      const bad = text[program] !== "" && !(Number(text[program]) >= 0 && Number(text[program]) <= 100);
+      return <label className="ui-field" key={program}>{program} · % of your work<input inputMode="decimal" value={text[program] ?? ""} placeholder="e.g. 100" aria-invalid={bad} onChange={event => change(program, event.target.value)}/>{bad && <small className="sub-field-error">Enter a percent from 0 to 100.</small>}</label>;
+    })}</div>
+  </Panel>;
 }
 
 function Shell({ company, children }: { company?: string; children: React.ReactNode }) {

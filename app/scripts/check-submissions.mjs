@@ -85,6 +85,13 @@ assert.deepEqual([subs[0].status, rev1.number, rev1.formVersion, rev1.baseBid, r
 assert(rev1.responses !== subs[0].draft.responses && rev1.attachments !== subs[0].draft.attachments);
 assert.equal(hasUnsubmittedChanges(subs[0]), false);
 rule(() => submitBid(subs, proc, sub.id, who, later), "revision", /Nothing has changed since revision 1/);
+
+// Certifications declared on the bid (Marcel's feedback log, 7 Nov) are cleaned, and a change to them is a change to the bid.
+const declaring = updateDraft(subs, sub.id, { certifications: [{ program: " CBE ", percent: 100 }, { program: "cbe", percent: 20 }, { program: "SBE", percent: 140 }, { program: "", percent: 5 }, { program: "MBE", percent: "x" }] }, later);
+assert.deepEqual(declaring[0].draft.certifications, [{ program: "CBE", percent: 100 }], "Trimmed; a repeat, an empty name, a percent over 100 and a non-number are dropped");
+assert.equal(hasUnsubmittedChanges(declaring[0]), true, "Declaring a certification is something to send");
+assert.deepEqual(latestRevision(submitBid(declaring, proc, sub.id, who, later)[0]).certifications, [{ program: "CBE", percent: 100 }], "It goes with the bid as its own version");
+assert.equal(hasUnsubmittedChanges(subs[0]), false, "A bid from before certifications reads as unchanged");
 assert.deepEqual(bidExceptions(rev1).map(r => [r.scopeItemId, r.answer]), [[c, "N"], [d, "P"]], "The estimator sees every answer other than Y");
 
 // A price change is revision 2, "revised", with the difference reported.
@@ -128,7 +135,7 @@ const clean = sanitizeBidContent({
 });
 assert.deepEqual({ ...clean, alternates: clean.alternates.map(({ id, ...rest }) => rest), attachments: clean.attachments.map(({ id, ...rest }) => rest) }, {
   baseBid: null, exclusions: ["a"], clarifications: [], responses: [{ scopeItemId: "x", answer: null, note: "" }],
-  alternates: [{ kind: "add", description: "d", amount: 0 }], attachments: [{ name: "ok.pdf", size: 3, type: "", addedAt: "", storageKey: null }],
+  alternates: [{ kind: "add", description: "d", amount: 0 }], attachments: [{ name: "ok.pdf", size: 3, type: "", addedAt: "", storageKey: null }], certifications: [],
 });
 assert.equal({}.polluted, undefined);
 assert.deepEqual(sanitizeBidContent(null).responses, []);
