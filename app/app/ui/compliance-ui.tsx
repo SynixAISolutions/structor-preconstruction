@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { Download } from "lucide-react";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, Stats, usd, type ViewProps } from "./shared";
-import { exportRows } from "../../lib/format";
+import { exportRows, possessive } from "../../lib/format";
 import { budgetTotals } from "../../lib/budget";
 import { useBudget } from "../../lib/use-budget";
 import { useAward } from "../../lib/use-award";
@@ -81,7 +81,7 @@ export function ComplianceView({ project, navigate, notify, projectName }: ViewP
           {project.kickoff?.wageScale === true && <td><select aria-label={`Wage scale, ${row.company}`} value={row.wageScale ?? ""} onChange={e => setWage(row, (e.target.value || null) as WageScaleStatus | null)}><option value="">Not confirmed</option><option value="compliant">Compliant</option><option value="not-compliant">Not compliant</option></select><button type="button" className="cm-text-button compliance-note" onClick={() => setWageNote(row)}>{row.note ? "Edit note" : "Add note"}</button>{row.note && <small>{row.note}</small>}</td>}
           {row.programs.map(p => <td key={p.program} className="num">
             {p.percent === null ? <Badge tone="neutral">Not recorded</Badge> : <><strong>{percentText(p.percent)}</strong><small>{usd(p.counted ?? 0)} counts{p.source === "bid" ? " · declared on the bid" : ""}</small></>}
-            {p.source === "bid" && row.companyId && <button type="button" className="cm-text-button" onClick={() => run(() => setDirectory(setCompanyCertification(directory, row.companyId!, p.program, p.percent)), `${row.company}'s ${p.program} share is confirmed in the directory.`)}>Confirm</button>}
+            {p.source === "bid" && row.companyId && <button type="button" className="cm-text-button" onClick={() => run(() => setDirectory(setCompanyCertification(directory, row.companyId!, p.program, p.percent)), `${possessive(row.company)} ${p.program} share is confirmed in the directory.`)}>Confirm</button>}
             <button type="button" className="cm-text-button" disabled={!row.companyId} onClick={() => { setError(""); setEditing({ row, program: p.program }); }}>Set %</button>
           </td>)}
         </tr>)}</tbody>

@@ -14,7 +14,7 @@ export type Screen =
   | "contracts" | "contract-compare" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
   | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
   | "architect" | "ratings" | "prequalification" | "drawing-flip" | "buyout" | "model-mep" | "model-structural" | "model-exterior"
-  | "rfp-requirements" | "compliance";
+  | "rfp-requirements" | "compliance" | "assumptions";
 
 export type ViewProps = { navigate: (screen: Screen) => void; notify: (message: string) => void; projectName: string };
 
@@ -75,6 +75,8 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "budget", label: "Budget summary", icon: "Wallet", section: BUDGET },
     { id: "allowances", label: "Allowances", icon: "ClipboardList", section: BUDGET },
     { id: "value-engineering", label: "Value engineering", icon: "Wallet", section: BUDGET, keywords: ["VE", "savings", "target reduction", "cost reduction"] },
+    // Marcel's features list, item 35: "Assumptions and Clarifications or Basis of Estimate under preconstruction budget".
+    { id: "assumptions", label: "Assumptions & clarifications", icon: "ListChecks", section: BUDGET, keywords: ["basis of estimate", "qualifications", "clarifications", "assumptions", "exclusions", "proposal clarifications"] },
     { id: "model", label: "Interior finishes", icon: "Box", section: MODEL, keywords: ["3d model studio", "3d model", "interiors", "finishes", "doors", "walkthrough"] },
     { id: "model-mep", label: "MEP coordination", icon: "Box", section: MODEL, keywords: ["3d mep", "mechanical", "electrical", "plumbing", "fire protection", "bim", "clash"] },
     { id: "model-structural", label: "Structural model", icon: "Box", section: MODEL, keywords: ["3d structure", "concrete", "steel", "framing", "columns"] },

@@ -32,6 +32,9 @@ export function exportRows(name: string, rows: (string | number)[][]) {
 }
 export const dateLabel = (value: string) => localNoon(value)?.toLocaleDateString("en-US", { month: "short", day: "numeric" }) ?? "Not set";
 
+/** A name's possessive: "District Drywall's", but "Capitol Wall Systems'". */
+export const possessive = (name: string): string => /s$/i.test(name.trim()) ? `${name.trim()}'` : `${name.trim()}'s`;
+
 /**
  * A whole number as it's typed, with commas between thousands: "1250000" → "1,250,000" (Marcel's feedback log, 7 Nov:
  * "add automatic commas when number in millions, same thing for square footage"). Anything but digits is dropped, and

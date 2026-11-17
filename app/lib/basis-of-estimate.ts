@@ -17,7 +17,10 @@ const ITEM_NAMES: Record<string, string> = { geotech: "Geotechnical report", sur
 const itemName = (target: string) => { const key = target.split(":").pop() ?? target; return ITEM_NAMES[key] ?? key.replace(/[-_]/g, " ").replace(/^./, c => c.toUpperCase()); };
 const day = (iso: string) => iso.slice(0, 10);
 
-export function basisOfEstimate(input: { project: Project; documents: StoredDocument[]; budget: BudgetState; setup: SetupState; notCarried?: NotCarried[] }): { sections: BasisSection[]; markdown: string } {
+/** One trade's list from Assumptions & clarifications (lib/assumptions' TradeAssumptions has these). */
+export type TradeNotes = { trade: string; code: string; assumptions: { text: string }[]; clarifications: { text: string }[] };
+
+export function basisOfEstimate(input: { project: Project; documents: StoredDocument[]; budget: BudgetState; setup: SetupState; notCarried?: NotCarried[]; trades?: TradeNotes[] }): { sections: BasisSection[]; markdown: string } {
   const { project, budget } = input;
   const latest = latestDocuments(input.documents);
   const counted = budget.lines.filter(l => !l.byOwner);
@@ -43,6 +46,11 @@ export function basisOfEstimate(input: { project: Project; documents: StoredDocu
     ...input.setup.decisions.filter(d => d.kind === "waiting").map(d => `${itemName(d.target)}: waiting on ${d.responsible || "others"}${d.followUp ? `, follow-up ${d.followUp}` : ""}.`),
     ...budget.allowances.filter(a => a.status === "review").map(a => `Allowance to confirm: ${a.name}, ${usd(a.amount)}.`),
   ];
+  // Each trade's own assumptions and clarifications (Marcel's features list, item 35), after the project-wide ones.
+  const byTrade = (input.trades ?? []).flatMap(t => [
+    ...t.assumptions.map(a => `${t.trade}${t.code ? ` (${t.code})` : ""}, assumption: ${a.text}`),
+    ...t.clarifications.map(c => `${t.trade}${t.code ? ` (${t.code})` : ""}, clarification: ${c.text}`),
+  ]);
   const sections = [
     { heading: "Basis", lines: basis },
     { heading: "Allowances included", lines: allowances },
@@ -50,6 +58,7 @@ export function basisOfEstimate(input: { project: Project; documents: StoredDocu
     { heading: "Excluded or carried by the owner", lines: excluded },
     { heading: "Assumptions", lines: assumptions },
     { heading: "Clarifications", lines: clarifications },
+    { heading: "Assumptions and clarifications by trade", lines: byTrade },
     { heading: "Open items", lines: open },
   ].filter(s => s.lines.length);
   const markdown = [`# Basis of estimate: ${project.name}`, ...sections.map(s => `## ${s.heading}\n\n${s.lines.map(l => `- ${l}`).join("\n")}`)].join("\n\n");

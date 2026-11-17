@@ -25,6 +25,25 @@ export const pageGuides = [
     related: ["leveling", "contracts", "turnover"],
   },
   {
+    id: "assumptions",
+    group: "Preconstruction",
+    title: "Assumptions & clarifications",
+    purpose: "Keep each trade's assumptions and clarifications in one place, written by its division leader and taken from the subcontractors' proposals, and gather them into one document to send with the estimate.",
+    steps: [
+      "Every trade package has its own list, in CSI order. Filter by division leader to see only your trades.",
+      "Choose Assumption or Clarification on a trade to add one in your own words. Edit or remove it with the icons beside it.",
+      "Show what the proposals clarify and exclude lists each subcontractor's latest submitted proposal for that trade: its clarifications, and its exclusions written as \"Excludes: ...\". Choose Add for one line, or Add all for a company's lines. They are copied word for word and say which proposal they came from.",
+      "View document shows every trade's list as one document. Copy it, print it, or download it as text. The Basis of estimate includes it too.",
+    ],
+    terms: [
+      { name: "Assumption", meaning: "Something the estimate takes as given, for example normal working hours, or that the existing slab is sound." },
+      { name: "Clarification", meaning: "A note on what the price covers or leaves out, for example that patching is limited to areas affected by new work." },
+    ],
+    example: "District Drywall's proposal excludes permits and clarifies that it carries one mobilization. Choose Add all: both join the Drywall list as clarifications, marked as from District Drywall's proposal (V2). Add an assumption of your own that work is during normal hours, then View document.",
+    reality: "Lists are saved for the project and shared with your team. Proposal lines come only from bids submitted through the portal; the AI doesn't read proposal PDFs here.",
+    related: ["budget", "leveling", "buyout"],
+  },
+  {
     id: "compliance",
     group: "Preconstruction",
     title: "Compliance",

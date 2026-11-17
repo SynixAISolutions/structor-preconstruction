@@ -1,0 +1,33 @@
+/* Assumptions & clarifications (17 Nov, Marcel's features list item 35). */
+.assumption-trades { display: grid; gap: 14px; padding: 4px 0 6px; }
+.assumption-trade { border: 1px solid #e3e8e3; border-radius: 10px; padding: 14px 16px; background: #fff; }
+.assumption-trade > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.assumption-trade h3 { margin: 0; font-size: 13px; color: #2f474f; }
+.assumption-trade > header small { display: block; margin-top: 2px; color: #7a8881; font-size: 10px; }
+.assumption-trade-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.assumption-list h4 { margin: 12px 0 6px; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: #7a8881; }
+.assumption-list ul, .assumption-proposal ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.assumption-list li { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 8px 10px; border-radius: 7px; background: #f7f9f6; font-size: 12px; color: #344d56; }
+.assumption-list li small { display: block; margin-top: 3px; color: #3f8f5b; font-size: 10px; }
+.assumption-item-actions { display: flex; gap: 2px; flex: none; }
+.assumption-item-actions .ui-icon-btn { width: 26px; height: 26px; }
+.assumption-empty { margin: 10px 0 0; color: #98a3a5; font-size: 11px; }
+.assumption-proposals { margin-top: 12px; padding-top: 10px; border-top: 1px dashed #dfe6e0; }
+.assumption-proposal { margin-top: 10px; }
+.assumption-proposal > header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.assumption-proposal > header strong { font-size: 12px; color: #344d56; }
+.assumption-proposal > header small { color: #7a8881; font-size: 10px; }
+.assumption-proposal > header .ui-btn, .assumption-proposal > header button:last-child { margin-left: auto; }
+.assumption-proposal li { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; font-size: 12px; color: #4c5f66; }
+.assumption-proposal li > span { display: flex; gap: 8px; align-items: baseline; }
+.assumption-taken { color: #3f8f5b; font-size: 10px; font-weight: 600; white-space: nowrap; }
+.assumption-document { display: grid; gap: 16px; max-height: 60vh; overflow: auto; padding: 4px 2px 12px; color: #2f474f; }
+.assumption-document > header p { margin: 0; font-size: 10px; letter-spacing: .08em; color: #7a8881; }
+.assumption-document > header h2 { margin: 4px 0 2px; font-size: 18px; }
+.assumption-document > header small { color: #7a8881; font-size: 11px; }
+.assumption-document h3 { margin: 0 0 6px; font-size: 13px; border-bottom: 1px solid #e3e8e3; padding-bottom: 4px; }
+.assumption-document h4 { margin: 8px 0 4px; font-size: 11px; color: #5f726c; }
+.assumption-document ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 12px; }
+.assumption-document li small { color: #7a8881; }
+@media (max-width: 700px) { .assumption-trade > header { flex-direction: column; } .assumption-proposal li { flex-direction: column; gap: 4px; } }
+@media print { .assumption-document { max-height: none; overflow: visible; } }
