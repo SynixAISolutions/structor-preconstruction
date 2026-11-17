@@ -58,7 +58,7 @@ export default function StructorApp(){
  const [newProjectBusy,setNewProjectBusy]=useState(false);
  const props={navigate,notify,projectName:project.name};
  function inspectModel(target:ModelInspection){navigate("model");setModelInspection(target);}
- function createProject(p:Project){setProjects(v=>[...v,p]);selectProject(p.id);setNewProject(false);navigate("turnover");notify("Project created. Start with your drawings or project manual.");}
+ function createProject(p:Project,uploading=0){setProjects(v=>[...v,p]);selectProject(p.id);setNewProject(false);navigate("turnover");notify(uploading?`Project created. ${uploading===1?"Your file is":`${uploading} files are`} uploading in the background; keep working and we'll tell you when it's done.`:"Project created. Start with your drawings or project manual.");}
  return <div className={`product-app ${reduced?"motion-off":""}`}>
   {menuOpen&&<button className="mobile-scrim" aria-label="Close navigation" onClick={()=>setMenuOpen(false)}/>}
   <aside className={`product-sidebar ${menuOpen?"is-open":""}`}>
@@ -92,7 +92,7 @@ export default function StructorApp(){
   </div>
   {toast&&<div className="product-toast" role="status"><CheckCheck size={18}/><span>{toast}</span><button onClick={()=>setToast("")} aria-label="Dismiss notification"><X size={16}/></button></div>}
    {searchOpen&&<Modal title="Find your next step" subtitle="Jump to any part of your workspace." onClose={()=>setSearchOpen(false)}><SearchBox value={search} onChange={setSearch} placeholder="Search scopes, budget, drawings…"/><div className="command-list">{searchScreens(search).map(s=><button key={s.id} onClick={()=>navigate(s.id)}><NavIcon id={s.id} name={s.icon} size={19}/>{s.label}<ArrowRight size={15}/></button>)}</div></Modal>}
-  <div className="work-status"><UploadBanner onOpenFiles={() => navigate("documents")}/><AiRunCard projectId={activeId}/></div>
+  <div className="work-status"><UploadBanner onOpenFiles={id => { if (id && id !== activeId) selectProject(id); navigate("documents"); }}/><AiRunCard projectId={activeId}/></div>
   <UserManual open={helpOpen} onOpen={()=>setHelpOpen(true)} onClose={()=>setHelpOpen(false)} currentScreen={screen} onNavigate={id=>{const next=resolveScreen(id);if(next&&next!==screen)navigate(next);}}/>
   <PageVoiceFeedback page={{screen,projectId:projectOpen?project.id:null,projectName:projectOpen?project.name:null}} notify={notify} onOpenPage={message=>{if(message.projectId){if(!projects.some(p=>p.id===message.projectId)){notify(`The message is for ${message.projectName}. That project is not saved in this browser.`);return false;}selectProject(message.projectId);}navigate(message.screen);return true;}}/>
    {newProject&&<Modal title="A new project starts here" subtitle="Set up the workspace, then add your RFP and project documents." wide onClose={()=>{if(!newProjectBusy)setNewProject(false);}}><ProjectForm onBusyChange={setNewProjectBusy} onCancel={()=>setNewProject(false)} onSave={createProject}/></Modal>}

@@ -25,3 +25,9 @@
 @media (max-width: 1200px) { .work-status { left: calc(216px + 20px); width: min(340px, calc(100vw - 216px - 40px)); } }
 @media (max-width: 950px) { .work-status { left: calc(190px + 16px); width: min(320px, calc(100vw - 190px - 32px)); } }
 @media (max-width: 700px) { .work-status { left: 12px; right: 12px; width: auto; bottom: calc(max(22px, env(safe-area-inset-bottom)) + 120px); } }
+/* A finished upload's notice (17 Nov): green when everything was stored, amber when a file failed; it stays until dismissed. */
+.upload-notice { position: relative; padding-right: 34px; }
+.upload-notice .ai-run-icon { background: #3f8f5b; animation: none; }
+.upload-notice.failed .ai-run-icon { background: #c98a1b; }
+.upload-notice-close { position: absolute; top: 8px; right: 8px; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: none; color: #c4d4cf; cursor: pointer; }
+.upload-notice-close:hover, .upload-notice-close:focus-visible { background: #2e4b52; color: #eff7ef; }

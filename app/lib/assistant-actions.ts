@@ -52,7 +52,7 @@ function tradePackage(projectId: string, trade?: string, strict = true): TradePa
 }
 
 const SEVERITIES: Severity[] = ["high", "medium", "low"];
-const STAGE_WORDS: Record<string, BudgetVersionStage> = { concept: "concept", schematic: "schematic", sd: "schematic", "schematic design": "schematic", dd: "dd", "design development": "dd", cd: "cd", "construction documents": "cd" };
+const STAGE_WORDS: Record<string, BudgetVersionStage> = { concept: "concept", schematic: "schematic", sd: "schematic", "schematic design": "schematic", dd: "dd", "design development": "dd", cd: "cd", "construction documents": "cd", gmp: "gmp", "guaranteed maximum price": "gmp", ifc: "ifc", "issued for construction": "ifc" };
 
 const CHANGES: { [K in ProposalToolName]: Change<any> } = {
   propose_ve_idea: {

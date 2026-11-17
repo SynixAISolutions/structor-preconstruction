@@ -10,7 +10,7 @@ export const RFP_FIELDS = {
   squareFeet: "Total building area (SF)", renovationSquareFeet: "Renovation area (SF)", additionSquareFeet: "Addition / new area (SF)",
   workType: "Work type: new, renovation, addition or both", due: "Bid / proposal due date", rfi: "Last day for questions (RFIs)",
   start: "Construction start", finish: "Construction completion", taxStatus: "Tax status: taxable or non-taxable",
-  estimateStage: "Design stage of the documents: concept, schematic, dd or cd", certifications: "Participation programs, e.g. CBE, MBE, First Source",
+  estimateStage: "Design stage of the documents: concept, schematic, dd, cd, gmp or ifc", certifications: "Participation programs, e.g. CBE, MBE, First Source",
 } as const;
 export type RfpField = keyof typeof RFP_FIELDS;
 export type RfpFact = { field: RfpField; value: string | number | string[]; page: number; quote: string };
@@ -38,7 +38,12 @@ export function normalizeFact(field: RfpField, value: unknown): RfpFact["value"]
   if (NUMBER_FIELDS.has(field)) { const n = Math.round(Number(text.replace(/[$,\s]|sf|sq\.?\s*ft\.?/gi, ""))); return Number.isFinite(n) && n > 0 && n < 1e10 ? n : null; }
   if (field === "workType") { const w = text.toLowerCase(); return ["new", "renovation", "addition", "both"].find(v => w === v || (v === "new" && /new construction/.test(w))) ?? null; }
   if (field === "taxStatus") { const t = text.toLowerCase(); return /non|exempt/.test(t) ? "non-taxable" : /taxable/.test(t) ? "taxable" : null; }
-  if (field === "estimateStage") { const s = text.toLowerCase(); return ESTIMATE_STAGES.find(e => s === e.value || s.includes(e.label.toLowerCase()))?.value ?? (/construction doc/.test(s) ? "cd" : null); }
+  if (field === "estimateStage") {
+    const s = text.toLowerCase();
+    // GMP and IFC are written many ways: "GMP", "guaranteed maximum price", "issued for construction", "IFC set".
+    const named = /\bifc\b|issued? for construction/.test(s) ? "ifc" : /\bgmp\b|guaranteed maximum/.test(s) ? "gmp" : /construction doc|\bcds?\b/.test(s) ? "cd" : null;
+    return ESTIMATE_STAGES.find(e => s === e.value || s.includes(e.label.toLowerCase()))?.value ?? named;
+  }
   if (field === "type") return PROJECT_TYPES.find(t => t.toLowerCase() === text.toLowerCase()) ?? (text ? text.slice(0, 80) : null);
   if (field === "certifications") {
     const list = (Array.isArray(value) ? value : text.split(/[,;/]/)).map(v => String(v).trim()).filter(Boolean);

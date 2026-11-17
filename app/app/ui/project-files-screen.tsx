@@ -15,6 +15,7 @@ import { ContentViewer, type ContentLocation } from "./content-viewer";
 import { CONTENT_ACTOR, ContentLinks, useContentRecords, type SaveContent } from "./project-content-links";
 import { DrawingLogView, UploadCheck, VersionPills } from "./drawing-log";
 import { BidDocumentsPanel, type BidUpload } from "./bid-documents";
+import { addUploadNotice, clearUploadCheckRequest, useUploadCheckRequest } from "../../lib/upload-notices";
 import "./project-files.css";
 import "./project-content.css";
 
@@ -54,6 +55,9 @@ export function ProjectFilesScreen({ projectName, notify, navigate }: ViewProps)
   const [naming, setNaming] = useState<{ kind: "new-folder"; parent: string } | { kind: "rename"; item: Item } | null>(null);
   const [moving, setMoving] = useState<Item | null>(null), [deleting, setDeleting] = useState<Item | null>(null);
   const picker = useRef<HTMLInputElement>(null), lock = useRef(false);
+  // "Review sheet numbers" on a finished upload's notice opens the upload check here.
+  const checkRequested = useUploadCheckRequest(projectId);
+  useEffect(() => { if (checkRequested) { setCheckIds(ids => [...new Set([...ids, ...checkRequested])]); clearUploadCheckRequest(); } }, [checkRequested]);
 
   // The folder being shown may be deleted by someone else, or this browser may have opened another project.
   useEffect(() => { if (folder !== ROOT && contentReady && !findFolder(content, folder)) setFolder(ROOT); }, [content, contentReady, folder]);
@@ -108,48 +112,53 @@ export function ProjectFilesScreen({ projectName, notify, navigate }: ViewProps)
     if ((upload?.revisionOf || upload?.sheet) && files.length > 1) { notify("Choose one PDF for a new revision."); return; }
     setPending(files.map(file => ({ file, category: upload?.sheet ? "Drawings" : upload?.revisionOf?.category ?? uploadCategory })));
   }
+  /**
+   * Stores the chosen files. Once they're known to be PDFs the window closes and the upload carries on in the background
+   * (Marcel's feedback log, 7 Nov: "I would have this work in the background and tell us when it is complete"): the
+   * banner shows its progress, and a notice says when it's done, offering the sheet-number check instead of opening it.
+   */
   async function startUpload() {
     if (uploadLock.current) return;
+    const notPdf = pending.flatMap((item, i) => !item.done && !/\.pdf$/i.test(item.file.name) ? [i] : []);
+    if (notPdf.length) { setPending(prev => prev.map((p, n) => notPdf.includes(n) ? { ...p, error: "Choose a PDF document." } : p)); return; }
     uploadLock.current = true; setBusy(true);
-    let stored = 0;
-    const checked: string[] = [], remaining: Pending[] = [], moves: ContentOp[] = [];
-    const target = upload?.folder;
-    for (const [i, item] of pending.entries()) {
-      if (item.done) continue;
-      if (!/\.pdf$/i.test(item.file.name)) {
-        setPending(prev => prev.map((p, n) => n === i ? { ...p, error: "Choose a PDF document." } : p));
-        remaining.push(item);
-        continue;
-      }
+    const job = upload, items = pending.filter(item => !item.done);
+    setUpload(null);
+    notify("Uploading in the background. You can keep working; we'll tell you when it's done.");
+    const storedNames: string[] = [], failed: { name: string; error: string }[] = [];
+    const checked: string[] = [], moves: ContentOp[] = [];
+    const target = job?.folder;
+    for (const item of items) {
+      const i = pending.indexOf(item);
       setPending(prev => prev.map((p, n) => n === i ? { ...p, error: undefined } : p));
       let doc = item.storedDoc;
       try {
-        if (upload?.sheet && !doc) {
+        if (job?.sheet && !doc) {
           const { PDFDocument } = await import("pdf-lib");
           const pdf = await PDFDocument.load(await item.file.arrayBuffer());
           if (pdf.getPageCount() !== 1) throw new Error("Choose a one-page PDF for a sheet revision. Upload a drawing set with Upload files.");
         }
-        doc ??= await uploadProjectPdf({ projectId, file: item.file, category: item.category, revisionOf: upload?.revisionOf, onProgress: progress => setPending(prev => prev.map((p, n) => n === i ? { ...p, progress } : p)) });
+        doc ??= await uploadProjectPdf({ projectId, file: item.file, category: item.category, revisionOf: job?.revisionOf, onProgress: progress => setPending(prev => prev.map((p, n) => n === i ? { ...p, progress } : p)) });
         if (doc.kind === "drawings") {
-          if (upload?.sheet) doc = withSheetNumbers(doc, [{ page: 1, sheet: upload.sheet.sheet, title: upload.sheet.title }]);
+          if (job?.sheet) doc = withSheetNumbers(doc, [{ page: 1, sheet: job.sheet.sheet, title: job.sheet.title }]);
           await updateProjectDocument(doc);
           checked.push(doc.id);
         }
         // A file uploaded into a folder its category wouldn't choose stays where it was dropped; at the top, its type picks the folder.
-        if (target && target !== ROOT && !upload?.revisionOf && defaultFolder(item.category) !== target) moves.push({ op: "file-move", series: doc.series, folder: target });
-        stored++;
+        if (target && target !== ROOT && !job?.revisionOf && defaultFolder(item.category) !== target) moves.push({ op: "file-move", series: doc.series, folder: target });
+        storedNames.push(item.file.name);
         setPending(prev => prev.map((p, n) => n === i ? { ...p, done: true } : p));
       } catch (error) {
         if (doc?.kind === "drawings") checked.push(doc.id);
-        remaining.push({ ...item, storedDoc: doc });
-        setPending(prev => prev.map((p, n) => n === i ? { ...p, storedDoc: doc, error: `${doc ? "File stored. Retry to save sheet details: " : ""}${error instanceof Error ? error.message : "The upload failed."}` } : p));
+        const message = `${doc ? "the file is stored, but its sheet details weren't saved: " : ""}${error instanceof Error ? error.message : "The upload failed."}`;
+        failed.push({ name: item.file.name, error: message });
+        setPending(prev => prev.map((p, n) => n === i ? { ...p, storedDoc: doc, error: message } : p));
       }
     }
-    if (moves.length) await save(moves);
+    if (moves.length) await save(moves).catch(() => null);
     uploadLock.current = false; setBusy(false);
-    if (checked.length) setCheckIds(ids => [...new Set([...ids, ...checked])]);
-    if (stored) notify(upload?.revisionOf ? `Revision ${revisionLabel({ revision: upload.revisionOf.revision + 1 })} of ${upload.revisionOf.name} stored.` : `${plural(stored, "document")} stored in ${target ? folderName(content, target) : `${projectName}'s files`}.`);
-    if (!remaining.length) { setPending([]); setUpload(null); }
+    addUploadNotice({ projectId, stored: storedNames, failed, checkIds: checked });
+    if (!failed.length) setPending([]);
   }
   const beginRevision = (doc: StoredDocument) => { setPending([]); setUpload({ revisionOf: revisionsOf(documents, doc.series).at(-1) }); };
   function dropRevision(doc: StoredDocument, files: File[]) {
@@ -322,7 +331,7 @@ export function ProjectFilesScreen({ projectName, notify, navigate }: ViewProps)
         {p.progress && !p.done && <progress value={p.progress.done} max={Math.max(1, p.progress.total)}/>}
         {p.error && <span className="pf-error" role="alert">{p.error}</span>}
       </div>)}</div>}
-      <p className="intel-muted intel-small">Large drawing sets take a few minutes: the file is stored, then every page is read. Keep this page open until it finishes.</p>
+      <p className="intel-muted intel-small">Large drawing sets take a few minutes: the file is stored, then every page is read. The upload carries on in the background, so you can keep working and we'll tell you when it's done. Keep this browser tab open.</p>
       <div className="intel-dialog-actions"><Button onClick={() => { if (busy) notify("The upload continues in the background. Its progress shows at the bottom of the page."); setUpload(null); }}>{busy ? "Continue in background" : "Cancel"}</Button><Button variant="primary" disabled={busy || !pending.some(p => !p.done)} onClick={() => void startUpload()}>{busy ? "Working…" : `Store ${pending.filter(p => !p.done).length || ""} file${pending.length === 1 ? "" : "s"}`}</Button></div>
     </Modal>}
 

@@ -31,3 +31,20 @@ export function exportRows(name: string, rows: (string | number)[][]) {
   downloadText(name, csv, "text/csv");
 }
 export const dateLabel = (value: string) => localNoon(value)?.toLocaleDateString("en-US", { month: "short", day: "numeric" }) ?? "Not set";
+
+/**
+ * A whole number as it's typed, with commas between thousands: "1250000" → "1,250,000" (Marcel's feedback log, 7 Nov:
+ * "add automatic commas when number in millions, same thing for square footage"). Anything but digits is dropped, and
+ * leading zeros with it; "" stays "".
+ */
+export const groupDigits = (text: string): string => {
+  const digits = text.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+};
+/** Where the caret belongs after grouping: just past the same number of digits it followed before. */
+export const caretAfterDigits = (grouped: string, digitsBefore: number): number => {
+  if (digitsBefore <= 0) return 0;
+  let seen = 0;
+  for (let i = 0; i < grouped.length; i++) if (/\d/.test(grouped[i]) && ++seen === digitsBefore) return i + 1;
+  return grouped.length;
+};

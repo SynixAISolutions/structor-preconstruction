@@ -13,7 +13,19 @@ export type TaxStatus = "taxable" | "non-taxable";
  * RFP; CM at-risk works to a GMP whose stage the owner sets in the RFP; design-build starts from the RFP response.
  */
 export type DeliveryMethod = "hard-bid" | "cmar" | "design-build";
-export const ESTIMATE_STAGES = [{ value: "concept", label: "Concept" }, { value: "schematic", label: "Schematic design" }, { value: "dd", label: "Design development" }] as const;
+/**
+ * The design stage an estimate is priced at, in order. GMP and IFC were added for Marcel (feedback log, 7 Nov: "add
+ * Guaranteed Maximum Price (GMP), and Issue for Construction (IFC) in estimate stage"), with construction documents
+ * between design development and GMP, where the RFP reader (lib/rfp) already placed it.
+ */
+export const ESTIMATE_STAGES = [
+  { value: "concept", label: "Concept" },
+  { value: "schematic", label: "Schematic design" },
+  { value: "dd", label: "Design development" },
+  { value: "cd", label: "Construction documents" },
+  { value: "gmp", label: "Guaranteed maximum price (GMP)" },
+  { value: "ifc", label: "Issued for construction (IFC)" },
+] as const;
 export type EstimateStage = typeof ESTIMATE_STAGES[number]["value"];
 export const estimateStageLabel = (stage: EstimateStage | null) => ESTIMATE_STAGES.find(item => item.value === stage)?.label ?? "Not recorded";
 export type TeamMember = { name: string; role: string };
@@ -21,24 +33,43 @@ export type TeamMember = { name: string; role: string };
 /**
  * The bid captain's kickoff (Marcel's write-up, step 3, and his 22 Oct note: "putting the project information,
  * when the RFI deadlines are due"): the dates and rules the team works to beyond bid due, RFI deadline, start
- * and finish. Dates are yyyy-mm-dd or "" until entered.
+ * and finish. Dates are yyyy-mm-dd or "" until entered. Demolition start moved to the project milestones
+ * (feedback log, 7 Nov).
  */
 export type Kickoff = {
   /** Scopes go to subcontractors (about a week before their numbers are due). */
   scopesDue: string;
-  /** The architect's answers to the pre-bid RFIs are expected. */
+  /** The architect's answers to the pre-bid RFIs are expected; never before the pre-bid RFI deadline. */
   rfiResponses: string;
   /** Drawing flip: each division leader walks the drawings with the bid captain. */
   drawingFlip: string;
-  demolitionStart: string;
-  /** Job walk arrangements, in words ("N/A unless requested by your subcontractors"). */
+  /** The job walk's date (feedback log, 7 Nov: "job walk should be a drop down to choose a date"). */
   jobWalk: string;
+  /** Job walk arrangements in words ("N/A unless requested by your subcontractors"). */
+  jobWalkNote: string;
   /** "Three subs at least required for every trade." */
   minBidders: number;
   wageScale: boolean | null;
+  /** Which wage scale applies when there is one, e.g. "Davis-Bacon wages" (feedback log, 7 Nov). */
+  wageScaleType: string;
 };
-export const EMPTY_KICKOFF: Kickoff = { scopesDue: "", rfiResponses: "", drawingFlip: "", demolitionStart: "", jobWalk: "", minBidders: 3, wageScale: null };
-const KICKOFF_DATES = ["scopesDue", "rfiResponses", "drawingFlip", "demolitionStart"] as const;
+export const EMPTY_KICKOFF: Kickoff = { scopesDue: "", rfiResponses: "", drawingFlip: "", jobWalk: "", jobWalkNote: "", minBidders: 3, wageScale: null, wageScaleType: "" };
+const KICKOFF_DATES = ["scopesDue", "rfiResponses", "drawingFlip", "jobWalk"] as const;
+
+/**
+ * A project milestone: when a major part of the work starts (Marcel's feedback log, 7 Nov: "a section under kick-off,
+ * call it project milestones ... demolition start date, super structure erection, finishes beginning, site work, etc.
+ * - that would help the AI build the schedule"). `start` is yyyy-mm-dd or "" until known, and never before the
+ * project's construction start.
+ */
+export type Milestone = { name: string; start: string };
+/** The milestones every project starts with, in build order (Marcel's list). Any can be removed, and others added. */
+export const STANDARD_MILESTONES = [
+  "Interior gut or selective demolition", "Full building raze", "Erosion and sediment control", "Site demolition", "Earthwork",
+  "Site utilities", "Geothermal well drilling", "Foundations to grade", "Superstructure erection", "MEP work",
+  "Roofing and waterproofing", "Façade finishes", "Interior finishes", "Landscaping and site furnishings", "Interior furnishings",
+] as const;
+export const standardMilestones = (): Milestone[] => STANDARD_MILESTONES.map(name => ({ name, start: "" }));
 
 /** A project record. Every stored or created project has this shape. */
 export type Project = {
@@ -55,8 +86,14 @@ export type Project = {
   deliveryMethod: DeliveryMethod | null;
   /** Local participation / certification programs, e.g. "CBE", "MBE", "First Source". */
   certifications: string[];
+  /**
+   * The share of the project each program must reach, in percent, by program name (feedback log, 7 Nov: "Once user
+   * inputs CBE, it should have a box next to it, ask for %CBE required"). A program without one has no target set.
+   */
+  certificationTargets: Record<string, number>;
   team: TeamMember[];
   kickoff: Kickoff;
+  milestones: Milestone[];
   /** Name of the RFP file chosen at creation. The file itself is not stored yet. */
   rfpFileName: string;
   createdAt: string;
@@ -89,10 +126,12 @@ export const CERTIFICATION_PROGRAMS = ["CBE", "MBE", "WBE", "SBE", "First Source
 export const PROJECT_FORM_FIELDS = {
   name: "name", location: "location", type: "type", value: "value", description: "description",
   squareFeet: "squareFeet", workType: "workType", renovationSquareFeet: "renovationSquareFeet", additionSquareFeet: "additionSquareFeet",
-  taxStatus: "taxStatus", estimateStage: "estimateStage", deliveryMethod: "deliveryMethod", certifications: "certifications", rfp: "rfp", architect: "architect",
+  taxStatus: "taxStatus", estimateStage: "estimateStage", deliveryMethod: "deliveryMethod", certifications: "certifications", certificationPercent: "certificationPercent",
+  rfp: "rfp", drawings: "drawings", specifications: "specifications", architect: "architect",
   due: "due", rfi: "rfi", start: "start", finish: "finish", teamName: "teamName", teamRole: "teamRole",
-  scopesDue: "scopesDue", rfiResponses: "rfiResponses", drawingFlip: "drawingFlip", demolitionStart: "demolitionStart",
-  jobWalk: "jobWalk", minBidders: "minBidders", wageScale: "wageScale",
+  scopesDue: "scopesDue", rfiResponses: "rfiResponses", drawingFlip: "drawingFlip",
+  jobWalk: "jobWalk", jobWalkNote: "jobWalkNote", minBidders: "minBidders", wageScale: "wageScale", wageScaleType: "wageScaleType",
+  milestoneName: "milestoneName", milestoneStart: "milestoneStart", milestones: "milestones",
 } as const;
 
 export type ProjectFormField = keyof typeof PROJECT_FORM_FIELDS;
@@ -100,8 +139,8 @@ export type ProjectFormErrors = Partial<Record<ProjectFormField, string>>;
 
 export const squareFeetLabel = (squareFeet: number): string => squareFeet > 0 ? `${squareFeet.toLocaleString("en-US")} SF` : "Not recorded";
 
-const sample = (p: Omit<Project, "renovationSquareFeet" | "additionSquareFeet" | "workType" | "taxStatus" | "estimateStage" | "deliveryMethod" | "certifications" | "team" | "kickoff" | "rfpFileName" | "createdAt">, extra: Partial<Project> = {}): Project =>
-  ({ ...p, workType: null, renovationSquareFeet: 0, additionSquareFeet: 0, taxStatus: null, estimateStage: null, deliveryMethod: null, certifications: [], team: [], kickoff: EMPTY_KICKOFF, rfpFileName: "", createdAt: "2026-09-01", ...extra });
+const sample = (p: Omit<Project, "renovationSquareFeet" | "additionSquareFeet" | "workType" | "taxStatus" | "estimateStage" | "deliveryMethod" | "certifications" | "certificationTargets" | "team" | "kickoff" | "milestones" | "rfpFileName" | "createdAt">, extra: Partial<Project> = {}): Project =>
+  ({ ...p, workType: null, renovationSquareFeet: 0, additionSquareFeet: 0, taxStatus: null, estimateStage: null, deliveryMethod: null, certifications: [], certificationTargets: {}, team: [], kickoff: EMPTY_KICKOFF, milestones: standardMilestones(), rfpFileName: "", createdAt: "2026-09-01", ...extra });
 
 export const sampleProjectRecords: Project[] = [
   // Jelleff facts from Marcel's shared drive: the DD Budget (26,500 SF gross, DLR Group, DD total
@@ -110,7 +149,7 @@ export const sampleProjectRecords: Project[] = [
   sample({ id: "jelleff", name: "Project 1", location: "Washington, DC", type: "Community & recreation", status: "Preconstruction", value: 33328991, squareFeet: 26500, architect: "Architect of record", description: "Modernization of a recreation center for a public owner: a new building, pool renovation, and sitework, delivered by Contractor as CM at-risk.", due: "2026-02-02", rfi: "2026-01-20", start: "2026-06-01", finish: "" },
     { deliveryMethod: "cmar", certifications: ["First Source"], team: [{ name: "Marcel Khoury", role: "Estimator" }, { name: "Chris Taylor", role: "Project executive" }],
       // From Marcel's Jelleff kickoff email (his precon write-up). Raze start was "between March and April 2026", so no date.
-      kickoff: { ...EMPTY_KICKOFF, scopesDue: "2026-01-26", rfiResponses: "2026-01-27", drawingFlip: "2026-01-20", jobWalk: "N/A unless requested by your subcontractors", wageScale: true } }),
+      kickoff: { ...EMPTY_KICKOFF, scopesDue: "2026-01-26", rfiResponses: "2026-01-27", drawingFlip: "2026-01-20", jobWalkNote: "N/A unless requested by your subcontractors", wageScale: true } }),
   sample({ id: "whittier", name: "Project 2", location: "Washington, DC", type: "Education", status: "Design development", value: 26800000, squareFeet: 68200, architect: "Campus design team", description: "A school modernization, classroom addition, and associated site work.", due: "2026-11-06", rfi: "2026-10-23", start: "2027-03-01", finish: "2028-08-18" }, { deliveryMethod: "cmar" }),
   sample({ id: "riverside", name: "Project 3", location: "Arlington, VA", type: "Mixed-use", status: "Bidding", value: 12300000, squareFeet: 31800, architect: "Project architect", description: "A mixed-use community space with new retail and public gathering areas.", due: "2026-10-16", rfi: "2026-10-02", start: "2027-02-01", finish: "2028-02-25" }, { deliveryMethod: "hard-bid" }),
 ];
@@ -121,26 +160,51 @@ const isDeliveryMethod = (v: unknown): v is DeliveryMethod => DELIVERY_METHODS.s
 const text = (v: unknown) => typeof v === "string" ? v : "";
 const count = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.round(v) : 0;
 
-/** Brings any stored record — including ones saved before the 20 Sep fields — to the current shape. */
 /** A saved kickoff, or the empty one for records saved before kickoffs existed. */
 export function normalizeKickoff(raw: unknown): Kickoff {
   const k = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  const date = (v: unknown) => typeof v === "string" && ISO_DATE.test(v) ? v : "";
+  const date = (v: unknown) => typeof v === "string" && ISO_DATE.test(v.trim()) ? v.trim() : "";
+  const words = (v: unknown, max: number) => typeof v === "string" ? v.trim().slice(0, max) : "";
   const min = Number(k.minBidders);
+  // The job walk was words until 17 Nov; words saved there become the note, a date stays the date.
+  const walkWords = typeof k.jobWalk === "string" && !ISO_DATE.test(k.jobWalk.trim()) ? words(k.jobWalk, 300) : "";
+  const wageScale = typeof k.wageScale === "boolean" ? k.wageScale : null;
   return {
-    scopesDue: date(k.scopesDue), rfiResponses: date(k.rfiResponses), drawingFlip: date(k.drawingFlip), demolitionStart: date(k.demolitionStart),
-    jobWalk: typeof k.jobWalk === "string" ? k.jobWalk.trim().slice(0, 300) : "",
+    scopesDue: date(k.scopesDue), rfiResponses: date(k.rfiResponses), drawingFlip: date(k.drawingFlip),
+    jobWalk: date(k.jobWalk), jobWalkNote: words(k.jobWalkNote, 300) || walkWords,
     minBidders: Number.isInteger(min) && min >= 1 && min <= 10 ? min : EMPTY_KICKOFF.minBidders,
-    wageScale: typeof k.wageScale === "boolean" ? k.wageScale : null,
+    wageScale, wageScaleType: wageScale ? words(k.wageScaleType, 120) : "",
   };
 }
 
+/**
+ * Saved milestones, or the standard list for a record saved before milestones existed (17 Nov). Such a record's kickoff
+ * demolition start, the only milestone it could hold, becomes the demolition milestone's start.
+ */
+export function normalizeMilestones(raw: unknown, kickoff?: unknown): Milestone[] {
+  if (Array.isArray(raw)) return raw
+    .filter((m): m is { name: string; start?: unknown } => !!m && typeof m.name === "string" && !!m.name.trim())
+    .slice(0, 60).map(m => ({ name: m.name.trim().slice(0, 120), start: typeof m.start === "string" && ISO_DATE.test(m.start) ? m.start : "" }));
+  const demolition = kickoff && typeof kickoff === "object" ? (kickoff as Record<string, unknown>).demolitionStart : undefined;
+  const list = standardMilestones();
+  if (typeof demolition === "string" && ISO_DATE.test(demolition)) list[0].start = demolition;
+  return list;
+}
+
+/** Saved certification targets: percents from 0 to 100, by program name, for the project's own programs only. */
+export function normalizeCertificationTargets(raw: unknown, certifications: string[]): Record<string, number> {
+  const t = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return Object.fromEntries(certifications.flatMap(program => { const v = t[program]; return typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 100 ? [[program, v]] : []; }));
+}
+
+/** Brings any stored record — including ones saved before the 20 Sep fields — to the current shape. */
 export function normalizeProject(raw: Record<string, unknown>): Project {
   // Records saved before squareFeet existed held the area as display text in `size`, e.g. "42,500 SF".
   const legacyArea = Number(text(raw.size).replace(/[^\d.]/g, "")) || 0;
   const squareFeet = count(raw.squareFeet) || count(legacyArea);
   const workType = isWorkType(raw.workType) ? raw.workType : null;
   const split = areaSplit(workType, squareFeet, count(raw.renovationSquareFeet), count(raw.additionSquareFeet));
+  const certifications = Array.isArray(raw.certifications) ? raw.certifications.filter((c): c is string => typeof c === "string" && !!c.trim()) : [];
   return {
     id: text(raw.id), name: text(raw.name), location: text(raw.location), type: text(raw.type), status: text(raw.status) || "Preconstruction",
     value: typeof raw.value === "number" && raw.value >= 0 ? raw.value : 0,
@@ -151,10 +215,11 @@ export function normalizeProject(raw: Record<string, unknown>): Project {
     estimateStage: ESTIMATE_STAGES.some(stage => stage.value === raw.estimateStage) ? raw.estimateStage as EstimateStage : null,
     // A sample project saved before delivery methods existed gets the sample's; any other old record stays unrecorded.
     deliveryMethod: isDeliveryMethod(raw.deliveryMethod) ? raw.deliveryMethod : raw.deliveryMethod === undefined ? sampleProjectRecords.find(p => p.id === raw.id)?.deliveryMethod ?? null : null,
-    certifications: Array.isArray(raw.certifications) ? raw.certifications.filter((c): c is string => typeof c === "string" && !!c.trim()) : [],
+    certifications, certificationTargets: normalizeCertificationTargets(raw.certificationTargets, certifications),
     team: Array.isArray(raw.team) ? raw.team.filter((m): m is TeamMember => !!m && typeof m.name === "string" && typeof m.role === "string") : [],
     // A Jelleff record saved before kickoffs existed gets the sample's (Marcel's kickoff email); the sample refresh never touches project records.
     kickoff: raw.kickoff === undefined && raw.id === "jelleff" ? sampleProjectRecords[0].kickoff : normalizeKickoff(raw.kickoff),
+    milestones: normalizeMilestones(raw.milestones, raw.kickoff),
     rfpFileName: text(raw.rfpFileName), createdAt: text(raw.createdAt),
   };
 }
@@ -254,19 +319,51 @@ export function parseProjectForm(form: FormData, existing?: Project): { project?
     if (v && !ISO_DATE.test(v)) errors[key] = "Use a valid date."; else kickoff[key] = v;
   }
   if (!errors.scopesDue && kickoff.scopesDue && dates.due && kickoff.scopesDue > dates.due) errors.scopesDue = "Scopes go to subcontractors before the bid due date.";
-  if (form.has(f.jobWalk)) kickoff.jobWalk = get(f.jobWalk).slice(0, 300);
+  // Feedback log, 7 Nov: "make sure that the user can not input a date that is prior to RFI deadline".
+  if (!errors.rfiResponses && !errors.rfi && kickoff.rfiResponses && dates.rfi && kickoff.rfiResponses < dates.rfi) errors.rfiResponses = `RFI responses can't come before the pre-bid RFI deadline (${dates.rfi}).`;
+  if (!errors.jobWalk && !errors.due && kickoff.jobWalk && dates.due && kickoff.jobWalk > dates.due) errors.jobWalk = "The job walk must be on or before the bid deadline.";
+  if (form.has(f.jobWalkNote)) kickoff.jobWalkNote = get(f.jobWalkNote).slice(0, 300);
   if (form.has(f.minBidders)) {
     const min = get(f.minBidders) === "" ? EMPTY_KICKOFF.minBidders : num(f.minBidders);
     if (!Number.isInteger(min) || min < 1 || min > 10) errors.minBidders = "Enter how many bids each trade needs, from 1 to 10."; else kickoff.minBidders = min;
   }
   if (form.has(f.wageScale)) { const w = get(f.wageScale); kickoff.wageScale = w === "yes" ? true : w === "no" ? false : null; }
+  if (form.has(f.wageScaleType)) kickoff.wageScaleType = get(f.wageScaleType).slice(0, 120);
+  if (!kickoff.wageScale) kickoff.wageScaleType = "";
 
-  const certifications = [...new Set(form.getAll(f.certifications).map(c => String(c).trim()).filter(Boolean))];
+  // Each program row may carry the percent required; the first row for a program wins.
+  const programRows = form.getAll(f.certifications).map(c => String(c).trim());
+  const percents = form.getAll(f.certificationPercent).map(v => String(v).trim().replace(/%$/, "").trim());
+  const certifications: string[] = [], certificationTargets: Record<string, number> = {};
+  programRows.forEach((program, i) => {
+    if (!program || certifications.includes(program)) return;
+    certifications.push(program);
+    const raw = percents[i] ?? "";
+    if (raw === "") return;
+    const percent = Number(raw);
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) errors.certificationPercent ??= `Enter the share ${program} requires as a percent from 0 to 100.`;
+    else certificationTargets[program] = percent;
+  });
+  // A form without percent inputs (an older form) keeps the targets already saved.
+  if (!form.has(f.certificationPercent) && existing) for (const program of certifications) if (existing.certificationTargets?.[program] !== undefined) certificationTargets[program] = existing.certificationTargets[program];
+
+  // Milestones: a form without them (the demo project, an older form) keeps what is saved, or starts the standard list.
+  let milestones = existing?.milestones ?? standardMilestones();
+  if (form.has(f.milestoneName)) {
+    const starts = form.getAll(f.milestoneStart).map(v => String(v).trim());
+    milestones = form.getAll(f.milestoneName).map((n, i) => ({ name: String(n).trim().slice(0, 120), start: starts[i] ?? "" })).filter(m => m.name);
+    const badDate = milestones.find(m => m.start && !ISO_DATE.test(m.start));
+    // Feedback log, 7 Nov: "make sure that these milestones can not start before project start date initially set".
+    const early = !errors.start && dates.start ? milestones.filter(m => m.start && ISO_DATE.test(m.start) && m.start < dates.start) : [];
+    if (badDate) errors.milestones = `Use a valid date for ${badDate.name}.`;
+    else if (early.length) errors.milestones = `${early.map(m => m.name).join(", ")} can't start before the construction start (${dates.start}).`;
+  }
   const names = form.getAll(f.teamName).map(v => String(v).trim());
   const roles = form.getAll(f.teamRole).map(v => String(v).trim());
   const team = names.map((memberName, i) => ({ name: memberName, role: roles[i] ?? "" })).filter(m => m.name);
   const rfp = form.get(f.rfp);
-  const rfpFileName = rfp && typeof rfp === "object" && "name" in rfp ? String(rfp.name) : existing?.rfpFileName ?? "";
+  // An empty file input still submits a nameless file: that keeps the RFP already recorded.
+  const rfpFileName = rfp && typeof rfp === "object" && "name" in rfp && String(rfp.name) ? String(rfp.name) : existing?.rfpFileName ?? "";
 
   if (Object.keys(errors).length) return { errors };
   const split = areaSplit(workType, total, renovation, addition);
@@ -277,7 +374,7 @@ export function parseProjectForm(form: FormData, existing?: Project): { project?
       status: existing?.status ?? "Preconstruction",
       createdAt: existing?.createdAt ?? new Date().toISOString().slice(0, 10),
       name, location, type, value, description: get(f.description), architect: get(f.architect),
-      ...dates, ...split, workType, taxStatus, estimateStage, deliveryMethod, certifications, team, kickoff, rfpFileName,
+      ...dates, ...split, workType, taxStatus, estimateStage, deliveryMethod, certifications, certificationTargets, team, kickoff, milestones, rfpFileName,
     },
   };
 }

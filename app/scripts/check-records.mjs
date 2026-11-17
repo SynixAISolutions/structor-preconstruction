@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { demoProject, loadProjects, normalizeProject, parseProjectForm, sampleProjectRecords, squareFeetLabel } from "../lib/projects.ts";
-import { dateLabel, displayDate } from "../lib/format.ts";
+import { demoProject, loadProjects, normalizeProject, parseProjectForm, sampleProjectRecords, squareFeetLabel, STANDARD_MILESTONES } from "../lib/projects.ts";
+import { caretAfterDigits, dateLabel, displayDate, groupDigits } from "../lib/format.ts";
 import { initialDrawings, initialSpecSections, initialSpecs } from "../lib/data/preconstruction.ts";
 import { CSI_DIVISIONS, csiDivision } from "../lib/csi.ts";
 import { register } from "node:module";
@@ -127,16 +127,63 @@ assert.equal(Object.keys(CSI_DIVISIONS).length, 35, "MasterFormat has 35 divisio
 // The kickoff (Marcel's write-up): extra dates and rules; old records and forms without the fields keep working.
 assert.deepEqual(normalizeProject({ id: "jelleff", name: "Jelleff Recreation Center" }).kickoff, sampleProjectRecords[0].kickoff, "A Jelleff record saved before kickoffs gets Marcel's kickoff");
 assert.equal(normalizeProject({ id: "jelleff", name: "J", kickoff: { minBidders: 2 } }).kickoff.minBidders, 2, "A saved kickoff is kept");
-assert.deepEqual(normalizeProject({ id: "old", name: "Old" }).kickoff, { scopesDue: "", rfiResponses: "", drawingFlip: "", demolitionStart: "", jobWalk: "", minBidders: 3, wageScale: null }, "Records from before kickoffs get the empty one");
-assert.deepEqual(normalizeProject({ id: "k", name: "K", kickoff: { scopesDue: "Jan 26", minBidders: 40, wageScale: "yes", jobWalk: " On request " } }).kickoff, { scopesDue: "", rfiResponses: "", drawingFlip: "", demolitionStart: "", jobWalk: "On request", minBidders: 3, wageScale: null }, "Bad stored values are not trusted");
+assert.deepEqual(normalizeProject({ id: "old", name: "Old" }).kickoff, { scopesDue: "", rfiResponses: "", drawingFlip: "", jobWalk: "", jobWalkNote: "", minBidders: 3, wageScale: null, wageScaleType: "" }, "Records from before kickoffs get the empty one");
+assert.deepEqual(normalizeProject({ id: "k", name: "K", kickoff: { scopesDue: "Jan 26", minBidders: 40, wageScale: "yes", jobWalk: " On request " } }).kickoff, { scopesDue: "", rfiResponses: "", drawingFlip: "", jobWalk: "", jobWalkNote: "On request", minBidders: 3, wageScale: null, wageScaleType: "" }, "Bad stored values are not trusted; the job walk's old words become its note");
+assert.deepEqual(sampleProjectRecords[0].kickoff.jobWalkNote, "N/A unless requested by your subcontractors", "Jelleff's job walk words are its note");
 const jel = sampleProjectRecords[0];
 const keptKickoff = parseProjectForm(form({ ...valid }), jel).project.kickoff;
 assert.deepEqual(keptKickoff, jel.kickoff, "A form without kickoff inputs keeps the saved kickoff");
-const withKickoff = parseProjectForm(form({ ...valid, due: "2026-02-02", scopesDue: "2026-01-26", rfiResponses: "2026-01-27", drawingFlip: "", minBidders: "4", wageScale: "no", jobWalk: "Thursday 10am" }), jel).project.kickoff;
-assert.deepEqual([withKickoff.scopesDue, withKickoff.drawingFlip, withKickoff.minBidders, withKickoff.wageScale, withKickoff.jobWalk], ["2026-01-26", "", 4, false, "Thursday 10am"], "Inputs that are present set the kickoff, even to empty");
+const withKickoff = parseProjectForm(form({ ...valid, due: "2026-02-02", scopesDue: "2026-01-26", rfiResponses: "2026-01-27", drawingFlip: "", minBidders: "4", wageScale: "no", wageScaleType: "Davis-Bacon", jobWalk: "2026-01-22", jobWalkNote: "Thursday 10am at the front gate" }), jel).project.kickoff;
+assert.deepEqual([withKickoff.scopesDue, withKickoff.drawingFlip, withKickoff.minBidders, withKickoff.wageScale, withKickoff.wageScaleType, withKickoff.jobWalk, withKickoff.jobWalkNote], ["2026-01-26", "", 4, false, "", "2026-01-22", "Thursday 10am at the front gate"], "Inputs that are present set the kickoff, even to empty; a wage scale type needs a wage scale");
 assert.equal(parseProjectForm(form({ ...valid, due: "2026-02-02", scopesDue: "2026-02-05" })).errors.scopesDue, "Scopes go to subcontractors before the bid due date.");
 assert.equal(parseProjectForm(form({ ...valid, rfiResponses: "next week" })).errors.rfiResponses, "Use a valid date.");
 assert.match(parseProjectForm(form({ ...valid, minBidders: "0" })).errors.minBidders, /from 1 to 10/);
+
+// Marcel's feedback log, 7 Nov.
+// 1. GMP and IFC are estimate stages (with construction documents before them).
+for (const stage of ["cd", "gmp", "ifc"]) assert.equal(parseProjectForm(form({ ...valid, estimateStage: stage })).project?.estimateStage, stage, `${stage} is an estimate stage`);
+assert.equal(normalizeProject({ id: "g", name: "G", estimateStage: "gmp" }).estimateStage, "gmp");
+// 2. Money and areas typed with commas parse (the form puts them in as you type).
+assert.equal(groupDigits("1250000"), "1,250,000");
+assert.equal(groupDigits("$18,400,000.00x"), "1,840,000,000", "Only digits are kept: a whole number field");
+assert.equal(groupDigits("0042500"), "42,500");
+assert.equal(groupDigits(""), "");
+assert.equal(groupDigits("0"), "0");
+assert.equal(caretAfterDigits("1,250,000", 4), 5, "The caret stays after the fourth digit, past the comma");
+assert.equal(caretAfterDigits("1,250", 0), 0);
+assert.equal(parseProjectForm(form({ ...valid, value: "33,328,991", squareFeet: "26,500" })).project.squareFeet, 26500);
+// 3. RFI responses can't come before the pre-bid RFI deadline.
+assert.match(parseProjectForm(form({ ...valid, rfi: "2026-01-20", rfiResponses: "2026-01-19" })).errors.rfiResponses, /can't come before the pre-bid RFI deadline/);
+assert.equal(parseProjectForm(form({ ...valid, rfi: "2026-01-20", rfiResponses: "2026-01-20" })).errors.rfiResponses, undefined, "On the deadline itself is fine");
+// 5. The job walk is a date, on or before the bid deadline.
+assert.equal(parseProjectForm(form({ ...valid, jobWalk: "Thursday" })).errors.jobWalk, "Use a valid date.");
+assert.match(parseProjectForm(form({ ...valid, due: "2026-02-02", jobWalk: "2026-02-03" })).errors.jobWalk, /on or before the bid deadline/);
+assert.equal(normalizeProject({ id: "w", name: "W", kickoff: { jobWalk: "2026-01-22" } }).kickoff.jobWalk, "2026-01-22", "A saved job walk date stays a date");
+// 6. A wage scale says which one.
+assert.equal(parseProjectForm(form({ ...valid, wageScale: "yes", wageScaleType: " Davis Bacon Wages " })).project.kickoff.wageScaleType, "Davis Bacon Wages");
+assert.equal(normalizeProject({ id: "w", name: "W", kickoff: { wageScale: false, wageScaleType: "Davis-Bacon" } }).kickoff.wageScaleType, "", "No wage scale, no type");
+// 7. Certifications carry the share each requires.
+const certified = parseProjectForm(form({ ...valid, certifications: ["CBE", "First Source", "CBE"], certificationPercent: ["35", "", "50"] }));
+assert.deepEqual([certified.project.certifications, certified.project.certificationTargets], [["CBE", "First Source"], { CBE: 35 }], "A blank percent sets no target; the first row for a program wins");
+assert.match(parseProjectForm(form({ ...valid, certifications: ["CBE"], certificationPercent: ["135"] })).errors.certificationPercent, /CBE requires as a percent from 0 to 100/);
+assert.deepEqual(parseProjectForm(form({ ...valid, certifications: ["CBE"], certificationPercent: ["35%"] })).project.certificationTargets, { CBE: 35 }, "A typed % sign is fine");
+const keptTargets = parseProjectForm(form({ ...valid, certifications: ["CBE"] }), { ...jel, certifications: ["CBE"], certificationTargets: { CBE: 35 } }).project.certificationTargets;
+assert.deepEqual(keptTargets, { CBE: 35 }, "A form without percent inputs keeps the saved targets");
+assert.deepEqual(normalizeProject({ id: "c", name: "C", certifications: ["CBE"], certificationTargets: { CBE: 35, MBE: 10, SBE: "x" } }).certificationTargets, { CBE: 35 }, "Targets are kept only for the project's own programs, as numbers");
+// 4. Project milestones: the standard list to start, demolition start moved in, never before construction start.
+const fresh = parseProjectForm(form({ ...valid })).project;
+assert.equal(fresh.milestones.length, STANDARD_MILESTONES.length, "A new project starts with Marcel's milestone list");
+assert(fresh.milestones.every(m => m.start === ""), "Its dates are left for later");
+assert.equal(STANDARD_MILESTONES[0], "Interior gut or selective demolition");
+assert.deepEqual(normalizeProject({ id: "d", name: "D", kickoff: { demolitionStart: "2027-03-15" } }).milestones[0], { name: "Interior gut or selective demolition", start: "2027-03-15" }, "An old demolition start becomes the demolition milestone");
+const planned = parseProjectForm(form({ ...valid, start: "2027-03-01", milestoneName: ["Earthwork", "  ", "Steel erection"], milestoneStart: ["2027-03-10", "2027-04-01", ""] })).project;
+assert.deepEqual(planned.milestones, [{ name: "Earthwork", start: "2027-03-10" }, { name: "Steel erection", start: "" }], "Unnamed rows are dropped; dates are optional");
+assert.match(parseProjectForm(form({ ...valid, start: "2027-03-01", milestoneName: ["Earthwork", "Site demolition"], milestoneStart: ["2027-02-20", "2027-02-25"] })).errors.milestones, /^Earthwork, Site demolition can't start before the construction start \(2027-03-01\)\.$/);
+assert.equal(parseProjectForm(form({ ...valid, milestoneName: ["Earthwork"], milestoneStart: ["2027-02-20"] })).errors.milestones, undefined, "Without a construction start there's nothing to be early for");
+assert.deepEqual(parseProjectForm(form({ ...valid }), { ...jel, milestones: [{ name: "Raze", start: "2026-05-01" }] }).project.milestones, [{ name: "Raze", start: "2026-05-01" }], "A form without milestone inputs keeps the saved ones");
+// 9. An empty RFP file input keeps the RFP already recorded.
+const emptyFile = new File([], "");
+assert.equal(parseProjectForm(form({ ...valid, rfp: emptyFile }), { ...jel, rfpFileName: "RFP.pdf" }).project.rfpFileName, "RFP.pdf");
 
 console.log(`Records checked: ${sampleProjectRecords.length} sample projects, form validation, area split, legacy upgrade, blank dates, project scope; ${initialDrawings.length} drawings, ${initialSpecSections.length} spec sections.`);
 

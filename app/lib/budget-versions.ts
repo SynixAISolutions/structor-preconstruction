@@ -1,8 +1,9 @@
 import { budgetTotals, validateLineInput, type BudgetState } from "./budget";
 import { ESTIMATE_STAGES, type EstimateStage } from "./projects";
 
-export const BUDGET_VERSION_STAGES = [...ESTIMATE_STAGES, { value: "cd", label: "Construction documents" }] as const;
-export type BudgetVersionStage = EstimateStage | "cd";
+/** A budget version's stage: the estimate stages, construction documents among them since 17 Nov. */
+export const BUDGET_VERSION_STAGES = ESTIMATE_STAGES;
+export type BudgetVersionStage = EstimateStage;
 export type BudgetVersion = { id: string; projectId: string; name: string; stage: BudgetVersionStage; reason: string; by: string; at: string; budget: BudgetState };
 const cents = (v: number) => Math.round(v * 100);
 
