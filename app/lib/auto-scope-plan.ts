@@ -34,7 +34,9 @@ export type AutoRun = {
   stage?: string;
   /** A run after a new revision (Marcel, 24 Oct: "uploading a new drawing revision should trigger a scope update"):
    * only the sheets and specification sections whose text changed since the run named `since` were read. */
-  update?: { since: string; sheets: string[]; sections: string[] };
+  update?: { since: string; sheets: string[]; sections: string[]; /** The sections came from scanned pages read with OCR, not a revision. */ scanned?: boolean };
+  /** Scanned specification pages being read with OCR before the bid packages are set, for the progress card. */
+  ocr?: { done: number; total: number };
   /** The browser tab reading, and when it last said it still was: with shared saving (3 Nov) another person's browser
    * sees the run and leaves it to that tab instead of reading the same files again. */
   tab?: string; browser?: string; beat?: string;
@@ -157,6 +159,12 @@ export const waitsForGoAhead = (fullCost: number | undefined, readAll = false): 
  */
 export const canReadEveryTrade = (run: Pick<AutoRun, "status" | "scopesLater"> | null | undefined): boolean => run?.status === "done" && !!run.scopesLater;
 
+/** Section numbers in the project's manuals now that weren't before (scanned pages read with OCR found them). */
+export function addedSections(before: StoredDocument[], after: StoredDocument[]): string[] {
+  const had = new Set(specificationSections(before).map(s => sectionKey(s.section)));
+  return specificationSections(after).filter(s => !had.has(sectionKey(s.section))).map(s => s.section);
+}
+
 /** Trades a run still has to read: a run stopped by a closed tab picks up after the trades it finished. */
 export const stillToRead = <T extends { pkg: { id: string } }>(trades: T[], previous: AutoRun | null): T[] =>
   trades.filter(t => !previous?.trades.some(x => x.packageId === t.pkg.id && x.status === "done"));
@@ -172,7 +180,7 @@ export function runSummary(run: AutoRun): string {
   const scoped = run.trades.filter(t => t.added > 0).length;
   if (run.update && !run.update.sheets.length && !run.update.sections.length) return "Revision: nothing changed on the drawings or in the specifications";
   return [
-    run.update ? `Revision: ${plural(run.update.sheets.length, "changed sheet")} and ${plural(run.update.sections.length, "changed section")} read again` : "",
+    run.update?.scanned ? `Scanned specification pages: ${plural(run.update.sections.length, "new section")} read` : run.update ? `Revision: ${plural(run.update.sheets.length, "changed sheet")} and ${plural(run.update.sections.length, "changed section")} read again` : "",
     run.scopesLater ? `Bid packages set; reading every trade would cost about ${dollars(run.fullCost ?? 0)}, so it waits for you: choose Read every trade in Project files, or pick trades in Write scopes with AI` : run.added ? `${plural(run.added, "scope item")} added to ${plural(scoped, "trade")} for approval` : "No new scope items",
     run.newTrades.length ? `${plural(run.newTrades.length, "new bid package")}` : "",
     run.packagesBy && !run.packagesBy.startsWith("AI ") ? run.packagesBy : "",

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useState, type DragEvent, type ReactNode } from "react";
 import { ArrowRight, BookOpen, FilePlus2, FileStack, GitBranchPlus, Map as MapIcon, Sparkles } from "lucide-react";
-import { readEveryTrade, RUNS_KEY } from "../../lib/auto-scopes";
+import { readEveryTrade, readScannedSpecifications, RUNS_KEY } from "../../lib/auto-scopes";
+import { scannedManualPages, useSheetOcr } from "../../lib/sheet-text-ocr";
 import { canReadEveryTrade, NO_RUNS, runFiles, runSummary, type SavedRuns } from "../../lib/auto-scope-plan";
 import { CONFIRM_ABOVE, dollars } from "../../lib/ai-cost";
 import { getActiveProjectId } from "../../lib/project-scope";
@@ -34,6 +35,22 @@ export function BidDocumentsPanel({ documents, ready, busy, onUpload, onOpen, on
   const [problem, setProblem] = useState("");
   const readAll = () => { setConfirming(false); setProblem(readEveryTrade(getActiveProjectId(), documents) ?? ""); };
   const waiting = ready && canReadEveryTrade(run);
+  // The manuals' scanned pages (19 Nov: Whittier's Vol 2 printed Divisions 27 and 28 as images, 60 pages the AI never
+  // saw): how many, and reading them with OCR in this tab.
+  const [scanned, setScanned] = useState(0);
+  const [scanNote, setScanNote] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const ocr = useSheetOcr();
+  const manualKey = manual.map(v => v.doc.id).join("|");
+  useEffect(() => {
+    let live = true;
+    if (ready && manual.length && !scanning) void scannedManualPages(documents).then(rows => { if (live) setScanned(rows.length); }).catch(() => {});
+    return () => { live = false; };
+  }, [ready, manualKey, scanning]); // eslint-disable-line react-hooks/exhaustive-deps
+  const readScanned = () => {
+    setScanning(true); setScanNote("");
+    void readScannedSpecifications(getActiveProjectId(), documents).then(setScanNote, error => setScanNote(error instanceof Error ? error.message : "The scanned pages could not be read.")).finally(() => setScanning(false));
+  };
   return <Panel className="bid-docs" title="Bid documents" subtitle="The drawings and project manual the bid is based on: upload every volume here at the start. The AI reads them as they arrive and writes the bid packages and their scope items.">
     <div className="bid-docs-slots">
       <Slot icon={<MapIcon size={17}/>} title="Drawings" hint="Every drawing volume: Vol 1, Vol 2…" what="drawings" busy={busy} onUpload={onUpload} action="Add drawings">
@@ -56,6 +73,10 @@ export function BidDocumentsPanel({ documents, ready, busy, onUpload, onOpen, on
       <div className="proc-form-actions"><Button onClick={() => setConfirming(false)}>Cancel</Button><Button variant="primary" onClick={readAll}>Yes, read every trade</Button></div>
     </div>}
     {problem && <p className="bid-docs-ai" role="alert">{problem}</p>}
+    {(scanned > 0 || scanning || scanNote) && <p className="bid-docs-ai" role="status">{scanning
+      ? `Reading scanned specification pages with OCR in this tab: ${ocr.done} of ${ocr.total || scanned}. Keep this tab open; each page is saved as it is read.`
+      : scanNote || <>{scanned} page{scanned === 1 ? " of the project manual is a scanned image" : "s of the project manual are scanned images"} with no text, so the AI can't read {scanned === 1 ? "it" : "them"}. Structor can read {scanned === 1 ? "it" : "them"} once with OCR in this tab, free, and save the text for everyone.</>}
+      {!scanning && scanned > 0 && <span className="bid-docs-read-all"><Button onClick={readScanned}><Sparkles size={14}/>Read the scanned pages</Button></span>}</p>}
   </Panel>;
 }
 

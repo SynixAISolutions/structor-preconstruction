@@ -86,6 +86,9 @@ assert.deepEqual(M.storedSections(whit).map(s => [s.section, s.first, s.last]), 
 const twice = M.manualSections([...whit, { page: 700, text: "CAST-IN-PLACE CONCRETE 03 30 00 - 9\nloose page" }]);
 assert.deepEqual(twice.filter(s => s.section === "03 30 00").map(s => [s.firstPage, s.lastPage]), [[300, 330]]);
 assert.equal(M.SECTIONS_VERSION >= 2, true, "Manuals split before 19 Nov are split again");
+// A scanned page read by OCR: the dash may come back as an em dash.
+assert.deepEqual(M.sectionOfPage("WHITTIER ES MODERNIZATION\nSECTION 274116 — INTEGRATED AUDIO-VIDEO SYSTEMS\nPART 1 — GENERAL"), { section: "27 41 16", title: "INTEGRATED AUDIO-VIDEO SYSTEMS" });
+assert.deepEqual(M.sectionOfPage("INTEGRATED AUDIO-VIDEO SYSTEMS 274116 — 3\n2.1 PRODUCTS"), { section: "27 41 16", title: "INTEGRATED AUDIO-VIDEO SYSTEMS" });
 
 // ── Quote screening ──
 assert.equal(J.quoteOnPage("Level 4: At panel surfaces that will be exposed to view", manual[4].text), true);

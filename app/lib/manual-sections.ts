@@ -18,8 +18,9 @@ export const SECTIONS_VERSION = 2;
 
 /** "092216" or "09 22 16" (and "09 22 16.13") → "09 22 16". */
 const format = (a: string, b: string, c: string, d?: string) => `${a} ${b} ${c}${d ? `.${d}` : ""}`;
-const HEADER = /^(.*?\S)\s+(\d{2})\s?(\d{2})\s?(\d{2})(?:\.(\d{2}))?\s*-\s*\d+\s*$/;
-const OPENER = /^SECTION\s+(\d{2})\s?(\d{2})\s?(\d{2})(?:\.(\d{2}))?\s*[-–]\s*(.+?)\s*$/i;
+// Dashes as printed, or as OCR reads them off a scanned page (an em dash, 19 Nov).
+const HEADER = /^(.*?\S)\s+(\d{2})\s?(\d{2})\s?(\d{2})(?:\.(\d{2}))?\s*[-–—]\s*\d+\s*$/;
+const OPENER = /^SECTION\s+(\d{2})\s?(\d{2})\s?(\d{2})(?:\.(\d{2}))?\s*[-–—]\s*(.+?)\s*$/i;
 
 /** The section a page belongs to, read from its first lines; null when it carries no section header. */
 export function sectionOfPage(text: string): { section: string; title: string } | null {

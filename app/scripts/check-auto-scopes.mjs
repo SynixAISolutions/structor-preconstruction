@@ -90,6 +90,16 @@ assert.throws(() => P.copyScope(owned, line.id, drywall, "Sadie", at), /already 
 // How a run is told in the notification center.
 const finished = { documents: ["manual.pdf", "arch.pdf"], newTrades: ["Drywall", "Rail Tracks"], trades: [{ status: "done", added: 12 }, { status: "done", added: 0 }, { status: "failed", added: 0 }], added: 12, duplicates: 3 };
 assert.equal(A.runSummary(finished), "12 scope items added to 1 trade for approval · 2 new bid packages · 3 already in the bid forms · 1 trade could not be read");
+
+// Scanned specification pages (19 Nov: Whittier's Vol 2 printed Divisions 27 and 28 as images): the sections OCR finds are
+// the ones no stored manual had, and only they are read, in their trades.
+{
+  const before = [manual, doc("vol2", "manual", { sections: [sec("26 05 19", "Conductors", 1)] })];
+  const after = [manual, doc("vol2", "manual", { sections: [sec("26 05 19", "Conductors", 1), sec("27 41 16", "Integrated Audio-Video Systems", 443), sec("28 31 00", "Fire Detection and Alarm", 489)] })];
+  assert.deepEqual(A.addedSections(before, after), ["27 41 16", "28 31 00"]);
+  assert.deepEqual(A.addedSections(after, after), [], "Nothing new, nothing to read");
+  assert.equal(A.runSummary({ ...finished, update: { since: "r2", sheets: [], sections: ["27 41 16", "28 31 00"], scanned: true } }).split(" · ")[0], "Scanned specification pages: 2 new sections read");
+}
 assert.equal(A.runFiles(finished), "manual.pdf and arch.pdf");
 assert.equal(A.runFiles({ documents: ["a", "b", "c"] }), "a and 2 more");
 assert.deepEqual(A.runProgress(finished), { done: 3, total: 3 });

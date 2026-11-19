@@ -19,7 +19,7 @@ import { planBidPackages } from "./bid-package-client";
 import { aiReader } from "./ai-reader-client";
 import { estimateCost } from "./ai-cost";
 import { findReferencesWithAi, loadSheetTexts, PARALLEL_REFERENCES, referenceRunNow } from "./sheet-reference-client";
-import { ocrScannedSheets, sheetOcrNow } from "./sheet-text-ocr";
+import { ocrScannedManualPages, ocrScannedSheets, sheetOcrNow } from "./sheet-text-ocr";
 import { referenceWork, SHEET_REFERENCE_LIMITS } from "./sheet-reference-ai";
 import { AI_REQUESTS_AT_ONCE, aiTimes } from "./ai-pool";
 import { OCR_WORKERS, ocrWork } from "./sheet-ocr";
@@ -139,10 +139,37 @@ export function readEveryTrade(projectId: string, documents: StoredDocument[]): 
   return null;
 }
 
+/**
+ * Reads the project manuals' scanned pages with OCR (Project files, for manuals stored before 19 Nov: Whittier's Vol 2
+ * printed Divisions 27 and 28 as images), then the sections they add, in the trades they belong to, the way a revision's
+ * changed sections are read. A run still waiting for Read every trade, or a first run to come, reads them with the rest.
+ * Resolves to what it did, for the page to say.
+ */
+export async function readScannedSpecifications(projectId: string, documents: StoredDocument[]): Promise<string> {
+  if (active) return "The AI is reading in this tab. Read the scanned pages when it finishes.";
+  const { pages, added } = await ocrScannedManualPages(documents);
+  if (!pages) return "No scanned specification page could be read.";
+  const read = `${pages} scanned page${pages === 1 ? "" : "s"} read`;
+  if (!added.length) return `${read}; they hold no section that wasn't already found.`;
+  const now = storedDocuments(projectId) ?? documents, target = runTarget(now);
+  const last = target ? savedRuns(projectId).runs.find(r => r.key === target.key) ?? null : null;
+  if (!target || !last || last.status !== "done" || last.scopesLater || active) return `${read}: ${added.length} new section${added.length === 1 ? "" : "s"}, read with the other trades.`;
+  void start(projectId, now, target, { id: crypto.randomUUID(), projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: new Date().toISOString(), finishedAt: null, newTrades: [], packagesBy: last.packagesBy, trades: [], added: 0, duplicates: 0, update: { since: last.id, sheets: [], sections: added, scanned: true } });
+  return `${read}: ${added.length} new section${added.length === 1 ? "" : "s"} (${added.slice(0, 6).join(", ")}${added.length > 6 ? "…" : ""}), now read in their trades.`;
+}
+
 async function start(projectId: string, documents: StoredDocument[], target: { key: string; documents: StoredDocument[] }, previous: AutoRun | null) {
   active = projectId;
   window.addEventListener("beforeunload", holdTab);
   const at = () => new Date().toISOString();
+
+  // 0. The manuals' scanned pages first (19 Nov: Whittier's Vol 2 printed Divisions 27 and 28 as images, 60 pages the AI
+  // never saw): their sections exist only once OCR has read them, and the packages and trades are set from the sections.
+  // Free, in this tab, read once and saved for everyone; nothing to do on the next run.
+  const showOcr = setInterval(() => { const o = sheetOcrNow(); if (o.running && o.total) emit({ run: { ...(snapshot.run ?? { id: "", projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades: [], trades: [], added: 0, duplicates: 0 }), ocr: { done: o.done, total: o.total } } }); }, 2_000);
+  const scanned = await ocrScannedManualPages(documents).catch(() => null);
+  clearInterval(showOcr);
+  if (scanned?.pages) documents = storedDocuments(projectId) ?? documents;
 
   // 1. The bid packages, set by the AI from the manual's sections and the drawing index (Danial, 28 Oct: "YOU CANT
   // WRITE THE WHOLE LIST U NEED AI"): which packages, and which sections and sheets each carries. A stopped run
