@@ -11,6 +11,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { GLOBAL_DRAFT_KEYS, draftStorageKey } from "./project-scope";
 import { mergeJson, ORG_SCOPE, sameJson } from "./shared-merge";
+import { packDraft, unpackDraft } from "./draft-codec";
 import { sampleProjectRecords } from "./projects";
 
 /** Fired on window, with the storage key as detail, when a draft is changed outside its screen. */
@@ -39,9 +40,10 @@ export const sharedReady = (scope: string) => status.state === "off" || status.s
 
 // ── What this browser last had from the shared copy ──
 const id = (scope: string, key: string) => `${scope}\n${key}`;
-const readJson = <T>(key: string, fallback: T): T => { try { return JSON.parse(localStorage.getItem(key) ?? "null") ?? fallback; } catch { return fallback; } };
+const readJson = <T>(key: string, fallback: T): T => { try { return JSON.parse(unpackDraft(localStorage.getItem(key)) ?? "null") ?? fallback; } catch { return fallback; } };
 const writeJson = (key: string, value: unknown, keep?: string) => {
-  const text = JSON.stringify(value);
+  // Large drafts are stored packed (lib/draft-codec); the project list stays plain JSON, as lib/projects reads it.
+  const text = key === PROJECTS_KEY ? JSON.stringify(value) : packDraft(JSON.stringify(value));
   try { localStorage.setItem(key, text); } catch {
     // Storage full: make room from other projects' copies and try once more; else the shared copy still has it.
     try { if (keep !== undefined && freeStorage(keep)) localStorage.setItem(key, text); } catch { /* still full */ }
@@ -102,7 +104,7 @@ function slot(scope: string, key: string): Slot {
   const storageKey = scope === ORG_SCOPE ? `structor-ui-${key}` : draftStorageKey(scope, key);
   return {
     scope, key,
-    read: () => { try { return localStorage.getItem(storageKey); } catch { return null; } },
+    read: () => { try { return unpackDraft(localStorage.getItem(storageKey)); } catch { return null; } },
     write: value => { writeJson(storageKey, value, scope); announceDraftChange(storageKey); },
   };
 }

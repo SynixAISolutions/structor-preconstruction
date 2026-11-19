@@ -13,6 +13,7 @@ import { useBudget } from "./use-budget";
 import { useExtraction } from "./use-extraction";
 import { useLocalDraft } from "./use-local-draft";
 import { useSchedule } from "./use-schedule";
+import { unpackDraft } from "./draft-codec";
 
 // Check results live under their own key ("project-setup-checks"), so writing them can never undo a
 // decision saved through another component's copy of the hook. One run per drawing-set and manual
@@ -24,7 +25,7 @@ const listeners = new Set<() => void>();
 const notify = () => listeners.forEach(listener => listener());
 /** The saved results, read directly: a copy that has just mounted hasn't loaded its draft yet. */
 function stored(projectId: string): SetupChecks {
-  try { return JSON.parse(localStorage.getItem(draftStorageKey(projectId, "project-setup-checks")) ?? "{}") as SetupChecks; } catch { return {}; }
+  try { return JSON.parse(unpackDraft(localStorage.getItem(draftStorageKey(projectId, "project-setup-checks"))) ?? "{}") as SetupChecks; } catch { return {}; }
 }
 /** Saves results straight to storage (the component that started the run may be gone). */
 function save(projectId: string, found: SetupChecks) {

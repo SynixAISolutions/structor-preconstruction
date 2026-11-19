@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { draftStorageKey, startingDraft, useActiveProject } from "./project-scope";
 import { announceDraftChange, DRAFT_CHANGED, freeStorage, noteDraftSaved } from "./shared-sync";
+import { packDraft, unpackDraft } from "./draft-codec";
 
 /** A project's saved draft as its screen would load it: the saved copy, else its starting value. */
 export function readDraft<T>(projectId: string, key: string, initial: T): T {
   let value = startingDraft(projectId, key, initial);
   try {
-    const saved = localStorage.getItem(draftStorageKey(projectId, key));
+    const saved = unpackDraft(localStorage.getItem(draftStorageKey(projectId, key)));
     if (saved) value = JSON.parse(saved) as T;
   } catch { /* A fresh draft remains usable when storage is unavailable. */ }
   return value;
@@ -20,7 +21,8 @@ export function readDraft<T>(projectId: string, key: string, initial: T): T {
  * The change then goes to the team's shared copy (lib/shared-sync).
  */
 export function writeDraft<T>(projectId: string, key: string, value: T): void {
-  const storageKey = draftStorageKey(projectId, key), text = JSON.stringify(value);
+  // Large drafts are stored packed (lib/draft-codec): a whole project's scope run didn't fit in Chrome.
+  const storageKey = draftStorageKey(projectId, key), text = packDraft(JSON.stringify(value));
   try { localStorage.setItem(storageKey, text); }
   catch (error) { if (!freeStorage(projectId)) throw error; localStorage.setItem(storageKey, text); }
   announceDraftChange(storageKey);
@@ -54,7 +56,7 @@ export function useLocalDraft<T>(key: string, initial: T) {
   useEffect(() => {
     if (draft.storageKey !== storageKey || !draft.edited) return;
     try {
-      const text = JSON.stringify(draft.value);
+      const text = packDraft(JSON.stringify(draft.value));
       try { localStorage.setItem(storageKey, text); }
       catch (error) { if (!freeStorage(projectId)) throw error; localStorage.setItem(storageKey, text); }
       noteDraftSaved(projectId, key);
