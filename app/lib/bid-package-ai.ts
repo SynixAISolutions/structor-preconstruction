@@ -31,7 +31,7 @@ export type PlannedPackage = { existing: string | null; standard: string | null;
  * utilities and dry utilities"; "This is not called technology integration. This should be called low voltage").
  */
 export const HOUSE_SPLITS = [
-  "Concrete (Division 03) is its own package; structural steel and miscellaneous metals (Division 05) are another. Never combine them.",
+  "Concrete (Division 03) is its own package; structural steel with all miscellaneous and ornamental metals, metal fabrications, stairs and railings (Division 05) is another, one package. Never combine the two, and never split Division 05.",
   "Roofing (with its sheet metal flashings and copings), metal wall panels, and waterproofing with air and vapor barriers and joint sealants are three separate packages.",
   "Site work is never one \"site work\" or \"civil\" package: earthwork, asphalt paving, site concrete, unit pavers, fencing, and landscaping and turf are each their own package, and site utilities split into wet utilities (water, sanitary, storm) and dry utilities (site electrical and communications).",
   "Structured cabling, audiovisual and other technology systems are \"Low voltage\", never \"technology integration\".",

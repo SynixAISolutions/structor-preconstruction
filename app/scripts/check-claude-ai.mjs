@@ -128,7 +128,8 @@ assert.deepEqual(B.applyBidPackagePlan(applied.procurement, plan).added, [], "Ap
 
 // Marcel's trade breakdown (18 Nov): the AI is given the standard trades and his splits, and a standard trade keeps the
 // contractor's own name, code and id.
-assert.match(messages[0].content, /- steel: Structural steel, 05 12 00/);
+assert.match(messages[0].content, /- steel: Structural steel & miscellaneous metals, 05 12 00/);
+assert.match(messages[0].content, /never split Division 05/, "Misc metals stay with structural steel (19 Nov: the AI made them their own package)");
 assert.match(messages[0].content, /- utilities: Wet utilities, 33 10 00\n- dry-utilities: Dry utilities, 33 70 00/);
 assert.match(messages[0].content, /Concrete \(Division 03\) is its own package/);
 assert.match(messages[0].content, /never "technology integration"/);

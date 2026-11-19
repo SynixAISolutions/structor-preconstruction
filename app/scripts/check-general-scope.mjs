@@ -32,6 +32,9 @@ assert.throws(() => job.parse({ trade: "D", items: Array.from({ length: G.GENERA
 const messages = job.messages(job.parse(input));
 assert.match(messages[0].content, /Asbestos abatement/);
 assert.match(messages[0].content, /Every item belongs to exactly one line/);
+assert.match(messages[0].content, /at most 10 words/);
+assert.match(messages[0].content, /never more than 10/);
+assert.match(messages[0].content, /"as shown on the plans"/, "It says what to leave out: conditions, locations, approvals");
 assert.match(messages[1].content, /^Trade: Demolition \(02 41 19\)/);
 assert.match(messages[1].content, /\n0\. Remove aluminum windows, frames and sashes at level 1\n1\./);
 const screened = job.screen({ lines: [
