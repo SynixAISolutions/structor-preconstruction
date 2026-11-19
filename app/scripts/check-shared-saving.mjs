@@ -71,6 +71,16 @@ try {
   assert.deepEqual((await (await get("scope=p1")).json()).rows.map(x => x.key), ["project"], "Only the marker is left");
   assert.equal((await (await get("every=project")).json()).rows.find(x => x.scope === "p1").value.deleted.by, "Danial", "Every browser learns it was deleted");
   assert.deepEqual((await (await get("scope=p2")).json()).rows.map(x => x.key), ["project"], "Other projects untouched");
+  // A deleted project stays deleted (19 Nov: a tab on older code saved the markers back without their mark).
+  const p1 = await get("scope=p1&key=project");
+  r = await put(`scope=p1&key=project&base=${p1.headers.get("x-version")}`, { id: "p1", name: "Project A", value: 0 });
+  assert.equal(r.status, 200, "An older tab's save is taken");
+  const after = JSON.parse(gunzipSync(Buffer.from(await (await get("scope=p1&key=project")).arrayBuffer())).toString());
+  assert.deepEqual(after.deleted, { at: "2026-11-19T12:00:00.000Z", by: "Danial" }, "but the record keeps its mark");
+  r = await put("scope=p1&key=procurement&base=0", { packages: [] });
+  assert.equal(r.status, 410, "A deleted project's drafts are refused");
+  assert.deepEqual((await (await get("scope=p1")).json()).rows.map(x => x.key), ["project"], "Nothing comes back");
+  assert.equal((await put("scope=p2&key=procurement&base=0", { packages: [] })).status, 200, "Other projects save as before");
 } finally {
   process.chdir(cwd);
   rmSync(dir, { recursive: true, force: true });
