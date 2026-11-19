@@ -14,19 +14,23 @@
 export type PageText = { page: number; text: string; sheet?: string; aspect?: number };
 export type ManualSection = { section: string; title: string; firstPage: number; lastPage: number; pages: PageText[] };
 /** The splitter's version, saved on a stored manual: a manual split by an older one is split again from its stored text. */
-export const SECTIONS_VERSION = 2;
+export const SECTIONS_VERSION = 3;
 
 /** "092216" or "09 22 16" (and "09 22 16.13") → "09 22 16". */
 const format = (a: string, b: string, c: string, d?: string) => `${a} ${b} ${c}${d ? `.${d}` : ""}`;
 // Dashes as printed, or as OCR reads them off a scanned page (an em dash, 19 Nov).
-const HEADER = /^(.*?\S)\s+(\d{2})\s?(\d{2})\s?(\d{2})(?:\.(\d{2}))?\s*[-–—]\s*\d+\s*$/;
-const OPENER = /^SECTION\s+(\d{2})\s?(\d{2})\s?(\d{2})(?:\.(\d{2}))?\s*[-–—]\s*(.+?)\s*$/i;
+const HEADER = /^(.*?\S)\s+(\d{2})\s?(\d{2})\s?(\d{2})(?:\.(\d{1,2}))?\s*[-–—]\s*\d+\s*$/;
+const OPENER = /^SECTION\s+(\d{2})\s?(\d{2})\s?(\d{2})(?:\.(\d{1,2}))?\s*[-–—]\s*(.+?)\s*$/i;
+// A scanned opener read by OCR (19 Nov, Whittier Vol 2): "SECTION 27 0500 TELECOM ROOMS AND PATHWAYS", "SECTION 27 0533.1
+// CONDUIT, RACEWAYS AND BOXES", no dash. Capitals only, and a title that ends in a word, so neither "Section includes"
+// nor a contents line ("SECTION 092900 GYPSUM BOARD .... 434") counts.
+const BARE_OPENER = /^SECTION\s+(\d{2})\s?(\d{2})\s?(\d{2})(?:\.(\d{1,2}))?\s+(?!.*\.\.)([A-Z][A-Z0-9 ,&()/'’–-]*[A-Z)])$/;
 
 /** The section a page belongs to, read from its first lines; null when it carries no section header. */
 export function sectionOfPage(text: string): { section: string; title: string } | null {
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean).slice(0, 10);
   for (const line of lines) {
-    const m = line.match(OPENER);
+    const m = line.match(OPENER) ?? line.match(BARE_OPENER);
     if (m) return { section: format(m[1], m[2], m[3], m[4]), title: m[5] };
   }
   for (const line of lines) {
@@ -36,7 +40,7 @@ export function sectionOfPage(text: string): { section: string; title: string } 
   return null;
 }
 
-const BARE = /^(\d{2})\s?(\d{2})\s?(\d{2})(?:\.(\d{2}))?\s+[A-Za-z]/;
+const BARE = /^(\d{2})\s?(\d{2})\s?(\d{2})(?:\.(\d{1,2}))?\s+[A-Za-z]/;
 /**
  * A table of contents or a division's list of sections: five or more sections listed a line each ("SECTION 07 27 26 -
  * FLUID-APPLIED MEMBRANE AIR BARRIERS", "07 27 26 Fluid-Applied ...", "AIR BARRIERS 07 27 26 - 1"), or the words
@@ -48,7 +52,7 @@ export function listsSections(text: string): boolean {
   if (lines.slice(0, 6).some(l => l.length <= 60 && /^(PROJECT\s+MANUAL\s+)?TABLE\s+OF\s+CONTENTS\b/i.test(l))) return true;
   const codes = new Set<string>();
   for (const line of lines) {
-    const opener = line.match(OPENER), bare = line.match(BARE), header = line.match(HEADER);
+    const opener = line.match(OPENER) ?? line.match(BARE_OPENER), bare = line.match(BARE), header = line.match(HEADER);
     if (opener) codes.add(format(opener[1], opener[2], opener[3], opener[4]));
     else if (bare) codes.add(format(bare[1], bare[2], bare[3], bare[4]));
     else if (header && !/^(section|part)\b/i.test(header[1])) codes.add(format(header[2], header[3], header[4], header[5]));

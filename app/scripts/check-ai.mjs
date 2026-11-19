@@ -86,6 +86,12 @@ assert.deepEqual(M.storedSections(whit).map(s => [s.section, s.first, s.last]), 
 const twice = M.manualSections([...whit, { page: 700, text: "CAST-IN-PLACE CONCRETE 03 30 00 - 9\nloose page" }]);
 assert.deepEqual(twice.filter(s => s.section === "03 30 00").map(s => [s.firstPage, s.lastPage]), [[300, 330]]);
 assert.equal(M.SECTIONS_VERSION >= 2, true, "Manuals split before 19 Nov are split again");
+// Whittier's scanned openers as OCR read them (19 Nov): no dash, a two-and-four digit code, a one-digit decimal.
+assert.deepEqual(M.sectionOfPage("District of Columbia Public Schools\nSECTION 27 0500 TELECOM ROOMS AND PATHWAYS\nPART 1 GENERAL"), { section: "27 05 00", title: "TELECOM ROOMS AND PATHWAYS" });
+assert.deepEqual(M.sectionOfPage("SECTION 27 0533.1 CONDUIT, RACEWAYS AND BOXES\nSection includes:"), { section: "27 05 33.1", title: "CONDUIT, RACEWAYS AND BOXES" });
+assert.deepEqual(M.sectionOfPage("SECTION 27 5000 TELEPHONE AND DATA SYSTEMS AUDIOVISUAL AND SOUND SYSTEM"), { section: "27 50 00", title: "TELEPHONE AND DATA SYSTEMS AUDIOVISUAL AND SOUND SYSTEM" });
+assert.equal(M.sectionOfPage("WHITTIER ES\nSection Includes\nSection 27 41 16 requirements apply"), null, "Words in sentences don't open a section");
+assert.equal(M.sectionOfPage("SECTION 092900 GYPSUM BOARD .... 434"), null, "A contents line doesn't open a section");
 // A scanned page read by OCR: the dash may come back as an em dash.
 assert.deepEqual(M.sectionOfPage("WHITTIER ES MODERNIZATION\nSECTION 274116 — INTEGRATED AUDIO-VIDEO SYSTEMS\nPART 1 — GENERAL"), { section: "27 41 16", title: "INTEGRATED AUDIO-VIDEO SYSTEMS" });
 assert.deepEqual(M.sectionOfPage("INTEGRATED AUDIO-VIDEO SYSTEMS 274116 — 3\n2.1 PRODUCTS"), { section: "27 41 16", title: "INTEGRATED AUDIO-VIDEO SYSTEMS" });
