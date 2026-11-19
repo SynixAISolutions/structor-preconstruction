@@ -77,6 +77,14 @@ async function fingerprint(file: File): Promise<string> {
   return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
+/** Deletes everything a deleted project stored (lib/project-delete, lib/project-files-store removeProject). A PDF another project reuses stays for it. */
+export async function removeProjectFiles(projectId: string): Promise<{ removed: number; kept: number }> {
+  const result = await api<{ removed: number; kept: number }>("/api/project-files", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "remove-project", projectId }) });
+  indexes.delete(projectId);
+  notify();
+  return result;
+}
+
 /** A project's stored documents as last loaded in this tab, or null before the first load. */
 export const storedDocuments = (projectId: string): StoredDocument[] | null => indexes.get(projectId)?.documents ?? null;
 

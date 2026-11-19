@@ -100,6 +100,11 @@ export type Project = {
   /** Name of the RFP file chosen at creation. The file itself is not stored yet. */
   rfpFileName: string;
   createdAt: string;
+  /**
+   * Deleted by someone on the team (Danial, 19 Nov: "add the option to delete projects"): the record stays as a marker,
+   * so every browser that has the project drops it too. No screen shows a deleted project.
+   */
+  deleted?: { at: string; by: string };
 };
 
 export const PROJECTS_STORAGE_KEY = "structor-ui-projects";
@@ -224,8 +229,18 @@ export function normalizeProject(raw: Record<string, unknown>): Project {
     kickoff: raw.kickoff === undefined && raw.id === "jelleff" ? sampleProjectRecords[0].kickoff : normalizeKickoff(raw.kickoff),
     milestones: normalizeMilestones(raw.milestones, raw.kickoff),
     rfpFileName: text(raw.rfpFileName), createdAt: text(raw.createdAt),
+    ...(isDeletedMark(raw.deleted) ? { deleted: { at: text(raw.deleted.at), by: text(raw.deleted.by) } } : {}),
   };
 }
+const isDeletedMark = (v: unknown): v is { at: unknown; by: unknown } => !!v && typeof v === "object" && typeof (v as { at?: unknown }).at === "string";
+
+/** The built-in sample project (lib/project-scope SAMPLE_PROJECT_ID): its drafts share their keys with the browser's own, so it can't be deleted. */
+export const KEPT_PROJECT_ID = "jelleff";
+/** What the person types to confirm a deletion. */
+export const DELETE_WORD = "delete";
+export const deleteConfirmed = (typed: string): boolean => typed.trim().toLowerCase() === DELETE_WORD;
+/** The marker a deleted project leaves: its id and name only, marked deleted by `by`; nothing else of it is kept. */
+export const deletedProject = (project: Pick<Project, "id" | "name">, by: string, at = new Date().toISOString()): Project => normalizeProject({ id: project.id, name: project.name, deleted: { at, by } });
 
 /** Keeps total = renovation + addition. For a single work type the whole area belongs to it; new construction has no split. */
 function areaSplit(workType: WorkType | null, total: number, renovation: number, addition: number) {
@@ -248,16 +263,25 @@ function upgradeUntouchedSample(raw: Record<string, unknown>): Record<string, un
 export function loadProjects(): Project[] | null {
   try {
     const saved = JSON.parse(localStorage.getItem(PROJECTS_STORAGE_KEY) || "null");
-    if (Array.isArray(saved) && saved.length && saved.every(p => p && p.id && p.name)) return saved.map(upgradeUntouchedSample).map(normalizeProject);
+    if (Array.isArray(saved) && saved.length && saved.every(p => p && p.id && p.name)) {
+      const live = liveProjects(saved.map(upgradeUntouchedSample).map(normalizeProject));
+      if (live.length) return live;
+    }
   } catch { /* An unreadable store falls back to the sample projects. */ }
   return null;
 }
+/** The projects no one has deleted. */
+export const liveProjects = (projects: Project[]): Project[] => projects.filter(p => !p.deleted);
 
+/** Saves the screens' projects; deleted projects' markers stay with them, so the deletion reaches the team. */
 export function saveProjects(projects: Project[]): void {
   try {
-    localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects));
+    localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(withMarkers(projects, JSON.parse(localStorage.getItem(PROJECTS_STORAGE_KEY) || "[]"))));
   } catch { /* Keep the session editable when storage is full. */ }
 }
+/** `projects` and the deleted markers among `stored` that aren't in it (pure). */
+export const withMarkers = (projects: Project[], stored: unknown): Project[] =>
+  [...projects, ...(Array.isArray(stored) ? stored.filter((p): p is Project => !!p?.deleted && !projects.some(x => x.id === p.id)) : [])];
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 

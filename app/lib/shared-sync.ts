@@ -151,6 +151,28 @@ export function noteProjectsSaved(projects: { id: string }[]) {
   }
 }
 
+/**
+ * A deleted project's drafts leave this browser (lib/project-delete): their copies, the changes waiting to go up and what
+ * this browser last had of them. Its record stays, as the marker.
+ */
+export function forgetProject(scope: string) {
+  const own = (slotId: string) => slotId.startsWith(`${scope}\n`) && slotId !== id(scope, "project");
+  for (const [slotId, t] of [...timers]) if (own(slotId)) { clearTimeout(t.timer); timers.delete(slotId); }
+  writeJson(WAITING_KEY, waiting().filter(([s, k]) => !own(id(s, k))));
+  writeJson(VERSIONS_KEY, Object.fromEntries(Object.entries(versions()).filter(([slotId]) => !own(slotId))));
+  for (const key of localDrafts(scope)) try { localStorage.removeItem(`structor-ui-${scope}:${key}`); } catch { /* no storage */ }
+  if (status.pulled.has(scope)) set({ pulled: new Set([...status.pulled].filter(s => s !== scope)) });
+}
+
+/** Sends a project's record to the shared copy now, not after the usual pause (a deletion's marker goes first). */
+export async function sendProjectNow(scope: string): Promise<void> {
+  if (status.state === "off") return;
+  const slotId = id(scope, "project"), was = timers.get(slotId);
+  if (was) { clearTimeout(was.timer); timers.delete(slotId); }
+  setWaiting(scope, "project", true);
+  await send(scope, "project");
+}
+
 function queue(scope: string, key: string) {
   if (status.state === "off") return;
   const slotId = id(scope, key), now = Date.now(), was = timers.get(slotId);
@@ -255,6 +277,8 @@ async function pullProjects(): Promise<string[]> {
     // An edit made here and not sent yet is merged into theirs and sent; otherwise theirs is taken.
     const value = mine && pending.has(r.scope) ? mergeJson(bases.get(slotId), mine, r.value) as { id: string } : r.value;
     if (!mine || !sameJson(mine, value)) { byId.set(r.scope, value); changed = true; }
+    // Someone deleted the project: its drafts leave this browser too.
+    if ((value as { deleted?: unknown }).deleted && !(mine as { deleted?: unknown } | undefined)?.deleted) forgetProject(r.scope);
     setVersion(slotId, r.version);
     bases.set(slotId, r.value);
     if (pending.has(r.scope)) queue(r.scope, "project");

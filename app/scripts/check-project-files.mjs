@@ -350,4 +350,17 @@ assert.equal(updated.id, sampleProjectRecords[0].id);
   assert.equal(pool.alive(), 0, "The pool ends its workers again after the next idle spell");
 }
 
+// Deleting a project completely (19 Nov): its files go, except a PDF another project reused, which stays for it.
+{
+  const own = (id, o = {}) => ({ id, projectId: "gone", sourcePath: `project-files/gone/${id}/source.pdf`, hash: `h-${id}`, ...o });
+  const files = [own("vol1"), own("vol2"), own("rfp"), own("copy", { textFrom: { projectId: "elsewhere", docId: "x" }, sourcePath: "project-files/elsewhere/x/source.pdf" })];
+  const others = [
+    { id: "b1", projectId: "run2", textFrom: { projectId: "gone", docId: "vol1" }, sourcePath: "project-files/gone/vol1/source.pdf" },
+    { id: "b2", projectId: "run3", sourcePath: "project-files/gone/rfp/source.pdf" },
+    { id: "b3", projectId: "other", sourcePath: "project-files/other/b3/source.pdf" },
+  ];
+  assert.deepEqual(F.filesStillUsed("gone", files, others).map(u => [u.doc.id, u.usedBy.projectId]), [["vol1", "run2"], ["rfp", "run3"]], "Vol 1 and the RFP stay for the projects reading them; Vol 2 goes");
+  assert.deepEqual(F.filesStillUsed("gone", files, []), [], "Nothing else uses them: every file goes");
+}
+
 console.log("Project files checked: identical uploads reuse the stored copy, sheet keys, revisions, drawing log (sets, sheet versions, partial sets, naming pages), sheet/manual/section lookup, stored-file validation, index upsert, sections by trade.");

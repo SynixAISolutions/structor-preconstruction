@@ -1,6 +1,8 @@
 import { renameDemoNamesDeep } from "../../../lib/demo-names";
 import { parseDocument, validId, type StoredDocument, isHash, parseSheetsAndSections, reuseDocument } from "../../../lib/project-files";
-import { readIndex, registerDocument, removeDocument, renameDocument, updateDocument, findCopy } from "../../../lib/project-files-store";
+import { readIndex, registerDocument, removeDocument, removeProject, renameDocument, updateDocument, findCopy } from "../../../lib/project-files-store";
+import { sharedStore } from "../../../lib/shared-store";
+import { gunzipSync } from "node:zlib";
 
 // Project files index: list a project's stored documents, register an upload, update what was read
 // from its pages, or remove it. The demo password (proxy.ts) guards this like every route.
@@ -34,6 +36,13 @@ export async function POST(request: Request) {
       return json({ reused: true, document: doc, index: await registerDocument(doc) });
     }
     if (body.op === "remove" && validId(body.docId)) return json(await removeDocument(projectId, body.docId));
+    // Everything a deleted project stored (lib/project-delete). Only once its shared record is marked deleted.
+    if (body.op === "remove-project") {
+      const record = await sharedStore()?.get(projectId, "project");
+      const marked = record && (JSON.parse(gunzipSync(Buffer.from(record.value, "base64")).toString("utf8")) as { deleted?: unknown }).deleted;
+      if (!marked) return json({ error: "Only a deleted project's files can be removed." }, 409);
+      return json(await removeProject(projectId));
+    }
     if (body.op === "rename" && validId(body.series)) return json(await renameDocument(projectId, body.series, body.name));
     if (body.op === "update" && validId(body.docId)) {
       // Only what pages say may change after upload: sheet titles and manual sections (split again by a newer splitter).

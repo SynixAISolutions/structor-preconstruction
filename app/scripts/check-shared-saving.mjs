@@ -60,9 +60,20 @@ try {
   assert.equal((await put("scope=p1&key=Bad%20Key&base=0", {})).status, 400, "Draft names are checked");
   assert.equal((await put("scope=p1&key=procurement&base=-1", {})).status, 400, "The version is checked");
   assert.equal((await put("scope=p1&key=big&base=0", null, Buffer.alloc(4_000_001))).status, 413, "Over 4 MB compressed is refused");
+
+  // Deleting a project (19 Nov): its drafts go only once its record is marked deleted; the record stays as the marker.
+  const del = (q) => api.DELETE(new Request(at(q), { method: "DELETE" }));
+  assert.equal((await del("scope=p1")).status, 409, "A project still in use can't be emptied");
+  assert.equal((await del("scope=_org")).status, 400, "The organization's drafts can't be removed this way");
+  await put("scope=p1&key=project&base=1", { id: "p1", name: "Project A", deleted: { at: "2026-11-19T12:00:00.000Z", by: "Danial" } });
+  r = await del("scope=p1");
+  assert.equal(r.status, 200); assert.deepEqual(await r.json(), { removed: 1 }, "Its bid forms go");
+  assert.deepEqual((await (await get("scope=p1")).json()).rows.map(x => x.key), ["project"], "Only the marker is left");
+  assert.equal((await (await get("every=project")).json()).rows.find(x => x.scope === "p1").value.deleted.by, "Danial", "Every browser learns it was deleted");
+  assert.deepEqual((await (await get("scope=p2")).json()).rows.map(x => x.key), ["project"], "Other projects untouched");
 } finally {
   process.chdir(cwd);
   rmSync(dir, { recursive: true, force: true });
 }
 
-console.log("Shared saving checked: both people's changes kept in a merge, versions and conflicts, compressed drafts, project records, the organization's drafts, bad input refused.");
+console.log("Shared saving checked: both people's changes kept in a merge, versions and conflicts, compressed drafts, project records, the organization's drafts, bad input refused, a deleted project emptied but its marker kept.");

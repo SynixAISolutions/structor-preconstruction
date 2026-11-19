@@ -181,6 +181,18 @@ export function reuseDocument(copy: StoredDocument, upload: Pick<StoredDocument,
   return { ...copy, ...upload, textFrom: textSource(copy) };
 }
 
+/**
+ * A deleted project's stored PDFs that other projects still read (Danial, 19 Nov: "make sure the delete button deletes
+ * the project completely"): an upload elsewhere that reused one (reuseDocument) points at this project's folder for its
+ * PDF and page text, so that file's folder stays, and the fingerprint is handed to that upload. Every other file goes.
+ */
+export function filesStillUsed(projectId: string, own: StoredDocument[], others: StoredDocument[]): { doc: StoredDocument; usedBy: StoredDocument }[] {
+  return own.filter(d => !d.textFrom).flatMap(doc => {
+    const usedBy = others.find(o => o.projectId !== projectId && ((o.textFrom?.projectId === projectId && o.textFrom.docId === doc.id) || o.sourcePath === doc.sourcePath));
+    return usedBy ? [{ doc, usedBy }] : [];
+  });
+}
+
 /** Adds or replaces a document in an index (pure). */
 export function upsertDocument(index: ProjectFileIndex, doc: StoredDocument): ProjectFileIndex {
   return { ...index, documents: [...index.documents.filter(d => d.id !== doc.id), doc], updatedAt: new Date().toISOString() };

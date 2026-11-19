@@ -221,7 +221,7 @@ const certificationText = (project: Project) => project.certifications.length
   ? project.certifications.map(program => project.certificationTargets?.[program] !== undefined ? `${program} (${project.certificationTargets[program]}% required)` : program).join(", ")
   : "Not recorded";
 
-export function ProjectInformation({ project, onSave, navigate, cover }: { project: Project; onSave: (project: Project) => void; navigate: (screen: Screen) => void; cover: ReactNode }) {
+export function ProjectInformation({ project, onSave, onDelete, navigate, cover }: { project: Project; onSave: (project: Project) => void; onDelete?: () => void; navigate: (screen: Screen) => void; cover: ReactNode }) {
   const [editing, setEditing] = useState(false);
   const [formBusy, setFormBusy] = useState(false);
   const [addingMember, setAddingMember] = useState(false), [memberError, setMemberError] = useState("");
@@ -239,7 +239,7 @@ export function ProjectInformation({ project, onSave, navigate, cover }: { proje
   const jobWalk = kickoff?.jobWalk ? `${displayDate(kickoff.jobWalk)}${kickoff.jobWalkNote ? ` · ${kickoff.jobWalkNote}` : ""}` : kickoff?.jobWalkNote || "Not set";
   const wage = kickoff?.wageScale === true ? `Yes${kickoff.wageScaleType ? ` · ${kickoff.wageScaleType}` : " · type not recorded"}` : kickoff?.wageScale === false ? "No" : "Not confirmed";
 
-  return <><PageHeader eyebrow="PROJECT INFORMATION" title={project.name} description="The shared source of project context for your team and trade partners." actions={<><Button onClick={() => navigate("portal")}><HardHat size={16}/>Subcontractor view</Button><Button onClick={()=>navigate("architect")}>Architect view</Button><Button variant="primary" onClick={() => setEditing(true)}>Edit information</Button></>}/>
+  return <><PageHeader eyebrow="PROJECT INFORMATION" title={project.name} description="The shared source of project context for your team and trade partners." actions={<><Button onClick={() => navigate("portal")}><HardHat size={16}/>Subcontractor view</Button><Button onClick={()=>navigate("architect")}>Architect view</Button>{onDelete && <Button onClick={onDelete}><Trash2 size={15}/>Delete project</Button>}<Button variant="primary" onClick={() => setEditing(true)}>Edit information</Button></>}/>
     <div className="info-cover">{cover}<div><Badge tone="green">{project.status}</Badge><h2>{project.type}</h2><p><MapPin size={16}/>{project.location}</p></div></div>
     <SetupContinueCard project={project} navigate={navigate}/>
     <div className="ui-two-col"><div className="info-main"><Panel title="Project brief" subtitle="Visible to the project team and invited partners"><div className="info-body"><p>{project.description || "No project brief has been recorded."}</p><dl className="info-grid">{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></div></Panel>

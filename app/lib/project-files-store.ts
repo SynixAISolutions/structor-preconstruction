@@ -1,8 +1,8 @@
 // Server side of Project files: the per-project index and page text in the private Blob store, and
 // byte ranges of the original PDFs. Only reached through /api/project-files, behind the demo password.
 
-import { del, get, put } from "@vercel/blob";
-import { emptyIndex, hashPath, indexPath, MAX_RANGE_BYTES, renameSeries, textPath, textSource, upsertDocument, type DocKind, type PageText, type ProjectFileIndex, type StoredDocument } from "./project-files";
+import { del, get, list, put } from "@vercel/blob";
+import { blobRoot, emptyIndex, filesStillUsed, hashPath, indexPath, MAX_RANGE_BYTES, renameSeries, textPath, textSource, upsertDocument, type DocKind, type PageText, type ProjectFileIndex, type StoredDocument } from "./project-files";
 
 async function readJson<T>(pathname: string): Promise<T | null> {
   const result = await get(pathname, { access: "private", useCache: false }).catch(() => null);
@@ -69,6 +69,53 @@ export async function removeDocument(projectId: string, docId: string) {
   // A fingerprinted PDF may be reused by other uploads (findCopy), so its stored copy stays; only the entry goes.
   if (!doc.hash && !doc.textFrom) await del([doc.sourceUrl, ...Array.from({ length: doc.textChunks }, (_, n) => textPath(projectId, docId, n))]).catch(() => {});
   return next;
+}
+
+/** Every stored blob's pathname under a prefix, all pages of the listing. */
+async function pathsUnder(prefix: string): Promise<string[]> {
+  const out: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await list({ prefix, cursor, limit: 1000 });
+    out.push(...page.blobs.map(b => b.pathname));
+    cursor = page.hasMore ? page.cursor : undefined;
+  } while (cursor);
+  return out;
+}
+/** Every other project's files (each project folder's index). */
+async function otherProjectsFiles(projectId: string): Promise<StoredDocument[]> {
+  const folders: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await list({ prefix: "project-files/", mode: "folded", cursor, limit: 1000 });
+    folders.push(...page.folders);
+    cursor = page.hasMore ? page.cursor : undefined;
+  } while (cursor);
+  const ids = folders.map(f => f.replace(/^project-files\//, "").replace(/\/$/, "")).filter(id => id && id !== projectId);
+  return (await Promise.all(ids.map(id => readIndex(id, true).catch(() => null)))).flatMap(index => index?.documents ?? []);
+}
+
+/**
+ * Deletes everything a deleted project stored (Danial, 19 Nov: "make sure the delete button deletes the project
+ * completely"): its file list, PDFs, page text and their fingerprints, its notes, the bids subcontractors uploaded and its
+ * clarification requests. A PDF another project reused stays, with its page text, and that project gets its fingerprint
+ * (lib/project-files filesStillUsed). Resolves to how many stored files went and how many stayed for other projects.
+ */
+export async function removeProject(projectId: string): Promise<{ removed: number; kept: number }> {
+  const index = await readIndex(projectId, true);
+  const used = filesStillUsed(projectId, index.documents, await otherProjectsFiles(projectId));
+  const keep = used.map(u => `${blobRoot(projectId)}/${u.doc.id}/`);
+  for (const { doc, usedBy } of used) if (doc.hash) await writeJson(hashPath(doc.hash), { projectId: usedBy.projectId, docId: usedBy.id }).catch(() => null);
+  // The fingerprints that point at this project's files, other than the ones handed on.
+  const pointers = (await Promise.all(index.documents.filter(d => d.hash && !d.textFrom && !used.some(u => u.doc.id === d.id)).map(async d => {
+    const at = await readJson<{ projectId: string; docId: string }>(hashPath(d.hash!));
+    return at?.projectId === projectId ? [hashPath(d.hash!)] : [];
+  }))).flat();
+  const stored = (await Promise.all([`${blobRoot(projectId)}/`, `bid-files/${projectId}/`, `clarifications/${projectId}/`].map(pathsUnder))).flat();
+  const gone = [...stored.filter(p => !keep.some(k => p.startsWith(k))), ...pointers];
+  for (let i = 0; i < gone.length; i += 100) await del(gone.slice(i, i + 100));
+  cache.delete(projectId);
+  return { removed: gone.length, kept: used.length };
 }
 
 export const saveText = (projectId: string, docId: string, chunk: number, pages: PageText[]) => writeJson(textPath(projectId, docId, chunk), pages);
