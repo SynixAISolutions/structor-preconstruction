@@ -11,14 +11,15 @@ import {
   restoreSampleBackup, sampleBackupFile, sampleStatus, type SampleBackup, type SampleStatus,
 } from "./sample-refresh";
 import { writeDraft } from "./use-local-draft";
+import { unpackDraft } from "./draft-codec";
 
 /** A directory saved before the starting list grew gets the new companies, here and in the team's shared copy. */
 function addStartingCompanies() {
   try {
-    const saved = localStorage.getItem(draftStorageKey(SAMPLE_PROJECT_ID, "directory"));
+    const saved = unpackDraft(localStorage.getItem(draftStorageKey(SAMPLE_PROJECT_ID, "directory")));
     if (!saved) return;
     const current = JSON.parse(saved) as Bidder[];
-    const removed = JSON.parse(localStorage.getItem(draftStorageKey(SAMPLE_PROJECT_ID, REMOVED_COMPANIES_KEY)) ?? "[]") as string[];
+    const removed = JSON.parse(unpackDraft(localStorage.getItem(draftStorageKey(SAMPLE_PROJECT_ID, REMOVED_COMPANIES_KEY))) ?? "[]") as string[];
     const next = withStartingCompanies(current, removed);
     if (next !== current) writeDraft(SAMPLE_PROJECT_ID, "directory", next);
   } catch { /* The saved directory stays as it was; the next load tries again. */ }
