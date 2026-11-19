@@ -16,8 +16,15 @@
 // take the same time either way (above). Drawing into a canvas kept in ordinary memory (willReadFrequently) held 1.1 GB
 // but drew 2.6 times slower, so it was left out.
 
-/** Pages being drawn at once in the whole tab: the automatic run's trades, OCR, an upload's title blocks, a viewer. */
+/** Pages being drawn at once in the whole tab by the readers: the automatic run's trades, OCR, an upload's title blocks. */
 export const PAGES_AT_ONCE = 1;
+/**
+ * Pages a person asked to see, drawn at once beside the readers' (19 Nov, Danial: drawings take "too long" to open, "not a
+ * smooth experience"). Behind one shared turn, a sheet clicked during the automatic run waited for whatever sheet a reader
+ * was drawing, up to a minute on Whittier's heaviest; with its own turn it starts at once. Two pages at once peaked at
+ * 1.7 GB against 1.5 GB for one in the 12 Nov measurements (above), and only while someone is opening sheets.
+ */
+export const ASKED_AT_ONCE = 1;
 
 /**
  * A page still drawing after this long gives its turn to the next one and finishes in the background (13 Nov). A Whittier
@@ -29,29 +36,30 @@ let stuckAfter = STUCK_AFTER_MS;
 /** For the checks only. */
 export const setStuckAfter = (ms: number) => { stuckAfter = ms; };
 
-let busy = 0;
-/** Waiting for a turn: pages a person asked to see, then the readers working through many sheets. */
-const asked: (() => void)[] = [], line: (() => void)[] = [];
+/** Turns in use and pages waiting, in two lanes: pages a person asked to see, and the readers working through many sheets. */
+const lanes = { asked: { busy: 0, most: ASKED_AT_ONCE, waiting: [] as (() => void)[] }, behind: { busy: 0, most: PAGES_AT_ONCE, waiting: [] as (() => void)[] } };
 
 /**
- * Runs `draw` (one page drawn, or its drawing read) once one of the tab's PAGES_AT_ONCE turns is free, and gives the turn
- * up when it ends or fails, or once it has been stuck for STUCK_AFTER_MS. A reader working through many sheets (the
- * automatic run, OCR, a model build) passes `behind`: it waits behind any page a person has asked to see, which goes next.
+ * Runs `draw` (one page drawn, or its drawing read) once a turn in its lane is free, and gives the turn up when it ends or
+ * fails, or once it has been stuck for STUCK_AFTER_MS. A reader working through many sheets (the automatic run, OCR, a model
+ * build) passes `behind` and takes one of the readers' PAGES_AT_ONCE turns; a page a person asked to see takes one of its
+ * own ASKED_AT_ONCE, so it never waits for a reader's page.
  */
 export async function pageTurn<T>(draw: () => Promise<T>, behind = false): Promise<T> {
-  if (busy < PAGES_AT_ONCE) busy++;
-  else await new Promise<void>(resolve => { (behind ? line : asked).push(resolve); });
+  const lane = behind ? lanes.behind : lanes.asked;
+  if (lane.busy < lane.most) lane.busy++;
+  else await new Promise<void>(resolve => { lane.waiting.push(resolve); });
   let given = false;
   const giveUp = () => { // the turn passes straight on, once
     if (given) return;
     given = true;
-    const next = asked.shift() ?? line.shift();
-    if (next) next(); else busy--;
+    const next = lane.waiting.shift();
+    if (next) next(); else lane.busy--;
   };
   const stuck = setTimeout(giveUp, stuckAfter);
   try { return await draw(); }
   finally { clearTimeout(stuck); giveUp(); }
 }
 
-/** Pages being drawn and waiting, for the checks. */
-export const pageTurns = () => ({ busy, waiting: asked.length + line.length });
+/** Pages being drawn and waiting, both lanes together, for the checks. */
+export const pageTurns = () => ({ busy: lanes.asked.busy + lanes.behind.busy, waiting: lanes.asked.waiting.length + lanes.behind.waiting.length });

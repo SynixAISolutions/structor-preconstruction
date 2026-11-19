@@ -17,6 +17,7 @@ import { pageTextBoxes, type TextBox } from "./text-anchor";
 import { paintPage } from "./pdf-paint";
 import { eachPageInRuns, freeCanvas, openLocalPdf, PAGES_PER_OPEN, pdfDecoders, readersFor } from "./local-pdf";
 import { pageTurn } from "./page-turns";
+import { keepPageImage, keptPageImage, pageImageKey } from "./page-image-cache";
 import { fetchWholeRange } from "./range-fetch";
 import {
   chunkFor, emptyIndex, kindForCategory, MAX_RANGE_BYTES, sourcePath, TEXT_CHUNK,
@@ -356,13 +357,42 @@ const renders = new Map<string, Promise<{ image: string; aspect: number }>>();
 const RENDERS_KEPT = 16;
 
 /**
- * A page of a stored PDF as a JPEG data URL, longest side `size` pixels. Pages are drawn a few at a time in the whole tab
- * (lib/page-turns); a reader working through many sheets passes `behind`, so a page someone opens is drawn ahead of its queue.
+ * A page of a stored PDF as a JPEG data URL, longest side `size` pixels. A page drawn before, in this browser, comes from the
+ * kept images (lib/page-image-cache) without fetching or drawing anything. Pages are drawn a few at a time in the whole tab
+ * (lib/page-turns); a reader working through many sheets passes `behind`, so a page someone opens doesn't wait for it.
  */
 export function renderStoredPage(doc: StoredDocument, pageNumber: number, size = 2000, behind = false): Promise<{ image: string; aspect: number }> {
   const key = `${doc.id}:${pageNumber}:${size}`;
   if (!renders.has(key)) {
-    const job = openStoredPdf(doc).then(pdf => pageTurn(async () => {
+    const job = keptPageImage(pageImageKey(doc.id, pageNumber, size)).then(kept => kept ?? drawStoredPage(doc, pageNumber, size, behind).then(drawn => {
+      void keepPageImage(pageImageKey(doc.id, pageNumber, size), drawn.image, drawn.aspect);
+      return drawn;
+    }));
+    job.catch(() => renders.delete(key));
+    renders.set(key, job);
+    if (renders.size > RENDERS_KEPT) renders.delete(renders.keys().next().value!);
+  }
+  return renders.get(key)!;
+}
+
+/**
+ * Starts drawing a page someone is about to open (a pointer resting on a link to it), so it is ready or nearly so by the
+ * click. Only the latest such page waits for its turn: moving across a list of links doesn't queue a page per link.
+ */
+let warming: string | null = null;
+export function warmStoredPage(doc: StoredDocument, pageNumber: number, size = 2000): void {
+  const key = `${doc.id}:${pageNumber}:${size}`;
+  if (renders.has(key) || warming === key) return;
+  warming = key;
+  setTimeout(() => { if (warming === key) { warming = null; renderStoredPage(doc, pageNumber, size).catch(() => {}); } }, 150);
+}
+/** Stops warming a page the pointer has left before its drawing started. */
+export const coolStoredPage = (doc: StoredDocument, pageNumber: number, size = 2000) => { if (warming === `${doc.id}:${pageNumber}:${size}`) warming = null; };
+
+/** Draws a page of a stored PDF in its turn (lib/page-turns): the PDF's bytes for it are fetched, then it is painted. */
+function drawStoredPage(doc: StoredDocument, pageNumber: number, size: number, behind: boolean): Promise<{ image: string; aspect: number }> {
+  {
+    return openStoredPdf(doc).then(pdf => pageTurn(async () => {
       const page = await pdf.getPage(pageNumber);
       const original = page.getViewport({ scale: 1 });
       const viewport = page.getViewport({ scale: size / Math.max(original.width, original.height) });
@@ -376,11 +406,7 @@ export function renderStoredPage(doc: StoredDocument, pageNumber: number, size =
       freeCanvas(canvas);
       return { image, aspect: original.width / original.height };
     }, behind));
-    job.catch(() => renders.delete(key));
-    renders.set(key, job);
-    if (renders.size > RENDERS_KEPT) renders.delete(renders.keys().next().value!);
   }
-  return renders.get(key)!;
 }
 
 type Box = [number, number, number, number];

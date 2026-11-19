@@ -3,11 +3,18 @@
 import { useEffect, useState } from "react";
 import { BookOpen, LocateFixed, Map as MapIcon } from "lucide-react";
 import type { ScopeItem } from "../../lib/procurement";
-import { readStoredText } from "../../lib/project-files-client";
+import { coolStoredPage, readStoredText, warmStoredPage } from "../../lib/project-files-client";
 import { findParagraph, onDrawing, type Evidence } from "../../lib/scope-evidence";
 import { useScopeEvidence } from "../../lib/use-scope-evidence";
 import { StoredDocumentViewer } from "./project-file-viewer";
 import { Empty, Modal } from "./shared";
+
+/** Pointer handlers that start drawing a source's page while the pointer rests on its link, so the click opens it sooner. */
+const warm = (e: Evidence | undefined) => e?.doc && e.page ? {
+  onPointerEnter: () => warmStoredPage(e.doc!, e.page),
+  onPointerLeave: () => coolStoredPage(e.doc!, e.page),
+  onFocus: () => warmStoredPage(e.doc!, e.page),
+} : {};
 
 /** A bid package's items and where each came from; a source opens the document on its words, highlighted. */
 export function PackageScopeSources({ items }: { items: ScopeItem[] }) {
@@ -20,7 +27,7 @@ export function PackageScopeSources({ items }: { items: ScopeItem[] }) {
       return <li key={item.id}><b>{String(n + 1).padStart(2, "0")}</b><div>
         <strong>{item.title}</strong>
         {quote && <q>{quote}</q>}
-        <span className="pkg-source-chips">{evidence.length ? evidence.map((e, index) => <button key={e.key} type="button" className="pkg-source-chip" title={`${e.documentName}, page ${e.page}${e.quotes.length ? `: ${e.quotes.map(q => `“${q}”`).join(" · ")}` : ""}`} onClick={() => setOpen({ item, index })}><LocateFixed size={12}/>{e.label}</button>) : <small>{item.source || "No source linked"}</small>}</span>
+        <span className="pkg-source-chips">{evidence.length ? evidence.map((e, index) => <button key={e.key} type="button" className="pkg-source-chip" {...warm(e)} title={`${e.documentName}, page ${e.page}${e.quotes.length ? `: ${e.quotes.map(q => `“${q}”`).join(" · ")}` : ""}`} onClick={() => setOpen({ item, index })}><LocateFixed size={12}/>{e.label}</button>) : <small>{item.source || "No source linked"}</small>}</span>
       </div></li>;
     })}</ol>
     {open && <ScopeSourceModal title={open.item.title} evidence={evidenceOf(open.item)} index={open.index} onClose={() => setOpen(null)}/>}
@@ -43,7 +50,7 @@ export function OpenSourceButton({ evidence, onOpen }: { evidence: Evidence[]; o
   if (!evidence.length) return null;
   const drawing = evidence.findIndex(onDrawing), index = Math.max(0, drawing), source = evidence[index];
   const label = drawing >= 0 ? "Open drawing" : source.kind === "section" || source.doc?.kind === "manual" ? "Open spec" : "Open source";
-  return <button type="button" className="scope-open-source" aria-label={`${label}: ${source.label}`} title={`${source.label}${source.quotes.length ? `: ${source.quotes.map(q => `“${q}”`).join(" · ")}` : ""}`} onClick={() => onOpen(index)}>
+  return <button type="button" className="scope-open-source" {...warm(source)} aria-label={`${label}: ${source.label}`} title={`${source.label}${source.quotes.length ? `: ${source.quotes.map(q => `“${q}”`).join(" · ")}` : ""}`} onClick={() => onOpen(index)}>
     {drawing >= 0 ? <MapIcon size={13}/> : <BookOpen size={13}/>}<span>{label}</span>
   </button>;
 }
