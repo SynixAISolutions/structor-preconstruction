@@ -36,9 +36,9 @@ export async function POST(request: Request) {
     if (body.op === "remove" && validId(body.docId)) return json(await removeDocument(projectId, body.docId));
     if (body.op === "rename" && validId(body.series)) return json(await renameDocument(projectId, body.series, body.name));
     if (body.op === "update" && validId(body.docId)) {
-      // Only what pages say may change after upload: sheet titles and manual sections.
+      // Only what pages say may change after upload: sheet titles and manual sections (split again by a newer splitter).
       const patch = parseSheetsAndSections(body.document ?? {});
-      return json(await updateDocument(projectId, body.docId, (doc: StoredDocument) => ({ ...doc, sheets: patch.sheets.length ? patch.sheets : doc.sheets, sections: patch.sections.length ? patch.sections : doc.sections })));
+      return json(await updateDocument(projectId, body.docId, (doc: StoredDocument) => ({ ...doc, sheets: patch.sheets.length ? patch.sheets : doc.sheets, sections: patch.sections.length ? patch.sections : doc.sections, ...(patch.sectionsVersion ? { sectionsVersion: patch.sectionsVersion } : {}) })));
     }
     return json({ error: "Unknown request." }, 400);
   } catch (error) {

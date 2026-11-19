@@ -32,6 +32,8 @@ export type StoredDocument = {
   textChunks: number;
   sheets: StoredSheet[];
   sections: StoredSection[];
+  /** The splitter that found `sections` (lib/manual-sections SECTIONS_VERSION); older manuals are split again on load. */
+  sectionsVersion?: number;
   /** SHA-256 of the PDF, so an identical upload reuses this stored copy instead of storing it again. */
   hash?: string;
   /**
@@ -160,12 +162,13 @@ export function parseDocument(raw: unknown, projectId: string): StoredDocument {
 }
 
 /** A document record's sheets and manual sections, as a browser sends them (after upload, titles and sections may change). */
-export function parseSheetsAndSections(o: Record<string, any>): Pick<StoredDocument, "sheets" | "sections"> {
+export function parseSheetsAndSections(o: Record<string, any>): Pick<StoredDocument, "sheets" | "sections" | "sectionsVersion"> {
   const text = (v: unknown, max: number) => typeof v === "string" ? v.trim().slice(0, max) : "";
   const int = (v: unknown, min: number, max: number) => Number.isInteger(v) && (v as number) >= min && (v as number) <= max ? v as number : NaN;
   return {
     sheets: (Array.isArray(o.sheets) ? o.sheets : []).slice(0, 20_000).map((s: any) => ({ page: int(s?.page, 1, 20_000), sheet: text(s?.sheet, 40), title: text(s?.title, 200), date: text(s?.date, 40) })).filter((s: StoredSheet) => Number.isFinite(s.page)),
     sections: (Array.isArray(o.sections) ? o.sections : []).slice(0, 5_000).map((s: any) => ({ section: text(s?.section, 20), title: text(s?.title, 200), first: int(s?.first, 1, 20_000), last: int(s?.last, 1, 20_000) })).filter((s: StoredSection) => s.section && Number.isFinite(s.first) && Number.isFinite(s.last)),
+    ...(Number.isInteger(o.sectionsVersion) && o.sectionsVersion >= 1 && o.sectionsVersion <= 100 ? { sectionsVersion: o.sectionsVersion as number } : {}),
   };
 }
 

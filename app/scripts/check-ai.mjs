@@ -56,6 +56,37 @@ const sections = M.manualSections([...manual].reverse());
 assert.deepEqual(sections.map(s => [s.section, s.firstPage, s.lastPage, s.pages.map(p => p.page)]), [["09 22 16", 425, 426, [425, 426]], ["09 29 00", 434, 440, [434, 440]], ["09 84 33", 486, 486, [486]], ["23 05 93.13", 700, 700, [700]]]);
 assert.deepEqual(M.sectionsInDivision(sections, "09").map(s => s.section), ["09 22 16", "09 29 00", "09 84 33"]);
 
+// Whittier's layout (19 Nov): contents pages list sections the way they open, a section's later pages name nothing in
+// their first lines (the page number is in the footer), and END OF SECTION closes it. The old splitter gave the air
+// barrier section 1 page and ran cast-in-place concrete from its contents line on page 8 to its last page.
+const body = n => Array.from({ length: n }, (_, i) => `Body line ${i}`).join("\n");
+const whit = [
+  { page: 8, text: "PROJECT MANUAL\nTABLE OF CONTENTS\nSECTION 03 30 00 - CAST-IN-PLACE CONCRETE\nSECTION 03 45 00 - PRECAST ARCHITECTURAL CONCRETE" },
+  { page: 9, text: ["07 27 26 - FLUID-APPLIED MEMBRANE AIR BARRIERS", "07 54 19 - POLYVINYL-CHLORIDE (PVC) ROOFING", "07 62 00 - SHEET METAL FLASHING AND TRIM", "07 92 00 - JOINT SEALANTS", "07 95 13.13 - INTERIOR EXPANSION JOINT COVER ASSEMBLIES"].map(l => `SECTION ${l}`).join("\n") },
+  { page: 300, text: "WHITTIER ES MODERNIZATION\nSECTION 03 30 00 - CAST-IN-PLACE CONCRETE\nPART 1 - GENERAL\n1.2 RELATED REQUIREMENTS\nSection 03 10 00 - Concrete Forming\nSection 03 20 00 - Concrete Reinforcing\nSection 07 92 00 - Joint Sealants\nSection 31 20 00 - Earth Moving\nSection 32 13 13 - Concrete Paving" },
+  { page: 301, text: `WHITTIER ES MODERNIZATION\n${body(12)}\nCAST-IN-PLACE CONCRETE 03 30 00 - 2` },
+  { page: 330, text: `WHITTIER ES MODERNIZATION\n${body(12)}\nEND OF SECTION 03 30 00` },
+  { page: 331, text: "THIS PAGE INTENTIONALLY LEFT BLANK" },
+  { page: 561, text: "WHITTIER ES MODERNIZATION\nSECTION 072726 - FLUID-APPLIED MEMBRANE AIR BARRIERS\nPART 1 - GENERAL" },
+  { page: 562, text: `WHITTIER ES MODERNIZATION\n${body(12)}\nA. Fluid-applied air barrier, vapor permeable, on exterior sheathing.` },
+  { page: 568, text: `WHITTIER ES MODERNIZATION\n${body(12)}\nEND OF SECTION 072726` },
+  { page: 569, text: "SECTION 075419 - POLYVINYL-CHLORIDE (PVC) ROOFING\nPART 1 - GENERAL" },
+  { page: 584, text: `WHITTIER ES MODERNIZATION\n${body(12)}\nB. PVC roofing over the timber roof deck.` },
+  { page: 585, text: "APPENDIX B\nROOF WIND UPLIFT CALCULATIONS" },
+  { page: 586, text: "Zone 1 field pressure 45 psf" },
+  { page: 600, text: "DIVISION 08 - OPENINGS" },
+  { page: 601, text: "Cover sheet text that names nothing" },
+];
+assert.equal(M.listsSections("WHITTIER ES MODERNIZATION\nC. Source Information: List each product, arranged to match manual's table of contents.\nEND OF SECTION"), false, "Words in a sentence are not the contents heading (01 78 23, 19 Nov)");
+assert.deepEqual([M.listsSections(whit[0].text), M.listsSections(whit[1].text), M.listsSections(whit[2].text)], [true, true, false], "Contents pages list sections; a section's first page lists related sections but opens PART 1");
+const split = M.manualSections(whit);
+assert.deepEqual(split.map(s => [s.section, s.firstPage, s.lastPage, s.pages.length]), [["03 30 00", 300, 330, 3], ["07 27 26", 561, 568, 3], ["07 54 19", 569, 584, 2]], "Each section runs from its opening page to its end; contents, blank, appendix and division pages belong to none");
+assert.deepEqual(M.storedSections(whit).map(s => [s.section, s.first, s.last]), [["03 30 00", 300, 330], ["07 27 26", 561, 568], ["07 54 19", 569, 584]]);
+// A section named again later (a stray header) keeps its longer run.
+const twice = M.manualSections([...whit, { page: 700, text: "CAST-IN-PLACE CONCRETE 03 30 00 - 9\nloose page" }]);
+assert.deepEqual(twice.filter(s => s.section === "03 30 00").map(s => [s.firstPage, s.lastPage]), [[300, 330]]);
+assert.equal(M.SECTIONS_VERSION >= 2, true, "Manuals split before 19 Nov are split again");
+
 // ── Quote screening ──
 assert.equal(J.quoteOnPage("Level 4: At panel surfaces that will be exposed to view", manual[4].text), true);
 assert.equal(J.quoteOnPage("level 4 at panel surfaces THAT will be exposed", "Level 4: At panel\nsurfaces that will be exposed"), true, "Spacing, case and punctuation don't decide");

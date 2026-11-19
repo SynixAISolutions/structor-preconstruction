@@ -57,10 +57,10 @@ console.log(`uploaded in ${Math.round((Date.now() - started) / 1000)} s`);
 
 const chunks = Math.ceil(pages.length / F.TEXT_CHUNK);
 for (let n = 0; n < chunks; n++) await S.saveText(projectId, id, n, pages.slice(n * F.TEXT_CHUNK, (n + 1) * F.TEXT_CHUNK));
-const sections = kind === "manual" ? M.manualSections(pages).map(s => ({ section: s.section, title: s.title, first: s.firstPage, last: s.lastPage })) : [];
+const sections = kind === "manual" ? M.storedSections(pages) : [];
 const doc = F.parseDocument({
   id, projectId, name: basename(file), category, kind, series: id, revision: 1, size, pageCount: pages.length, uploadedAt: new Date().toISOString(),
-  sourcePath: blob.pathname, sourceUrl: blob.url, textChunk: F.TEXT_CHUNK, textChunks: chunks, sheets, sections,
+  sourcePath: blob.pathname, sourceUrl: blob.url, textChunk: F.TEXT_CHUNK, textChunks: chunks, sheets, sections, ...(kind === "manual" ? { sectionsVersion: M.SECTIONS_VERSION } : {}),
 }, projectId);
 await S.registerDocument(doc);
 console.log(`registered ${id}: ${chunks} text chunks${sections.length ? `, ${sections.length} sections` : ""}`);
