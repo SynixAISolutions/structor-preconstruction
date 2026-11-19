@@ -2,8 +2,10 @@
 
 import { useState, type DragEvent, type ReactNode } from "react";
 import { ArrowRight, BookOpen, FilePlus2, FileStack, GitBranchPlus, Map as MapIcon, Sparkles } from "lucide-react";
-import { RUNS_KEY } from "../../lib/auto-scopes";
-import { NO_RUNS, runFiles, runSummary, type SavedRuns } from "../../lib/auto-scope-plan";
+import { readEveryTrade, RUNS_KEY } from "../../lib/auto-scopes";
+import { canReadEveryTrade, NO_RUNS, runFiles, runSummary, type SavedRuns } from "../../lib/auto-scope-plan";
+import { CONFIRM_ABOVE, dollars } from "../../lib/ai-cost";
+import { getActiveProjectId } from "../../lib/project-scope";
 import { bidDocuments, type BidVolume } from "../../lib/bid-documents";
 import { displayDate } from "../../lib/format";
 import { revisionLabel, type StoredDocument } from "../../lib/project-files";
@@ -27,6 +29,11 @@ export function BidDocumentsPanel({ documents, ready, busy, onUpload, onOpen, on
   const [saved] = useLocalDraft<SavedRuns>(RUNS_KEY, NO_RUNS);
   const run = saved.runs[0];
   const empty = !drawings.length && !manual.length;
+  // Read every trade, when the run set the bid packages only (reading everything cost $2 or more): above $5 it asks first.
+  const [confirming, setConfirming] = useState(false);
+  const [problem, setProblem] = useState("");
+  const readAll = () => { setConfirming(false); setProblem(readEveryTrade(getActiveProjectId(), documents) ?? ""); };
+  const waiting = ready && canReadEveryTrade(run);
   return <Panel className="bid-docs" title="Bid documents" subtitle="The drawings and project manual the bid is based on: upload every volume here at the start. The AI reads them as they arrive and writes the bid packages and their scope items.">
     <div className="bid-docs-slots">
       <Slot icon={<MapIcon size={17}/>} title="Drawings" hint="Every drawing volume: Vol 1, Vol 2…" what="drawings" busy={busy} onUpload={onUpload} action="Add drawings">
@@ -40,9 +47,15 @@ export function BidDocumentsPanel({ documents, ready, busy, onUpload, onOpen, on
       </Slot>
     </div>
     <p className="bid-docs-ai" role="status"><Sparkles size={14}/>{!ready ? "Looking for the project's files…"
-      : run ? <>{run.status === "running" ? `The AI is reading ${runFiles(run)} now. Its progress shows at the bottom of the page.` : `The AI read ${runFiles(run)}: ${runSummary(run)}.`}<button type="button" className="bid-docs-link" onClick={() => navigate("scopes")}>Open the scopes<ArrowRight size={13}/></button></>
+      : run ? <>{run.status === "running" ? `The AI is reading ${runFiles(run)} now. Its progress shows at the bottom of the page.` : `The AI read ${runFiles(run)}: ${runSummary(run)}.`}<button type="button" className="bid-docs-link" onClick={() => navigate("scopes")}>Open the scopes<ArrowRight size={13}/></button>
+        {waiting && <span className="bid-docs-read-all"><Button variant="primary" disabled={confirming} onClick={() => (run.fullCost ?? 0) > CONFIRM_ABOVE ? setConfirming(true) : readAll()}><Sparkles size={14}/>Read every trade · about {dollars(run.fullCost ?? 0)}</Button></span>}</>
       : empty ? "Upload the drawings and the project manual: the AI starts reading as soon as they are stored, and lets you know when the scopes are ready."
       : <>New drawings and specifications are read by the AI as soon as they are uploaded.<button type="button" className="bid-docs-link" onClick={() => navigate("scopes")}>Open the scopes<ArrowRight size={13}/></button></>}</p>
+    {waiting && confirming && <div className="ai-cost-confirm bid-docs-confirm" role="alertdialog" aria-label="Confirm the AI reading">
+      <p><strong>Reading every trade costs about {dollars(run.fullCost ?? 0)} of Claude credits.</strong> Read them all?</p>
+      <div className="proc-form-actions"><Button onClick={() => setConfirming(false)}>Cancel</Button><Button variant="primary" onClick={readAll}>Yes, read every trade</Button></div>
+    </div>}
+    {problem && <p className="bid-docs-ai" role="alert">{problem}</p>}
   </Panel>;
 }
 

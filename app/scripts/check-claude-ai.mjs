@@ -200,7 +200,17 @@ assert.ok(small < K.AUTO_READ_UNDER, `Two drawings and two sections read by them
 const big = K.estimateCost("claude-opus-5-5", A.readingWork([{ sections: [{ first: 1, last: 1084 }], sheets: Array(120).fill({}) }]));
 assert.ok(big > 20, `Project 1's manual and drawings wait for the estimator (${big})`);
 assert.deepEqual(H.referenceWork([{ text: "  " }, { text: "A".repeat(50) }], [{ name: "Tile", sections: [] }]), { requests: 1, chars: 50 + 24 }, "Sheets without text aren't counted");
-assert.equal(A.runSummary({ trades: [], added: 0, duplicates: 0, newTrades: ["Tile"], scopesLater: true, fullCost: 31.2 }), "Bid packages set; reading every trade would cost about $31, so choose trades in Write scopes with AI · 1 new bid package");
+assert.equal(A.runSummary({ trades: [], added: 0, duplicates: 0, newTrades: ["Tile"], scopesLater: true, fullCost: 31.2 }), "Bid packages set; reading every trade would cost about $31, so it waits for you: choose Read every trade in Project files, or pick trades in Write scopes with AI · 1 new bid package");
+// Read every trade (19 Nov): Whittier's drawings and two manuals were estimated at $3.69, so the run set the packages only;
+// the estimator's go-ahead reads them all, also when the run picks up again after a closed tab.
+assert.equal(A.waitsForGoAhead(3.69), true, "$2 or more waits for the estimator");
+assert.equal(A.waitsForGoAhead(1.99), false);
+assert.equal(A.waitsForGoAhead(undefined), false, "DeepSeek, or Claude with CLAUDE_AUTO_SCOPES on: no estimate, no wait");
+assert.equal(A.waitsForGoAhead(3.69, true), false, "Read every trade reads them all");
+assert.equal(A.canReadEveryTrade({ status: "done", scopesLater: true }), true);
+assert.equal(A.canReadEveryTrade({ status: "running", scopesLater: true }), false, "Not while it runs");
+assert.equal(A.canReadEveryTrade({ status: "done", scopesLater: false }), false, "A run that read its trades has nothing waiting");
+assert.equal(A.canReadEveryTrade(undefined), false);
 
 
 // Haiku reads Project 1 in full for about what Opus charges for a few trades.

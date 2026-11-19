@@ -5,7 +5,7 @@
 import { drawingLog, drawingRegister, latestDocuments, specificationSections, type StoredDocument, type VolumeSection } from "./project-files";
 import type { TradePackage } from "./procurement";
 import { sectionsByTrade, sheetsForTrade } from "./project-scopes";
-import { dollars } from "./ai-cost";
+import { AUTO_READ_UNDER, dollars } from "./ai-cost";
 
 /**
  * Files uploaded from this moment start a run by themselves. Drawings and manuals stored before it were
@@ -27,6 +27,9 @@ export type AutoRun = {
   scopesLater?: boolean;
   /** What reading everything was estimated to cost, in dollars, when Claude reads. */
   fullCost?: number;
+  /** The estimator chose Read every trade after the run set the bid packages only: it reads every trade whatever the
+   * estimate, also when it picks up again after a closed tab. */
+  readAll?: boolean;
   /** What the run is doing after the trades, for the progress card ("Making the scanned sheets searchable…"). */
   stage?: string;
   /** A run after a new revision (Marcel, 24 Oct: "uploading a new drawing revision should trigger a scope update"):
@@ -142,6 +145,18 @@ export function heldElsewhere(run: Pick<AutoRun, "status" | "tab" | "browser" | 
   return now - Date.parse(run.beat ?? "") < (run.browser === me.browser ? 45_000 : 120_000);
 }
 
+/**
+ * Whether a run sets the bid packages only and waits for the estimator: reading every trade with Claude was estimated
+ * at AUTO_READ_UNDER dollars or more (Danial, 28 Oct: "Yes, under $2"), and nobody has said to read them all.
+ */
+export const waitsForGoAhead = (fullCost: number | undefined, readAll = false): boolean => !readAll && fullCost !== undefined && fullCost >= AUTO_READ_UNDER;
+
+/**
+ * A finished run that set the bid packages only, so Read every trade can go on from it (Danial, 19 Nov, on Whittier's
+ * drawings and two manuals, estimated at $3.69: "i want to run it on all scope items like a whole project").
+ */
+export const canReadEveryTrade = (run: Pick<AutoRun, "status" | "scopesLater"> | null | undefined): boolean => run?.status === "done" && !!run.scopesLater;
+
 /** Trades a run still has to read: a run stopped by a closed tab picks up after the trades it finished. */
 export const stillToRead = <T extends { pkg: { id: string } }>(trades: T[], previous: AutoRun | null): T[] =>
   trades.filter(t => !previous?.trades.some(x => x.packageId === t.pkg.id && x.status === "done"));
@@ -158,7 +173,7 @@ export function runSummary(run: AutoRun): string {
   if (run.update && !run.update.sheets.length && !run.update.sections.length) return "Revision: nothing changed on the drawings or in the specifications";
   return [
     run.update ? `Revision: ${plural(run.update.sheets.length, "changed sheet")} and ${plural(run.update.sections.length, "changed section")} read again` : "",
-    run.scopesLater ? `Bid packages set; reading every trade would cost about ${dollars(run.fullCost ?? 0)}, so choose trades in Write scopes with AI` : run.added ? `${plural(run.added, "scope item")} added to ${plural(scoped, "trade")} for approval` : "No new scope items",
+    run.scopesLater ? `Bid packages set; reading every trade would cost about ${dollars(run.fullCost ?? 0)}, so it waits for you: choose Read every trade in Project files, or pick trades in Write scopes with AI` : run.added ? `${plural(run.added, "scope item")} added to ${plural(scoped, "trade")} for approval` : "No new scope items",
     run.newTrades.length ? `${plural(run.newTrades.length, "new bid package")}` : "",
     run.packagesBy && !run.packagesBy.startsWith("AI ") ? run.packagesBy : "",
     run.duplicates ? `${run.duplicates} already in the bid forms` : "",
