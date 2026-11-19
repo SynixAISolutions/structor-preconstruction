@@ -1,5 +1,5 @@
 import { gunzipSync } from "node:zlib";
-import { MAX_SAVED_BYTES, sharedStore, validKey, validScope } from "../../../lib/shared-store";
+import { MAX_SAVED_BYTES, ORG_SCOPE, sharedStore, validKey, validScope } from "../../../lib/shared-store";
 
 // Shared saving (lib/shared-store, lib/shared-sync): every screen's saved data, one row per project and draft name.
 //   GET  ?scope=<project>             the scope's rows and versions
@@ -7,6 +7,8 @@ import { MAX_SAVED_BYTES, sharedStore, validKey, validScope } from "../../../lib
 //   GET  ?every=<name>                that row of every scope, as JSON (the project records)
 //   PUT  ?scope=&key=&base=<version>  saves a gzip-compressed JSON body over `base`; 409 with the current version
 //                                     when someone else's save landed first
+//   DELETE ?scope=<project>           removes a deleted project's drafts; its record stays as the marker, and only a
+//                                     project whose shared record is marked deleted can be emptied
 // 503 when no database is connected: the app then keeps saving in the browser only. The sign-in (proxy.ts) guards it.
 export const runtime = "nodejs";
 
@@ -31,6 +33,21 @@ export async function GET(request: Request) {
     const found = await store.get(scope, key);
     if (!found) return json({ error: "Nothing is saved under that name." }, 404);
     return new Response(Buffer.from(found.value, "base64"), { headers: { "content-type": "application/octet-stream", "cache-control": "no-store", "x-version": String(found.version), "x-updated-at": found.updatedAt } });
+  } catch (error) {
+    return failed(error);
+  }
+}
+
+export async function DELETE(request: Request) {
+  const store = sharedStore();
+  if (!store) return notSetUp();
+  const scope = new URL(request.url).searchParams.get("scope");
+  if (!validScope(scope) || scope === ORG_SCOPE) return json({ error: "Name the project." }, 400);
+  try {
+    const record = await store.get(scope, "project");
+    const marked = record && (JSON.parse(gunzipSync(Buffer.from(record.value, "base64")).toString("utf8")) as { deleted?: unknown }).deleted;
+    if (!marked) return json({ error: "Only a deleted project's saved data can be removed." }, 409);
+    return json({ removed: await store.removeScope(scope, "project") });
   } catch (error) {
     return failed(error);
   }

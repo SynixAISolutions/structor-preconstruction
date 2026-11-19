@@ -201,3 +201,18 @@ assert.ok(demos.every(d => d.rfi < d.due && d.due > "2026-10-28" && d.start > d.
 assert.equal(new Set(demos.map(d => d.id)).size, demos.length, "Each demo project has its own id");
 assert.ok(new Set(demos.map(d => d.name)).size > 20 && new Set(demos.map(d => d.workType)).size === 4, "Demo projects vary");
 assert.deepEqual(demos[0].team, [{ name: "Marcel Khoury", role: "Estimator" }]);
+
+// Deleting a project (19 Nov): "delete" typed to confirm; the record stays as a marker no screen shows.
+{
+  const P = await import("../lib/projects.ts");
+  assert.deepEqual(["delete", " Delete ", "DELETE", "delet", "delete it", ""].map(P.deleteConfirmed), [true, true, true, false, false, false]);
+  const kept = sampleProjectRecords[1], gone = P.deletedProject(sampleProjectRecords[2], "Danial", "2026-11-19T12:00:00.000Z");
+  assert.deepEqual(gone.deleted, { at: "2026-11-19T12:00:00.000Z", by: "Danial" });
+  assert.deepEqual(normalizeProject(JSON.parse(JSON.stringify(gone))).deleted, gone.deleted, "The marker survives storage");
+  assert.equal(normalizeProject(kept).deleted, undefined);
+  assert.deepEqual(P.liveProjects([kept, gone]).map(p => p.id), [kept.id], "No screen shows a deleted project");
+  assert.deepEqual(P.withMarkers([kept], [kept, gone]).map(p => [p.id, !!p.deleted]), [[kept.id, false], [gone.id, true]], "Saving the screens' list keeps the marker");
+  assert.deepEqual(P.withMarkers([kept], "junk").map(p => p.id), [kept.id]);
+  assert.equal(P.KEPT_PROJECT_ID, SAMPLE_PROJECT_ID, "The built-in sample can't be deleted");
+}
+console.log("Project deletion checked: the typed word, the marker kept through storage and saves, deleted projects hidden, the sample kept.");

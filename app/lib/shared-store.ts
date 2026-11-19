@@ -33,6 +33,8 @@ export interface SharedStore {
   everyScope(key: string): Promise<SharedValue[]>;
   /** Saves over version `base` (0: a new row); refused, with the current version, when that isn't the stored one. */
   save(scope: string, key: string, value: string, base: number, by: string): Promise<SaveResult>;
+  /** Removes a scope's rows but `keep` (a deleted project's drafts, keeping its record as the marker); resolves to how many. */
+  removeScope(scope: string, keep: string): Promise<number>;
 }
 
 type Row = { scope: string; key: string; version: number; updated_at: string | Date; updated_by: string; value?: string };
@@ -68,6 +70,10 @@ function postgresStore(url: string): SharedStore {
       const version = Number((done as Row[])[0]?.version ?? 0);
       return version ? { saved: true, version } : { saved: false, version: await current(scope, key) };
     },
+    async removeScope(scope, keep) {
+      await table();
+      return ((await sql`DELETE FROM shared_state WHERE scope = ${scope} AND key <> ${keep} RETURNING key`) as Row[]).length;
+    },
   };
 }
 
@@ -90,6 +96,16 @@ function fileStore(file: string): SharedStore {
         await fs.mkdir(path.dirname(file), { recursive: true });
         await fs.writeFile(file, JSON.stringify(rows));
         return { saved: true, version: base + 1 };
+      });
+      queue = run.catch(() => {});
+      return run;
+    },
+    removeScope(scope, keep) {
+      const run = queue.then(async () => {
+        const rows = await read(), gone = Object.keys(rows).filter(k => rows[k].scope === scope && rows[k].key !== keep);
+        gone.forEach(k => delete rows[k]);
+        if (gone.length) await fs.writeFile(file, JSON.stringify(rows));
+        return gone.length;
       });
       queue = run.catch(() => {});
       return run;
