@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { upload } from "@vercel/blob/client";
-import { manualSections } from "./manual-sections";
+import { SECTIONS_VERSION, storedSections } from "./manual-sections";
 import { aiJob, readTitleBlock } from "./ai-more-client";
 import { rfpPages, type RfpFact } from "./rfp";
 import type { OwnerBudgetLine } from "./owner-budget";
@@ -43,6 +43,7 @@ export function loadIndex(projectId: string, fresh = false): Promise<ProjectFile
   if (!fresh && indexes.has(projectId)) return Promise.resolve(indexes.get(projectId)!);
   if (!fresh && loading.has(projectId)) return loading.get(projectId)!;
   const request = api<ProjectFileIndex>(`/api/project-files?project=${encodeURIComponent(projectId)}`)
+    .then(resplitManuals)
     .then(index => { indexes.set(projectId, index); notify(); return index; })
     .finally(() => loading.delete(projectId));
   loading.set(projectId, request);
@@ -50,6 +51,22 @@ export function loadIndex(projectId: string, fresh = false): Promise<ProjectFile
 }
 
 const setIndex = (index: ProjectFileIndex) => { indexes.set(index.projectId, index); notify(); return index; };
+
+/**
+ * Splits again, from their stored page text, the project manuals an older splitter split (lib/manual-sections; 19 Nov:
+ * Whittier's air barrier section had 1 page of its 8), and saves the sections for everyone before the project's files
+ * are shown or read. A manual that can't be split now keeps its sections until the next load.
+ */
+async function resplitManuals(index: ProjectFileIndex): Promise<ProjectFileIndex> {
+  let next = index;
+  for (const doc of index.documents.filter(d => d.kind === "manual" && (d.sectionsVersion ?? 1) < SECTIONS_VERSION)) {
+    try {
+      const sections = storedSections(await readStoredText(doc));
+      next = await api<ProjectFileIndex>("/api/project-files", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "update", projectId: doc.projectId, docId: doc.id, document: { sections, sectionsVersion: SECTIONS_VERSION } }) });
+    } catch { /* split again on the next load */ }
+  }
+  return next;
+}
 
 /** A PDF's SHA-256, in hex. */
 async function fingerprint(file: File): Promise<string> {
@@ -198,7 +215,7 @@ async function storePdf(args: Parameters<typeof uploadProjectPdf>[0]): Promise<S
     id, projectId, name: file.name, category: revisionOf?.category ?? category, kind, series: revisionOf?.series ?? id, revision: (revisionOf?.revision ?? 0) + 1,
     size: file.size, pageCount: pages.length, uploadedAt: new Date().toISOString(), sourcePath: stored.pathname, sourceUrl: stored.url,
     textChunk: TEXT_CHUNK, textChunks: chunks, sheets, hash,
-    sections: kind === "manual" ? manualSections(pages).map(s => ({ section: s.section, title: s.title, first: s.firstPage, last: s.lastPage })) : [],
+    sections: kind === "manual" ? storedSections(pages) : [], ...(kind === "manual" ? { sectionsVersion: SECTIONS_VERSION } : {}),
   };
   setIndex(await api<ProjectFileIndex>("/api/project-files", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "register", projectId, document }) }));
   if (kind !== "drawings") return document;

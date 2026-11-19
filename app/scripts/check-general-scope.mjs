@@ -36,6 +36,33 @@ assert.match(messages[0].content, /at most 10 words/);
 assert.match(messages[0].content, /never more than 10/);
 assert.match(messages[0].content, /"as shown on the plans"/, "It says what to leave out: conditions, locations, approvals");
 assert.match(messages[1].content, /^Trade: Demolition \(02 41 19\)/);
+assert.match(messages[0].content, /Most lines name work the trade furnishes, installs, builds or removes/, "Work first (19 Nov: Concrete's lines were meetings and submittals)");
+assert.match(messages[0].content, /together in one line, the last one/, "Admin requirements in one closing line");
+assert.match(messages[0].content, /check that none is left out/);
+assert.equal(job.maxTokens >= 8000, true, "Room for the numbers of 900 items");
+
+// Every item goes (19 Nov: Concrete 567, Electrical 898; 400 used to be the most), titles only above 300.
+const many = Array.from({ length: 898 }, (_, n) => ({ title: `Item ${n}`, detail: `Detail ${n}` }));
+const big = G.generalScopeInput({ name: "Electrical", code: "26 00 00" }, many);
+assert.deepEqual([big.items.length, big.items[897], big.items[0].detail], [898, { title: "Item 897", detail: "" }, ""], "Every item, titles only");
+assert.equal(G.generalScopeInput({ name: "E", code: "" }, many.slice(0, 300)).items[0].detail, "Detail 0", "Details up to 300 items");
+assert.equal(job.parse(big).items.length, 898, "The route takes them");
+assert.equal(G.GENERAL_MAX_ITEMS >= 1500, true);
+
+// Items the first answer left out are asked again with the lines it wrote, and joined to them.
+const first = [{ text: "Raceways and conductors", members: [0, 1, 3] }, { text: "Submittals, testing, warranties and closeout", members: [4] }];
+const five = G.generalScopeInput({ name: "Electrical", code: "26 00 00" }, many.slice(0, 6));
+const left = G.leftoverInput(five, first);
+assert.deepEqual([left.index, left.input.items.map(i => i.title), left.input.lines], [[2, 5], ["Item 2", "Item 5"], ["Raceways and conductors", "Submittals, testing, warranties and closeout"]]);
+assert.equal(G.leftoverInput(five, [{ text: "All", members: [0, 1, 2, 3, 4, 5] }]), null, "Nothing left out, no second request");
+const again = job.messages(job.parse(left.input));
+assert.match(again[0].content, /already written; the items you receive were left out/);
+assert.match(again[1].content, /General lines already written:\n- Raceways and conductors\n- Submittals, testing, warranties and closeout\n\nItems left out of them:\n0\. Item 2/);
+const merged = G.mergeLeftovers(first, [{ text: " raceways and  CONDUCTORS", members: [0] }, { text: "Lighting fixtures", members: [1, 7] }], left.index);
+assert.deepEqual(merged, [{ text: "Raceways and conductors", members: [0, 1, 3, 2] }, { text: "Submittals, testing, warranties and closeout", members: [4] }, { text: "Lighting fixtures", members: [5] }], "Same words join the line; a new line is added; numbers map back");
+assert.deepEqual(first[0].members, [0, 1, 3], "The first answer is left as it was");
+const full = Array.from({ length: G.GENERAL_MAX_LINES }, (_, n) => ({ text: `Line ${n}`, members: [n] }));
+assert.equal(G.mergeLeftovers(full, [{ text: "One more", members: [0] }], [99]).length, G.GENERAL_MAX_LINES, "No line past the most");
 assert.match(messages[1].content, /\n0\. Remove aluminum windows, frames and sashes at level 1\n1\./);
 const screened = job.screen({ lines: [
   { text: "Removal of windows, frames and sashes", members: [0, 1, 9] },
@@ -81,4 +108,4 @@ s = G.removeGeneralLine(s, "demo", firstLine);
 assert.deepEqual(G.uncovered(s, s.packages[0]).map(i => i.id), ["s1", "s2"], "Removing a line uncovers its items");
 assert.throws(() => G.addGeneralLine(state, "steel", "x"), /no general scope yet/);
 
-console.log("General scope checked: the trade's own items, the AI job's input, prompt and screening, applying lines to item ids, out-of-date detection, and the estimator's edits.");
+console.log("General scope checked: the trade's own items (all of them, titles only above 300), the AI job's input, prompt and screening, the items left out asked again, applying lines to item ids, out-of-date detection, and the estimator's edits.");
