@@ -102,8 +102,10 @@
 .bid-docs-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .bid-docs-ai { margin: 12px 18px 16px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .bid-docs-ai > svg { margin-right: 6px; color: var(--accent); vertical-align: -2px; }
+.bid-docs-read-all { display: flex; margin-top: 8px; }
+.bid-docs-confirm { margin: 0 18px 16px; font-size: 12px; }
 .bid-docs-link { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
-@media (max-width: 900px) { .bid-docs-slots { grid-template-columns: 1fr; padding: 0 12px; } .bid-docs-ai { margin: 12px; } }
+@media (max-width: 900px) { .bid-docs-slots { grid-template-columns: 1fr; padding: 0 12px; } .bid-docs-ai { margin: 12px; } .bid-docs-confirm { margin: 0 12px 12px; } }
 @media (prefers-reduced-motion: reduce) { .bid-docs-slot { transition: none; } }
 /* Another package's words on the sheet, in its colour; the selected package stays green on top. */
 .stored-viewer-mark.layer { box-shadow: none; animation: none; }

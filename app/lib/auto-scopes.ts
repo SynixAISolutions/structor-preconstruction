@@ -17,7 +17,7 @@ import { sectionsByTrade, tradesToAdd } from "./project-scopes";
 import { applyBidPackagePlan } from "./bid-package-ai";
 import { planBidPackages } from "./bid-package-client";
 import { aiReader } from "./ai-reader-client";
-import { AUTO_READ_UNDER, estimateCost } from "./ai-cost";
+import { estimateCost } from "./ai-cost";
 import { findReferencesWithAi, loadSheetTexts, PARALLEL_REFERENCES, referenceRunNow } from "./sheet-reference-client";
 import { ocrScannedSheets, sheetOcrNow } from "./sheet-text-ocr";
 import { referenceWork, SHEET_REFERENCE_LIMITS } from "./sheet-reference-ai";
@@ -28,7 +28,7 @@ import { readTradeScope } from "./scope-reading";
 import { readDraft, writeDraft } from "./use-local-draft";
 import { writeGeneralScope } from "./general-scope-client";
 import { DRAFT_CHANGED, sharedReady, useSharedStatus } from "./shared-sync";
-import { addedSince, biggestFirst, changedSince, filesToCompare, heldElsewhere, MAX_SAVED_RUNS, NO_RUNS, onlyChanged, readingWork, runTarget, runToUpdate, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns, type TradeToRead } from "./auto-scope-plan";
+import { addedSince, biggestFirst, canReadEveryTrade, changedSince, filesToCompare, heldElsewhere, MAX_SAVED_RUNS, NO_RUNS, onlyChanged, readingWork, runTarget, runToUpdate, stillToRead, tradesToRead, waitsForGoAhead, type AutoRun, type AutoTrade, type SavedRuns, type TradeToRead } from "./auto-scope-plan";
 import { sampleProcurement } from "./data/procurement";
 import { sampleExtraction } from "./data/extraction";
 import { sampleDrawingFlip } from "./data/drawing-flip";
@@ -123,6 +123,22 @@ export function ensureRun(projectId: string, documents: StoredDocument[]) {
   void start(projectId, documents, target, previous);
 }
 
+/**
+ * Reads every trade of a run that set the bid packages only because reading them all cost too much to start unasked
+ * (Danial, 19 Nov: "i want to run it on all scope items like a whole project"). It is the same run as after an upload:
+ * the scope items go to the bid forms for approval, each trade gets its general scope, and the packages are found on
+ * the drawings. Returns why it can't start, or null when it started.
+ */
+export function readEveryTrade(projectId: string, documents: StoredDocument[]): string | null {
+  if (active) return "The AI is already reading in this tab. Read every trade when it finishes.";
+  const target = runTarget(documents);
+  const previous = target ? savedRuns(projectId).runs.find(r => r.key === target.key) ?? null : null;
+  if (!target || !previous || !canReadEveryTrade(previous)) return "There is nothing waiting to be read: the project's latest files have been read already, or are being read.";
+  if (heldElsewhere(previous, me())) return "Someone else's browser is reading these files now.";
+  void start(projectId, documents, target, { ...previous, readAll: true });
+  return null;
+}
+
 async function start(projectId: string, documents: StoredDocument[], target: { key: string; documents: StoredDocument[] }, previous: AutoRun | null) {
   active = projectId;
   window.addEventListener("beforeunload", holdTab);
@@ -213,12 +229,12 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
     sheetTexts = await loadSheetTexts(documents).catch(() => null);
     fullCost = (estimateCost(reader.model, readingWork(candidates)) ?? 0) + (sheetTexts && search ? estimateCost(reader.model, referenceWork(sheetTexts.sheets, refPackages)) ?? 0 : 0);
   }
-  const scopesLater = fullCost !== undefined && fullCost >= AUTO_READ_UNDER;
+  const scopesLater = waitsForGoAhead(fullCost, previous?.readAll);
   const readable = scopesLater ? [] : candidates;
   ledger = ledgerOf(readable, id => !!previous?.trades.some(t => t.packageId === id && t.status === "done"));
   const queued = (t: (typeof readable)[number]): AutoTrade => ({ packageId: t.pkg.id, name: t.pkg.name, status: "queued", added: 0, note: "" });
   let run: AutoRun = previous
-    ? { ...previous, status: "running", newTrades: [...new Set([...previous.newTrades, ...newTrades])], trades: readable.map(t => previous.trades.find(x => x.packageId === t.pkg.id && x.status === "done") ?? queued(t)), scopesLater, fullCost }
+    ? { ...previous, status: "running", finishedAt: null, newTrades: [...new Set([...previous.newTrades, ...newTrades])], trades: readable.map(t => previous.trades.find(x => x.packageId === t.pkg.id && x.status === "done") ?? queued(t)), scopesLater, fullCost }
     : { id: crypto.randomUUID(), projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades, packagesBy, trades: readable.map(queued), added: 0, duplicates: 0, scopesLater, fullCost, update };
   save(run);
   const setTrade = (packageId: string, change: Partial<AutoTrade>, totals: Partial<Pick<AutoRun, "added" | "duplicates">> = {}) => {
