@@ -195,9 +195,12 @@ export const STANDARD_TRADES: { id: string; name: string; code: string }[] = [
   { id: "asphalt", name: "Asphalt paving", code: "32 12 16" },
   { id: "site-concrete", name: "Site concrete", code: "32 13 13" },
   { id: "fencing", name: "Site fencing", code: "32 31 00" },
-  { id: "landscaping", name: "Landscaping", code: "32 90 00" },
+  { id: "pavers", name: "Unit pavers", code: "32 14 00" },
+  { id: "landscaping", name: "Landscaping & turf", code: "32 90 00" },
   { id: "site-improvements", name: "Exterior improvements", code: "32 00 00" },
-  { id: "utilities", name: "Site utilities", code: "33 00 00" },
+  // Marcel, 18 Nov: site utilities are bought as "wet utilities and dry utilities", not one package.
+  { id: "utilities", name: "Wet utilities", code: "33 10 00" },
+  { id: "dry-utilities", name: "Dry utilities", code: "33 70 00" },
   { id: "geothermal", name: "Geothermal wells", code: "33 20 00" },
 ];
 
