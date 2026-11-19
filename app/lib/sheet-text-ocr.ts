@@ -8,8 +8,9 @@
 // sheet is saved as soon as it is read, so a stopped or closed run picks up where it was.
 
 import { useSyncExternalStore } from "react";
-import { drawingRegister, SCANNED_PAGE_TEXT, type RegisterRow, type StoredDocument } from "./project-files";
-import { readStoredText, savePageOcrText } from "./project-files-client";
+import { drawingRegister, latestDocuments, SCANNED_PAGE_TEXT, type RegisterRow, type StoredDocument } from "./project-files";
+import { readStoredText, resplitManual, savePageOcrText } from "./project-files-client";
+import { addedSections } from "./auto-scope-plan";
 import { OCR_WORKERS, readWholeSheet, type OcrProgress } from "./sheet-ocr";
 import { ocrText } from "./text-anchor";
 
@@ -30,6 +31,35 @@ export async function scannedSheets(documents: StoredDocument[]): Promise<Regist
   return register.filter(r => { const p = pages.get(r.doc.id)?.get(r.page); return !p?.ocr && (p?.text.trim().length ?? 0) < SCANNED_PAGE_TEXT; });
 }
 
+/**
+ * The project manuals' scanned pages (19 Nov: Whittier's Vol 2 printed Divisions 27 and 28 as images, 60 pages with no
+ * text, so their sections didn't exist and the AI never read them): every page of the latest manuals with no text layer
+ * and no OCR text yet, as rows OCR reads like sheets.
+ */
+export async function scannedManualPages(documents: StoredDocument[]): Promise<{ doc: StoredDocument; page: number; sheet: string }[]> {
+  const manuals = latestDocuments(documents).filter(d => d.kind === "manual");
+  const rows = await Promise.all(manuals.map(async doc => (await readStoredText(doc)).filter(p => !p.ocr && p.text.trim().length < SCANNED_PAGE_TEXT).map(p => ({ doc, page: p.page, sheet: `${doc.name} p. ${p.page}` }))));
+  return rows.flat();
+}
+
+let manualRun: Promise<{ pages: number; added: string[] }> | null = null;
+/**
+ * Reads the manuals' scanned pages with OCR, saves their text for everyone and splits each manual again, so the sections
+ * on them are found and read like the others. Resolves to the pages read and the sections they added (lib/auto-scope-plan
+ * addedSections). One run per tab.
+ */
+export function ocrScannedManualPages(documents: StoredDocument[]): Promise<{ pages: number; added: string[] }> {
+  manualRun ??= (async () => {
+    const todo = await scannedManualPages(documents);
+    if (!todo.length) return { pages: 0, added: [] };
+    const saved = await readPages(todo);
+    let after = documents;
+    for (const doc of new Set(saved.map(r => r.doc))) after = await resplitManual(doc).catch(() => after);
+    return { pages: saved.length, added: addedSections(documents, after) };
+  })().finally(() => { manualRun = null; });
+  return manualRun;
+}
+
 let current: Promise<void> | null = null;
 /** Reads and saves every scanned sheet's text, one at a time, until done or stopped. One run per tab: asked again while it runs, it answers with the run in progress. */
 export function ocrScannedSheets(documents: StoredDocument[]): Promise<void> {
@@ -38,13 +68,18 @@ export function ocrScannedSheets(documents: StoredDocument[]): Promise<void> {
 }
 
 async function readScannedSheets(documents: StoredDocument[]): Promise<void> {
+  try { await readPages(await scannedSheets(documents)); }
+  catch (error) { set({ failed: [...snapshot.failed, error instanceof Error ? error.message : "The scanned sheets could not be listed."] }); }
+}
+
+/** Reads and saves each page's text with OCR, as many at once as there are workers; resolves to the pages saved. */
+async function readPages<R extends { doc: StoredDocument; page: number; sheet: string }>(todo: R[]): Promise<R[]> {
   controller = new AbortController();
   const signal = controller.signal;
   window.addEventListener("beforeunload", holdTab);
-  set({ running: true, done: 0, total: 0, sheet: "", part: null, saved: 0, failed: [] });
+  set({ running: true, done: 0, total: todo.length, sheet: "", part: null, saved: 0, failed: [] });
+  const saved: R[] = [];
   try {
-    const todo = await scannedSheets(documents);
-    set({ total: todo.length });
     // As many sheets at once as there are OCR workers (lib/sheet-ocr); each is saved as soon as it is read.
     let next = 0;
     await Promise.all(Array.from({ length: Math.min(OCR_WORKERS, todo.length) }, async () => {
@@ -54,19 +89,19 @@ async function readScannedSheets(documents: StoredDocument[]): Promise<void> {
           const { words, wholeSheet } = await readWholeSheet(row.doc, row.page, part => set({ part }), signal);
           if (!wholeSheet) break; // stopped mid-sheet: nothing is saved for it, it is read again next time
           await savePageOcrText(row.doc, row.page, ocrText(words));
+          saved.push(row);
           set({ saved: snapshot.saved + 1, done: snapshot.done + 1, version: snapshot.version + 1 });
         } catch (error) {
           set({ done: snapshot.done + 1, failed: [...snapshot.failed, `${row.sheet}: ${error instanceof Error ? error.message : "could not be read"}`] });
         }
       }
     }));
-  } catch (error) {
-    set({ failed: [...snapshot.failed, error instanceof Error ? error.message : "The scanned sheets could not be listed."] });
   } finally {
     window.removeEventListener("beforeunload", holdTab);
     controller = null;
     set({ running: false, part: null });
   }
+  return saved;
 }
 
 /** Stops after the sheet being read (that sheet isn't saved). */

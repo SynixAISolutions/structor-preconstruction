@@ -60,12 +60,15 @@ const setIndex = (index: ProjectFileIndex) => { indexes.set(index.projectId, ind
 async function resplitManuals(index: ProjectFileIndex): Promise<ProjectFileIndex> {
   let next = index;
   for (const doc of index.documents.filter(d => d.kind === "manual" && (d.sectionsVersion ?? 1) < SECTIONS_VERSION)) {
-    try {
-      const sections = storedSections(await readStoredText(doc));
-      next = await api<ProjectFileIndex>("/api/project-files", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "update", projectId: doc.projectId, docId: doc.id, document: { sections, sectionsVersion: SECTIONS_VERSION } }) });
-    } catch { /* split again on the next load */ }
+    try { next = await saveSections(doc); } catch { /* split again on the next load */ }
   }
   return next;
+}
+const saveSections = async (doc: StoredDocument) => api<ProjectFileIndex>("/api/project-files", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "update", projectId: doc.projectId, docId: doc.id, document: { sections: storedSections(await readStoredText(doc)), sectionsVersion: SECTIONS_VERSION } }) });
+
+/** Splits a manual again from its stored text (after OCR saved its scanned pages) and shows the new sections everywhere. */
+export async function resplitManual(doc: StoredDocument): Promise<StoredDocument[]> {
+  return setIndex(await saveSections(doc)).documents;
 }
 
 /** A PDF's SHA-256, in hex. */
