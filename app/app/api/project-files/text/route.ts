@@ -13,7 +13,8 @@ export async function GET(request: Request) {
   const [projectId, docId, chunk] = [q.get("project"), q.get("doc"), Number(q.get("chunk"))];
   if (!validId(projectId) || !validId(docId) || !Number.isInteger(chunk) || chunk < 0) return json({ error: "Name the project, document and chunk." }, 400);
   const pages = await readText(projectId, docId, chunk);
-  return pages ? Response.json(renameDemoNamesDeep(pages), { headers: { "cache-control": "private, max-age=3600" } }) : json({ error: "No text stored for those pages." }, 404);
+  // Asked fresh each time (19 Nov): OCR saves scanned pages into these chunks, and an hour-old copy after a reload missed them.
+  return pages ? Response.json(renameDemoNamesDeep(pages), { headers: { "cache-control": "private, no-cache" } }) : json({ error: "No text stored for those pages." }, 404);
 }
 
 export async function POST(request: Request) {
