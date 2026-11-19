@@ -21,6 +21,19 @@ export function GeneralScopePanel({ projectId, state, pkg, run, by, notify }: { 
   const byId = new Map(items.map(i => [i.id, i]));
   const missing = general ? uncovered(state, pkg) : [];
   const stale = generalStale(state, pkg);
+  // Trades read before general scopes existed (Whittier's): every one still without one, written one after another.
+  const waiting = state.packages.filter(p => !p.general && generalItems(state, p.id).length);
+  const [allBusy, setAllBusy] = useState("");
+  async function writeAll() {
+    let written = 0;
+    for (const [n, p] of waiting.entries()) {
+      setAllBusy(`Writing ${n + 1} of ${waiting.length}: ${p.name}…`);
+      try { await writeGeneralScope(projectId, p.id, by); written++; } catch { /* a trade that fails keeps its button */ }
+    }
+    setAllBusy("");
+    notify(`General scope written for ${written} of ${waiting.length} trade${waiting.length === 1 ? "" : "s"}.`);
+  }
+  const everyTrade = waiting.length > 1 ? <Button disabled={!!allBusy || busy} onClick={() => void writeAll()}><Sparkles size={14}/>{allBusy || `Write for every trade (${waiting.length})`}</Button> : null;
 
   async function write() {
     setBusy(true);
@@ -45,13 +58,13 @@ export function GeneralScopePanel({ projectId, state, pkg, run, by, notify }: { 
 
   if (!general) return <div className="general-scope">
     <Empty title={items.length ? "No general scope yet" : "No detailed items to summarize yet"} description={items.length ? `The AI lumps this trade's ${items.length} detailed items into a few general lines, the way your bid forms read. Each line keeps the items it covers.` : "Write or read this trade's scope first; the general scope is written from its detailed items."}
-      action={items.length ? <Button variant="primary" disabled={busy} onClick={() => void write()}><Sparkles size={15}/>{busy ? "Writing…" : "Write general scope"}</Button> : undefined}/>
+      action={<span className="general-scope-actions">{items.length > 0 && <Button variant="primary" disabled={busy || !!allBusy} onClick={() => void write()}><Sparkles size={15}/>{busy ? "Writing…" : "Write general scope"}</Button>}{everyTrade}</span>}/>
   </div>;
 
   return <div className="general-scope">
     <div className="general-scope-head">
       <span>{general.lines.length} line{general.lines.length === 1 ? "" : "s"} covering {items.length - missing.length} of {items.length} detailed items · written {displayDate(general.at.slice(0, 10))}{general.by ? ` by ${general.by}` : ""}</span>
-      <span className="general-scope-actions"><Button onClick={() => void copy()}><Copy size={14}/>Copy</Button><Button disabled={busy} onClick={() => void write()}><RefreshCw size={14}/>{busy ? "Writing…" : "Rewrite"}</Button></span>
+      <span className="general-scope-actions">{everyTrade}<Button onClick={() => void copy()}><Copy size={14}/>Copy</Button><Button disabled={busy} onClick={() => void write()}><RefreshCw size={14}/>{busy ? "Writing…" : "Rewrite"}</Button></span>
     </div>
     {(stale || missing.length > 0) && <p className="general-scope-stale" role="status">{missing.length ? `${missing.length} detailed item${missing.length === 1 ? " isn't" : "s aren't"} covered by a general line${stale ? ": the detailed scope changed since this was written" : ""}.` : "The detailed scope changed since this was written."} Rewrite to include {missing.length === 1 ? "it" : "them"}.</p>}
     <ol className="general-scope-lines">{general.lines.map(line => {
