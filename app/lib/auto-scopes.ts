@@ -26,6 +26,7 @@ import { OCR_WORKERS, ocrWork } from "./sheet-ocr";
 import { blendPace, checkShare, FIRST_PACE, measurePace, secondsLeft, steadyLeft, tradesLeft, type Pace, type TradeLeft } from "./run-time-left";
 import { readTradeScope } from "./scope-reading";
 import { readDraft, writeDraft } from "./use-local-draft";
+import { writeGeneralScope } from "./general-scope-client";
 import { DRAFT_CHANGED, sharedReady, useSharedStatus } from "./shared-sync";
 import { addedSince, biggestFirst, changedSince, filesToCompare, heldElsewhere, MAX_SAVED_RUNS, NO_RUNS, onlyChanged, readingWork, runTarget, runToUpdate, stillToRead, tradesToRead, type AutoRun, type AutoTrade, type SavedRuns, type TradeToRead } from "./auto-scope-plan";
 import { sampleProcurement } from "./data/procurement";
@@ -273,6 +274,8 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
         const failed = !!outcome.input.error && !outcome.input.drafts.length;
         const notes = [outcome.failures.length ? `${outcome.failures.length} request(s) failed.` : "", added.held ? `${added.held} held back: the words they quote aren't printed on the sheet.` : ""].filter(Boolean).join(" ");
         setTrade(pkg.id, { status: failed ? "failed" : "done", added: added.added, note: outcome.input.error ?? notes }, { added: run.added + added.added, duplicates: run.duplicates + added.duplicates });
+        // Then its general scope, the few lines Marcel's bid forms use (18 Nov): one short request from the items just added.
+        if (added.added) await writeGeneralScope(projectId, pkg.id, "Structor AI", controller.signal).catch(() => null);
       } catch (error) {
         setTrade(pkg.id, { status: "failed", note: error instanceof Error ? error.message : "The reading failed." });
       }

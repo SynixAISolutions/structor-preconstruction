@@ -265,14 +265,16 @@ assert.equal(updated.id, sampleProjectRecords[0].id);
   const jobs = [
     ...Array.from({ length: 6 }, (_, i) => T.pageTurn(draw(`reader ${i + 1}`), true)),
     T.pageTurn(draw("viewer")),
+    T.pageTurn(draw("viewer 2")),
     T.pageTurn(async () => { throw new Error("bad page"); }, true).catch(error => error.message),
   ];
-  assert.deepEqual(T.pageTurns(), { busy: T.PAGES_AT_ONCE, waiting: jobs.length - T.PAGES_AT_ONCE }, "The rest wait for a turn");
+  assert.deepEqual(T.pageTurns(), { busy: T.PAGES_AT_ONCE + T.ASKED_AT_ONCE, waiting: jobs.length - T.PAGES_AT_ONCE - T.ASKED_AT_ONCE }, "One reader and one page someone asked to see draw; the rest wait");
   const results = await Promise.all(jobs);
-  assert.equal(most, T.PAGES_AT_ONCE, "Never more pages being drawn than the tab's turns");
-  assert.equal(order.indexOf("viewer"), T.PAGES_AT_ONCE, "A page someone asked to see goes next, ahead of the readers' queue");
-  assert.deepEqual(order.filter(n => n !== "viewer"), Array.from({ length: 6 }, (_, i) => `reader ${i + 1}`), "Readers keep their order");
-  assert.deepEqual([results[6], results[7]], ["viewer", "bad page"], "Each caller gets its own page, or its own error");
+  assert.equal(most, T.PAGES_AT_ONCE + T.ASKED_AT_ONCE, "Never more pages being drawn than the tab's turns, both lanes together");
+  assert(order.indexOf("viewer") < order.indexOf("reader 2"), "A page someone asked to see doesn't wait for the readers (19 Nov: clicked sheets waited behind the scope run's)");
+  assert(order.indexOf("viewer 2") > order.indexOf("viewer"), "Pages someone asked to see take their turns in order");
+  assert.deepEqual(order.filter(n => !n.startsWith("viewer")), Array.from({ length: 6 }, (_, i) => `reader ${i + 1}`), "Readers keep their order");
+  assert.deepEqual([results[6], results[7], results[8]], ["viewer", "viewer 2", "bad page"], "Each caller gets its own page, or its own error");
   assert.deepEqual(T.pageTurns(), { busy: 0, waiting: 0 }, "A page that fails gives its turn up");
 
   // A page stuck waiting (13 Nov: a part of the file the server failed to send) gives its turn up after a while.

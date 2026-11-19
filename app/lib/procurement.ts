@@ -14,6 +14,8 @@
 // ProcurementRuleError with a message fit to show the user. Notifications are RECORDED
 // here; nothing is emailed yet.
 
+import type { GeneralScope } from "./general-scope";
+
 export type ScopeOrigin = "ai" | "drawing" | "specification" | "estimator";
 export type ScopeStatus = "draft" | "approved";
 
@@ -57,6 +59,8 @@ export type TradePackage = {
   sections?: string[];
   /** Drawing sheets that show this package's work, most telling first, as the AI set them. */
   sheets?: string[];
+  /** The trade's general scope: a few lines lumping its detailed items, in the contractor's bid-form style (lib/general-scope). */
+  general?: GeneralScope;
 };
 
 export type InvitationStatus = "invited" | "bidding" | "declined" | "submitted";
@@ -195,9 +199,12 @@ export const STANDARD_TRADES: { id: string; name: string; code: string }[] = [
   { id: "asphalt", name: "Asphalt paving", code: "32 12 16" },
   { id: "site-concrete", name: "Site concrete", code: "32 13 13" },
   { id: "fencing", name: "Site fencing", code: "32 31 00" },
-  { id: "landscaping", name: "Landscaping", code: "32 90 00" },
+  { id: "pavers", name: "Unit pavers", code: "32 14 00" },
+  { id: "landscaping", name: "Landscaping & turf", code: "32 90 00" },
   { id: "site-improvements", name: "Exterior improvements", code: "32 00 00" },
-  { id: "utilities", name: "Site utilities", code: "33 00 00" },
+  // Marcel, 18 Nov: site utilities are bought as "wet utilities and dry utilities", not one package.
+  { id: "utilities", name: "Wet utilities", code: "33 10 00" },
+  { id: "dry-utilities", name: "Dry utilities", code: "33 70 00" },
   { id: "geothermal", name: "Geothermal wells", code: "33 20 00" },
 ];
 

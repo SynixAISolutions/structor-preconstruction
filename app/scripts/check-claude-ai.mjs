@@ -126,6 +126,21 @@ assert.deepEqual(applied.procurement.packages.map(p => [p.id, p.name, p.owner, (
 ], "An existing package keeps its name and owner and takes the AI's sections and sheets; packages end up in CSI order");
 assert.deepEqual(B.applyBidPackagePlan(applied.procurement, plan).added, [], "Applying the same plan again adds nothing");
 
+// Marcel's trade breakdown (18 Nov): the AI is given the standard trades and his splits, and a standard trade keeps the
+// contractor's own name, code and id.
+assert.match(messages[0].content, /- steel: Structural steel, 05 12 00/);
+assert.match(messages[0].content, /- utilities: Wet utilities, 33 10 00\n- dry-utilities: Dry utilities, 33 70 00/);
+assert.match(messages[0].content, /Concrete \(Division 03\) is its own package/);
+assert.match(messages[0].content, /never "technology integration"/);
+const standardPlan = B.screenBidPackages({ packages: [
+  { existing: null, standard: "low-voltage", name: "Technology integration", code: "27 00 00", sections: ["22 11 16"], sheets: [] },
+  { existing: null, standard: "nonsense", name: "Odd trade", code: "10 00 00", sections: [], sheets: ["C1.0"] },
+] }, job);
+assert.deepEqual(standardPlan.packages.map(p => [p.standard, p.name, p.code]), [["low-voltage", "Low voltage", "27 00 00"], [null, "Odd trade", "10 00 00"]], "A standard trade takes the contractor's name; an unknown standard id is ignored");
+const withStandard = B.applyBidPackagePlan({ packages: [], scopes: [], invitations: [] }, standardPlan).procurement;
+assert.deepEqual(withStandard.packages.map(p => p.id), ["odd-trade", "low-voltage"], "A new standard package keeps the standard trade's id");
+assert.deepEqual(B.applyBidPackagePlan(withStandard, { packages: [{ ...standardPlan.packages[0], name: "Low Voltage Systems" }] }).added, [], "A later run finds it by its standard id, whatever it's called");
+
 // The packages' sections and sheets lead the scope reading.
 const sec = (section, title = "") => ({ section, title, first: 1, last: 2 });
 const by = P.sectionsByTrade([sec("09 21 16"), sec("09 51 13"), sec("08 71 00"), sec("09 65 13")], applied.procurement.packages);
