@@ -55,6 +55,7 @@ import {
 import { useSubmissions } from "../../lib/use-submissions";
 import { useProcurement } from "../../lib/use-procurement";
 import { useExtraction } from "../../lib/use-extraction";
+import { GeneralScopePanel } from "./general-scope-ui";
 import { initialSpecSections } from "../../lib/data/preconstruction";
 import { scopeSources } from "../../lib/scope-sources";
 import { tradeColors } from "./drawing-flip-ui";
@@ -147,6 +148,9 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
   const review = useExtraction();
   const { procurement: state, runProcurement: run, flip: drawingFlip } = review;
   const [scopeTab, setScopeTab] = useState("Bid forms");
+  // Marcel, 18 Nov: each trade's general scope first, the detailed items a tab away.
+  const [packageView, setPackageView] = useState("General scope");
+  const projectId = useActiveProject();
 
   const [specSections] = useLocalDraft("specification-sections", initialSpecSections);
   const [generalOpen, setGeneralOpen] = useState(false);
@@ -209,6 +213,8 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
       <aside className="ui-panel proc-trades"><button className={generalOpen ? "active" : ""} onClick={() => setGeneralOpen(true)}><span className="proc-division">01</span><span><strong>General</strong><small>Applies to every trade</small></span></button><div className="proc-aside-title">TRADE PACKAGES</div>{trades.map(pkg => { const items = bidForm(state, pkg.id); const status = packageStatus(state, pkg.id); const pending = review.extraction.drafts.filter(d => d.packageId === pkg.id && d.status === "pending-review").length; return <button className={!generalOpen && pkg.id === activePackage.id ? "active" : ""} key={pkg.id} onClick={() => { setGeneralOpen(false); setPackageId(pkg.id); setSelectedId(""); }}><span className="proc-division">{pkg.division}</span><span><strong>{pkg.name}</strong><small>{items.filter(item => item.status === "approved").length}/{items.length} approved{pending > 0 && ` · ${pending} proposed`}</small></span><Badge tone={statusTone(status)}>{statusLabels[status]}</Badge></button>; })}<button className="proc-aside-link" onClick={() => navigate("packages")}>Manage bidders<ArrowRight size={14}/></button></aside>
       {generalOpen ? <GeneralScopes review={review} by={CURRENT_USER} notify={notify} onEdit={item => setEditor({...item})} onAdd={() => setEditor({packageId:activePackage.id,title:"",detail:"",source:"",origin:"estimator"})}/> : <>
       <Panel title={activePackage.name} subtitle={`${activePackage.code} · ${activePackage.owner ? `Owner: ${activePackage.owner}` : "No owner yet"} · Due ${displayDate(activePackage.due)}`} action={<Badge tone={statusTone(packageState)}>{statusLabels[packageState]}{activePackage.published ? ` · v${activePackage.published.version}` : ""}</Badge>} className="proc-scope-panel">
+        <div className="general-scope-tabs"><Tabs tabs={["General scope", "Detailed scope"]} value={packageView} onChange={setPackageView}/></div>
+        {packageView === "General scope" ? <GeneralScopePanel key={activePackage.id} projectId={projectId} state={state} pkg={activePackage} run={run} by={CURRENT_USER} notify={notify}/> : <>
         <div className="ui-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search this bid form…"/><Button onClick={approveAll}><CheckCheck size={15}/>Approve visible form</Button></div>
         <PackageDrawingReferences key={activePackage.id} pkg={activePackage} packages={state.packages} colors={sourceColors}/>
         <div className="proc-scope-list"><InlineScopeDrafts key={activePackage.id} review={review} packageId={activePackage.id} query={query} sections={specSections} colors={sourceColors} by={CURRENT_USER} notify={notify} onMove={setPackageId}/>{visible.map((item, index) => <article className={`proc-scope-row ${selected?.id === item.id ? "selected" : ""}`} key={item.id}>
@@ -221,6 +227,7 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
         </article>)}</div>
         {!visible.length && !proposed.some(d => (d.kind === "scope" ? d.title : d.kind === "region" ? d.label : d.item).toLowerCase().includes(query.toLowerCase())) && <Empty title="No scope items found" description="Add a requirement or adjust your search."/>}
         <div className="proc-publish-bar"><div><strong>{form.filter(item => item.status === "approved").length} of {form.length} approved</strong>{blockers.map(reason => <span key={reason}>{reason}</span>)}</div><Button variant="primary" disabled={blockers.length > 0} onClick={() => runAndNotify(run, current => publishPackage(current, activePackage.id, CURRENT_USER), notify, activePackage.published ? "Revision published and bidder notifications recorded. No email was sent." : "Bid form published and bidder notifications recorded. No email was sent.")}><Send size={15}/>{activePackage.published ? "Publish revision" : "Publish to subcontractors"}</Button></div>
+        </>}
       </Panel>
       <div className="proc-detail-column">{selected ? <Panel title="Requirement detail" action={<Badge>{ORIGIN_LABELS[selected.origin]}</Badge>}><div className="proc-detail">
         <span className="proc-label">SOURCE REFERENCE</span>{sources?.spec ? <button className="proc-spec-link" onClick={() => setSourceKind("spec")}><FileText size={14}/>{selected.source}<ArrowRight size={13}/></button> : <strong>{selected.source || "No source linked"}</strong>}<p>{selected.detail || "No coordination notes recorded."}</p>

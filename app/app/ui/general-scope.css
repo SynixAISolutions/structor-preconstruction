@@ -1,0 +1,19 @@
+/* General scope (19 Nov, Marcel's 18 Nov meeting): a trade's few general lines, each with the detailed items it covers. */
+.general-scope { display: grid; gap: 10px; padding: 4px 0 10px; }
+.general-scope-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; color: #6f7f79; font-size: 11px; }
+.general-scope-actions { display: flex; gap: 6px; }
+.general-scope-stale { margin: 0; padding: 8px 10px; border-radius: 7px; background: #fdf3e6; color: #8a5a12; font-size: 11px; }
+.general-scope-lines { display: grid; gap: 6px; margin: 0; padding: 0 0 0 22px; }
+.general-scope-lines > li { padding: 8px 10px; border: 1px solid #e3e8e3; border-radius: 8px; background: #fff; }
+.general-scope-lines > li::marker { color: #7a8881; font-size: 11px; font-weight: 600; }
+.general-scope-line { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.general-scope-text { font-size: 13px; color: #2f474f; }
+.general-scope-text small { color: #8a969a; font-size: 10px; }
+.general-scope-line-actions { display: flex; align-items: center; gap: 2px; flex: none; }
+.general-scope-line-actions .cm-text-button { display: inline-flex; align-items: center; gap: 2px; margin-right: 4px; font-size: 11px; white-space: nowrap; }
+.general-scope-line-actions .ui-icon-btn { width: 26px; height: 26px; }
+.general-scope-members { display: grid; gap: 3px; margin: 8px 0 0; padding: 8px 10px 8px 22px; border-radius: 6px; background: #f7f9f6; color: #4c5f66; font-size: 11px; }
+.general-scope-edit { display: flex; gap: 6px; align-items: center; }
+.general-scope-edit input { flex: 1; min-width: 0; padding: 7px 9px; border: 1px solid #c9d3cc; border-radius: 6px; font: inherit; font-size: 13px; }
+.general-scope-tabs { margin: 2px 0 10px; }
+@media (max-width: 700px) { .general-scope-line { flex-direction: column; } }

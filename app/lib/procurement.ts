@@ -14,6 +14,8 @@
 // ProcurementRuleError with a message fit to show the user. Notifications are RECORDED
 // here; nothing is emailed yet.
 
+import type { GeneralScope } from "./general-scope";
+
 export type ScopeOrigin = "ai" | "drawing" | "specification" | "estimator";
 export type ScopeStatus = "draft" | "approved";
 
@@ -57,6 +59,8 @@ export type TradePackage = {
   sections?: string[];
   /** Drawing sheets that show this package's work, most telling first, as the AI set them. */
   sheets?: string[];
+  /** The trade's general scope: a few lines lumping its detailed items, in the contractor's bid-form style (lib/general-scope). */
+  general?: GeneralScope;
 };
 
 export type InvitationStatus = "invited" | "bidding" | "declined" | "submitted";
