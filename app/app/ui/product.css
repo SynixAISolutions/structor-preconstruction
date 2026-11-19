@@ -60,3 +60,7 @@
 .delete-project input:focus{outline:2px solid #e3a187;outline-offset:1px}
 .delete-project small{display:block;margin-top:7px;color:#8f9aa2;font-size:11px}
 .delete-project .delete-project-error{margin-top:12px;color:#8d3f32}
+
+/* 19 Nov, live: the floating Record feedback and Ask Structor buttons (z-index 150) sat over a dialog's own buttons
+   (the backdrop is 100), covering "Delete project" at 800 px. While a dialog is open they step aside. */
+body:has(.ui-modal-backdrop) .voice-launcher,body:has(.ui-modal-backdrop) .ask-launcher{display:none}
