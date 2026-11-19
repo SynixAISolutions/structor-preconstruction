@@ -1,4 +1,4 @@
-import { gunzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { MAX_SAVED_BYTES, ORG_SCOPE, sharedStore, validKey, validScope } from "../../../lib/shared-store";
 
 // Shared saving (lib/shared-store, lib/shared-sync): every screen's saved data, one row per project and draft name.
@@ -9,6 +9,7 @@ import { MAX_SAVED_BYTES, ORG_SCOPE, sharedStore, validKey, validScope } from ".
 //                                     when someone else's save landed first
 //   DELETE ?scope=<project>           removes a deleted project's drafts; its record stays as the marker, and only a
 //                                     project whose shared record is marked deleted can be emptied
+// A deleted project stays deleted: its record keeps the mark whatever is saved over it, and its drafts are refused (410).
 // 503 when no database is connected: the app then keeps saving in the browser only. The sign-in (proxy.ts) guards it.
 export const runtime = "nodejs";
 
@@ -44,13 +45,18 @@ export async function DELETE(request: Request) {
   const scope = new URL(request.url).searchParams.get("scope");
   if (!validScope(scope) || scope === ORG_SCOPE) return json({ error: "Name the project." }, 400);
   try {
-    const record = await store.get(scope, "project");
-    const marked = record && (JSON.parse(gunzipSync(Buffer.from(record.value, "base64")).toString("utf8")) as { deleted?: unknown }).deleted;
-    if (!marked) return json({ error: "Only a deleted project's saved data can be removed." }, 409);
+    if (!(await deletedMark(scope))) return json({ error: "Only a deleted project's saved data can be removed." }, 409);
     return json({ removed: await store.removeScope(scope, "project") });
   } catch (error) {
     return failed(error);
   }
+}
+
+/** The deletion mark on a project's shared record, if it has one. */
+async function deletedMark(scope: string): Promise<unknown> {
+  const record = await sharedStore()?.get(scope, "project");
+  if (!record) return undefined;
+  try { return (JSON.parse(gunzipSync(Buffer.from(record.value, "base64")).toString("utf8")) as { deleted?: unknown }).deleted || undefined; } catch { return undefined; }
 }
 
 export async function PUT(request: Request) {
@@ -63,10 +69,19 @@ export async function PUT(request: Request) {
   const body = Buffer.from(await request.arrayBuffer());
   if (!body.length || body.length > MAX_SAVED_BYTES) return json({ error: `A saved draft must be between 1 byte and ${MAX_SAVED_BYTES / 1_000_000} MB compressed.` }, 413);
   // Only readable JSON is kept: a broken save must not become everyone's copy.
-  try { JSON.parse(gunzipSync(body).toString("utf8")); } catch { return json({ error: "The saved draft isn't compressed JSON." }, 400); }
+  let incoming: unknown;
+  try { incoming = JSON.parse(gunzipSync(body).toString("utf8")); } catch { return json({ error: "The saved draft isn't compressed JSON." }, 400); }
   const by = (request.headers.get("x-by") ?? "").trim().slice(0, 80);
   try {
-    const result = await store.save(scope, key, body.toString("base64"), base, by);
+    // A deleted project stays deleted (19 Nov: a tab still on the code from before Delete project read the markers,
+    // dropped the mark it didn't know, and saved the projects back, so all eight came back for everyone).
+    let saved = body;
+    const deleted = scope === ORG_SCOPE ? undefined : await deletedMark(scope);
+    if (deleted) {
+      if (key !== "project") return json({ error: "This project was deleted.", deleted: true }, 410);
+      if (!(incoming as { deleted?: unknown } | null)?.deleted) saved = gzipSync(JSON.stringify({ ...(incoming as object), deleted }));
+    }
+    const result = await store.save(scope, key, saved.toString("base64"), base, by);
     return json({ version: result.version }, result.saved ? 200 : 409);
   } catch (error) {
     return failed(error);

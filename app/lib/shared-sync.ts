@@ -203,6 +203,8 @@ async function send(scope: string, key: string): Promise<void> {
         if (status.state === "offline") set({ state: "saving" });
         return;
       }
+      // Its project was deleted by someone: the draft goes from this browser too, never sent again.
+      if (response.status === 410) { forgetProject(scope); setWaiting(scope, key, false); return; }
       if (response.status !== 409) throw new Error((await response.json().catch(() => null))?.error ?? `The shared copy answered ${response.status}.`);
       // Someone else's save landed first: keep both changes and try again over theirs.
       const theirs = await fetchValue(scope, key);
