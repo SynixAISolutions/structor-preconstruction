@@ -171,7 +171,8 @@ export const STANDARD_TRADES: { id: string; name: string; code: string }[] = [
   { id: "abatement", name: "Hazardous materials abatement", code: "02 82 00" },
   { id: "concrete", name: "Concrete", code: "03 30 00" },
   { id: "masonry", name: "Masonry", code: "04 22 00" },
-  { id: "steel", name: "Structural steel", code: "05 12 00" },
+  // Marcel, 18 Nov: his bid form is "structural steel and miscellaneous metals", one package.
+  { id: "steel", name: "Structural steel & miscellaneous metals", code: "05 12 00" },
   { id: "carpentry", name: "Carpentry", code: "06 10 00" },
   { id: "waterproofing", name: "Waterproofing, air barrier & joint sealants", code: "07 10 00" },
   { id: "metal-panels", name: "Metal panels", code: "07 42 00" },

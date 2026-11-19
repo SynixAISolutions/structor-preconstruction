@@ -12,7 +12,9 @@
 .general-scope-line-actions { display: flex; align-items: center; gap: 2px; flex: none; }
 .general-scope-line-actions .cm-text-button { display: inline-flex; align-items: center; gap: 2px; margin-right: 4px; font-size: 11px; white-space: nowrap; }
 .general-scope-line-actions .ui-icon-btn { width: 26px; height: 26px; }
-.general-scope-members { display: grid; gap: 3px; margin: 8px 0 0; padding: 8px 10px 8px 22px; border-radius: 6px; background: #f7f9f6; color: #4c5f66; font-size: 11px; }
+.general-scope-members { display: grid; gap: 4px; margin: 8px 0 0; padding: 8px 10px 8px 22px; border-radius: 6px; background: #f7f9f6; color: #4c5f66; font-size: 11px; }
+.general-scope-members li { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.general-scope-members .scope-open-source { flex: none; }
 .general-scope-edit { display: flex; gap: 6px; align-items: center; }
 .general-scope-edit input { flex: 1; min-width: 0; padding: 7px 9px; border: 1px solid #c9d3cc; border-radius: 6px; font: inherit; font-size: 13px; }
 .general-scope-tabs { margin: 2px 0 10px; }

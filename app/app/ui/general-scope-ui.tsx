@@ -7,6 +7,9 @@ import { addGeneralLine, editGeneralLine, generalItems, generalStale, removeGene
 import { writeGeneralScope } from "../../lib/general-scope-client";
 import type { Procurement, TradePackage } from "../../lib/procurement";
 import { displayDate } from "../../lib/format";
+import { useScopeEvidence } from "../../lib/use-scope-evidence";
+import type { Evidence } from "../../lib/scope-evidence";
+import { OpenSourceButton, ScopeSourceModal } from "./package-scope-sources";
 import "./general-scope.css";
 
 /**
@@ -21,6 +24,11 @@ export function GeneralScopePanel({ projectId, state, pkg, run, by, notify }: { 
   const byId = new Map(items.map(i => [i.id, i]));
   const missing = general ? uncovered(state, pkg) : [];
   const stale = generalStale(state, pkg);
+  // Where a line comes from (Danial, 19 Nov: "where is the button that will show me where they are coming from in the
+  // drawing"): the sources of every item it covers, one chip each, opened on the first drawing.
+  const evidenceOf = useScopeEvidence();
+  const [opened, setOpened] = useState<{ title: string; evidence: Evidence[]; index: number } | null>(null);
+  const lineEvidence = (members: string[]) => [...new Map(members.map(id => byId.get(id)).filter(Boolean).flatMap(item => evidenceOf(item!)).map(e => [e.key, e])).values()];
   // Trades read before general scopes existed (Whittier's): every one still without one, written one after another.
   const waiting = state.packages.filter(p => !p.general && generalItems(state, p.id).length);
   const [allBusy, setAllBusy] = useState("");
@@ -73,13 +81,14 @@ export function GeneralScopePanel({ projectId, state, pkg, run, by, notify }: { 
         {editing === line.id
           ? <form className="general-scope-edit" onSubmit={e => saveLine(e, line.id)}><input name="text" autoFocus defaultValue={line.text} maxLength={400} aria-label="General scope line"/><button type="submit" className="ui-icon-btn" aria-label="Save line"><Check size={14}/></button><button type="button" className="ui-icon-btn" aria-label="Cancel" onClick={() => setEditing(null)}><X size={14}/></button></form>
           : <div className="general-scope-line"><span className="general-scope-text">{line.text}{line.edited && <small> · edited</small>}</span>
-            <span className="general-scope-line-actions">{covered.length > 0 && <button type="button" className="cm-text-button" aria-expanded={expanded} onClick={() => setOpen(o => expanded ? o.filter(x => x !== line.id) : [...o, line.id])}>{expanded ? <ChevronDown size={13}/> : <ChevronRight size={13}/>}{covered.length} item{covered.length === 1 ? "" : "s"}</button>}
+            <span className="general-scope-line-actions"><OpenSourceButton evidence={lineEvidence(line.members)} onOpen={index => setOpened({ title: line.text, evidence: lineEvidence(line.members), index })}/>{covered.length > 0 && <button type="button" className="cm-text-button" aria-expanded={expanded} onClick={() => setOpen(o => expanded ? o.filter(x => x !== line.id) : [...o, line.id])}>{expanded ? <ChevronDown size={13}/> : <ChevronRight size={13}/>}{covered.length} item{covered.length === 1 ? "" : "s"}</button>}
               <button type="button" className="ui-icon-btn" aria-label={`Edit: ${line.text}`} onClick={() => setEditing(line.id)}><Pencil size={13}/></button>
               <button type="button" className="ui-icon-btn" aria-label={`Remove: ${line.text}`} onClick={() => act(s => removeGeneralLine(s, pkg.id, line.id), "Line removed.")}><Trash2 size={13}/></button></span></div>}
-        {expanded && <ul className="general-scope-members">{covered.map(item => <li key={item!.id}>{item!.title}</li>)}</ul>}
+        {expanded && <ul className="general-scope-members">{covered.map(item => <li key={item!.id}><span>{item!.title}</span><OpenSourceButton evidence={evidenceOf(item!)} onOpen={index => setOpened({ title: item!.title, evidence: evidenceOf(item!), index })}/></li>)}</ul>}
       </li>;
     })}</ol>
     {adding ? <form className="general-scope-edit" onSubmit={e => saveLine(e, null)}><input name="text" autoFocus maxLength={400} placeholder="e.g. Temporary protection of adjacent finishes" aria-label="New general scope line"/><button type="submit" className="ui-icon-btn" aria-label="Add line"><Check size={14}/></button><button type="button" className="ui-icon-btn" aria-label="Cancel" onClick={() => setAdding(false)}><X size={14}/></button></form>
       : <Button onClick={() => setAdding(true)}><Plus size={14}/>Add a line</Button>}
+    {opened && <ScopeSourceModal title={opened.title} evidence={opened.evidence} index={opened.index} onClose={() => setOpened(null)}/>}
   </div>;
 }

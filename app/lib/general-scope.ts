@@ -13,7 +13,10 @@ export type GeneralScope = { lines: GeneralLine[]; /** The detailed items it was
 
 /** The AI's input: the trade and its detailed items, numbered from 0 (the answer refers to them by number). */
 export type GeneralScopeInput = { trade: string; code: string; items: { title: string; detail: string }[] };
-export const GENERAL_MAX_ITEMS = 400, GENERAL_MAX_LINES = 15;
+// 19 Nov, tried live on Whittier's selective demolition (62 items): asked only to "stay general", the AI wrote 15 long
+// sentences ("... the flagged door and frame at D.4.1, which must be measured and documented and held for architect
+// approval before removal"). The prompt now asks for headings of at most 10 words and at most 10 lines; 12 is the hard cap.
+export const GENERAL_MAX_ITEMS = 400, GENERAL_MAX_LINES = 12;
 
 /** The detailed items a general scope is written from: the trade's own (not the all-trades ones, which are the General section). */
 export const generalItems = (state: Pick<Procurement, "scopes">, packageId: string): ScopeItem[] =>

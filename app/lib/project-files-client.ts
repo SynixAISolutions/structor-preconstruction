@@ -17,7 +17,7 @@ import { pageTextBoxes, type TextBox } from "./text-anchor";
 import { paintPage } from "./pdf-paint";
 import { eachPageInRuns, freeCanvas, openLocalPdf, PAGES_PER_OPEN, pdfDecoders, readersFor } from "./local-pdf";
 import { pageTurn } from "./page-turns";
-import { keepPageImage, keptPageImage, pageImageKey } from "./page-image-cache";
+import { keepPageImage, keepPageWords, keptPageImage, keptPageWords, pageImageKey, pageWordsKey } from "./page-image-cache";
 import { fetchWholeRange } from "./range-fetch";
 import {
   chunkFor, emptyIndex, kindForCategory, MAX_RANGE_BYTES, sourcePath, TEXT_CHUNK,
@@ -340,12 +340,15 @@ const textBoxes = new Map<string, Promise<TextBox[]>>();
 export function readPageTextBoxes(doc: StoredDocument, pageNumber: number): Promise<TextBox[]> {
   const key = `${doc.id}:${pageNumber}`;
   if (!textBoxes.has(key)) {
-    const job = (async () => {
+    // Kept in the browser once read (lib/page-image-cache): finding a highlight then doesn't need the PDF at all.
+    const job = keptPageWords<TextBox>(pageWordsKey(doc.id, pageNumber)).then(async kept => {
+      if (kept) return kept;
       const page = await (await openStoredPdf(doc)).getPage(pageNumber);
       const boxes = pageTextBoxes((await page.getTextContent()).items, page.getViewport({ scale: 1 }));
       page.cleanup();
+      void keepPageWords(pageWordsKey(doc.id, pageNumber), boxes);
       return boxes;
-    })();
+    });
     job.catch(() => textBoxes.delete(key));
     textBoxes.set(key, job);
   }
