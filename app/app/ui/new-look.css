@@ -16,6 +16,11 @@
   --nl-muted: #5d657c;
   --nl-cobalt: #334de5;
   --nl-cobalt-hover: #293ec1;
+  --nl-action: var(--nl-cobalt);
+  --nl-action-hover: var(--nl-cobalt-hover);
+  --nl-action-border: var(--nl-action);
+  --nl-on-action: #fff;
+  --nl-action-shadow: 0 5px 14px rgb(39 60 193 / 0.2);
   --nl-accent-text: #283cbd;
   --nl-accent-wash: #eaedff;
   --nl-lime: #dbf866;
@@ -32,7 +37,15 @@ html.new-look[data-structor-theme="dark"] .new-look {
   --nl-line: #373a4a;
   --nl-ink: #f0f1fa;
   --nl-muted: #afb5cb;
-  --nl-cobalt-hover: #4158ef;
+  --nl-cobalt-hover: #404c7e;
+  --nl-action: #333c67;
+  --nl-action-border: #6575a8;
+  --nl-on-action: #f6f7ff;
+  --nl-action-shadow: none;
+  --nl-positive-surface: #273c32;
+  --nl-positive-hover: #354d40;
+  --nl-caution-surface: #433726;
+  --nl-danger-surface: #492e39;
   --nl-accent-text: #aebaff;
   --nl-accent-wash: #2d3457;
   --nl-positive: #a9dba9;
@@ -50,7 +63,7 @@ html.new-look {
   --muted: var(--nl-muted);
   --line: var(--nl-line);
   --line-soft: var(--nl-line);
-  --accent: var(--nl-cobalt);
+  --accent: var(--nl-action);
   --accent-dark: var(--nl-cobalt-hover);
   --selected: var(--nl-accent-wash);
 }
@@ -89,16 +102,22 @@ html.new-look[data-structor-theme="dark"] {
   border-color: var(--nl-line);
 }
 
-.new-look :is(.ui-btn.primary, .voice-launcher) {
-  background: var(--nl-cobalt); border-color: var(--nl-cobalt); color: #fff !important;
-  box-shadow: 0 5px 14px rgb(39 60 193 / 0.2);
+.new-look :is(.ui-btn.primary, .voice-launcher, .legacy-leveling .button.primary, .ask-proposal-actions button.apply) {
+  background: var(--nl-action); border-color: var(--nl-action-border); color: var(--nl-on-action) !important;
+  box-shadow: var(--nl-action-shadow);
 }
-.new-look :is(.ui-btn.primary, .voice-launcher):hover { background: var(--nl-cobalt-hover); }
-.new-look :is(.ui-btn:not(.primary, .ghost, .dark), .ui-search, .ui-field input:not([type=checkbox]),
+.new-look :is(.ui-btn.primary, .voice-launcher, .legacy-leveling .button.primary, .ask-proposal-actions button.apply):hover:not(:disabled) {
+  background: var(--nl-action-hover);
+}
+html.new-look[data-structor-theme="dark"] :is(.ui-btn.primary, .legacy-leveling .button.primary):disabled {
+  background: var(--nl-surface-quiet); border-color: var(--nl-line); color: var(--nl-muted) !important;
+  opacity: 1; box-shadow: none; transform: none;
+}
+.new-look :is(.ui-btn:not(.primary, .ghost, .dark, .danger), .ui-search, .ui-field input:not([type=checkbox]),
   .ui-field select, .ui-field textarea, .ask-panel form input) {
   background-color: var(--nl-surface); border-color: var(--nl-line); color: var(--nl-ink);
 }
-.new-look .ui-btn:not(.primary, .ghost, .dark):hover { background: var(--nl-surface-quiet); }
+.new-look .ui-btn:not(.primary, .ghost, .dark, .danger):hover { background: var(--nl-surface-quiet); }
 .new-look :is(.ui-search input, .ui-modal > header h2, .ui-empty h3, .portfolio-content > div > strong,
   .ui-table td strong, .command-list button, .ui-tabs button.active) { color: var(--nl-ink); }
 .new-look :is(.ui-page-header p, .ui-panel-head p, .ui-stat > span, .ui-stat > small, .ui-empty, .ui-field,
@@ -109,7 +128,10 @@ html.new-look[data-structor-theme="dark"] {
 .new-look :is(.ui-icon-btn, .top-search) { color: var(--nl-muted) !important; }
 .new-look .ui-icon-btn:hover { background: var(--nl-surface-quiet); }
 .new-look .ui-tabs button.active::after { background: var(--nl-cobalt); }
-.new-look :focus-visible { outline-color: var(--nl-accent-text); }
+.new-look.product-app :is(button, a, input, select, textarea, summary):focus-visible,
+html.new-look :is(.voice-launcher, .ask-panel button, .voice-panel button):focus-visible {
+  outline-color: var(--nl-accent-text);
+}
 
 .new-look .ui-table th { background: var(--nl-surface-quiet); color: var(--nl-muted); }
 .new-look .ui-table td { color: var(--nl-ink); }
@@ -119,7 +141,7 @@ html.new-look[data-structor-theme="dark"] {
 .new-look .ui-table tbody tr:hover td { background: var(--nl-surface-quiet); }
 .new-look .command-list button { background: var(--nl-surface); border-bottom-color: var(--nl-line); }
 .new-look .command-list button:hover { background: var(--nl-surface-quiet); }
-.new-look .ask-message.user { background: var(--nl-cobalt); color: #fff; }
+.new-look .ask-message.user { background: var(--nl-action); color: var(--nl-on-action); }
 .new-look .ask-message.assistant { background: var(--nl-surface-quiet); color: var(--nl-ink); }
 
 .new-look .todo-progress-banner :is(.health-eyebrow, .health-ring-number > span, p, .todo-progress-count > span) {
@@ -223,11 +245,10 @@ html.new-look[data-structor-theme="dark"] .setup-drop-target.is-dragging { backg
 html.new-look[data-structor-theme="dark"] :is(.flip-side-tabs button.active, .scope-matrix-item .ui-source) {
   background: var(--nl-accent-wash); border-color: var(--nl-line); color: var(--nl-accent-text);
 }
-html.new-look[data-structor-theme="dark"] :is(.setup-checklist .ui-btn, .todo-work-list .ui-btn) {
+html.new-look[data-structor-theme="dark"] :is(.setup-checklist, .todo-work-list) .ui-btn:not(.primary, .danger) {
   color: var(--nl-ink); background: var(--nl-surface-quiet); border-color: var(--nl-line);
 }
 html.new-look[data-structor-theme="dark"] .ui-field [aria-invalid="true"] { background: #382c35 !important; }
-.new-look .legacy-leveling .button.primary { background: var(--nl-cobalt); }
 html.new-look[data-structor-theme="dark"] :is(
   .legacy-leveling, .legacy-leveling .summary, .legacy-leveling .table-wrap, .legacy-leveling .modal,
   .legacy-leveling .trade-select select, .legacy-leveling .button:not(.primary, .ghost),
@@ -261,7 +282,7 @@ html.new-look[data-structor-theme="dark"] .legacy-leveling .gap-cell-trigger {
 
 /* Workspace-specific surfaces that still use literal colors in older stylesheets. */
 html.new-look[data-structor-theme="dark"] :is(
-  .cm-bidder-card, .cm-placeholder-grid > article, .cm-record-files, .proc-package-summary,
+  .cm-bidder-card, .cm-placeholder-grid > article, .cm-record-files,
   .intel-change-row, .intel-spec-register > section > header, .rfi-detail dl, .rfi-detail dl > div,
   .assumption-trade, .sched-phases > button, .sched-row, .sub-acting-as, .sub-view dl > div,
   .sub-document-list > button, .award-package-rail, .award-package-rail > header, .award-package-rail > button,
@@ -300,9 +321,201 @@ html.new-look[data-structor-theme="dark"] :is(
 ) { color: var(--nl-ink); }
 html.new-look[data-structor-theme="dark"] :is(.ms-inspector-empty p, .ms-viewbar button:not(.active, :hover)) { color: var(--nl-muted); }
 
+/* Scope review and bid packages */
+html.new-look[data-structor-theme="dark"] :is(
+  .proc-candidates, .proc-candidates > article, .proc-invitation-list > article,
+  .proc-detail-actions, .proc-history, .proc-trades > button.proc-aside-link, .proc-package-messages article,
+  .proc-outreach-form, .proc-outreach-log > article, .ai-reader, .proc-source-regions li, .ext-card, .ext-card.accepted
+) { border-color: var(--nl-line); }
+html.new-look[data-structor-theme="dark"] :is(
+  .proc-package-summary > span, .proc-package-thread > header, .proc-package-compose textarea,
+  .proc-status-select, .general-scope-edit input, .general-scope-members, .general-scope-lines > li,
+  .scope-dash-table .scope-dash-group > th, .scope-dash-table td select.scope-dash-owner,
+  .ext-bulk, .ext-card.rejected, .ext-original, .proc-citation-quote
+) { background-color: var(--nl-surface-quiet); border-color: var(--nl-line); color: var(--nl-ink); }
+html.new-look[data-structor-theme="dark"] :is(
+  .proc-package-summary strong, .proc-package-thread > header strong, .proc-package-messages article :is(strong, p),
+  .proc-invitation-list strong, .proc-candidates strong, .proc-outreach-log strong, .general-scope-text,
+  .scope-dash-ring strong, .scope-dash-review dd, .scope-dash-disciplines strong, .ai-reader h3, .ext-card h3
+) { color: var(--nl-ink); }
+html.new-look[data-structor-theme="dark"] :is(
+  .proc-package-summary small, .proc-package-link small, .proc-table-sub, .proc-package-thread > header small,
+  .proc-package-messages article small, .proc-package-compose > div > span, .proc-invitation-list small,
+  .proc-candidates small, .proc-outreach-log :is(p, small), .proc-modal-note, .general-scope-head,
+  .general-scope-text small, .proc-scope-meta > b, .scope-dash-ring small, .scope-dash-review :is(dt, dd small),
+  .scope-dash-disciplines li, .scope-dash-open span, .scope-dash-progress, .scope-matrix-group :is(span, small),
+  .scope-matrix-pages, .ai-reader, .ai-reader .ai-privacy, .proc-source-heading p, .proc-source-regions p,
+  .ext-summary, .ext-summary small, .ext-run-details, .ext-bulk label, .ext-card :is(p, small), .ext-history
+) { color: var(--nl-muted); }
+html.new-look[data-structor-theme="dark"] .general-scope-lines > li::marker { color: var(--nl-muted); }
+html.new-look[data-structor-theme="dark"] :is(
+  .proc-active-row, .proc-active-row > td, .ui-table tbody .proc-active-row:hover > td,
+  .scope-matrix-table tr.selected > td
+) { background-color: var(--nl-accent-wash); }
+html.new-look[data-structor-theme="dark"] :is(
+  .proc-code, .proc-company-mark, .proc-package-messages article.own .proc-company-mark,
+  .proc-status-select.blue, .scope-matrix-bulk, .bid-thread-unread, .ext-citations button, .proc-outreach-log article > span
+) { background-color: var(--nl-accent-wash); border-color: var(--nl-line); color: var(--nl-accent-text); }
+html.new-look[data-structor-theme="dark"] .proc-package-summary { background: var(--nl-line); border-color: var(--nl-line); }
+html.new-look[data-structor-theme="dark"] .proc-scope-row.selected::before { background: var(--nl-accent-text); }
+html.new-look[data-structor-theme="dark"] :is(
+  .proc-owner i, .proc-approval.approved, .scope-open-source, .pkg-source-chip
+) { background-color: var(--nl-positive-surface); border-color: var(--nl-line); color: var(--nl-positive); }
+html.new-look[data-structor-theme="dark"] :is(.scope-open-source, .pkg-source-chip):is(:hover, :focus-visible, .active) {
+  background-color: var(--nl-positive-hover); border-color: var(--nl-positive); color: var(--nl-ink);
+}
+html.new-look[data-structor-theme="dark"] :is(.scope-matrix-also, .proc-publish-bar span) { color: var(--nl-caution); }
+html.new-look[data-structor-theme="dark"] :is(.general-scope-stale, .proc-status-select.amber) {
+  background-color: var(--nl-caution-surface); border-color: var(--nl-line); color: var(--nl-caution);
+}
+html.new-look[data-structor-theme="dark"] :is(.proc-source-error, .ext-result.error, .ext-card p.ext-rejection) {
+  background-color: var(--nl-danger-surface); border-color: var(--nl-line); color: var(--nl-danger);
+}
+html.new-look[data-structor-theme="dark"] .ext-result:not(.error) { background: var(--nl-positive-surface); color: var(--nl-positive); }
+html.new-look[data-structor-theme="dark"] .proc-invitation-list button { color: var(--nl-accent-text); }
+html.new-look[data-structor-theme="dark"] .proc-invitation-list button.proc-remove-invitation { color: var(--nl-danger); }
+html.new-look[data-structor-theme="dark"] .scope-dash-open { color: var(--nl-ink) !important; }
+html.new-look[data-structor-theme="dark"] .scope-dash-open:hover { color: var(--nl-accent-text) !important; }
+html.new-look[data-structor-theme="dark"] .scope-dash-ring {
+  background: conic-gradient(var(--nl-accent-text) var(--done), var(--nl-line) 0);
+}
+html.new-look[data-structor-theme="dark"] .scope-dash-ring > span { background: var(--nl-surface); }
+html.new-look[data-structor-theme="dark"] :is(.scope-dash-disciplines, .scope-dash-progress) i { background: var(--nl-line); }
+html.new-look[data-structor-theme="dark"] :is(.scope-dash-disciplines, .scope-dash-progress) b { background: var(--nl-accent-text); }
+html.new-look[data-structor-theme="dark"] :is(.scope-matrix-table, .ext-review) input[type=checkbox] { accent-color: var(--nl-accent-text); }
+html.new-look[data-structor-theme="dark"] :is(.ext-quantity, .proc-source-regions button.active) { color: var(--nl-accent-text); }
+html.new-look[data-structor-theme="dark"] .pkg-source-chip.active { border-color: var(--nl-positive); }
+html.new-look[data-structor-theme="dark"] .coverage-row summary:hover { background: var(--nl-surface-quiet); }
+
+/* Shared controls and legacy workspace chrome */
+html.new-look[data-structor-theme="dark"] :is(
+  .ui-form-actions, .cm-form-footer, .ui-panel > .ui-toolbar, .setup-checklist, .info-links > button,
+  .health-trade-list li + li, .health-work-areas li + li, .activity-list > button,
+  .sched-filters, .sched-history > div, .award-agreement
+) { border-color: var(--nl-line); }
+html.new-look[data-structor-theme="dark"] :is(
+  .cm-select, .intel-select, .cm-category > select, .rfi-filters select, .flip-filterbar select,
+  .flip-sheet-select select, .flip-search, .flip-page-nav button, .flip-legend button, .flip-expand,
+  .sched-filters :is(input, select), .sched-link-form :is(input, select), .sched-lookahead button,
+  .health-detail-panel, .info-links > button, .activity-list > button, .award-agreement, .award-executed,
+  .pf-folder-row > td, .setup-honesty-note, .flip-image-state, .flip-empty-note, .sub-overview dl,
+  .sub-acting-as select, .sub-overview select, .budget-trade-total, .ui-table .budget-trade-total > td,
+  .ui-table .budget-section-total > td, .compliance-table tfoot :is(th, td), .intel-plan-canvas, .info-cover
+) { background-color: var(--nl-surface-quiet); border-color: var(--nl-line); color: var(--nl-ink); }
+html.new-look[data-structor-theme="dark"] :is(
+  .ui-source, .rfi-origin.ai, .intel-change-index, .cm-company-icon, .cm-avatar, .mini-avatar,
+  .setup-continue-icon, .todo-task-icon, .top-avatar, .award-trade-code, .intel-file-icon.drawing,
+  .cm-file-symbol.pf-folder-symbol.system, .cm-display-toggle [aria-pressed="true"], .portfolio-delete,
+  .cm-placeholder-grid article > span, .user-avatar, .ms-inspector-empty > div > span,
+  .sub-document-list > button > span:first-child
+) { background-color: var(--nl-accent-wash); border-color: var(--nl-line); color: var(--nl-accent-text) !important; }
+html.new-look[data-structor-theme="dark"] :is(
+  .ui-btn.ghost, .breadcrumb-home, .ui-eyebrow, .nav-label, .ui-field > span, .cm-muted, .cm-cell-note, .ui-table caption,
+  .pf-folder-row small, .health-panel-description, .health-trade-title small, .health-trade-detail,
+  .activity-list small, .flip-page-meta small, .sched-lookahead small, .sched-history small, .sched-row-label small,
+  .rfi-row-title small, .rfi-cell-stack small, .compliance-base, .compliance-table :is(th, td) small,
+  .workload-table small, .setup-continue-card .health-eyebrow, .health-detail-panel .health-eyebrow, .activity-list p,
+  .info-cover p, .info-grid dt, .team-list small, .cm-distribution > div > div:first-child span,
+  .info-links small, .model-caption, .model-coordinate, .award-agreement small, .award-revisions small,
+  .sub-overview p, .sched-view :is(.ui-panel-head small, .sched-gantt-head, .sched-detail small)
+) { color: var(--nl-muted); }
+html.new-look[data-structor-theme="dark"] :is(
+  .ui-btn.dark, .voice-panel, .sched-view, .sched-row-label strong, .sched-lookahead strong, .sched-history strong,
+  .flip-page-meta strong, .flip-search input, .intel-detail-body h3, .rfi-detail-heading h2,
+  .ui-table .budget-section-total strong, .sub-overview :is(strong, dd), .sub-acting-as strong,
+  .cm-placeholder-grid strong, .activity-list strong, .info-cover h2, .info-grid dd, .info-links strong,
+  .award-revisions strong, .award-facts dd, .team-list strong
+) { color: var(--nl-ink); }
+html.new-look[data-structor-theme="dark"] :is(.cm-text-button, .proc-citation-link, .pf-revisions button.active,
+  .bid-docs-link, .bid-docs-icon, .bid-docs-ai > svg, .legacy-leveling .progress-summary strong) {
+  color: var(--nl-accent-text) !important;
+}
+html.new-look[data-structor-theme="dark"] :is(.cm-text-button, .proc-citation-link):hover { text-decoration: underline; }
+html.new-look[data-structor-theme="dark"] :is(
+  .rfi-issue-table tr.selected td, .ui-table .budget-section-total.grand > td,
+  .pf-folder-row.pf-drop-active td
+) { background-color: var(--nl-accent-wash); }
+html.new-look[data-structor-theme="dark"] :is(.rfi-severity-mark.high, .ui-btn.danger) {
+  background-color: var(--nl-danger-surface); border-color: var(--nl-line); color: var(--nl-danger);
+}
+html.new-look[data-structor-theme="dark"] .ui-btn.danger:hover { border-color: var(--nl-danger); }
+html.new-look[data-structor-theme="dark"] .ui-btn.dark,
+html.new-look[data-structor-theme="dark"] .ui-field input::file-selector-button {
+  background: var(--nl-surface-quiet); border-color: var(--nl-line); color: var(--nl-ink);
+}
+html.new-look[data-structor-theme="dark"] .ui-btn.dark:hover { background: var(--nl-accent-wash); }
+html.new-look[data-structor-theme="dark"] :is(input, textarea)::placeholder { color: var(--nl-muted); opacity: 1; }
+html.new-look[data-structor-theme="dark"] .product-app ::-webkit-scrollbar-thumb { background: var(--nl-line); }
+html.new-look[data-structor-theme="dark"] .todo-progress-banner {
+  background: linear-gradient(115deg, #262e55, #303b65);
+}
+html.new-look[data-structor-theme="dark"] .notification-btn i { box-shadow: 0 0 0 2px var(--nl-canvas); }
+html.new-look[data-structor-theme="dark"] :is(.pf-drop-active, .legacy-leveling .button.ghost.pressed) {
+  background: var(--nl-accent-wash) !important; border-color: var(--nl-accent-text) !important; color: var(--nl-accent-text);
+}
+html.new-look[data-structor-theme="dark"] .activity-list > button::before { background: var(--nl-line); }
+html.new-look[data-structor-theme="dark"] .activity-list i { background: var(--nl-accent-text); box-shadow: 0 0 0 4px var(--nl-surface); }
+html.new-look[data-structor-theme="dark"] :is(.portfolio-visual, .theme-preview) {
+  background: var(--nl-surface-quiet); border-color: var(--nl-line);
+}
+html.new-look[data-structor-theme="dark"] .theme-preview { box-shadow: var(--nl-shadow); }
+html.new-look[data-structor-theme="dark"] .theme-preview span { background: var(--nl-accent-wash); border-color: var(--nl-line); }
+html.new-look[data-structor-theme="dark"] .model-ground {
+  background: #3e4b4b; border-color: #47575a; box-shadow: -9px 13px 0 #2e383e, -11px 16px 0 #35414a, 5px 28px 25px rgb(0 0 0 / 0.35);
+}
+html.new-look[data-structor-theme="dark"] .model-walkway { background: #5b6362; box-shadow: 0 0 0 1px #6e7475; }
+html.new-look[data-structor-theme="dark"] .award-paper :is(li, footer) { color: #586661; }
+html.new-look[data-structor-theme="dark"] .sched-time-axis {
+  background: repeating-linear-gradient(to right, var(--nl-surface-quiet) 0 129px, var(--nl-line) 129px 130px);
+}
+html.new-look[data-structor-theme="dark"] .sched-row-track {
+  background: repeating-linear-gradient(to right, transparent 0 129px, var(--nl-line) 129px 130px);
+}
+html.new-look[data-structor-theme="dark"] .sched-phases button[aria-pressed="true"] {
+  background: var(--nl-accent-wash); border-color: var(--nl-accent-text);
+}
+html.new-look[data-structor-theme="dark"] .sched-phases i { background: var(--nl-line); }
+
+/* The model workspace has its own toolbar and schedules. */
+html.new-look[data-structor-theme="dark"] .model-studio { --ms-ink: var(--nl-ink); --ms-muted: var(--nl-muted); }
+html.new-look[data-structor-theme="dark"] :is(
+  .ms-level-controls, .ms-takeoff-summary, .ms-takeoff-cards > button, .ms-room-schedule, .ms-room-scroll th,
+  .ms-door-filters :is(input, select), .ms-mat-tabs button, .ms-layer-panel > button, .ms-object-toolbar :is(label, select),
+  .ms-camera-tools, .ms-compass, .ms-finish-legend, .ms-element-picker select, .ms-source-tray > button,
+  .ms-scene, .ms-scene-caption, .ms-scene.is-walkthrough .ms-scene-hint,
+  .ms-ceiling-coverage button, .ms-base-totals > span, .ms-finish-schedule button, .ms-level-controls button
+) { background-color: var(--nl-surface-quiet); border-color: var(--nl-line); color: var(--nl-ink); }
+html.new-look[data-structor-theme="dark"] :is(
+  .ms-heading h1 > span, .ms-source-switch button.active, .ms-layer-panel button.on,
+  .ms-level-controls button[aria-pressed="true"], .ms-header-actions .ms-walk-toggle.active,
+  .ms-source-tray button.active, .ms-view-switch button > span, .ms-layer-panel button small
+) { background-color: var(--nl-accent-wash); border-color: var(--nl-line); color: var(--nl-accent-text); box-shadow: none; }
+html.new-look[data-structor-theme="dark"] :is(
+  .ms-source-switch p, .ms-source-switch button:not(.active), .ms-heading p, .ms-level-controls > p,
+  .ms-section-label, .ms-takeoff-heading > p, .ms-takeoff-cards small, .ms-room-schedule > p,
+  .ms-room-schedule small, .ms-door-filters > span, .ms-review-summary small, .ms-review-summary span,
+  .ms-source-tray :is(span, small), .ms-view-switch small, .ms-material-key, .ms-bottom-tools button,
+  .ms-camera-tools button, .ms-scene-caption :is(span, small), .ms-scene.is-walkthrough .ms-scene-caption small,
+  .ms-provenance :is(span:not(.ms-live-dot), small), .ms-base-runs small
+) { color: var(--nl-muted); }
+html.new-look[data-structor-theme="dark"] :is(
+  .ms-review-summary strong, .ms-source-tray strong, .ms-object-toolbar input, .ms-room-scroll button,
+  .ms-ceiling-coverage, .ms-element-picker label, .ms-base-runs > span, .ms-scene-caption strong,
+  .ms-scene.is-walkthrough :is(.ms-scene-caption strong, .ms-scene-hint)
+) { color: var(--nl-ink); }
+html.new-look[data-structor-theme="dark"] :is(.ms-review-summary strong.verified, .ms-hardware-badge) {
+  background-color: var(--nl-positive-surface); color: var(--nl-positive);
+}
+html.new-look[data-structor-theme="dark"] :is(
+  .ms-review-summary strong.flagged, .ms-hardware-badge.conflict, .ms-ceiling-conflicts,
+  .ms-door-width.conflict, .ms-door-hardware.conflict
+) { background-color: var(--nl-caution-surface); border-color: var(--nl-line); color: var(--nl-caution); }
+
+
+html.new-look[data-structor-theme="dark"] .ms-scene-caption { padding: 7px 10px; border-radius: 6px; }
+
 /* ---------- Cards: rounder, borderless, a soft wide shadow ---------- */
 .new-look .ui-panel { border-color: transparent; border-radius: var(--nl-radius); box-shadow: var(--nl-shadow); }
-.new-look .ui-panel-head { padding: 22px 24px 16px; }
 .new-look .portfolio-card { border-color: transparent; border-radius: var(--nl-radius); box-shadow: var(--nl-shadow); }
 .new-look .portfolio-card:hover { transform: translateY(-4px); box-shadow: var(--nl-shadow-hover); }
 .new-look .todo-status-summary { gap: 14px; }
@@ -342,6 +555,115 @@ html.new-look[data-structor-theme="dark"] :is(.ms-inspector-empty p, .ms-viewbar
 @keyframes nl-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 @keyframes nl-placeholder { 0%, 55% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
 @keyframes nl-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+/* Size workspace layouts against the room left by the sidebar and assistant. */
+.new-look .product-content { padding: clamp(18px, 1.9vw, 30px) clamp(16px, 2.4vw, 34px) 0; }
+.new-look .page-enter { container: workspace / inline-size; --nl-work-gap: 18px; --nl-panel-gutter: 22px; }
+.new-look .ui-page-header { flex-wrap: wrap; align-items: center; gap: 12px 20px; }
+.new-look .ui-page-header > div:first-child { flex: 1 1 205px; min-width: 0; }
+.new-look .ui-page-header h1 { font-size: clamp(24px, 3.1cqw, 30px); }
+.new-look .ui-page-header p { max-width: 80ch; font-size: 12px; }
+.new-look .ui-header-actions { flex: 0 1 auto; flex-wrap: wrap; max-width: 100%; }
+.new-look .ui-header-actions:empty { display: none; }
+.new-look .ui-panel-head { flex-wrap: wrap; padding: 18px var(--nl-panel-gutter, 22px) 14px; }
+.new-look .ui-panel-head > div { flex: 1 1 auto; min-width: 0; }
+.new-look .ui-panel-head h2 { font-size: 15px; }
+.new-look .ui-panel-head p { font-size: 11px; }
+.new-look :is(.cm-view, .proc-view) { gap: var(--nl-work-gap); }
+.new-look :is(.cm-view, .proc-view) > :is(.ui-page-header, .ui-preview-note, .ui-stats) { margin-block: 0; }
+.new-look .proc-view > .ui-tabs { margin-block: 0; }
+.new-look .ui-stats { gap: clamp(8px, 1.2cqw, 14px); }
+.new-look .ui-stat { min-width: 0; padding: 13px var(--nl-panel-gutter, 16px); }
+.new-look .ui-stat > strong { font-size: clamp(18px, 2.55cqw, 26px); overflow-wrap: anywhere; }
+.new-look .ui-stat > small { font-size: 10px; }
+.new-look .ui-tabs { min-width: 0; max-width: 100%; }
+.new-look .ui-tabs button { flex: none; }
+.new-look .ui-tabs button:focus-visible { outline-offset: -3px; }
+.new-look .ui-table-wrap { min-width: 0; max-width: 100%; }
+.new-look .ui-btn { max-width: 100%; }
+.new-look .ui-panel > .ui-toolbar { padding: 12px var(--nl-panel-gutter, 16px); }
+
+.new-look .proc-scope-layout {
+  display: grid; grid-template-columns: minmax(174px, .6fr) minmax(0, 1.45fr) minmax(260px, 1fr);
+  gap: var(--nl-work-gap);
+}
+.new-look .proc-general-panel { grid-column: 2 / -1; }
+.new-look .proc-detail-column { grid-column: auto; gap: var(--nl-work-gap); }
+.new-look .proc-scope-panel { container: scope-panel / inline-size; }
+.new-look [data-screen="scopes"] .trade-ask-toolbar { padding: 0 var(--nl-panel-gutter); margin: 0 0 10px; }
+.new-look .general-scope { padding: 4px var(--nl-panel-gutter) 14px; }
+.new-look .general-scope-actions { flex-wrap: wrap; }
+.new-look .general-scope .ui-empty { padding: 32px 8px; }
+.new-look .general-scope .ui-empty .general-scope-actions { justify-content: center; }
+.new-look .proc-scope-row-actions { display: flex; flex: none; align-items: center; gap: 2px; margin-top: 13px; }
+.new-look .proc-scope-row-actions .scope-open-source { margin-top: 0; }
+.new-look .proc-scope-meta, .new-look .proc-publish-bar { flex-wrap: wrap; }
+
+.new-look .proc-package-layout {
+  display: grid; grid-template-columns: minmax(0, 2.15fr) minmax(310px, 1fr); gap: var(--nl-work-gap);
+}
+.new-look .proc-invite-panel { max-width: none; min-width: 0; margin-top: 0; }
+.new-look .proc-package-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.new-look .proc-package-summary > span { min-width: 0; overflow-wrap: anywhere; }
+.new-look .proc-package-summary small, .new-look .proc-table-sub { font-size: 10px; }
+.new-look .proc-package-summary strong { font-size: 12px; }
+.new-look .proc-table-sub { display: block; }
+.new-look .proc-invite-panel > .ui-tabs { padding-inline: var(--nl-panel-gutter); gap: 16px; }
+
+.new-look .budget-estimate-summary-body { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 15px; padding: 0 var(--nl-panel-gutter) 16px; }
+.new-look .budget-estimate-summary-body strong { font-size: 22px; font-variant-numeric: tabular-nums; }
+.new-look .budget-estimate-summary-body p { margin: 0; color: var(--nl-muted); }
+.new-look .budget-estimate-summary-body .ui-btn { margin-inline-start: auto; }
+.new-look .ms-source-tray > button { grid-template-columns: minmax(0, 1fr) auto; }
+.new-look .ms-source-tray > button :is(strong, span) { white-space: normal; overflow-wrap: anywhere; }
+.new-look :is(.ms-heading, .ms-heading h1, .ms-header-actions) { flex-wrap: wrap; }
+
+@container workspace (max-width: 1000px) {
+  .new-look .proc-scope-layout { grid-template-columns: minmax(158px, 25%) minmax(0, 1fr); }
+  .new-look .proc-detail-column { grid-column: 2; }
+  .new-look .proc-package-layout { grid-template-columns: minmax(0, 1fr); }
+  .new-look .proc-package-table > .ui-table-wrap { max-height: clamp(15rem, 46dvh, 27rem); }
+  .new-look .proc-package-table .ui-table th { position: sticky; top: 0; z-index: 1; }
+}
+@container workspace (max-width: 820px) {
+  .new-look .ui-page-header { align-items: flex-start; flex-direction: column; }
+  .new-look .ui-page-header > div:first-child { flex: auto; }
+  .new-look .sched-header-actions { justify-content: flex-start; }
+  .new-look .ms-workspace, .new-look .scope-dash-top { grid-template-columns: minmax(0, 1fr); }
+}
+@container workspace (max-width: 600px) {
+  .new-look .proc-scope-layout { grid-template-columns: minmax(0, 1fr); }
+  .new-look :is(.proc-detail-column, .proc-general-panel) { grid-column: auto; }
+  .new-look .proc-trades { display: flex; gap: 4px; overflow-x: auto; }
+  .new-look .proc-aside-title { display: none; }
+  .new-look .proc-trades > button { flex: none; width: auto; min-width: 145px; }
+  .new-look .proc-trades > button.proc-aside-link { display: flex; margin: 0; padding: 10px 8px; border: 0; }
+  .new-look .general-scope-line { flex-direction: column; }
+  .new-look .ui-stats, .new-look .ui-stats:has(> .ui-stat:nth-child(5):last-child) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container workspace (max-width: 440px) {
+  .new-look .ui-header-actions { gap: 6px; }
+  .new-look .ui-stat, .new-look .proc-package-summary > span { padding: 10px 12px; }
+  .new-look .budget-estimate-summary-body .ui-btn { margin-inline-start: 0; }
+}
+@container scope-panel (max-width: 480px) {
+  .new-look .proc-scope-row:has(> .proc-scope-row-actions) {
+    display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px;
+  }
+  .new-look .proc-scope-row-actions { grid-column: 2; flex-wrap: wrap; margin-top: 0; }
+}
+@media (max-width: 700px) {
+  .new-look .page-enter { --nl-work-gap: 14px; --nl-panel-gutter: 15px; }
+  .new-look .product-footer { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+  .new-look .voice-launcher {
+    right: 174px; bottom: calc(15px + env(safe-area-inset-bottom, 0px)); width: 44px; height: 44px;
+    min-height: 44px; justify-content: center; padding: 0;
+  }
+  .new-look .voice-launcher > span { display: none; }
+}
+
 
 .new-look .page-enter[data-screen="turnover"],
 .new-look .page-enter[data-screen="projects"] { animation: none; }
@@ -417,30 +739,16 @@ html.new-look[data-structor-theme="dark"] :is(.ms-inspector-empty p, .ms-viewbar
 .new-look .ask-message { border-radius: 14px; }
 .new-look .ask-panel form input { border-radius: 999px; padding: 9px 14px; }
 
-@media (min-width: 900px) {
+@media (min-width: 1350px) {
   .new-look .ask-panel { top: 12px; bottom: 12px; right: 12px; width: 384px; max-height: none; }
   .new-look .product-main { transition: margin-right 0.38s var(--nl-ease); }
   html.ask-open .new-look .product-main { margin-right: 408px; }
-  html.ask-open .new-look [data-screen="scopes"] { container: scope-with-ask / inline-size; }
   /* Record feedback steps left of the open panel instead of sitting on it. */
   .new-look .voice-launcher { transition: right 0.38s var(--nl-ease); }
   html.ask-open.new-look .voice-launcher { right: 420px; }
 }
-@container scope-with-ask (max-width: 955px) {
-  .new-look [data-screen="scopes"] .ui-page-header { flex-direction: column; align-items: flex-start; gap: 16px; }
-  .new-look [data-screen="scopes"] .ui-header-actions { flex-wrap: wrap; }
-  .new-look [data-screen="scopes"] .proc-scope-layout { grid-template-columns: minmax(150px, 27%) minmax(0, 1fr); }
-  .new-look [data-screen="scopes"] .proc-detail-column { grid-column: 1 / -1; }
-}
-@container scope-with-ask (max-width: 590px) {
-  .new-look [data-screen="scopes"] .proc-scope-layout { grid-template-columns: minmax(0, 1fr); }
-  .new-look [data-screen="scopes"] .proc-trades { display: flex; gap: 4px; overflow-x: auto; }
-  .new-look [data-screen="scopes"] .proc-aside-title { display: none; }
-  .new-look [data-screen="scopes"] .proc-trades > button { flex: 0 0 auto; width: auto; min-width: 145px; }
-  .new-look [data-screen="scopes"] .proc-trades > .proc-aside-link { margin: 0; padding: 10px 8px; border: 0; }
-}
 /* On a narrower screen the panel covers that corner: Record feedback waits until it closes. */
-@media (max-width: 899px) { html.ask-open.new-look .voice-launcher { display: none; } }
+@media (max-width: 1349px) { html.ask-open.new-look .voice-launcher { display: none; } }
 
 /* ---------- The AI run card: the orb thinks while the AI reads ---------- */
 .new-look .ai-run-card { border-radius: 18px; box-shadow: 0 18px 40px -22px rgb(16 34 53 / 0.55); }
