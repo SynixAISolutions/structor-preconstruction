@@ -71,6 +71,7 @@ import { ScopeMatrixView } from "./scope-matrix";
 import { notOnSheet } from "../../lib/extraction";
 import { GeneralScopes } from "./general-scopes";
 import { ScopeExportButton } from "./scope-export";
+import { QuantityChip, ScopeQuantityPanel } from "./scope-quantity";
 import { AiScopeWriter } from "./ai-scope-writer";
 import { ProposalWorkspace } from "./proposal-review";
 import { useLocalDraft } from "../../lib/use-local-draft";
@@ -137,6 +138,8 @@ function historyLabel(event: ScopeItem["history"][number], packages: Procurement
   if (event.kind === "moved") return `Moved from ${packages.find(pkg => pkg.id === event.from)?.name ?? event.from} to ${packages.find(pkg => pkg.id === event.to)?.name ?? event.to}`;
   if (event.kind === "copied") return `Copied from ${packages.find(pkg => pkg.id === event.from)?.name ?? event.from}`;
   if (event.kind === "applied-to-all") return "Applied to every trade";
+  if (event.kind === "quantity") return event.quantity ? `Quantity set to ${event.quantity}` : "Quantity removed";
+  if (event.kind === "quantity-checked") return "Quantity checked";
   return event.kind === "created" ? "Created" : event.kind === "approved" ? "Approved" : event.kind === "reopened" ? "Reopened for review" : "Edited";
 }
 
@@ -218,7 +221,7 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
         <PackageDrawingReferences key={activePackage.id} pkg={activePackage} packages={state.packages} colors={sourceColors}/>
         <div className="proc-scope-list"><InlineScopeDrafts key={activePackage.id} review={review} packageId={activePackage.id} query={query} sections={specSections} colors={sourceColors} by={CURRENT_USER} notify={notify} onMove={setPackageId}/>{visible.map((item, index) => <article className={`proc-scope-row ${selected?.id === item.id ? "selected" : ""}`} key={item.id}>
           <button className={`proc-approval ${item.status}`} aria-label={`${item.status === "approved" ? "Reopen" : "Approve"} ${item.title}`} onClick={() => item.status === "approved" ? runAndNotify(run, current => reopenScope(current, item.id, CURRENT_USER), notify, "Scope item reopened for review.") : notify(review.approveScopeItem(item.id, CURRENT_USER) ?? "Scope item approved.")}>{item.status === "approved" ? <Check size={14}/> : <span/>}</button>
-          <button className="proc-scope-copy" onClick={() => setSelectedId(item.id)}><span className="proc-scope-meta"><b>{String(index + 1).padStart(2, "0")}</b><Badge tone={item.status === "approved" ? "green" : "amber"}>{item.status === "approved" ? "Approved" : "Needs review"}</Badge>{item.allTrades && <Badge tone="blue">All trades</Badge>}</span><strong>{item.title}</strong><small><FileText size={12}/>{item.source || "Source not linked"} · {ORIGIN_LABELS[item.origin]}</small></button>
+          <button className="proc-scope-copy" onClick={() => setSelectedId(item.id)}><span className="proc-scope-meta"><b>{String(index + 1).padStart(2, "0")}</b><Badge tone={item.status === "approved" ? "green" : "amber"}>{item.status === "approved" ? "Approved" : "Needs review"}</Badge>{item.allTrades && <Badge tone="blue">All trades</Badge>}{item.quantity && <QuantityChip quantity={item.quantity}/>}</span><strong>{item.title}</strong><small><FileText size={12}/>{item.source || "Source not linked"} · {ORIGIN_LABELS[item.origin]}</small></button>
           <OpenSourceButton evidence={evidenceOf(item)} onOpen={index => setOpened({ item, index })}/>
           <button className="ui-icon-btn" aria-label={`Move ${item.title}`} title="Move or copy to another trade" onClick={() => { setMoveItem(item); setMoveTo(state.packages.find(p => p.id !== item.packageId)?.id || ""); }}><MoveRight size={15}/></button>
           <button className="ui-icon-btn" aria-label={`Delete ${item.title}`} title={item.allTrades ? "Delete from every trade" : "Delete scope"} onClick={() => { const message = review.removeScope(item.id,CURRENT_USER); notify(message || "Scope item removed from the current bid form."); if(!message) setSelectedId(""); }}><Trash2 size={15}/></button>
@@ -231,6 +234,7 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
       <div className="proc-detail-column">{selected ? <Panel title="Requirement detail" action={<Badge>{ORIGIN_LABELS[selected.origin]}</Badge>}><div className="proc-detail">
         <span className="proc-label">SOURCE REFERENCE</span>{sources?.spec ? <button className="proc-spec-link" onClick={() => setSourceKind("spec")}><FileText size={14}/>{selected.source}<ArrowRight size={13}/></button> : <strong>{selected.source || "No source linked"}</strong>}<p>{selected.detail || "No coordination notes recorded."}</p>
         <div className="proc-detail-actions"><Button onClick={() => { const drawing = evidenceOf(selected).findIndex(onDrawing); if (drawing >= 0) setOpened({ item: selected, index: drawing }); else if (sources?.drawings.some(d => d.regions.length)) { sessionStorage.setItem("drawing-flip-scope", selected.id); navigate("drawing-flip"); } else setSourceKind("drawings"); }}><LocateFixed size={14}/>View on drawings</Button><Button onClick={() => { setMoveItem(selected); setMoveTo(state.packages.find(pkg => pkg.id !== selected.packageId)?.id ?? ""); }}><MoveRight size={14}/>{selected.allTrades ? "Assign to one trade" : "Move trade"}</Button>{!selected.allTrades && <Button onClick={() => runAndNotify(run, current => applyScopeToAllTrades(current, selected.id, CURRENT_USER), notify, "Scope item applied to every trade for review.")}><Share2 size={14}/>Apply to all trades</Button>}</div>
+        <ScopeQuantityPanel item={selected} packageId={activePackage.id} run={run} notify={notify} by={CURRENT_USER}/>
         <div className="proc-detail-actions"><AddScopeToEstimate procurement={state} scope={selected} packageId={activePackage.id} notify={notify} navigate={navigate}/></div>
         <div className="proc-history"><span className="proc-label"><History size={12}/>HISTORY</span>{selected.history.slice().reverse().map((event, index) => <div key={`${event.at}-${index}`}><i/><span><strong>{historyLabel(event, state.packages)}</strong><small>{event.by} · {eventTime(event.at)}</small></span></div>)}</div>
       </div></Panel> : <Panel><Empty title="Select a scope item" description="Choose an item to see its source, notes, and history."/></Panel>}</div>

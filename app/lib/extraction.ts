@@ -17,7 +17,7 @@
 // length-capped and rejected rather than silently cut, so a citation is never misquoted.
 
 import { addRegion, approveRegion, linkScope, DrawingFlipRuleError, type DrawingFlipState, type Point, type RegionAnchor } from "./drawing-flip";
-import { addScope, approveScope, ProcurementRuleError, type Procurement } from "./procurement";
+import { addScope, approveScope, ProcurementRuleError, setScopeQuantity, type Procurement } from "./procurement";
 import type { QuantityUnit } from "./model";
 
 /** Who the history names for the AI's own steps. */
@@ -390,12 +390,22 @@ export function deleteDraft(state: ExtractionState, draftId: string, by: string,
   return putDraft(next, { ...findDraft(next, draftId), removed: true });
 }
 
+/** An accepted AI quantity on its accepted scope item, checked by the person who accepted it; never over one already there. */
+function giveQuantity(procurement: Procurement, scopeId: string, draft: QuantityDraft, by: string, at: string): Procurement {
+  const item = procurement.scopes.find(s => s.id === scopeId);
+  if (!item || item.quantity) return procurement;
+  const where = [...new Set(draft.citations.map(c => `${c.sheet ?? c.document} p.${c.page}`))].join(", ");
+  const basis = `${draft.item}${where ? ` (${where})` : ""}: ${draft.basis.replace(/^AI proposal; verify dimensions and coverage\.\s*/i, "")}`;
+  return setScopeQuantity(procurement, scopeId, { value: draft.quantity, unit: draft.unit, basis, origin: "ai", ref: draft.id, checked: true }, by, at);
+}
+
 /**
  * Accepts a finding. A scope finding becomes an approved Scopes & bid forms item (origin "ai",
  * created by Structor AI at the run's time, approved by `by`) and is linked to any of its regions
  * already accepted. A region becomes an approved Drawing Flip region on the sheet's page, linked
  * to its accepted scope items; the sheet must already be a Drawing Flip page. A quantity is marked
- * accepted. Links only join findings of the same trade.
+ * accepted, and becomes the quantity of the scope item its finding belongs to (Marcel's issues log, item 19), once
+ * both are accepted and the item has none yet. Links only join findings of the same trade.
  */
 export function acceptDraft(records: ReviewRecords, draftId: string, by: string, at = now()): ReviewRecords {
   needBy(by);
@@ -413,6 +423,8 @@ export function acceptDraft(records: ReviewRecords, draftId: string, by: string,
       for (const r of extraction.drafts) {
         if (r.kind === "region" && r.acceptedId && r.packageId === draft.packageId && r.scopeDraftIds.includes(draft.id)) flip = linkScope(flip, procurement, r.acceptedId, acceptedId, by.trim(), at);
       }
+      const quantity = extraction.drafts.find((q): q is QuantityDraft => q.kind === "quantity" && q.status === "accepted" && q.scopeDraftId === draft.id && q.packageId === draft.packageId);
+      if (quantity) procurement = giveQuantity(procurement, acceptedId, quantity, by.trim(), at);
     } else if (draft.kind === "region") {
       const page = flip.pages.find(p => p.sheet === draft.sheet) ?? fail(`Add sheet ${draft.sheet} to Drawing Flip before accepting this region.`);
       const scopeIds = draft.scopeDraftIds
@@ -423,6 +435,9 @@ export function acceptDraft(records: ReviewRecords, draftId: string, by: string,
       flip = addRegion(flip, procurement, { pageId: page!.id, label: draft.label, polygon: draft.polygon, packageId: draft.packageId, scopeIds, evidence, confidence: draft.confidence, origin: "ai", anchor: draft.anchor }, AI_ACTOR, run.finishedAt);
       acceptedId = flip.regions.at(-1)!.id;
       flip = approveRegion(flip, acceptedId, by.trim(), at);
+    } else {
+      const scope = extraction.drafts.find((d): d is ScopeDraft => d.kind === "scope" && d.id === draft.scopeDraftId && d.packageId === draft.packageId);
+      if (scope?.acceptedId) procurement = giveQuantity(procurement, scope.acceptedId, draft, by.trim(), at);
     }
   } catch (error) {
     if (error instanceof ProcurementRuleError) fail(error.message);

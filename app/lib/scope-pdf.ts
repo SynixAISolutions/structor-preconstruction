@@ -14,7 +14,7 @@ const SIZE = 9, LINE = 11.5, PAD = 5;
 
 type Column = { label: string; width: number; align?: "right" };
 const GENERAL_COLUMNS: Column[] = [{ label: "#", width: 28 }, { label: "Scope", width: INNER - 28 - 110 }, { label: "Detailed items it covers", width: 110, align: "right" }];
-const DETAILED_COLUMNS: Column[] = [{ label: "#", width: 28 }, { label: "Scope", width: 262 }, { label: "Detail", width: 236 }, { label: "Source", width: 124 }, { label: "Status", width: INNER - 28 - 262 - 236 - 124 }];
+const DETAILED_COLUMNS: Column[] = [{ label: "#", width: 28 }, { label: "Scope", width: 226 }, { label: "Detail", width: 206 }, { label: "Source", width: 112 }, { label: "Qty", width: 52, align: "right" }, { label: "Unit", width: 34 }, { label: "Status", width: INNER - 28 - 226 - 206 - 112 - 52 - 34 }];
 const SUMMARY_COLUMNS: Column[] = [{ label: "CSI", width: 72 }, { label: "Trade", width: INNER - 72 - 86 * 3 - 110 }, { label: "General lines", width: 86, align: "right" }, { label: "Detailed items", width: 86, align: "right" }, { label: "Approved", width: 86, align: "right" }, { label: "Bid form", width: 110 }];
 
 /** A cell's lines at this width: words wrapped, and a word too long for the column broken where it overflows. */
@@ -137,7 +137,7 @@ export async function scopePdf(scopes: TradeScope[], options: ScopePdfOptions): 
       scope.detailed.forEach((item, i) => {
         if (everyTrade && i === 0) rows.push({ cells: ["Lines for every trade"], group: true });
         if (everyTrade && i === everyTrade) rows.push({ cells: [scope.trade], group: true });
-        rows.push({ cells: [String(i + 1), item.title, item.detail, item.source, item.status] });
+        rows.push({ cells: [String(i + 1), item.title, item.detail, item.source, item.quantity ? item.quantity.value.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "", item.quantity?.unit ?? "", item.status] });
       });
       table(DETAILED_COLUMNS, rows);
     }
