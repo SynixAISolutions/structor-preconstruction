@@ -1,6 +1,7 @@
 import { renameDemoNamesDeep } from "../../../../lib/demo-names";
 import { validId, withOcrPage, type PageText } from "../../../../lib/project-files";
 import { readText, saveText } from "../../../../lib/project-files-store";
+import { demoGuard } from "../../../../lib/demo-readonly";
 
 // Page text of a stored PDF, in chunks of pages: written once after upload, read by the AI jobs. A scanned page can
 // later be given the text OCR read off its image (PATCH), once, without touching the rest of its chunk.
@@ -18,6 +19,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const demo = demoGuard(); if (demo) return demo;
   const raw = await request.text();
   if (raw.length > 4_000_000) return json({ error: "Send fewer pages at a time." }, 413);
   let body: { projectId?: unknown; docId?: unknown; chunk?: unknown; pages?: unknown };
@@ -35,6 +37,7 @@ export async function POST(request: Request) {
  * Refused for a page that already has a real text layer.
  */
 export async function PATCH(request: Request) {
+  const demo = demoGuard(); if (demo) return demo;
   const raw = await request.text();
   if (raw.length > 400_000) return json({ error: "That page's text is too long." }, 413);
   let body: { projectId?: unknown; docId?: unknown; chunk?: unknown; page?: unknown; text?: unknown };

@@ -1,5 +1,6 @@
 import { audioFormat, feedbackListHeaders, feedbackRecord, MAX_VOICE_BYTES, parseFeedback } from "../../../lib/voice-feedback";
 import { listFeedback, saveFeedback } from "../../../lib/voice-feedback-store";
+import { demoGuard } from "../../../lib/demo-readonly";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -15,6 +16,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const demo = demoGuard(); if (demo) return demo;
   const origin = request.headers.get("origin");
   if (origin) {
     // Next may reconstruct request.url with an internal hostname behind its proxy.

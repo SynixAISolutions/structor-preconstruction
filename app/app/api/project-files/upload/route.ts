@@ -1,11 +1,13 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { MAX_SOURCE_BYTES, validId } from "../../../../lib/project-files";
+import { demoGuard } from "../../../../lib/demo-readonly";
 
 // Issues a short-lived token so the browser can send a large PDF straight to the private Blob store
 // (a server request is capped at 4.5 MB). Only PDFs, only into a project's own folder.
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const demo = demoGuard(); if (demo) return demo;
   const body = await request.json() as HandleUploadBody;
   try {
     const result = await handleUpload({

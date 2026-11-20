@@ -1,6 +1,7 @@
 import { ClarificationError, cancelClarification, markLinesApplied, parseDraftRequest, sendClarification } from "../../../lib/clarifications";
 import { StaleWriteError, listRequests, readRequest, writeRequest } from "../../../lib/clarification-store";
 import { issuePortalToken } from "../../../lib/portal-links";
+import { demoGuard } from "../../../lib/demo-readonly";
 
 // The estimator's side of clarification requests (Close the gap): list a project's requests, send a
 // draft (it is stored and a signed portal link comes back), record an apply done in leveling, cancel,
@@ -21,6 +22,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const demo = demoGuard(); if (demo) return demo;
   let body: Record<string, unknown>;
   try { body = await request.json(); } catch { return json({ error: "Send JSON." }, 400); }
   const action = body.action, by = typeof body.by === "string" && body.by.trim() ? body.by.trim().slice(0, 120) : "Estimator", at = new Date().toISOString();

@@ -2,6 +2,7 @@ import { renameDemoNamesDeep } from "../../../lib/demo-names";
 import { validId } from "../../../lib/project-files";
 import type { ContentOp } from "../../../lib/project-content";
 import { changeContent, readContent } from "../../../lib/project-content-store";
+import { demoGuard } from "../../../lib/demo-readonly";
 
 // Content management: a project's tags, file descriptions and links, and the markups on its pages.
 // GET reads them; POST applies a list of changes, all or none. The demo password (proxy.ts) guards this like every route.
@@ -16,6 +17,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const demo = demoGuard(); if (demo) return demo;
   let body: Record<string, unknown>;
   try { body = await request.json(); } catch { return json({ error: "The request isn't valid JSON." }, 400); }
   if (!validId(body?.projectId)) return json({ error: "Name the project." }, 400);

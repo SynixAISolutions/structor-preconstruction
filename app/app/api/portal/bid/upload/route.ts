@@ -2,12 +2,14 @@ import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { BID_FILE_TYPES, validBidFilePath } from "../../../../../lib/bid-portal";
 import { MAX_ATTACHMENT_BYTES } from "../../../../../lib/submissions";
 import { bidSession, json } from "../session";
+import { demoGuard } from "../../../../../lib/demo-readonly";
 
 // A short-lived token so a sub's browser can send a proposal file straight to the private store (a server request is
 // capped at 4.5 MB). Only into their own invitation's folder, only the file types a bid takes.
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const demo = demoGuard(); if (demo) return demo;
   try {
     const { session, error } = await bidSession(request);
     if (error) return error;

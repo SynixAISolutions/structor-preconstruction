@@ -1,5 +1,6 @@
 import { isEnvelopeId, readEnvelope } from "../../../../../lib/docusign";
 import { docusignConfig, DocusignError, fetchEnvelope, voidEnvelope } from "../../../../../lib/docusign-server";
+import { demoGuard } from "../../../../../lib/demo-readonly";
 
 export const runtime = "nodejs";
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "private, no-store" } });
@@ -17,6 +18,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
 /** Voids an envelope, so nobody can sign it once its award is cancelled. */
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  const demo = demoGuard(); if (demo) return demo;
   const { id } = await context.params;
   const origin = request.headers.get("origin");
   if (origin) { try { if (new URL(origin).host !== (request.headers.get("host") || new URL(request.url).host)) throw new Error(); } catch { return json({ error: "Void the envelope from the Structor page." }, 403); } }

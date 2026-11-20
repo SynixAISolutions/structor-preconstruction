@@ -1,6 +1,7 @@
 import { envelopeBody, parseEnvelopeRequest, type EnvelopeRequest } from "../../../../lib/docusign";
 import { contractPdf } from "../../../../lib/docusign-pdf";
 import { createEnvelope, docusignConfig, DocusignError, loadAsset } from "../../../../lib/docusign-server";
+import { demoGuard } from "../../../../lib/demo-readonly";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -8,6 +9,7 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
 
 // Sends a subcontract package for signature. The site's sign-in (proxy.ts) protects this route.
 export async function POST(request: Request) {
+  const demo = demoGuard(); if (demo) return demo;
   const origin = request.headers.get("origin");
   if (origin) { try { if (new URL(origin).host !== (request.headers.get("host") || new URL(request.url).host)) throw new Error(); } catch { return json({ error: "Send the subcontract from the Structor page." }, 403); } }
   const config = docusignConfig();

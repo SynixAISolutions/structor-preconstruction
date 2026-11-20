@@ -3,6 +3,7 @@ import { parseDocument, validId, type StoredDocument, isHash, parseSheetsAndSect
 import { readIndex, registerDocument, removeDocument, removeProject, renameDocument, updateDocument, findCopy } from "../../../lib/project-files-store";
 import { sharedStore } from "../../../lib/shared-store";
 import { gunzipSync } from "node:zlib";
+import { demoGuard } from "../../../lib/demo-readonly";
 
 // Project files index: list a project's stored documents, register an upload, update what was read
 // from its pages, or remove it. The demo password (proxy.ts) guards this like every route.
@@ -17,6 +18,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const demo = demoGuard(); if (demo) return demo;
   let body: Record<string, any>;
   try { body = await request.json(); } catch { return json({ error: "The request isn't valid JSON." }, 400); }
   const projectId = body?.projectId;

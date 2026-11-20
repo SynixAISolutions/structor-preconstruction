@@ -1,8 +1,10 @@
 import { del, get, put } from "@vercel/blob";
 import { ASSET_LIMIT, assetId, documentFormat, type DocumentAsset } from "../../../lib/document-assets";
+import { demoGuard } from "../../../lib/demo-readonly";
 export const runtime = "nodejs";
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "private, no-store" } });
 export async function POST(request: Request) {
+  const demo = demoGuard(); if (demo) return demo;
   const origin = request.headers.get("origin");
   if (origin) { try { const url = new URL(origin); if (!["http:", "https:"].includes(url.protocol) || url.host !== (request.headers.get("host") || new URL(request.url).host)) throw new Error(); } catch { return json({ error: "Upload from the Structor page." }, 403); } }
   if (Number(request.headers.get("content-length")) > ASSET_LIMIT) return json({ error: "Choose a file under 3 MB." }, 413);

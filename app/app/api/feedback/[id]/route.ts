@@ -1,11 +1,13 @@
 import { cleanTranscript, isFeedbackId } from "../../../../lib/voice-feedback";
 import { saveTranscript } from "../../../../lib/voice-feedback-store";
+import { demoGuard } from "../../../../lib/demo-readonly";
 
 export const runtime = "nodejs";
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "private, no-store" } });
 
 // A voice note's transcript, made in the browser that transcribed it (lib/voice-transcribe). The sign-in (proxy.ts) guards it.
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  const demo = demoGuard(); if (demo) return demo;
   const { id } = await context.params;
   if (!isFeedbackId(id)) return json({ error: "Message not found." }, 404);
   const origin = request.headers.get("origin");

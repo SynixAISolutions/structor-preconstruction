@@ -1,6 +1,7 @@
 import { ClarificationError, answerClarification, portalView, type AnswerInput } from "../../../../lib/clarifications";
 import { StaleWriteError, readRequest, writeRequest } from "../../../../lib/clarification-store";
 import { verifyPortalToken } from "../../../../lib/portal-links";
+import { demoGuard } from "../../../../lib/demo-readonly";
 
 // The subcontractor's side (Close the gap): the signed link from the estimator opens exactly one request
 // for one bidder, with no password and no access to anything else (proxy.ts lets /api/portal through;
@@ -27,6 +28,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const demo = demoGuard(); if (demo) return demo;
   let body: Record<string, unknown>;
   try { body = await request.json(); } catch { return json({ error: "Send JSON." }, 400); }
   try {
