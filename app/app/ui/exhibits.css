@@ -1,0 +1,18 @@
+/* Exhibits by trade (Marcel's issues log, item 18). */
+.exhibits-table { display: flex; flex-direction: column; }
+.exhibits-row { display: grid; grid-template-columns: minmax(200px, 1.4fr) minmax(130px, .8fr) minmax(200px, 1.2fr) auto; gap: 14px; align-items: center; padding: 12px 16px; border-top: 1px solid #edf0ee; }
+.exhibits-row.head { border-top: 0; color: #9aa5ad; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.exhibits-row > span { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.exhibits-row strong { color: #465767; font-size: 12px; font-weight: 600; }
+.exhibits-row small { color: #98a2a9; font-size: 11px; }
+.exhibits-row .ui-badge { align-self: flex-start; text-transform: capitalize; }
+.exhibits-marks { flex-direction: row !important; flex-wrap: wrap; align-items: center; }
+.exhibits-marks > span { display: inline-flex; align-items: center; gap: 2px; min-width: 24px; justify-content: center; padding: 3px 6px; border: 1px solid #e3e8e5; border-radius: 5px; color: #a2abb2; font-size: 11px; font-weight: 600; }
+.exhibits-marks > span.ready { border-color: #b9dcc7; background: #eef7f1; color: #3f7b5a; }
+.exhibits-marks > svg { color: #8d9aa2; }
+.exhibits-actions { flex-direction: row !important; gap: 8px; justify-content: flex-end; }
+@media (max-width: 760px) {
+  .exhibits-row { grid-template-columns: 1fr; }
+  .exhibits-row.head { display: none; }
+  .exhibits-actions { justify-content: flex-start; }
+}

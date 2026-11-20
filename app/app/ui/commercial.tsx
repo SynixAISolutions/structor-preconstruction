@@ -18,6 +18,7 @@ import { AllowancesView, BudgetView } from "./budget-ui";
 import { AwardView } from "./award-ui";
 import { ValueEngineeringView } from "./value-engineering-ui";
 import { AggregateLimitsView } from "./aggregate-limits";
+import { ExhibitsView } from "./exhibits-ui";
 
 // Local drafts make every preview screen useful without an account or external service.
 function statusTone(status: string) { return /approved|qualified|complete|submitted/i.test(status) ? "green" : /review|provisional|draft|invited/i.test(status) ? "amber" : "blue"; }
@@ -41,5 +42,5 @@ function RatingsView({ navigate }: ViewProps) {
 }
 
 export function CommercialView(props: ViewProps & { screen: Screen; project: Project }) {
-  switch(props.screen){case "packages":return <ProcurementPackagesView {...props}/>;case "bidders":return <BiddersView {...props}/>;case "ratings":return <RatingsView {...props}/>;case "prequalification":return <AggregateLimitsView {...props}/>;case "portal":return <SubmissionPortalView {...props}/>;case "budget":return <BudgetView {...props}/>;case "allowances":return <AllowancesView {...props}/>;case "value-engineering":return <ValueEngineeringView {...props}/>;case "contracts":return <AwardView {...props}/>;case "schedule":return <ScheduleView {...props}/>;default:return null;}
+  switch(props.screen){case "packages":return <ProcurementPackagesView {...props}/>;case "bidders":return <BiddersView {...props}/>;case "ratings":return <RatingsView {...props}/>;case "prequalification":return <AggregateLimitsView {...props}/>;case "portal":return <SubmissionPortalView {...props}/>;case "budget":return <BudgetView {...props}/>;case "allowances":return <AllowancesView {...props}/>;case "value-engineering":return <ValueEngineeringView {...props}/>;case "contracts":return <AwardView {...props}/>;case "exhibits":return <ExhibitsView {...props}/>;case "schedule":return <ScheduleView {...props}/>;default:return null;}
 }

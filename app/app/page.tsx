@@ -88,7 +88,7 @@ export default function StructorApp(){
      {screen==="contract-compare"&&<ContractCompareView key={project.id} {...props} project={project}/>}
      {screen==="information"&&<ProjectInformation project={project} cover={<BuildingModel/>} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Project information saved.");}} onDelete={canDeleteProject(project)?()=>setDeleting(project):undefined} navigate={navigate}/>}
       {['documents','scopes','drawing-flip','takeoffs','specs','checks','drawings','specifications','revisions'].includes(screen)&&<IntelligenceView key={project.id} {...props} project={project} screen={screen} quantityFilters={quantityFilters} onQuantityFilters={setQuantityFilters} onInspectModel={inspectModel}/>}
-     {['packages','bidders','ratings','prequalification','portal','budget','allowances','value-engineering','contracts','schedule'].includes(screen)&&<CommercialView {...props} screen={screen} project={project}/>}
+     {['packages','bidders','ratings','prequalification','portal','budget','allowances','value-engineering','contracts','exhibits','schedule'].includes(screen)&&<CommercialView {...props} screen={screen} project={project}/>}
      {screen==="buyout"&&<BuyoutView key={project.id} {...props}/>}
      {screen==="compliance"&&<ComplianceView key={project.id} {...props} project={project}/>}
      {screen==="assumptions"&&<AssumptionsView key={project.id} {...props} project={project}/>}

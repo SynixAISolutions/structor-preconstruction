@@ -45,7 +45,7 @@ const workspaceGuides: ManualGuide[] = [
       "Collect and review offers. A bid contains a price plus inclusions, exclusions, and qualifications. Companies answer in the Subcontractor portal, or email a proposal: the AI reads it against the bid form, and an estimator checks the reading under Review proposals in Bid packages before it becomes a bid revision. The configured Gmail Proposal inbox can list emails and attachments.",
       "Compare like for like in Bid leveling. Start from the supported Excel template or the demo, check each bidder’s Y/N/P answers, add notes and justified adjustments, and resolve exceptions. Only fully eligible reviewed bids appear in the reviewed ranking.",
       "Plan the overall cost. Budget summary holds the cost plan by cost center and CSI code; each trade’s forecast can be the in-house estimate or a leveled bid, and Trade variance shows the difference between them. Allowances reserves money for undefined work and is counted once.",
-      "Prepare the award and handover. Contracts & exhibits describes what the selected company will deliver. Project schedule records milestones. Each Bid package keeps its own messages with the invited companies, and Preconstruction to-do checks that the delivery team gets the right records. These are draft/preview tools, not executed contracts or delivered communications.",
+      "Prepare the award and handover. Contracts and Exhibits describe what the selected company will deliver. Project schedule records milestones. Each Bid package keeps its own messages with the invited companies, and Preconstruction to-do checks that the delivery team gets the right records. These are draft/preview tools, not executed contracts or delivered communications.",
       "Keep a copy. Export reviewed mapped work to Excel from Bid leveling, and download a JSON backup before replacing or resetting the active workspace. Other screens provide their own CSV or draft downloads where offered.",
     ],
     terms: [{ name: "Scope vs price", meaning: "Scope is what is included. Price is what it costs. The cheapest price is not necessarily the cheapest complete offer." }, { name: "Human review", meaning: "An estimator checks the source and makes the decision; a generated or prefilled value is not proof." }],
@@ -248,7 +248,7 @@ export const manualGuides: ManualGuide[] = [...workspaceGuides, ...pageGuides]
   .map((guide, i) => ({ guide, i }))
   .sort((a, b) => (menuOrder(a.guide.id) - menuOrder(b.guide.id)) || a.i - b.i)
   .map(({ guide }) => guide);
-export const manualGroups = ["Start here", "Workspace", "Preconstruction", "Operations", "Subcontractor view", "Architect view", "Reference"];
+export const manualGroups = ["Start here", "Workspace", "Preconstruction", "Contracts & procurement", "Operations", "Subcontractor view", "Architect view", "Reference"];
 export const glossary = [
   { name: "AI finding", meaning: "Something Structor's AI proposed from the project documents: a scope item, a drawing region, or a quantity, with its citation. An estimator accepts, corrects, or rejects it; nothing is used until accepted." },
   { name: "Addendum", meaning: "An official clarification or revision to the bid documents. Confirm which version each bidder priced." },

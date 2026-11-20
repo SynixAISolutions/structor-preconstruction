@@ -142,7 +142,9 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
   const [budgetLineId, setBudgetLineId] = useState("");
   const [allowanceIds, setAllowanceIds] = useState<string[]>([]);
   const [errors, setErrors] = useState<AwardErrors>({});
-  const [tab, setTab] = useState("Exhibit A");
+  // The tab another page asked for (Exhibits' "Exhibit A" or "B to G"), kept until this page has opened on it.
+  const [tab, setTab] = useState(() => { try { return sessionStorage.getItem("contracts-tab") || "Exhibit A"; } catch { return "Exhibit A"; } });
+  useEffect(() => { try { sessionStorage.removeItem("contracts-tab"); } catch { /* no storage */ } }, []);
   const [revisionNumber, setRevisionNumber] = useState(0);
   const [editDocument, setEditDocument] = useState<{ content: DocumentContent; note: string } | null>(null);
   const [commentMode, setCommentMode] = useState<"comment" | "changes" | null>(null);
@@ -324,7 +326,7 @@ export function AwardView({ projectName, notify, navigate, project }: ViewProps 
   const agreements = awardsLive.filter(item => item.exhibit.status === "agreed").length;
 
   return <div className="award-view">
-    <PageHeader eyebrow="BID → AWARD → CONTRACT" title="Contracts & exhibits" description="Select the reviewed bid, agree the trade scope, and carry one award through execution." actions={<>
+    <PageHeader eyebrow="BID → AWARD → CONTRACT" title="Contracts" description="Select the reviewed bid, agree the trade scope, and carry one award through execution. Every trade's exhibits are listed in Exhibits." actions={<>
       <Button onClick={() => navigate("settings")}>Company forms & logo</Button>{unread > 0 && <Button onClick={() => { setTab("Activity"); if (!award) notify(`${unread} recorded contract notifications across this project.`); }}><Bell size={16}/>{unread} unread</Button>}
       <Button onClick={() => navigate("leveling")}>Bid leveling<ArrowRight size={15}/></Button>
     </>}/>
