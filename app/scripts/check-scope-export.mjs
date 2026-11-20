@@ -1,4 +1,4 @@
-// Marcel's issues log, item 20 (the scope export) and item 18 (Exhibits under Contracts & procurement), 20 Nov.
+// Marcel's issues log, item 20 (the scope export, as Excel or PDF) and item 18 (Exhibits under Contracts & procurement), 20 Nov.
 import assert from "node:assert/strict";
 import { register } from "node:module";
 
@@ -45,12 +45,55 @@ const taken = new Set();
 assert.equal(X.sheetName("07 54 19 Roofing: PVC/membrane [main]", taken), "07 54 19 Roofing PVC membrane m");
 assert.equal(X.sheetName("07 54 19 Roofing: PVC/membrane [main]", taken), "07 54 19 Roofing PVC membra (2)");
 assert.equal(X.scopeExportFileName("Maple Street: Rec/Center", "2026-11-20"), "Maple Street- Rec-Center scopes 2026-11-20.xlsx");
+assert.equal(X.scopeExportFileName("Maple Street", "2026-11-20", "pdf"), "Maple Street scopes 2026-11-20.pdf");
 
 // A real workbook: written and read back, a tab per trade.
 const all = X.scopeExportSheets(state, { packageIds: ["demo", "steel", "roof"], general: true, detailed: true }, "Maple Street");
 const back = XLSX.read(XLSX.write(X.scopeWorkbook(all, XLSX), { type: "buffer", bookType: "xlsx" }), { type: "buffer" });
 assert.deepEqual(back.SheetNames, ["Summary", "02 41 19 Demolition", "05 12 00 Structural steel & mis", "07 54 19 Roofing PVC membrane m"]);
 assert.equal(back.Sheets["02 41 19 Demolition"]["B1"]?.v ?? back.Sheets["02 41 19 Demolition"]["A1"]?.v, "Maple Street · 02 41 19 Demolition");
+
+// ── The same scopes as a PDF (item 20: "export as a PDF as well") ──
+const P = await import("../lib/scope-pdf.ts");
+const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+const { PDFDocument } = await import("pdf-lib");
+const pdfPages = async bytes => {
+  const doc = await getDocument({ data: new Uint8Array(bytes), useSystemFonts: true, verbosity: 0 }).promise;
+  const out = [];
+  for (let i = 1; i <= doc.numPages; i++) out.push((await (await doc.getPage(i)).getTextContent()).items.map(t => t.str).join(" ").replace(/\s+/g, " "));
+  return out;
+};
+const scopes = X.tradeScopes(state, { packageIds: ["demo", "steel"], general: true, detailed: true });
+assert.deepEqual(scopes.map(s => [s.trade, s.general?.length, s.detailed?.length, s.counts.approved]), [["Demolition", 1, 3, 2], ["Structural steel & miscellaneous metals", 0, 2, 1]], "Each trade's General lines and whole bid form, as the Excel tabs hold them");
+assert.equal(X.tradeScopes(state, { packageIds: ["demo"], general: false, detailed: true })[0].general, null, "A scope not chosen is left out, not shown empty");
+const options = { projectName: "Maple Street", exportedAt: "Nov 20, 2026" };
+const allPdf = await P.scopePdf(scopes, { ...options, summary: true });
+const allText = await pdfPages(allPdf);
+assert.equal(allText.length, 3, "A summary page, then each trade from a new page");
+assert.match(allText[0], /Maple Street · Scopes.*Demolition.*Published v1.*Structural steel & miscellaneous metals.*Not published/, "The summary lists every chosen trade");
+assert.match(allText[1], /Demolition.*02 41 19 · Maple Street.*Bid form published, version 1.*General scope.*Selective demolition and removal.*Detailed scope.*Lines for every trade.*1 Provide daily cleanup of your work.*Approved.*Demolition.*2 Remove aluminum windows, frames and sashes Keynote D\.3 AD-101 Approved.*3 Remove doors and frames.*AD-101 Draft/, "A trade's page: its General scope, then its bid form, the lines for every trade first");
+assert.match(allText[2], /No general scope written for this trade yet\..*1 Provide daily cleanup of your work.*2 Furnish and erect structural steel 05 12 00/, "A trade without a General scope says so, and still carries the lines for every trade");
+assert.match(allText[2], /Exported Nov 20, 2026 · Page 3 of 3/, "Every page is numbered");
+const loaded = await PDFDocument.load(allPdf);
+assert.deepEqual([loaded.getPage(0).getWidth(), loaded.getPage(0).getHeight(), loaded.getTitle()], [792, 612, "Maple Street scopes"], "Landscape US Letter, titled for the project");
+
+// A long bid form runs over several pages, its column headings again on each, and nothing is lost.
+const long = { ...state, scopes: [...state.scopes, ...Array.from({ length: 60 }, (_, i) => item(`x${i}`, "demo", `Remove item ${i + 1} at the east elevation`, { detail: i === 20 ? "PROTECT ADJACENT MASONRY. ".repeat(80) + "LASTWORD" : `Note ${i + 1}`, source: "AD-102" }))] };
+const longText = await pdfPages(await P.scopePdf(X.tradeScopes(long, { packageIds: ["demo"], general: true, detailed: true }), { ...options, summary: false }));
+assert(longText.length >= 3, "Several pages");
+const joined = longText.join(" ");
+for (let i = 1; i <= 60; i++) assert(joined.includes(`Remove item ${i} at the east elevation`), `Item ${i} is in the PDF`);
+assert.deepEqual(["PROTECT", "ADJACENT", "MASONRY."].map(w => joined.split(" ").filter(word => word === w).length), [80, 80, 80], "Every word of a detail taller than a page");
+assert(longText.filter(page => page.includes("MASONRY")).length >= 2 && joined.includes("LASTWORD"), "It carries on to the next page, to its last word");
+assert(longText.slice(1).every(page => /# Scope Detail Source Status/.test(page)), "The column headings repeat on every page");
+assert.deepEqual(P.cellLines("a".repeat(40), 50, t => t.length * 5), ["a".repeat(10), "a".repeat(10), "a".repeat(10), "a".repeat(10)], "A word too long for its column is broken, never drawn over the next one");
+
+// A PDF per trade, to send to that trade's subcontractors.
+const each = await P.scopePdfsByTrade(scopes, options);
+assert.deepEqual(each.map(f => f.name), ["02 41 19 Demolition scope.pdf", "05 12 00 Structural steel & miscellaneous metals scope.pdf"]);
+const demoText = await pdfPages(each[0].bytes);
+assert.equal(demoText.length, 1, "No summary page in one trade's PDF");
+assert(!demoText[0].includes("Structural steel"), "Only that trade's scope");
 
 // ── Exhibits: every trade's Exhibit A and Exhibits B to G ──
 const award = (packageId, o = {}) => ({
@@ -70,4 +113,4 @@ assert.deepEqual(rows[0].others.map(m => `${m.code}${m.ready ? "+" : "-"}`), ["B
 const fresh = EX.exhibitRows([state.packages[0]], { notifications: [], awards: [award("demo", { status: "changes-requested" })] });
 assert.deepEqual([fresh[0].exhibitA.status, fresh[0].others.every(m => !m.ready), fresh[0].locked], ["changes requested", true, false], "Nothing prepared yet: every one to prepare");
 
-console.log("Scope export and Exhibits checked: a tab per chosen trade with its General and detailed scope, lines for every trade in each tab, the Summary, Excel's tab names, a workbook read back; every trade's Exhibit A and B to G.");
+console.log("Scope export and Exhibits checked: a tab per chosen trade with its General and detailed scope, lines for every trade in each tab, the Summary, Excel's tab names, a workbook read back; the same as a PDF, each trade from a new page, long forms over several pages with nothing lost, a PDF per trade; every trade's Exhibit A and B to G.");
