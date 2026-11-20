@@ -46,7 +46,7 @@ const guideIds = new Set(ids);
 const unique = (values, message) => assert.equal(new Set(values).size, values.length, message);
 const nonempty = (value, message) => assert(typeof value === "string" && value.trim(), message);
 
-assert.equal(screens.length, 36, "Expected coverage of all 36 current app screens (RFP requirements, Contract comparison and Unit cost database joined, 4 Nov; Compliance, Assumptions & clarifications and Estimator workload, 17 Nov)");
+assert.equal(screens.length, 37, "Expected coverage of all 37 current app screens (Exhibits, 20 Nov; (RFP requirements, Contract comparison and Unit cost database joined, 4 Nov; Compliance, Assumptions & clarifications and Estimator workload, 17 Nov)");
 unique(screens, "Screen ids must be unique");
 unique(ids, "Manual article ids must be unique");
 unique(manualGroups, "Manual group names must be unique");
@@ -72,7 +72,9 @@ for (const group of manualGroups) assert(manualGuides.some(guide => guide.group 
 const { SCREEN_GROUPS, DEFAULT_SCREEN, screenGroup, searchScreens } = load("lib/screens.ts");
 assert(screens.includes(DEFAULT_SCREEN), `DEFAULT_SCREEN ${DEFAULT_SCREEN} is not a screen`);
 unique(SCREEN_GROUPS.map(group => group.label), "Navigation group labels must be unique");
-assert.deepEqual(SCREEN_GROUPS.filter(group => group.scope === "project").map(group => group.label), ["PRECONSTRUCTION", "OPERATIONS"], "Exactly two project groups: Preconstruction, then Operations");
+assert.deepEqual(SCREEN_GROUPS.filter(group => group.scope === "project").map(group => group.label), ["PRECONSTRUCTION", "CONTRACTS & PROCUREMENT", "OPERATIONS"], "Project groups: Preconstruction, Contracts & procurement (Marcel's issues log, item 18), then Operations");
+assert.deepEqual(SCREEN_GROUPS.find(group => group.label === "CONTRACTS & PROCUREMENT").items.map(item => [item.id, item.label]), [["buyout", "Scope review & buyout"], ["contracts", "Contracts"], ["exhibits", "Exhibits"], ["drawings", "List of drawings"], ["specifications", "List of specifications"]], "Marcel, 18 Nov: scope review and buyout, Contracts, Exhibits, List of drawings and List of specifications under Contracts & procurement");
+assert(searchScreens("contracts & exhibits").some(screen => screen.id === "contracts"), "Quick find still reaches Contracts by its former name");
 for (const group of SCREEN_GROUPS) {
   assert(["global", "project"].includes(group.scope), `${group.label}: unknown scope ${group.scope}`);
   const runs = group.items.map(item => item.section ?? "").filter((section, i, all) => section && section !== all[i - 1]);
@@ -84,7 +86,7 @@ const precon = SCREEN_GROUPS.find(group => group.label === "PRECONSTRUCTION").it
 assert.equal(precon[0].id, "turnover", "Preconstruction to-do opens the Preconstruction group");
 assert.deepEqual(precon.slice(-4).map(item => item.id), ["model", "model-mep", "model-structural", "model-exterior"], "The 3D model studio closes the Preconstruction group");
 const sectionIds = section => precon.filter(item => item.section === section).map(item => item.id);
-assert.deepEqual(sectionIds("Subcontractor outreach"), ["packages", "leveling", "buyout", "contracts", "drawings", "specifications", "compliance"], "Marcel, 24 Oct: Compliance and contracts folded into one outreach flow; 7 Nov: Compliance (certifications and wage scale) closes it");
+assert.deepEqual(sectionIds("Subcontractor outreach"), ["packages", "leveling", "compliance"], "Marcel, 24 Oct: outreach is one flow; 18 Nov: buyout, contracts and the lists moved to Contracts & procurement");
 const checksAt = precon.findIndex(item => item.id === "checks");
 assert(checksAt > precon.findIndex(item => item.id === "revisions") && checksAt < precon.findIndex(item => item.id === "packages") && !precon[checksAt].section, "Marcel, 8 Nov: Structor Check & RFIs sits in Preconstruction proper, above Subcontractor outreach");
 assert.deepEqual(sectionIds("Preconstruction budget"), ["takeoffs", "budget", "allowances", "value-engineering", "assumptions"]);

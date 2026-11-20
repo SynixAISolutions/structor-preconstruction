@@ -70,6 +70,7 @@ import { useActiveProject } from "../../lib/project-scope";
 import { ScopeMatrixView } from "./scope-matrix";
 import { notOnSheet } from "../../lib/extraction";
 import { GeneralScopes } from "./general-scopes";
+import { ScopeExportButton } from "./scope-export";
 import { AiScopeWriter } from "./ai-scope-writer";
 import { ProposalWorkspace } from "./proposal-review";
 import { useLocalDraft } from "../../lib/use-local-draft";
@@ -79,7 +80,6 @@ import {
   Badge,
   Button,
   Empty,
-  ExportButton,
   Modal,
   PageHeader,
   Panel,
@@ -87,7 +87,6 @@ import {
   SearchBox,
   Stats,
   Tabs,
-  exportRows,
   type ViewProps,
 } from "./shared";
 import "./procurement.css";
@@ -206,7 +205,7 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
   if (!activePackage) return <div className="proc-view"><PageHeader eyebrow={`${projectName} / Project intelligence`} title="Scopes & bid forms" description="Review scope requirements before they reach subcontractors." actions={<><TradePackageControls state={state} run={run} combine={(from, to) => review.combine(from, to, CURRENT_USER)} notify={notify}/><AiScopeWriter review={review} notify={notify} onOpenFiles={() => navigate("documents")}/></>}/><ScopeViewTabs value={scopeTab} onChange={setScopeTab}/><div role="tabpanel" id="scope-tab-panel" aria-labelledby={`scope-tab-${SCOPE_TABS.indexOf(scopeTab)}`}>{scopeTab === "Section coverage" ? coverage : <Empty title="No bid packages yet" description="Write scopes with AI suggests trades from your drawings or project manual. Confirm them before reading scopes, or add a trade package yourself."/>}</div></div>;
 
   return <div className="proc-view">
-    <PageHeader eyebrow={`${projectName} / Project intelligence`} title="Scopes & bid forms" description="Review each requirement, correct its trade, and publish one clear bid form." actions={<><TradePackageControls state={state} run={run} combine={(from, to) => review.combine(from, to, CURRENT_USER)} notify={notify}/>{scopeTab === "Bid forms" && <><ExportButton onClick={() => exportRows("scope-and-bid-forms.csv", [["Package", "CSI section", "Scope", "Detail", "Source", "Origin", "Status", "All trades"], ...state.scopes.map(item => { const pkg = state.packages.find(candidate => candidate.id === item.packageId); return [pkg?.name ?? item.packageId, pkg?.code ?? "", item.title, item.detail, item.source, item.origin, item.status, item.allTrades ? "Yes" : "No"]; })])}/><AiScopeWriter review={review} notify={notify} onOpenFiles={() => navigate("documents")}/>{unread.length > 0 && <Button onClick={() => setNotificationsOpen(true)}><Bell size={15}/>{unread.length} notification{unread.length === 1 ? "" : "s"}</Button>}<Button variant="primary" onClick={() => setEditor({ packageId: activePackage.id, title: "", detail: "", source: "", origin: "estimator" })}><Plus size={16}/>Add scope item</Button></>}</>}/>
+    <PageHeader eyebrow={`${projectName} / Project intelligence`} title="Scopes & bid forms" description="Review each requirement, correct its trade, and publish one clear bid form." actions={<><TradePackageControls state={state} run={run} combine={(from, to) => review.combine(from, to, CURRENT_USER)} notify={notify}/>{scopeTab === "Bid forms" && <><ScopeExportButton state={state} projectName={projectName} notify={notify}/><AiScopeWriter review={review} notify={notify} onOpenFiles={() => navigate("documents")}/>{unread.length > 0 && <Button onClick={() => setNotificationsOpen(true)}><Bell size={15}/>{unread.length} notification{unread.length === 1 ? "" : "s"}</Button>}<Button variant="primary" onClick={() => setEditor({ packageId: activePackage.id, title: "", detail: "", source: "", origin: "estimator" })}><Plus size={16}/>Add scope item</Button></>}</>}/>
     <ScopeViewTabs value={scopeTab} onChange={setScopeTab}/>
     <div className="proc-view" role="tabpanel" id="scope-tab-panel" aria-labelledby={`scope-tab-${SCOPE_TABS.indexOf(scopeTab)}`}>{scopeTab === "Scope matrix" ? <ScopeMatrixView review={review} actor={CURRENT_USER} notify={notify} onOpen={(id, itemId) => { setScopeTab("Bid forms"); setGeneralOpen(id === null); if (id) setPackageId(id); setSelectedId(itemId); setQuery(""); }}/> : scopeTab === "Dashboard" ? <ScopeDashboardView state={state} run={run} proposed={proposedFor} notify={notify} onOpen={id => { setScopeTab("Bid forms"); setGeneralOpen(false); setPackageId(id); setSelectedId(""); }}/> : scopeTab === "Section coverage" ? coverage : <><Stats items={[{ label: "Trade packages", value: state.packages.length, detail: "One bid form per trade" }, { label: "Scope items", value: state.scopes.length, detail: "Project requirements" }, { label: "Approved", value: state.scopes.filter(item => item.status === "approved").length, detail: "Reviewed by an estimator", tone: "green" }, { label: "Published", value: state.packages.filter(pkg => packageStatus(state, pkg.id) === "published").length, detail: "Current with bidders" }]}/>
     <div className="proc-scope-layout">

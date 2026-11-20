@@ -3,7 +3,7 @@
 // changing an icon stays a UI edit in app/page.tsx and never touches this file.
 //
 // Structure is Marcel's 20 September review as reordered on 7 October: global workspace tools,
-// then two project groups — Preconstruction and Operations. Inside Preconstruction the to-do
+// then the project groups — Preconstruction, Contracts & procurement (his issues log, item 18, 18 Nov) and Operations. Inside Preconstruction the to-do
 // list comes first and the 3D model studio last; Subcontractor outreach and Preconstruction budget are
 // sections (24 Oct: Compliance and contracts folded into outreach, "one flow"). The Subcontractor portal is what an invited company
 // sees, so it sits in its own SUBCONTRACTOR VIEW group outside the contractor's sidebar.
@@ -14,7 +14,7 @@ export type Screen =
   | "contracts" | "contract-compare" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
   | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
   | "architect" | "ratings" | "prequalification" | "drawing-flip" | "buyout" | "model-mep" | "model-structural" | "model-exterior"
-  | "rfp-requirements" | "compliance" | "assumptions" | "workload";
+  | "rfp-requirements" | "compliance" | "assumptions" | "workload" | "exhibits";
 
 export type ViewProps = { navigate: (screen: Screen) => void; notify: (message: string) => void; projectName: string };
 
@@ -66,11 +66,6 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "contract-compare", label: "Contract comparison", icon: "GitCompareArrows", keywords: ["previous contract", "owner contract", "prime contract", "contract changes", "redline", "same client"] },
     { id: "packages", label: "Bid packages", icon: "Box", section: OUTREACH, keywords: ["invited bidders", "invitations", "messages", "conversations"] },
     { id: "leveling", label: "Bid leveling", icon: "Gauge", section: OUTREACH },
-    // Marcel, 22 Oct: after leveling, scope reviews, best and final, award and contract, tracked per trade.
-    { id: "buyout", label: "Scope review & buyout", icon: "UserCheck", section: OUTREACH, keywords: ["buyout log", "buyout tracker", "scope review", "best and final", "bafo", "meeting minutes", "ball in court", "award"] },
-    { id: "contracts", label: "Contracts & exhibits", icon: "FileCheck2", section: OUTREACH, keywords: ["exhibit a", "award"] },
-    { id: "drawings", label: "List of drawings", icon: "FileText", section: OUTREACH, keywords: ["drawing register", "sheets"] },
-    { id: "specifications", label: "List of specifications", icon: "FileText", section: OUTREACH, keywords: ["spec register", "project manual", "specification sections"] },
     // Marcel's feedback log, 7 Nov: "a section at the end of Subcontractor outreach called compliance".
     { id: "compliance", label: "Compliance", icon: "BadgeCheck", section: OUTREACH, keywords: ["CBE", "MBE", "WBE", "SBE", "First Source", "participation", "certification", "wage scale", "Davis-Bacon", "prevailing wage"] },
     { id: "takeoffs", label: "Quantity takeoffs", icon: "Ruler", section: BUDGET, keywords: ["estimate", "in-house estimate", "mcn estimate"] },
@@ -83,6 +78,17 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "model-mep", label: "MEP coordination", icon: "Box", section: MODEL, keywords: ["3d mep", "mechanical", "electrical", "plumbing", "fire protection", "bim", "clash"] },
     { id: "model-structural", label: "Structural model", icon: "Box", section: MODEL, keywords: ["3d structure", "concrete", "steel", "framing", "columns"] },
     { id: "model-exterior", label: "Exterior model", icon: "Box", section: MODEL, keywords: ["3d exterior", "facade", "envelope", "roof", "storefront"] },
+  ]},
+  // Marcel's issues log, item 18 (18 Nov): "Create a main header titled contracts and procurement, let scope review and buy
+  // out be under there, contracts & exhibits be titled contracts, and have one for exhibits, and have list of drawings and
+  // list of specifications under there."
+  { label: "CONTRACTS & PROCUREMENT", scope: "project", items: [
+    // Marcel, 22 Oct: after leveling, scope reviews, best and final, award and contract, tracked per trade.
+    { id: "buyout", label: "Scope review & buyout", icon: "UserCheck", keywords: ["buyout log", "buyout tracker", "scope review", "best and final", "bafo", "meeting minutes", "ball in court", "award"] },
+    { id: "contracts", label: "Contracts", icon: "FileCheck2", keywords: ["contracts & exhibits", "subcontract", "exhibit a", "award", "docusign", "signature"] },
+    { id: "exhibits", label: "Exhibits", icon: "FileStack", keywords: ["exhibit a", "exhibit b", "list of documents", "insurance requirements", "safety plan", "billing package", "quality control plan", "contract exhibits"] },
+    { id: "drawings", label: "List of drawings", icon: "FileText", keywords: ["drawing register", "sheets"] },
+    { id: "specifications", label: "List of specifications", icon: "FileText", keywords: ["spec register", "project manual", "specification sections"] },
   ]},
   { label: "OPERATIONS", scope: "project", items: [
     { id: "schedule", label: "Project schedule", icon: "CalendarDays" },

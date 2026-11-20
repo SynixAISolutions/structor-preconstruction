@@ -48,3 +48,14 @@
 @media(max-width:650px){.proc-add-company{margin-bottom:76px}}
 .proc-invitation-list button.proc-remove-invitation{color:#8d3f32}
 .ui-btn.danger{background:#8d3f32;border-color:#8d3f32;color:#fff}.ui-btn.danger:hover{background:#763428;border-color:#763428}
+
+/* Export scopes (Marcel's issues log, item 20): which scope, which trades. */
+.scope-export{display:flex;flex-direction:column;gap:16px}
+.scope-export fieldset{margin:0;padding:12px 14px;border:1px solid #e3e8e5;border-radius:8px;display:flex;flex-direction:column;gap:8px}
+.scope-export legend{padding:0 4px;color:#5d6d76;font-size:11px;font-weight:700}
+.scope-export label{display:flex;align-items:flex-start;gap:8px;color:#465767;font-size:12px;line-height:1.5}
+.scope-export-quick{display:flex;gap:12px}
+.scope-export-quick button{padding:0;border:0;background:none;color:#c37b51;font:inherit;font-size:11px;font-weight:600;cursor:pointer}
+.scope-export-trades{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;max-height:280px;overflow:auto}
+.scope-export-error{margin:0;color:#8d3f32;font-size:12px}
+@media(max-width:760px){.scope-export-trades{grid-template-columns:1fr}}

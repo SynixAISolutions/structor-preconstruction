@@ -2,7 +2,7 @@ export const pageGuides = [
   { id: "architect", group: "Architect view", title: "Architect submittals", purpose: "Review only the submittal revisions sent to the design team.", steps: ["Choose Preview as architect or Architect view in Project information.", "Choose the receiving architect, then Open submittal.", "Record an action and comments. The contractor receives the response before returning it to the subcontractor."], terms: [{name:"Sent revision",meaning:"A revision approved by the contractor and explicitly sent to this architect."}], example:"Approve a sent mix-design submittal as noted; the contractor then returns your response.", reality:"This is a workflow preview in the shared browser workspace, not a separate authenticated architect account. Contractor drafts are filtered from this view.", related:["specs","portal"] },
   {
     id: "buyout",
-    group: "Preconstruction",
+    group: "Contracts & procurement",
     title: "Scope review & buyout",
     purpose: "Track every trade from leveled bids to an executed subcontract on one page: the scope review with the low bidders, its minutes, their best and final offers, the award, Exhibit A and the subcontract, and whose move it is.",
     steps: [
@@ -280,7 +280,7 @@ export const pageGuides = [
   },
   {
     id: "drawings",
-    group: "Preconstruction",
+    group: "Contracts & procurement",
     title: "List of drawings · drawing register",
     purpose: "Maintain a list of drawing numbers, titles, revisions, and receipt dates. The register helps identify the intended active drawing set and produces a list for exhibits.",
     steps: [
@@ -303,7 +303,7 @@ export const pageGuides = [
   },
   {
     id: "specifications",
-    group: "Preconstruction",
+    group: "Contracts & procurement",
     title: "List of specifications",
     purpose: "The written counterpart of the drawing list: every section of the project manual with its MasterFormat number, title, issue date, date received, revision, and status. Use it to confirm which specification sections exist and which issue is current before relying on them.",
     steps: [
@@ -571,8 +571,8 @@ export const pageGuides = [
   },
   {
     id: "contracts",
-    group: "Preconstruction",
-    title: "Contracts & exhibits",
+    group: "Contracts & procurement",
+    title: "Contracts",
     purpose: "Carry one award per trade from the leveled bid to an executed subcontract: choose the bidder and award value, agree Exhibit A with the subcontractor, then generate, sign, and execute the subcontract.",
     steps: [
       "Exhibit A follows your company's template, with the Scope of Work as Section 3. AI draft · Scope of Work rewrites the bid-form lines in contract language, keeping exclusions and partials; review each obligation, then Save reviewed draft revision.",
@@ -593,6 +593,25 @@ export const pageGuides = [
     example: "In the Project 1 sample, Concrete is awarded to District Concrete at its $1,742,000 base bid against the concrete budget line, and Drywall to Capitol Wall Systems at $1,012,400 against the gypsum wallboard line, though Rock Creek Interiors bid less: its bid excludes the acoustical ceilings and stays open in Bid leveling. Both have Exhibit A agreed and the subcontract executed, so their submittals run under Submittal packages.",
     reality: "Awards, Exhibit A revisions, comments, signatures, and notifications save in this browser for the open project. Shares and signature requests are recorded, not emailed. Typed signatures are demonstration records, not legal electronic signatures, and documents download as text; no PDF or Word file is assembled.",
     related: ["leveling", "budget", "specs"],
+  },
+  {
+    id: "exhibits",
+    group: "Contracts & procurement",
+    title: "Exhibits",
+    purpose: "See every trade's exhibits in one place: Exhibit A, the scope agreed with the subcontractor, and Exhibits B to G, the documents and the contracts department's files attached to the subcontract.",
+    steps: [
+      "Each trade shows who it is awarded to, its Exhibit A revision and where it stands (draft, shared, changes requested or agreed), and which of Exhibits B to G are ready.",
+      "Exhibit A opens that trade on Contracts at its Exhibit A, to edit, share, comment and agree it. B to G opens it on All other exhibits, to build Exhibit B from Project files and upload C to G.",
+      "A trade appears here once it is awarded in Contracts. A lock means the subcontract has gone out and its exhibits are frozen into it.",
+    ],
+    terms: [
+      { name: "Exhibit A", meaning: "The scope of work attached to the subcontract, generated from the awarded bid form and the bidder's answers." },
+      { name: "Exhibit B", meaning: "The list of documents the subcontract is based on: drawings, specifications and reports, with their issue dates." },
+      { name: "Exhibits C to G", meaning: "Insurance requirements, safety plan, schedule, billing package and quality control plan, uploaded by the contracts department." },
+    ],
+    example: "Concrete is awarded to District Concrete: Exhibit A is agreed at revision 2, B to G are ready, and the lock shows the subcontract went out for signature.",
+    reality: "Exhibits are kept with each trade's award for the open project. This page lists them; they are prepared and changed on Contracts.",
+    related: ["contracts", "buyout", "drawings"],
   },
   {
     id: "schedule",
@@ -650,7 +669,7 @@ export const pageGuides = [
   },
 ] satisfies {
   id: string;
-  group: "Workspace" | "Preconstruction" | "Operations" | "Subcontractor view" | "Architect view";
+  group: "Workspace" | "Preconstruction" | "Contracts & procurement" | "Operations" | "Subcontractor view" | "Architect view";
   title: string;
   purpose: string;
   steps: string[];

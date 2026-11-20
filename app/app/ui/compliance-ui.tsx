@@ -71,7 +71,7 @@ export function ComplianceView({ project, navigate, notify, projectName }: ViewP
     {project.certifications.length > 0 && <p className="compliance-base">{report.base === null ? "Targets need a total to be a share of: build the Budget summary, or enter the internal project value in Project information." : `Targets are shares of ${report.baseSource === "budget" ? "the Budget summary's total" : "the internal project value"}, ${usd(report.base)}.`}{!targetsSet && " No % required is set yet: add one beside each program in Project information."}</p>}
     {error && <p className="cm-form-error" role="alert">{error}</p>}
     <Panel title="Awarded subcontractors" subtitle={report.rows.length ? `${report.rows.length} awarded ${report.rows.length === 1 ? "trade" : "trades"} · percents are saved on the company in the Subcontractor directory` : undefined}>
-      {!report.rows.length ? <Empty title="No trades awarded yet" description="Award a trade in Contracts & exhibits and it appears here with its contract value." action={<Button onClick={() => navigate("buyout")}>Open Scope review & buyout</Button>}/> :
+      {!report.rows.length ? <Empty title="No trades awarded yet" description="Award a trade in Contracts and it appears here with its contract value." action={<Button onClick={() => navigate("buyout")}>Open Scope review & buyout</Button>}/> :
       <div className="ui-table-wrap"><table className="ui-table compliance-table">
         <thead><tr><th>Trade</th><th>Subcontractor</th><th className="num">Contract value</th>{project.kickoff?.wageScale === true && <th>Wage scale</th>}{project.certifications.map(program => <th key={program} className="num">{program}</th>)}</tr></thead>
         <tbody>{report.rows.map(row => <tr key={row.awardId}>
