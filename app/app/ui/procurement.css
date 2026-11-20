@@ -85,3 +85,12 @@
 .proc-takeoff-choices small{color:#98a2a9;font-size:11px}
 .proc-takeoff-choices b{color:#3f5260;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
 @media(max-width:760px){.proc-quantity-fields{grid-template-columns:1fr}.proc-takeoff-choices article{grid-template-columns:1fr auto}.proc-takeoff-choices article .ui-btn{grid-column:1/-1;justify-self:start}}
+.proc-ai-quantities{display:flex;flex-direction:column;gap:12px}
+.proc-ai-quantities>p{margin:0;color:#5f6f78;font-size:13px;line-height:1.6}
+.proc-ai-quantities>p.proc-ai-progress{padding:9px 12px;border-radius:7px;background:#f4f8f6;color:#3f6150;font-size:12px;font-weight:600}
+.proc-ai-result{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid #e3e8e5;border-radius:8px}
+.proc-ai-result strong{color:#3f5260;font-size:13px}
+.proc-ai-result small{color:#8b979e;font-size:11px}
+.proc-ai-result details{color:#5f6f78;font-size:12px}
+.proc-ai-result summary{cursor:pointer;font-weight:600}
+.proc-ai-result ul{margin:6px 0 0;padding-left:18px;max-height:180px;overflow:auto;line-height:1.6}

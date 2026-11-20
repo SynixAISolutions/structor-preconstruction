@@ -16,6 +16,7 @@ import type { ReferencedDoc } from "./setup-checks";
 import { cleanOutline, polygonArea } from "./schematic-model";
 import { glossary, guideText, manualGuides } from "./user-manual";
 import { scopeLocate } from "./drawing-ai";
+import { scopeQuantities } from "./quantity-ai";
 import { screenLayers, type WallLayer } from "./wall-assemblies";
 import { GENERAL_MAX_ITEMS, GENERAL_MAX_LINES, type GeneralScopeInput } from "./general-scope";
 
@@ -795,4 +796,4 @@ const referencedDocuments = job({
   },
 });
 
-export const EXTRA_JOBS: Record<string, Job<any, any>> = { "title-block": titleBlock, "scope-consolidate": consolidate, "general-scope": generalScope, "revision-diff": revisionDiff, "submittal-requirements": submittalRequirements, assistant, "schedule-suggest": scheduleSuggest, "rfp-facts": rfpFacts, "rfp-requirements": rfpRequirements, "budget-lines": budgetLines, "estimate-draft": estimateDraft, "template-from-form": templateFromForm, "concept-comparables": conceptComparables, "plan-outline": planOutline, "plan-tags": planTags, "partition-types": partitionTypes, "wall-layers": wallLayers, "drawing-scale": drawingScale, "level-heights": levelHeightsJob, "referenced-documents": referencedDocuments, "scope-locate": scopeLocate, "contract-changes": contractChanges };
+export const EXTRA_JOBS: Record<string, Job<any, any>> = { "title-block": titleBlock, "scope-consolidate": consolidate, "general-scope": generalScope, "revision-diff": revisionDiff, "submittal-requirements": submittalRequirements, assistant, "schedule-suggest": scheduleSuggest, "rfp-facts": rfpFacts, "rfp-requirements": rfpRequirements, "budget-lines": budgetLines, "estimate-draft": estimateDraft, "template-from-form": templateFromForm, "concept-comparables": conceptComparables, "plan-outline": planOutline, "plan-tags": planTags, "partition-types": partitionTypes, "wall-layers": wallLayers, "drawing-scale": drawingScale, "level-heights": levelHeightsJob, "referenced-documents": referencedDocuments, "scope-locate": scopeLocate, "scope-quantities": scopeQuantities, "contract-changes": contractChanges };

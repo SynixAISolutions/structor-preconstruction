@@ -42,9 +42,12 @@ export type ScopeQuantity = {
   origin: "estimator" | "takeoff" | "ai";
   /** The Quantity takeoffs line (origin "takeoff") or AI finding (origin "ai") it was taken from. */
   ref: string | null;
-  /** An estimator has checked it. One from a takeoff line nobody has reviewed starts unchecked, and holds publishing. */
+  /** An estimator has checked it. One from a takeoff line nobody has reviewed, or proposed by AI, starts unchecked and holds publishing. */
   checked: boolean;
+  /** For a quantity read from a drawing: the sheet and the printed words it rests on, to open and check. */
+  citation?: QuantityCitation | null;
 };
+export type QuantityCitation = { document: string; page: number; sheet: string | null; quote: string; fromImage: boolean };
 
 export type ScopeItem = {
   id: string;
@@ -393,7 +396,7 @@ export const QUANTITY_UNITS = ["SF", "SY", "LF", "EA", "CY", "TON", "LB", "GAL",
 /** "1,240 LF", "46.5 TON". */
 export const quantityLabel = (q: { value: number; unit: string }): string => `${q.value.toLocaleString("en-US", { maximumFractionDigits: 2 })} ${q.unit}`;
 
-export type QuantityInput = { value: number; unit: string; basis: string; origin?: ScopeQuantity["origin"]; ref?: string | null; checked?: boolean };
+export type QuantityInput = { value: number; unit: string; basis: string; origin?: ScopeQuantity["origin"]; ref?: string | null; checked?: boolean; citation?: QuantityCitation | null };
 
 function cleanQuantity(input: QuantityInput): ScopeQuantity {
   const value = Number(input.value);
@@ -401,10 +404,13 @@ function cleanQuantity(input: QuantityInput): ScopeQuantity {
   const unit = String(input.unit ?? "").trim().toUpperCase();
   if (!/^[A-Z][A-Z0-9./ ]{0,7}$/.test(unit)) fail("Enter the unit, e.g. SF, LF or EA.");
   if (unit === "EA" && !Number.isInteger(value)) fail("A count in EA is a whole number.");
-  const basis = String(input.basis ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+  const basis = String(input.basis ?? "").replace(/\s+/g, " ").trim().slice(0, 500);
   if (!basis) fail("Say where the quantity comes from: the sheet and what was measured or counted, or the takeoff line.");
   const origin = input.origin ?? "estimator";
-  return { value: Math.round(value * 100) / 100, unit, basis, origin, ref: input.ref ?? null, checked: input.checked ?? origin === "estimator" };
+  const c = input.citation;
+  const citation = c && typeof c.document === "string" && c.document.trim() && Number.isInteger(c.page) && c.page > 0 && typeof c.quote === "string"
+    ? { document: c.document.trim(), page: c.page, sheet: c.sheet?.trim() || null, quote: c.quote.trim().slice(0, 300), fromImage: !!c.fromImage } : null;
+  return { value: Math.round(value * 100) / 100, unit, basis, origin, ref: input.ref ?? null, checked: input.checked ?? origin === "estimator", ...(citation ? { citation } : {}) };
 }
 
 /**
