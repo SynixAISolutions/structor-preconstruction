@@ -4,6 +4,7 @@ import { useMemo, useState, type Dispatch, type FormEvent, type SetStateAction }
 import { newDirectoryCompany } from "../../lib/directory";
 import { RemoveInvitationDialog } from "./remove-company";
 import { TradePackageControls } from "./trade-package-controls";
+import { AskAboutTrade } from "./ask-entry-points";
 import "./project-setup.css";
 import { LinkedProjectContent } from "./project-content-links";
 import {
@@ -213,7 +214,10 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
       <aside className="ui-panel proc-trades"><button className={generalOpen ? "active" : ""} onClick={() => setGeneralOpen(true)}><span className="proc-division">01</span><span><strong>General</strong><small>Applies to every trade</small></span></button><div className="proc-aside-title">TRADE PACKAGES</div>{trades.map(pkg => { const items = bidForm(state, pkg.id); const status = packageStatus(state, pkg.id); const pending = review.extraction.drafts.filter(d => d.packageId === pkg.id && d.status === "pending-review").length; return <button className={!generalOpen && pkg.id === activePackage.id ? "active" : ""} key={pkg.id} onClick={() => { setGeneralOpen(false); setPackageId(pkg.id); setSelectedId(""); }}><span className="proc-division">{pkg.division}</span><span><strong>{pkg.name}</strong><small>{items.filter(item => item.status === "approved").length}/{items.length} approved{pending > 0 && ` · ${pending} proposed`}</small></span><Badge tone={statusTone(status)}>{statusLabels[status]}</Badge></button>; })}<button className="proc-aside-link" onClick={() => navigate("packages")}>Manage bidders<ArrowRight size={14}/></button></aside>
       {generalOpen ? <GeneralScopes review={review} by={CURRENT_USER} notify={notify} onEdit={item => setEditor({...item})} onAdd={() => setEditor({packageId:activePackage.id,title:"",detail:"",source:"",origin:"estimator"})}/> : <>
       <Panel title={activePackage.name} subtitle={`${activePackage.code} · ${activePackage.owner ? `Owner: ${activePackage.owner}` : "No owner yet"} · Due ${displayDate(activePackage.due)}`} action={<Badge tone={statusTone(packageState)}>{statusLabels[packageState]}{activePackage.published ? ` · v${activePackage.published.version}` : ""}</Badge>} className="proc-scope-panel">
-        <div className="general-scope-tabs"><Tabs tabs={["General scope", "Detailed scope"]} value={packageView} onChange={setPackageView}/></div>
+        <div className="general-scope-tabs trade-ask-toolbar">
+          <Tabs tabs={["General scope", "Detailed scope"]} value={packageView} onChange={setPackageView}/>
+          <AskAboutTrade trade={activePackage.name} code={activePackage.code}/>
+        </div>
         {packageView === "General scope" ? <GeneralScopePanel key={activePackage.id} projectId={projectId} state={state} pkg={activePackage} run={run} by={CURRENT_USER} notify={notify}/> : <>
         <div className="ui-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search this bid form…"/><Button onClick={approveAll}><CheckCheck size={15}/>Approve visible form</Button></div>
         <PackageDrawingReferences key={activePackage.id} pkg={activePackage} packages={state.packages} colors={sourceColors}/>

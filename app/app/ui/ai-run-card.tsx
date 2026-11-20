@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { StructorOrb } from "./structor-orb";
+import { AiRunCompletion } from "./ai-run-completion";
 import { answerLeave, askToLeave, readingIn, useAutoScopes } from "../../lib/auto-scopes";
 import { runFiles, runProgress, type AutoRun } from "../../lib/auto-scope-plan";
 import { timeLeftLabel } from "../../lib/run-time-left";
@@ -26,12 +27,13 @@ export function AiRunCard({ projectId }: { projectId: string }) {
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [run]);
-  if (!run && !leave) return elsewhere ? <ElsewhereCard run={elsewhere}/> : null;
   const { done, total } = run ? runProgress(run) : { done: 0, total: 0 };
   const reading = run?.trades.filter(t => t.status === "reading") ?? [];
   // The bar follows the time: the share gone by of the time the run will take (lib/run-time-left).
   const percent = left ? Math.round(left.share * 100) : total ? Math.round((done / total) * 100) : 0;
   return <>
+    <AiRunCompletion projectId={projectId} readingProjectId={run?.projectId}/>
+    {!run && !leave && elsewhere && <ElsewhereCard run={elsewhere}/>}
     {run && <section className="ai-run-card" role="status" aria-live="polite" aria-label="AI is writing scopes">
       <span className="ai-run-icon"><StructorOrb size={30} mood="thinking"/></span>
       <div className="ai-run-copy">

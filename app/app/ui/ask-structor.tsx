@@ -12,6 +12,7 @@ import { manualGuides } from "../../lib/user-manual";
 import type { Screen } from "./shared";
 import { StructorOrb } from "./structor-orb";
 import { startersFor } from "./ask-starters";
+import { onAskRequested } from "./open-ask";
 import "./ask-structor.css";
 
 type ProposalState = { proposal: Proposal; status: "pending" | "applied" | "dismissed" | "undone"; error?: string };
@@ -42,11 +43,24 @@ export function AskStructor({ currentScreen, onOpenManual, onNavigate }: { curre
   const [choices, setChoices] = useState<Record<string, string[]>>({});
   const [picked, setPicked] = useState<Record<string, string>>({});
   const list = useRef<HTMLDivElement>(null);
+  const composer = useRef<HTMLInputElement>(null);
   const applied = useRef(new Map<string, AppliedChange>());
   const page = manualGuides.find(g => g.id === currentScreen)?.title ?? "this page";
   useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight }); }, [messages, busy, tasksOpen]);
   // New look (NEW_LOOK_DEMO.md §3.5): on a wide screen the page makes room for the open panel instead of being covered.
   useEffect(() => { document.documentElement.classList.toggle("ask-open", open); return () => document.documentElement.classList.remove("ask-open"); }, [open]);
+
+  useEffect(() => {
+    let frame = 0;
+    const unsubscribe = onAskRequested(question => {
+      setDraft(question);
+      setTasksOpen(false);
+      setOpen(true);
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => composer.current?.focus({ preventScroll: true }));
+    });
+    return () => { unsubscribe(); cancelAnimationFrame(frame); };
+  }, []);
 
   async function ask(question: string) {
     const q = question.trim();
@@ -133,7 +147,7 @@ export function AskStructor({ currentScreen, onOpenManual, onNavigate }: { curre
         </div>}
         {busy && <div className="ask-message assistant"><p className="ask-progress">{busy}…</p></div>}
       </div>
-      <form onSubmit={(e: FormEvent) => { e.preventDefault(); void ask(draft); }}><input aria-label="Your question" value={draft} onChange={e => setDraft(e.target.value)} placeholder="Ask about this project…" disabled={!!busy}/><button type="submit" className="ui-icon-btn" aria-label="Send question" disabled={!!busy || !draft.trim()}><Send size={16}/></button></form>
+      <form onSubmit={(e: FormEvent) => { e.preventDefault(); void ask(draft); }}><input ref={composer} aria-label="Your question" value={draft} onChange={e => setDraft(e.target.value)} placeholder="Ask about this project…" disabled={!!busy}/><button type="submit" className="ui-icon-btn" aria-label="Send question" disabled={!!busy || !draft.trim()}><Send size={16}/></button></form>
       <button type="button" className="ask-guide" onClick={() => { setOpen(false); onOpenManual(); }}><BookOpen size={15}/>Open the full guide</button>
     </section>}
   </>;

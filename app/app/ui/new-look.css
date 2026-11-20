@@ -40,6 +40,13 @@
 .new-look .top-search:hover { box-shadow: var(--nl-shadow-hover); }
 .new-look .top-search span { flex: 1; text-align: left; }
 .new-look .top-search kbd { border-radius: 999px; }
+.new-look .command-list .quick-find-ask {
+  margin-bottom: 4px; padding-inline: 12px; border-bottom-color: transparent;
+  border-radius: 12px; background: var(--nl-canvas); color: #203840; font-weight: 600;
+}
+.new-look .command-list .quick-find-ask:hover { background: #fdeee6; }
+.new-look .quick-find-ask span { min-width: 0; overflow-wrap: anywhere; }
+.new-look .quick-find-ask svg { flex: none; }
 @media (max-width: 900px) { .new-look .top-search { min-width: 0; } }
 
 /* ---------- Home-screen entrance: placeholders first, then content comes into focus ---------- */
@@ -78,6 +85,30 @@
   animation: nl-shimmer 0.9s linear, nl-placeholder 0.9s var(--nl-ease) forwards;
 }
 
+/* Dense workspaces render immediately. */
+.new-look .page-enter:is(
+  [data-screen="leveling"], [data-screen="budget"], [data-screen="drawing-flip"],
+  [data-screen="drawings"], [data-screen="revisions"], [data-screen="model"],
+  [data-screen^="model-"], :has(.scope-matrix)
+) {
+  &, & *, & *::before, & *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+.new-look [data-screen="scopes"] .trade-ask-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
+}
+.new-look [data-screen="scopes"] .trade-ask-toolbar .ui-tabs { margin: 0; }
+.new-look [data-screen="scopes"] .trade-ask {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 7px 12px;
+  border: 1px solid #dce5e1; border-radius: 999px; background: var(--nl-canvas);
+  color: #203840; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer;
+}
+.new-look [data-screen="scopes"] .trade-ask:hover { background: #e9eeeb; }
+.new-look [data-screen="scopes"] .trade-ask svg { flex: none; }
+
 /* ---------- Ask Structor: the orb in the button, the panel slides in and the page makes room ---------- */
 .new-look .ask-launcher { padding: 6px 18px 6px 6px; gap: 10px; background: #15282f; box-shadow: 0 14px 30px -14px rgb(16 34 53 / 0.75); transition: transform 0.2s var(--nl-ease), box-shadow 0.2s var(--nl-ease); }
 .new-look .ask-launcher:hover { transform: translateY(-2px); background: #15282f; }
@@ -102,9 +133,23 @@
   .new-look .ask-panel { top: 12px; bottom: 12px; right: 12px; width: 384px; max-height: none; }
   .new-look .product-main { transition: margin-right 0.38s var(--nl-ease); }
   html.ask-open .new-look .product-main { margin-right: 408px; }
+  html.ask-open .new-look [data-screen="scopes"] { container: scope-with-ask / inline-size; }
   /* Record feedback steps left of the open panel instead of sitting on it. */
   .new-look .voice-launcher { transition: right 0.38s var(--nl-ease); }
   html.ask-open.new-look .voice-launcher { right: 420px; }
+}
+@container scope-with-ask (max-width: 955px) {
+  .new-look [data-screen="scopes"] .ui-page-header { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .new-look [data-screen="scopes"] .ui-header-actions { flex-wrap: wrap; }
+  .new-look [data-screen="scopes"] .proc-scope-layout { grid-template-columns: minmax(150px, 27%) minmax(0, 1fr); }
+  .new-look [data-screen="scopes"] .proc-detail-column { grid-column: 1 / -1; }
+}
+@container scope-with-ask (max-width: 590px) {
+  .new-look [data-screen="scopes"] .proc-scope-layout { grid-template-columns: minmax(0, 1fr); }
+  .new-look [data-screen="scopes"] .proc-trades { display: flex; gap: 4px; overflow-x: auto; }
+  .new-look [data-screen="scopes"] .proc-aside-title { display: none; }
+  .new-look [data-screen="scopes"] .proc-trades > button { flex: 0 0 auto; width: auto; min-width: 145px; }
+  .new-look [data-screen="scopes"] .proc-trades > .proc-aside-link { margin: 0; padding: 10px 8px; border: 0; }
 }
 /* On a narrower screen the panel covers that corner: Record feedback waits until it closes. */
 @media (max-width: 899px) { html.ask-open.new-look .voice-launcher { display: none; } }
@@ -112,6 +157,7 @@
 /* ---------- The AI run card: the orb thinks while the AI reads ---------- */
 .new-look .ai-run-card { border-radius: 18px; box-shadow: 0 18px 40px -22px rgb(16 34 53 / 0.55); }
 .new-look .ai-run-icon { width: auto; height: auto; background: none; animation: none; }
+.new-look .ai-run-complete { align-items: center; border-color: #385651; background: #182f36; }
 
 /* ---------- The greeting (orb-greeting.tsx) ---------- */
 .orb-greeting { position: fixed; left: 0; top: 0; z-index: 58; opacity: 0; cursor: pointer; will-change: transform; }
@@ -128,10 +174,29 @@
 }
 .orb-greeting.phase-greet .orb-bubble { opacity: 1; scale: 1; }
 
+@media (max-width: 600px) {
+  .new-look .orb-greeting .structor-orb { --orb: 38px !important; }
+  .new-look .orb-greeting .orb-bubble {
+    left: calc(100% + 10px); max-width: min(290px, calc(100vw - 82px));
+    padding: 6px 10px; font-size: 12px; line-height: 1.35;
+  }
+  .new-look .ask-panel { max-height: min(560px, calc(100dvh - 96px - env(safe-area-inset-bottom, 0px))); }
+  .new-look .ask-panel .ask-messages { overscroll-behavior: contain; }
+  .new-look .ask-panel form input { font-size: 16px; }
+}
+
 /* Reduced motion: no entrance, no placeholder (it would otherwise stay over the tiles), no slide. */
 .new-look.motion-off [data-screen="turnover"] .todo-status-summary > div::after { display: none; }
+html.new-look:has(.product-app.motion-off) :is(.ask-panel, .ask-panel *, .ask-launcher, .ask-launcher *, .voice-launcher) {
+  animation: none !important;
+  transition: none !important;
+}
+html.new-look:has(.product-app.motion-off) .structor-orb.mood-idle .orb-eye { translate: 0 0 !important; }
 @media (prefers-reduced-motion: reduce) {
-  .new-look [data-screen] *, .new-look .ask-panel { animation: none !important; }
+  .new-look :is(.ask-panel, .ask-panel *, .ask-launcher, .ask-launcher *, .voice-launcher) {
+    animation: none !important;
+    transition: none !important;
+  }
   .new-look [data-screen="turnover"] .todo-status-summary > div::after { display: none; }
   .new-look .product-main { transition: none !important; }
 }

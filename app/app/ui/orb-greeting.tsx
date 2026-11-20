@@ -23,7 +23,19 @@ function markGreeted() {
   try { localStorage.setItem(KEY, today()); } catch { /* see above */ }
 }
 const still = () => !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches || !!document.querySelector(".product-app.motion-off");
-const at = (x: number, y: number, scale = 1) => `translate(${Math.round(x - SIZE / 2)}px, ${Math.round(y - SIZE / 2)}px) scale(${scale})`;
+
+/** Undo the home entrance's centered scale and translation when placing the greeting. */
+function restingRect(element: HTMLElement) {
+  const rect = element.getBoundingClientRect();
+  const transform = getComputedStyle(element).transform;
+  const matrix = transform === "none" ? null : new DOMMatrixReadOnly(transform);
+  return new DOMRect(
+    rect.left - (element.offsetWidth - rect.width) / 2 - (matrix?.m41 ?? 0),
+    rect.top - (element.offsetHeight - rect.height) / 2 - (matrix?.m42 ?? 0),
+    element.offsetWidth,
+    element.offsetHeight,
+  );
+}
 
 type Phase = "off" | "arrive" | "greet" | "dock";
 
@@ -49,16 +61,25 @@ export function OrbGreeting({ screen, reduced }: { screen: Screen; reduced: bool
   useEffect(() => {
     const el = box.current;
     if (!el) return;
+    const size = el.offsetWidth || SIZE;
+    const at = (x: number, y: number, scale = 1) => `translate(${Math.round(x - size / 2)}px, ${Math.round(y - size / 2)}px) scale(${scale})`;
     let timer = 0;
     if (phase === "arrive") {
       const area = document.querySelector(".product-content")?.getBoundingClientRect() ?? new DOMRect(0, 0, window.innerWidth, window.innerHeight);
-      const a = { x: area.left + Math.min(area.width * 0.28, 320), y: area.top + 190 };
-      const b = { x: Math.max(area.left + SIZE, Math.min(area.left + area.width * 0.56, area.right - SIZE / 2 - 340)), y: area.top + 120 };
+      const compact = window.matchMedia("(max-width: 600px)").matches;
+      const header = document.querySelector<HTMLElement>(".todo-workspace > .ui-page-header");
+      const banner = document.querySelector<HTMLElement>(".todo-progress-banner");
+      let b = { x: Math.max(area.left + size, Math.min(area.left + area.width * 0.56, area.right - size / 2 - 340)), y: area.top + 120 };
+      if (compact && header && banner) {
+        const heading = restingRect(header);
+        b = { x: heading.left + size / 2, y: (heading.bottom + restingRect(banner).top) / 2 };
+      }
+      const a = compact ? { x: b.x + 42, y: b.y + 12 } : { x: area.left + Math.min(area.width * 0.28, 320), y: area.top + 190 };
       spot.current = b;
       el.animate([
         { transform: at(a.x, a.y + 30, 0.4), opacity: 0 },
         { transform: at(a.x, a.y), opacity: 1, offset: 0.25 },
-        { transform: at((a.x + b.x) / 2, Math.min(a.y, b.y) - 50), opacity: 1, offset: 0.62 },
+        { transform: at((a.x + b.x) / 2, Math.min(a.y, b.y) - (compact ? 14 : 50)), opacity: 1, offset: 0.62 },
         { transform: at(b.x, b.y), opacity: 1 },
       ], { duration: 1500, easing: "cubic-bezier(.45,.05,.3,1)", fill: "forwards" });
       // Timers, not the animation's `finished`, move it on: a browser that stops drawing frames once nothing
@@ -71,7 +92,7 @@ export function OrbGreeting({ screen, reduced }: { screen: Screen; reduced: bool
       const from = spot.current;
       const launcher = document.querySelector<HTMLElement>(".ask-launcher");
       const target = launcher?.querySelector(".structor-orb")?.getBoundingClientRect() ?? launcher?.getBoundingClientRect();
-      const to = target ? { x: target.left + target.width / 2, y: target.top + target.height / 2, scale: Math.min(1, target.width / SIZE) } : { x: window.innerWidth - 40, y: window.innerHeight - 40, scale: 0.4 };
+      const to = target ? { x: target.left + target.width / 2, y: target.top + target.height / 2, scale: Math.min(1, target.width / size) } : { x: window.innerWidth - 40, y: window.innerHeight - 40, scale: 0.4 };
       el.animate([
         { transform: at(from.x, from.y), opacity: 1 },
         { transform: at(from.x + (to.x - from.x) * 0.35, Math.min(from.y, to.y) - 30, 0.9), opacity: 1, offset: 0.4 },
