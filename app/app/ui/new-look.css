@@ -106,6 +106,8 @@
   .new-look .voice-launcher { transition: right 0.38s var(--nl-ease); }
   html.ask-open.new-look .voice-launcher { right: 420px; }
 }
+/* On a narrower screen the panel covers that corner: Record feedback waits until it closes. */
+@media (max-width: 899px) { html.ask-open.new-look .voice-launcher { display: none; } }
 
 /* ---------- The AI run card: the orb thinks while the AI reads ---------- */
 .new-look .ai-run-card { border-radius: 18px; box-shadow: 0 18px 40px -22px rgb(16 34 53 / 0.55); }
