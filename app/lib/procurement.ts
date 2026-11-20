@@ -20,10 +20,31 @@ export type ScopeOrigin = "ai" | "drawing" | "specification" | "estimator";
 export type ScopeStatus = "draft" | "approved";
 
 export type ScopeEvent =
-  | { kind: "created" | "approved" | "reopened" | "edited"; at: string; by: string }
+  | { kind: "created" | "approved" | "reopened" | "edited" | "quantity-checked"; at: string; by: string }
+  /** `quantity` as it reads ("1,240 LF"); empty when it was removed. */
+  | { kind: "quantity"; at: string; by: string; quantity: string }
   | { kind: "moved"; at: string; by: string; from: string; to: string }
   | { kind: "copied"; at: string; by: string; from: string; to: string }
   | { kind: "applied-to-all"; at: string; by: string };
+
+/**
+ * How much work a scope item covers (Marcel's issues log, item 19, 18 Nov: "make sure we have quantity take offs next
+ * to every item in the detailed scopes especially for subcontractor view"): the contractor's own figure, shown to
+ * bidders beside the line for reference, like the QTY and UOM columns of his bid forms. Optional: a line such as
+ * "Acknowledge the bid documents" has none.
+ */
+export type ScopeQuantity = {
+  value: number;
+  /** "SF", "LF", "EA", "CY"… */
+  unit: string;
+  /** Where the number comes from, in words: the takeoff line, or the sheet and what was measured or counted. */
+  basis: string;
+  origin: "estimator" | "takeoff" | "ai";
+  /** The Quantity takeoffs line (origin "takeoff") or AI finding (origin "ai") it was taken from. */
+  ref: string | null;
+  /** An estimator has checked it. One from a takeoff line nobody has reviewed starts unchecked, and holds publishing. */
+  checked: boolean;
+};
 
 export type ScopeItem = {
   id: string;
@@ -37,11 +58,15 @@ export type ScopeItem = {
   status: ScopeStatus;
   /** Carried in every package's bid form. */
   allTrades: boolean;
+  /** The contractor's quantity for the line; absent or null when it has none. */
+  quantity?: ScopeQuantity | null;
   history: ScopeEvent[];
 };
 
 /** The bid form exactly as bidders received it. */
-export type PublishedForm = { version: number; at: string; by: string; items: { id: string; title: string; detail: string; source: string }[] };
+export type PublishedForm = { version: number; at: string; by: string; items: PublishedItem[] };
+/** A bid-form line as bidders received it; `quantity` only when the line had one. */
+export type PublishedItem = { id: string; title: string; detail: string; source: string; quantity?: { value: number; unit: string } };
 
 export type TradePackage = {
   id: string;
@@ -114,7 +139,8 @@ export function bidForm(state: Procurement, packageId: string): ScopeItem[] {
   ];
 }
 
-const formContent = (items: ScopeItem[]) => items.map(({ id, title, detail, source }) => ({ id, title, detail, source }));
+const formContent = (items: ScopeItem[]): PublishedItem[] => items.map(({ id, title, detail, source, quantity }) =>
+  ({ id, title, detail, source, ...(quantity ? { quantity: { value: quantity.value, unit: quantity.unit } } : {}) }));
 
 /** Why a package cannot be published right now; empty when it can. */
 export function publishBlockers(state: Procurement, packageId: string): string[] {
@@ -124,6 +150,8 @@ export function publishBlockers(state: Procurement, packageId: string): string[]
   if (!form.length) reasons.push(`${pkg.name} has no scope items yet.`);
   const drafts = form.filter(s => s.status !== "approved").length;
   if (drafts) reasons.push(`${drafts} scope item${drafts === 1 ? " is" : "s are"} not approved by an estimator.`);
+  const unchecked = form.filter(s => s.quantity && !s.quantity.checked).length;
+  if (unchecked) reasons.push(`${unchecked} quantit${unchecked === 1 ? "y needs" : "ies need"} an estimator's check.`);
   if (pkg.published && !isRevised(state, pkg)) reasons.push("This version is already published.");
   return reasons;
 }
@@ -357,6 +385,45 @@ export function applyScopeToAllTrades(state: Procurement, id: string, by: string
     kind: "scope-applied-to-all", recipientType: "team", recipient: owner, packageId: item.packageId, at,
     text: `${by} added "${item.title}" to every trade's bid form. It needs review before publishing.`,
   }))] };
+}
+
+// ── Quantities ──────────────────────────────────────────────────────────────
+
+export const QUANTITY_UNITS = ["SF", "SY", "LF", "EA", "CY", "TON", "LB", "GAL", "LS"] as const;
+/** "1,240 LF", "46.5 TON". */
+export const quantityLabel = (q: { value: number; unit: string }): string => `${q.value.toLocaleString("en-US", { maximumFractionDigits: 2 })} ${q.unit}`;
+
+export type QuantityInput = { value: number; unit: string; basis: string; origin?: ScopeQuantity["origin"]; ref?: string | null; checked?: boolean };
+
+function cleanQuantity(input: QuantityInput): ScopeQuantity {
+  const value = Number(input.value);
+  if (!Number.isFinite(value) || value <= 0 || value >= 1e9) fail("Enter a quantity greater than 0.");
+  const unit = String(input.unit ?? "").trim().toUpperCase();
+  if (!/^[A-Z][A-Z0-9./ ]{0,7}$/.test(unit)) fail("Enter the unit, e.g. SF, LF or EA.");
+  if (unit === "EA" && !Number.isInteger(value)) fail("A count in EA is a whole number.");
+  const basis = String(input.basis ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+  if (!basis) fail("Say where the quantity comes from: the sheet and what was measured or counted, or the takeoff line.");
+  const origin = input.origin ?? "estimator";
+  return { value: Math.round(value * 100) / 100, unit, basis, origin, ref: input.ref ?? null, checked: input.checked ?? origin === "estimator" };
+}
+
+/**
+ * Sets an item's quantity, or clears it with null. The item keeps its approval, since its wording is unchanged, but a
+ * published bid form shows Revised until the new quantity is published. An estimator's own figure counts as checked.
+ */
+export function setScopeQuantity(state: Procurement, id: string, input: QuantityInput | null, by: string, at = now()): Procurement {
+  const item = findScope(state, id);
+  const quantity = input ? cleanQuantity(input) : null;
+  if (JSON.stringify(quantity) === JSON.stringify(item.quantity ?? null)) return state;
+  return replaceScope(state, { ...item, quantity, history: [...item.history, { kind: "quantity", at, by, quantity: quantity ? quantityLabel(quantity) : "" }] });
+}
+
+/** An estimator confirms a quantity they didn't enter themselves. */
+export function checkScopeQuantity(state: Procurement, id: string, by: string, at = now()): Procurement {
+  const item = findScope(state, id);
+  if (!item.quantity) fail("This item has no quantity to check.");
+  if (item.quantity!.checked) return state;
+  return replaceScope(state, { ...item, quantity: { ...item.quantity!, checked: true }, history: [...item.history, { kind: "quantity-checked", at, by }] });
 }
 
 // ── Publishing and outreach ─────────────────────────────────────────────────

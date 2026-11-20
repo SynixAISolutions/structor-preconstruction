@@ -7,7 +7,7 @@ const X = await import("../lib/scope-export.ts");
 const EX = await import("../lib/exhibits.ts");
 const XLSX = await import("xlsx");
 
-const item = (id, packageId, title, o = {}) => ({ id, packageId, title, detail: o.detail ?? "", source: o.source ?? "", origin: "ai", status: o.status ?? "draft", allTrades: !!o.allTrades, history: [] });
+const item = (id, packageId, title, o = {}) => ({ id, packageId, title, detail: o.detail ?? "", source: o.source ?? "", origin: "ai", status: o.status ?? "draft", allTrades: !!o.allTrades, quantity: o.quantity ?? null, history: [] });
 const state = {
   packages: [
     { id: "demo", name: "Demolition", division: "02", code: "02 41 19", owner: "", due: "", published: { version: 1, at: "", by: "", items: [] },
@@ -17,7 +17,7 @@ const state = {
   ],
   scopes: [
     item("all1", "demo", "Provide daily cleanup of your work", { allTrades: true, status: "approved" }),
-    item("d1", "demo", "Remove aluminum windows, frames and sashes", { detail: "Keynote D.3", source: "AD-101", status: "approved" }),
+    item("d1", "demo", "Remove aluminum windows, frames and sashes", { detail: "Keynote D.3", source: "AD-101", status: "approved", quantity: { value: 1240.5, unit: "SF", basis: "AD-101 window schedule", origin: "estimator", ref: null, checked: true } }),
     item("d2", "demo", "Remove doors and frames", { source: "AD-101" }),
     item("s1", "steel", "Furnish and erect structural steel", { source: "05 12 00" }),
   ],
@@ -29,10 +29,10 @@ const sheets = X.scopeExportSheets(state, { packageIds: ["demo", "steel"], gener
 assert.deepEqual(sheets.map(s => s.name), ["Summary", "02 41 19 Demolition", "05 12 00 Structural steel & mis"], "A Summary, then a tab per chosen trade, names cut to Excel's 31 characters");
 const demo = sheets[1].rows.map(r => r.join(" | "));
 assert(demo.includes("1 | Selective demolition and removal | 2"), "The General scope line, with how many detailed items it covers");
-assert(demo.includes("1 | Provide daily cleanup of your work |  |  | Approved | Every trade"), "A line for every trade appears in this trade's tab");
-assert(demo.includes("2 | Remove aluminum windows, frames and sashes | Keynote D.3 | AD-101 | Approved | Demolition"), "Detailed lines with their detail, source and status");
+assert(demo.includes("1 | Provide daily cleanup of your work |  |  |  |  | Approved | Every trade"), "A line for every trade appears in this trade's tab");
+assert(demo.includes("2 | Remove aluminum windows, frames and sashes | Keynote D.3 | AD-101 | 1240.5 | SF | Approved | Demolition"), "Detailed lines with their detail, source, quantity (item 19) and status");
 const steel = sheets[2].rows.map(r => r.join(" | "));
-assert(steel.includes("1 | Provide daily cleanup of your work |  |  | Approved | Every trade"), "and in every other trade's tab too");
+assert(steel.includes("1 | Provide daily cleanup of your work |  |  |  |  | Approved | Every trade"), "and in every other trade's tab too");
 assert(steel.some(r => r.includes("No general scope written for this trade yet.")), "A trade without a General scope says so");
 assert.deepEqual(sheets[0].rows.slice(3).map(r => r.slice(0, 6)), [["02 41 19", "Demolition", 1, 3, 2, "Published v1"], ["05 12 00", "Structural steel & miscellaneous metals", 0, 2, 1, "Not published"]], "The Summary counts each trade");
 const detailedOnly = X.scopeExportSheets(state, { packageIds: ["demo"], general: false, detailed: true }, "Maple Street");
@@ -71,7 +71,7 @@ const allPdf = await P.scopePdf(scopes, { ...options, summary: true });
 const allText = await pdfPages(allPdf);
 assert.equal(allText.length, 3, "A summary page, then each trade from a new page");
 assert.match(allText[0], /Maple Street · Scopes.*Demolition.*Published v1.*Structural steel & miscellaneous metals.*Not published/, "The summary lists every chosen trade");
-assert.match(allText[1], /Demolition.*02 41 19 · Maple Street.*Bid form published, version 1.*General scope.*Selective demolition and removal.*Detailed scope.*Lines for every trade.*1 Provide daily cleanup of your work.*Approved.*Demolition.*2 Remove aluminum windows, frames and sashes Keynote D\.3 AD-101 Approved.*3 Remove doors and frames.*AD-101 Draft/, "A trade's page: its General scope, then its bid form, the lines for every trade first");
+assert.match(allText[1], /Demolition.*02 41 19 · Maple Street.*Bid form published, version 1.*General scope.*Selective demolition and removal.*Detailed scope.*Lines for every trade.*1 Provide daily cleanup of your work.*Approved.*Demolition.*2 Remove aluminum windows, frames and sashes Keynote D\.3 AD-101 1,240\.5 SF Approved.*3 Remove doors and frames.*AD-101 Draft/, "A trade's page: its General scope, then its bid form, the lines for every trade first");
 assert.match(allText[2], /No general scope written for this trade yet\..*1 Provide daily cleanup of your work.*2 Furnish and erect structural steel 05 12 00/, "A trade without a General scope says so, and still carries the lines for every trade");
 assert.match(allText[2], /Exported Nov 20, 2026 · Page 3 of 3/, "Every page is numbered");
 const loaded = await PDFDocument.load(allPdf);
@@ -85,7 +85,7 @@ const joined = longText.join(" ");
 for (let i = 1; i <= 60; i++) assert(joined.includes(`Remove item ${i} at the east elevation`), `Item ${i} is in the PDF`);
 assert.deepEqual(["PROTECT", "ADJACENT", "MASONRY."].map(w => joined.split(" ").filter(word => word === w).length), [80, 80, 80], "Every word of a detail taller than a page");
 assert(longText.filter(page => page.includes("MASONRY")).length >= 2 && joined.includes("LASTWORD"), "It carries on to the next page, to its last word");
-assert(longText.slice(1).every(page => /# Scope Detail Source Status/.test(page)), "The column headings repeat on every page");
+assert(longText.slice(1).every(page => /# Scope Detail Source Qty Unit Status/.test(page)), "The column headings repeat on every page");
 assert.deepEqual(P.cellLines("a".repeat(40), 50, t => t.length * 5), ["a".repeat(10), "a".repeat(10), "a".repeat(10), "a".repeat(10)], "A word too long for its column is broken, never drawn over the next one");
 
 // A PDF per trade, to send to that trade's subcontractors.

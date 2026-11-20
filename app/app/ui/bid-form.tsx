@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { AlertTriangle, Check, FileText, Paperclip, Plus, Send, Trash2, Users } from "lucide-react";
-import type { PublishedForm } from "../../lib/procurement";
+import { quantityLabel, type PublishedForm } from "../../lib/procurement";
 import { ANSWERS, addAttachment, hasUnsubmittedChanges, latestRevision, removeAttachment, setResponse, updateDraft, type Alternate, type Submission, type SubmissionIssue, type Submitter } from "../../lib/submissions";
 import { Button, Panel } from "./shared";
 import "./submission-ui.css";
@@ -26,10 +26,10 @@ export function ScopeResponseForm({ submission, items, issues, run }: {
   run: BidRun;
 }) {
   const formItems = items;
-  return <Panel title="Scope confirmation" subtitle="Y included · N excluded · P partial · N/A not applicable"><div className="sub-response-list">{formItems.map((item, index) => {
+  return <Panel title="Scope confirmation" subtitle="Y included · N excluded · P partial · N/A not applicable">{formItems.some(item => item.quantity) && <p className="sub-qty-note">Quantities are the contractor's takeoff, given for reference. Confirm them against the bid documents: your price covers the full scope shown there.</p>}<div className="sub-response-list">{formItems.map((item, index) => {
     const response = submission.draft.responses.find(answer => answer.scopeItemId === item.id);
     const problem = issueFor(issues, "responses", item.id);
-    return <article className={problem ? "has-error" : ""} key={item.id}><span className="sub-number">{String(index + 1).padStart(2, "0")}</span><div className="sub-response-copy"><strong>{item.title}</strong>{item.detail && <p>{item.detail}</p>}<small><FileText size={11}/>{item.source || "Source not linked"}</small>{problem && <span className="sub-field-error">{problem}</span>}{(response?.answer === "P" || response?.answer === "N/A") && <label>Required explanation<textarea rows={2} value={response.note} onChange={event => run(current => setResponse(current, submission.id, item.id, response.answer, event.target.value))} placeholder="Explain what is partial or why this item does not apply."/></label>}</div><div className="sub-answer-buttons">{ANSWERS.map(answer => <button key={answer} aria-label={`${item.title}: ${answer}`} aria-pressed={response?.answer === answer} className={response?.answer === answer ? `selected answer-${answer.replace("/", "")}` : ""} onClick={() => run(current => setResponse(current, submission.id, item.id, answer, response?.note ?? ""))}>{answer}</button>)}</div></article>;
+    return <article className={problem ? "has-error" : ""} key={item.id}><span className="sub-number">{String(index + 1).padStart(2, "0")}</span><div className="sub-response-copy"><strong>{item.title}</strong>{item.quantity && <span className="sub-qty">Qty {quantityLabel(item.quantity)}</span>}{item.detail && <p>{item.detail}</p>}<small><FileText size={11}/>{item.source || "Source not linked"}</small>{problem && <span className="sub-field-error">{problem}</span>}{(response?.answer === "P" || response?.answer === "N/A") && <label>Required explanation<textarea rows={2} value={response.note} onChange={event => run(current => setResponse(current, submission.id, item.id, response.answer, event.target.value))} placeholder="Explain what is partial or why this item does not apply."/></label>}</div><div className="sub-answer-buttons">{ANSWERS.map(answer => <button key={answer} aria-label={`${item.title}: ${answer}`} aria-pressed={response?.answer === answer} className={response?.answer === answer ? `selected answer-${answer.replace("/", "")}` : ""} onClick={() => run(current => setResponse(current, submission.id, item.id, answer, response?.note ?? ""))}>{answer}</button>)}</div></article>;
   })}</div></Panel>;
 }
 

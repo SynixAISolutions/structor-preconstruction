@@ -32,7 +32,7 @@ export type TradeScope = {
   /** The General scope lines with how many detailed items each covers; null when the General scope wasn't chosen. */
   general: { text: string; covers: number }[] | null;
   /** The detailed bid-form lines; null when the detailed scope wasn't chosen. Counts are kept either way. */
-  detailed: { title: string; detail: string; source: string; status: string; everyTrade: boolean }[] | null;
+  detailed: { title: string; detail: string; source: string; status: string; everyTrade: boolean; quantity: { value: number; unit: string } | null }[] | null;
   counts: { general: number; detailed: number; approved: number };
 };
 
@@ -46,7 +46,7 @@ export function tradeScopes(state: Procurement, choice: ScopeExportChoice): Trad
     return {
       packageId: pkg.id, code: pkg.code, trade: pkg.name, publishedVersion: pkg.published?.version ?? null,
       general: choice.general ? lines.map(line => ({ text: line.text, covers: line.members.length })) : null,
-      detailed: choice.detailed ? items.map(item => ({ title: item.title, detail: item.detail, source: item.source, status: STATUS[item.status] ?? item.status, everyTrade: !!item.allTrades })) : null,
+      detailed: choice.detailed ? items.map(item => ({ title: item.title, detail: item.detail, source: item.source, status: STATUS[item.status] ?? item.status, everyTrade: !!item.allTrades, quantity: item.quantity ? { value: item.quantity.value, unit: item.quantity.unit } : null })) : null,
       counts: { general: lines.length, detailed: items.length, approved: items.filter(s => s.status === "approved").length },
     };
   });
@@ -67,11 +67,11 @@ function tradeSheet(scope: TradeScope, projectName: string, name: string): Expor
   if (scope.detailed) {
     rows.push([], ["Detailed scope"]);
     if (scope.detailed.length) {
-      rows.push(["#", "Scope", "Detail", "Source", "Status", "Applies to"]);
-      scope.detailed.forEach((item, i) => rows.push([i + 1, item.title, item.detail, item.source, item.status, item.everyTrade ? "Every trade" : scope.trade]));
+      rows.push(["#", "Scope", "Detail", "Source", "Qty", "Unit", "Status", "Applies to"]);
+      scope.detailed.forEach((item, i) => rows.push([i + 1, item.title, item.detail, item.source, item.quantity?.value ?? "", item.quantity?.unit ?? "", item.status, item.everyTrade ? "Every trade" : scope.trade]));
     } else rows.push(["", NO_DETAILED]);
   }
-  return { name, rows, widths: [6, 70, 60, 26, 12, 22] };
+  return { name, rows, widths: [6, 70, 60, 26, 10, 7, 12, 22] };
 }
 
 /** The workbook's tabs: a Summary, then one per chosen trade, in the trades' order. Throws with a message to show. */

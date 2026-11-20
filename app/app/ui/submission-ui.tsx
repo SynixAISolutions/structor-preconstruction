@@ -29,7 +29,7 @@ import {
   type SubmissionIssue,
   type SubmittedRevision,
 } from "../../lib/submissions";
-import type { Procurement, TradePackage } from "../../lib/procurement";
+import { quantityLabel, type Procurement, type TradePackage } from "../../lib/procurement";
 import { portalRfis, raiseSubcontractorQuestion } from "../../lib/rfi";
 import { useStructorCheck } from "../../lib/use-structor-check";
 import { portalSubmittals, submitRevision } from "../../lib/submittals";
@@ -51,7 +51,7 @@ function PackageDocuments({ projectName, pkg }: { projectName: string; pkg: Trad
   const items = pkg.published?.items ?? [];
   const documents = [
     { name: "Invitation to bid", body: `${projectName}\n${pkg.code} · ${pkg.name}\nBid due ${displayDate(pkg.due)}${pkg.owner ? `\nEstimator: ${pkg.owner}` : ""}` },
-    { name: `${pkg.name} bid form`, body: items.map((item, index) => `${index + 1}. ${item.title}\n   ${item.detail}\n   Source: ${item.source || "Not linked"}`).join("\n\n") },
+    { name: `${pkg.name} bid form`, body: items.map((item, index) => `${index + 1}. ${item.title}\n   ${item.detail}${item.quantity ? `\n   Quantity: ${quantityLabel(item.quantity)} (for reference)` : ""}\n   Source: ${item.source || "Not linked"}`).join("\n\n") },
     { name: "Addendum acknowledgement", body: `${projectName}\n${pkg.name}\nConfirm all addenda received before submitting.` },
   ];
   return <Panel title="Package documents" subtitle="Review the current invitation and published bid form."><div className="sub-document-list">{documents.map(document => <button key={document.name} onClick={() => downloadText(`${document.name.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}.txt`, `${document.name}\n\n${document.body}`)}><span><FileText size={18}/></span><span><strong>{document.name}</strong><small>Download preview · TXT</small></span><Download size={15}/></button>)}</div></Panel>;
