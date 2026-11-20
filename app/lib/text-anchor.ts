@@ -130,9 +130,12 @@ export function approximateFind(text: string, pattern: string, maxErrors: number
 
 /** Letters OCR may get wrong in a phrase of this length: one in five, at most four. */
 const ocrErrors = (length: number) => Math.min(4, Math.floor(length / 5));
+/** A printed text layer's second, looser look (20 Nov): an AI quote a letter or two off ("ALUMINUM" for the sheet's
+ * "ALUMINIUM", "&" for "AND"), one in eight letters at most three, on phrases long enough not to match by chance. */
+const looseErrors = (length: number) => length < 16 ? 0 : Math.min(3, Math.floor(length / 8));
 
 /** Where each part of a quote is written in the boxes, read in this order; null for a part that isn't. */
-function placeParts(order: TextBox[], parts: string[], fuzzy: boolean): (Box | null)[] {
+function placeParts(order: TextBox[], parts: string[], fuzzy: boolean, errors = ocrErrors): (Box | null)[] {
   let page = "";
   const spans = order.map(box => { const start = page.length; page += squeeze(box.str); return { start, end: page.length, box }; });
   return parts.map(quote => {
@@ -142,7 +145,8 @@ function placeParts(order: TextBox[], parts: string[], fuzzy: boolean): (Box | n
       const phrase = squeeze(tryWords.join(" "));
       if (phrase.length < 6) break;
       const exact = page.indexOf(phrase);
-      const found = exact >= 0 ? { at: exact, end: exact + phrase.length } : fuzzy ? approximateFind(page, phrase, ocrErrors(phrase.length)) : null;
+      const allowed = fuzzy ? errors(phrase.length) : 0;
+      const found = exact >= 0 ? { at: exact, end: exact + phrase.length } : allowed ? approximateFind(page, phrase, allowed) : null;
       if (!found) continue;
       const covered = spans.filter(s => s.end > found.at && s.start < found.end).map(s => part(s.box, Math.max(0, found.at - s.start), Math.min(s.end, found.end) - s.start, s.end - s.start));
       if (covered.length) return padded(union(covered));
@@ -155,13 +159,13 @@ function placeParts(order: TextBox[], parts: string[], fuzzy: boolean): (Box | n
  * Where a sentence or note is written: one box over the words of each part (a quote "A … B" has two). The PDF's
  * own text order first, the order the AI's quote was checked in; then reading order, for a note stored out of order.
  */
-function findText(boxes: TextBox[], quote: string, fuzzy: boolean): Box[] {
+function findText(boxes: TextBox[], quote: string, fuzzy: boolean, errors = ocrErrors): Box[] {
   const kept = boxes.filter(b => squeeze(b.str));
   const parts = quote.split(/\.{3}|…/).map(p => p.trim()).filter(p => squeeze(p).length >= 6);
   if (!parts.length) return [];
   let best: Box[] = [];
   for (const order of [kept, readingOrder(kept)]) {
-    const found = placeParts(order, parts, fuzzy).filter((b): b is Box => !!b);
+    const found = placeParts(order, parts, fuzzy, errors).filter((b): b is Box => !!b);
     if (found.length === parts.length) return found;
     if (found.length > best.length) best = found;
   }
@@ -170,12 +174,79 @@ function findText(boxes: TextBox[], quote: string, fuzzy: boolean): Box[] {
 
 /**
  * Where a quote is on a sheet: every place for a tag, the written place for a sentence; empty when it isn't in the
- * text. `fuzzy` is for words read by OCR (sheetWords): a sentence may then be a few letters off.
+ * text. `fuzzy` is for words read by OCR (sheetWords): a sentence may then be a few letters off. `loose`: a sentence
+ * not found exactly on a printed text layer is looked for again a letter or two off (looseErrors). `note`: a sentence
+ * is marked over the whole note or keynote it is written in, not only the quoted words (growToNote).
  */
-export function findOnSheet(boxes: TextBox[], quote: string, max = MAX_TAG_MARKS, { fuzzy = false } = {}): Box[] {
+export function findOnSheet(boxes: TextBox[], quote: string, max = MAX_TAG_MARKS, { fuzzy = false, loose = false, note = false } = {}): Box[] {
   const q = norm(quote);
   if (!q) return [];
-  return isTag(q) ? findTag(boxes, q, max) : findText(boxes, q, fuzzy);
+  if (isTag(q)) return findTag(boxes, q, max);
+  let found = findText(boxes, q, fuzzy);
+  if (!found.length && loose && !fuzzy) found = findText(boxes, q, true, looseErrors);
+  return note ? found.map(box => growToNote(boxes, box)) : found;
+}
+
+// ── The whole note (20 Nov, Danial: "how can we make it better and more accurate? especially the highlighted text") ──
+// A highlight covered only the words the AI quoted, a sliver of a keynote. On Whittier's sheets a keynote prints its
+// number ("D.4.1") left of its first line, its lines about a fifth of a line apart and the next note about two fifths
+// below; a table's cells are a whole line apart. So a mark grows up to the line its note starts on and down to the
+// line before the next one: never across a bigger gap, a change of print size or another column; where no note is
+// numbered, a line ending a sentence ends the note. It stays the quoted words when the note would be implausibly big.
+
+type Run = { box: Box; text: string; line: number };
+const asBox = (t: TextBox): Box => ({ x: t.x, y: t.y, width: t.w, height: t.h });
+/** Each printed line's runs: its words cut where a wide gap starts another column (ocrText's rule). */
+function lineRuns(boxes: TextBox[]): Run[] {
+  return readingLines(boxes.filter(b => squeeze(b.str))).flatMap((line, index) => {
+    const parts: TextBox[][] = [];
+    for (const w of line) {
+      const last = parts.at(-1)?.at(-1);
+      if (last && w.x - (last.x + last.w) < Math.max(last.h, w.h) * 2.5) parts.at(-1)!.push(w); else parts.push([w]);
+    }
+    return parts.map(p => ({ box: union(p.map(asBox)), text: p.map(w => w.str).join(" ").trim(), line: index }));
+  });
+}
+/** A note's number or bullet printed on its own left of its first line: "D.4.1", "12", "3.", "A)", "(b)", "•". */
+const NOTE_NUMBER = /^(\(?([A-Z]{1,3}[.-]?)?\d{1,3}(\.\d{1,3}){0,3}[A-Z]?[.):]?|\(?[A-Z][.)]|[-–•●▪◦*])$/i;
+/** A note numbered at the start of its own first line: "3. REMOVE …", "A) PROVIDE …", "• SEAL …". */
+const NOTE_START = /^(\(?\d{1,2}(\.\d{1,2})*[.)]|\(?[A-Z][.)]|[-–•●▪◦*])\s/;
+const MAX_NOTE_LINES = 14, MAX_NOTE = { width: 0.5, height: 0.15 };
+
+/** The whole note a mark sits in (see above): the mark itself when it isn't in a printed line. */
+export function growToNote(boxes: TextBox[], mark: Box): Box {
+  const runs = lineRuns(boxes);
+  const core = { x: mark.x + PAD, y: mark.y + PAD, width: Math.max(0, mark.width - 2 * PAD), height: Math.max(0, mark.height - 2 * PAD) };
+  const marked = runs.filter(r => r.box.x < core.x + core.width && core.x < r.box.x + r.box.width && r.box.y + r.box.height / 2 >= core.y && r.box.y + r.box.height / 2 <= core.y + core.height);
+  // A note's number ("D.4.1", quoted with its text) marks where the note starts; growing from it would run down the
+  // column of numbers. It joins the note again below, as its first line's number.
+  const inMark = marked.filter(r => !NOTE_NUMBER.test(r.text));
+  if (!inMark.length) return mark;
+  const h = [...inMark.map(r => r.box.height)].sort((a, b) => a - b)[Math.floor(inMark.length / 2)];
+  const numberOf = (r: Run) => runs.find(o => o.line === r.line && o !== r && o.box.x + o.box.width <= r.box.x + h * 0.5 && r.box.x - (o.box.x + o.box.width) <= h * 10 && NOTE_NUMBER.test(o.text));
+  const starts = (r: Run) => !!numberOf(r) || NOTE_START.test(r.text);
+  const endsSentence = (r: Run) => /[.:;!?]$/.test(r.text);
+  const sideways = (a: Box, b: Box) => Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+  const next = (from: Run, down: boolean) => runs
+    .filter(o => o.line !== from.line && (down ? o.box.y > from.box.y : o.box.y < from.box.y) && Math.abs(o.box.height - h) <= h * 0.35 && sideways(o.box, from.box) >= 0.5 * Math.min(o.box.width, from.box.width))
+    .map(o => ({ o, gap: down ? o.box.y - (from.box.y + from.box.height) : from.box.y - (o.box.y + o.box.height) }))
+    .filter(c => c.gap >= -h * 0.3 && c.gap <= h * 0.6)
+    .sort((a, b) => a.gap - b.gap)[0]?.o;
+  const block = [...inMark].sort((a, b) => a.box.y - b.box.y);
+  const numbered = block.some(starts) || [next(block[0], false), next(block.at(-1)!, true)].some(r => r && starts(r));
+  while (block.length < MAX_NOTE_LINES && !starts(block[0])) {
+    const above = next(block[0], false);
+    if (!above || (!numbered && endsSentence(above))) break;
+    block.unshift(above);
+  }
+  while (block.length < MAX_NOTE_LINES) {
+    const below = next(block.at(-1)!, true);
+    if (!below || starts(below) || (!numbered && endsSentence(block.at(-1)!))) break;
+    block.push(below);
+  }
+  const number = numberOf(block[0]);
+  const note = union([...block.map(r => r.box), ...(number ? [number.box] : [])]);
+  return note.width > MAX_NOTE.width || note.height > MAX_NOTE.height ? padded(union(inMark.map(r => r.box))) : padded(note);
 }
 
 /** Print size OCR reads well (27 Oct, A12.1: at 155 dpi the finish schedule came back garbled, at 300 dpi 90%+ right). */
@@ -268,8 +339,8 @@ export function pinFindings(drafts: DraftInput[], boxes: Map<string, TextBox[]>,
     if (draft.kind !== "scope") continue;
     const cite = draft.citations[0], sheet = cite?.sheet;
     if (!sheet || !cite.quote) continue;
-    const inText = findOnSheet(boxes.get(sheet) ?? [], cite.quote);
-    const found = inText.length ? inText : findOnSheet(ocr.get(sheet) ?? [], cite.quote, MAX_TAG_MARKS, { fuzzy: true });
+    const inText = findOnSheet(boxes.get(sheet) ?? [], cite.quote, MAX_TAG_MARKS, { loose: true, note: true });
+    const found = inText.length ? inText : findOnSheet(ocr.get(sheet) ?? [], cite.quote, MAX_TAG_MARKS, { fuzzy: true, note: true });
     if (!found.length) continue;
     pinned.add(draft.key);
     found.forEach((box, i) => marks.push({

@@ -81,7 +81,7 @@ export async function locateScopes(args: {
       // Each mark goes where its evidence is printed (every place, for a tag); otherwise the AI's outline, approximate.
       const boxes = await readPageTextBoxes(row.doc, row.page).catch(() => null);
       for (const r of result.regions) {
-        const found = boxes && r.text ? findOnSheet(boxes, r.text) : [];
+        const found = boxes && r.text ? findOnSheet(boxes, r.text, undefined, { loose: true, note: true }) : [];
         const base = { pageId, packageId: args.pkg.id, scopeIds: [r.scopeId], evidence: r.evidence, confidence: r.confidence, origin: "ai" as const };
         if (!found.length && r.polygon.length < 3) dropped.push({ what: r.label, reason: `"${r.text}" is not in the sheet's text, and no area was marked.` });
         else if (!found.length) regions.push({ ...base, label: r.label, polygon: r.polygon, anchor: "image" });
