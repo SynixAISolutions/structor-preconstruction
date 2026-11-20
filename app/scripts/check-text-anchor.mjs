@@ -156,4 +156,35 @@ assert.deepEqual([toForms.added, toForms.held], [3, 1], "Printed and unchecked f
 assert.equal(toForms.extraction.drafts.find(d => d.title === "Membrane waterproofing").status, "pending-review", "It waits in its trade for a person to accept or reject");
 assert(!toForms.procurement.scopes.some(s => s.title === "Membrane waterproofing"));
 
-console.log("Text anchors checked: tags everywhere printed (whole codes only), notes across wrapped lines, opening-words fallback, pinned findings replace AI outlines, leftovers approximate, anchor kept on the accepted highlight, image quotes checked by OCR and unprinted findings held back.");
+// ── The whole note (20 Nov): Whittier AD-101's keynote table, as its text layer prints it ──
+// Numbers left of each note's first line; lines a fifth of a line apart inside a note, two fifths between notes.
+{
+  const h = 0.0044, x = 0.7936, nx = 0.7698;
+  const at = (str, y, w = 0.1) => box(str, x, y, w, h), num = (str, y) => box(str, nx, y, 0.01, h);
+  const keynotes = [
+    box("KEYNOTES-DEMOLITION", 0.799, 0.3003, 0.082, 0.0116),
+    num("D.3", 0.3246), at("REMOVE ALL ALUMINIUM WINDOWS, WINDOW FRAMES & SASHES U.N.O.", 0.3246, 0.092),
+    num("D.4", 0.3307), at("REMOVE DOOR AND DOOR FRAME AS INDICATED ON PLAN & ELEVATIONS.", 0.3307, 0.095),
+    num("D.4.1", 0.3367), at("REMOVE DOOR AND DOOR FRAME ONLY AFTER ARCHITECTS APPROVAL. THIS DOOR MUST", 0.3367, 0.116),
+    at("BE MEASURED AND DOCUMENTED.", 0.3419, 0.045),
+    num("D.5", 0.3479), at("REMOVE RAMP CONCRETE SLAB & RAILING.", 0.3479, 0.056),
+    num("D.7", 0.3540), at("REMOVE PLASTER TRIM BAND CORNICE AT MULTI-PURPOSE ROOM. SALVAGE AND STORE A", 0.3540, 0.117),
+    at("FULL HEIGHT PORTION OF TRIM TO MODEL FOR REINSTALLATION.", 0.3591, 0.084),
+    // An egress legend: cells a whole line apart, no numbers.
+    box("EXIT DISCHARGE", 0.521, 0.0581, 0.022, h), box("OCCUPANT LOAD SERVED", 0.521, 0.0670, 0.034, h), box("OCCUPANT LOAD MAXIMUM", 0.521, 0.0759, 0.036, h),
+  ];
+  const lines = (b) => keynotes.filter(t => t.x + t.w / 2 >= b.x && t.x + t.w / 2 <= b.x + b.width && t.y + t.h / 2 >= b.y && t.y + t.h / 2 <= b.y + b.height).map(t => t.str);
+  const note = (quote) => { const [b] = T.findOnSheet(keynotes, quote, 12, { loose: true, note: true }); return b ? lines(b) : []; };
+  assert.deepEqual(note("BE MEASURED AND DOCUMENTED"), ["D.4.1", "REMOVE DOOR AND DOOR FRAME ONLY AFTER ARCHITECTS APPROVAL. THIS DOOR MUST", "BE MEASURED AND DOCUMENTED."], "A note's second line marks the whole note, with its number");
+  assert.deepEqual(note("THIS DOOR MUST"), note("BE MEASURED AND DOCUMENTED"), "Either line, the same note");
+  assert.deepEqual(note("WINDOW FRAMES & SASHES"), ["D.3", "REMOVE ALL ALUMINIUM WINDOWS, WINDOW FRAMES & SASHES U.N.O."], "A one-line note stays one line: the next note's number stops it");
+  assert.deepEqual(note("D.7 REMOVE PLASTER TRIM BAND"), ["D.7", "REMOVE PLASTER TRIM BAND CORNICE AT MULTI-PURPOSE ROOM. SALVAGE AND STORE A", "FULL HEIGHT PORTION OF TRIM TO MODEL FOR REINSTALLATION."], "A quote led by its number: the note, not the column of numbers");
+  assert.deepEqual(note("OCCUPANT LOAD SERVED"), ["OCCUPANT LOAD SERVED"], "A legend cell stays one cell");
+  assert.deepEqual(T.findOnSheet(keynotes, "ALUMINUM WINDOWS, WINDOW FRAMES"), [], "Exactly, the AI's ALUMINUM isn't the sheet's ALUMINIUM");
+  assert.deepEqual(note("ALUMINUM WINDOWS, WINDOW FRAMES"), note("WINDOW FRAMES & SASHES"), "the looser second look finds it");
+  assert.deepEqual(T.findOnSheet(keynotes, "REMOVE CONCRETE STAIRS", 12, { loose: true }), [], "but not a different note");
+  const plain = T.findOnSheet(keynotes, "BE MEASURED AND DOCUMENTED")[0];
+  assert(plain.height < T.growToNote(keynotes, plain).height, "Without note, only the quoted words");
+}
+
+console.log("Text anchors checked: whole notes with their numbers (Whittier keynotes, legend cells kept), a looser second look, tags everywhere printed (whole codes only), notes across wrapped lines, opening-words fallback, pinned findings replace AI outlines, leftovers approximate, anchor kept on the accepted highlight, image quotes checked by OCR and unprinted findings held back.");

@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as Reac
 import { ChevronLeft, ChevronRight, Maximize, ZoomIn, ZoomOut } from "lucide-react";
 import { readPageTextBoxes, renderStoredPage } from "../../lib/project-files-client";
 import { revisionLabel, type StoredDocument } from "../../lib/project-files";
-import { findOnSheet, type Box } from "../../lib/text-anchor";
+import { findOnSheet, growToNote, type Box } from "../../lib/text-anchor";
 import { findInSheetImage, type OcrProgress } from "../../lib/sheet-ocr";
 import type { Point } from "../../lib/drawing-flip";
 import "./project-files.css";
@@ -55,10 +55,11 @@ function usePageMarks(doc: StoredDocument, page: number, quotes: string[], readI
     setReading(null);
     (async () => {
       const text = await readPageTextBoxes(doc, page).catch(() => []);
-      const inText = quotes.flatMap(q => findOnSheet(text, q));
+      // The whole note each quote is written in, and a quote a letter or two off the print (20 Nov).
+      const inText = quotes.flatMap(q => findOnSheet(text, q, undefined, { loose: true, note: true }));
       if (inText.length || !(readImage || text.length < IMAGE_PAGE_TEXT)) return { boxes: inText, via: inText.length ? "text" as const : "none" as const };
       const image = await findInSheetImage(doc, page, quotes, progress => { if (live) setReading(progress); });
-      return { boxes: image.marks, via: image.marks.length ? "image" as const : image.wholeSheet ? "not-printed" as const : "none" as const };
+      return { boxes: image.marks.map(mark => growToNote(image.words, mark)), via: image.marks.length ? "image" as const : image.wholeSheet ? "not-printed" as const : "none" as const };
     })().catch(() => ({ boxes: [] as Box[], via: "none" as const })).then(result => { if (live) { setFound({ key, ...result }); setReading(null); } });
     return () => { live = false; };
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -66,7 +67,8 @@ function usePageMarks(doc: StoredDocument, page: number, quotes: string[], readI
   const current = found?.key === key ? found : null;
   const words = current?.boxes ?? [];
   const boxes = words.length ? words : onMarkPage && outline && outline.length > 1 ? [outlineBox(outline)] : [];
-  return { key, boxes, searched: !quotes.length || !!current, fromText: words.length > 0, via: current?.via ?? null, reading, onMarkPage };
+  // A box not on printed words (the area marked in Drawing Flip) is shown as approximate, never like a found quote.
+  return { key, boxes, searched: !quotes.length || !!current, fromText: words.length > 0, approximate: !words.length && boxes.length > 0, via: current?.via ?? null, reading, onMarkPage };
 }
 
 /** Other packages' printed words on the page, each in its package's colour (Wyre's "Highlight all scope packages"). */
@@ -225,13 +227,13 @@ export function StoredDocumentViewer({ doc, page, onPageChange, range, highlight
     </div>
     {quotes.length > 0 && <blockquote className="stored-viewer-quote"><strong>{marks.fromText ? marks.via === "image" ? "Highlighted (read from the sheet image)" : "Highlighted" : "Look for"}</strong> {quotes.slice(0, 3).map(q => `“${q}”`).join(" · ")}{quotes.length > 3 ? ` and ${quotes.length - 3} more` : ""}</blockquote>}
     {marks.reading && <p className="stored-viewer-status" role="status">This sheet has no text layer, so Structor is reading the words off the image at 300 dpi… {marks.reading.done} of {marks.reading.total} parts</p>}
-    {quotes.length > 0 && marks.searched && !marks.fromText && marks.onMarkPage && <p className={`stored-viewer-status${marks.via === "not-printed" ? " warning" : ""}`} role="status">{marks.boxes.length ? "These exact words aren't on the page, so the green box is the area marked in Drawing Flip."
+    {quotes.length > 0 && marks.searched && !marks.fromText && marks.onMarkPage && <p className={`stored-viewer-status${marks.via === "not-printed" ? " warning" : ""}`} role="status">{marks.boxes.length ? "These exact words aren't on the page. The dashed orange box is the area marked in Drawing Flip, which may not be exact: check the sheet around it."
       : marks.via === "not-printed" ? "These words aren't printed on this sheet: Structor read the whole sheet image and they aren't on it. The AI described the sheet in its own words here, so check this scope item against the sheet."
       : "These words weren't found on this page. Look for them on the page."}</p>}
     <div className={`stored-viewer-frame${dragging ? " dragging" : ""}`} ref={frame} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}><div className="stored-viewer-sheet" ref={sheet} style={{ width: `${zoom * 100}%`, aspectRatio: aspect ?? undefined }}>
       <StoredPage doc={doc} page={page} size={zoom > 1.5 ? 3600 : 2000} onAspect={setAspect}/>
       {aspect && layerMarks.map((b, i) => <span key={`layer-${i}`} className="stored-viewer-mark layer" title={b.label} style={{ left: `${b.x * 100}%`, top: `${b.y * 100}%`, width: `${b.width * 100}%`, height: `${b.height * 100}%`, borderColor: b.color, background: `${b.color}2e` }}/>)}
-      {aspect && marks.boxes.map((b, i) => <span key={i} className="stored-viewer-mark" style={{ left: `${b.x * 100}%`, top: `${b.y * 100}%`, width: `${b.width * 100}%`, height: `${b.height * 100}%` }} aria-hidden="true"/>)}
+      {aspect && marks.boxes.map((b, i) => <span key={i} className={`stored-viewer-mark${marks.approximate ? " approximate" : ""}`} data-label={marks.approximate ? "Approximate" : undefined} style={{ left: `${b.x * 100}%`, top: `${b.y * 100}%`, width: `${b.width * 100}%`, height: `${b.height * 100}%` }} aria-hidden="true"/>)}
     </div></div>
   </div>;
 }

@@ -109,3 +109,7 @@
 @media (prefers-reduced-motion: reduce) { .bid-docs-slot { transition: none; } }
 /* Another package's words on the sheet, in its colour; the selected package stays green on top. */
 .stored-viewer-mark.layer { box-shadow: none; animation: none; }
+
+/* 20 Nov: a box that isn't on printed words (the area marked in Drawing Flip) looks approximate, not like a found quote. */
+.stored-viewer-mark.approximate { border: 2px dashed #d97706; background: rgb(217 119 6 / .08); box-shadow: none; }
+.stored-viewer-mark.approximate::after { content: attr(data-label); position: absolute; left: -2px; bottom: 100%; margin-bottom: 3px; padding: 2px 6px; border-radius: 4px; background: #d97706; color: #fff; font-size: 11px; font-weight: 600; white-space: nowrap; }
