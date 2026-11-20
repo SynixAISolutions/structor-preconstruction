@@ -7,6 +7,7 @@ import type { SetupSummary } from "../../lib/project-setup";
 import type { TodoSummary } from "../../lib/todo";
 import { useTodoSummary } from "../../lib/use-todo-summary";
 import { Badge, Button, type Screen } from "./shared";
+import { CountUp } from "./count-up";
 import "./project-health.css";
 
 type Navigate = (screen: Screen) => void;
@@ -25,7 +26,7 @@ export function ProgressRing({ percent, label, detail, segments, pending = false
         return length > 0 && <circle key={i} cx="60" cy="60" r="51" pathLength="100" className={`health-ring-arc ${segment.tone}`} transform="rotate(-90 60 60)" strokeDashoffset={-start} strokeDasharray={`${length} ${100 - length}`} style={{ "--ring-dash": `${length} ${100 - length}` } as CSSProperties}/>;
       })}
     </svg>
-    <div className="health-ring-number" aria-hidden="true"><strong>{pending ? "—" : value}<small>{!pending && "%"}</small></strong><span>{pending ? "Checking" : "complete"}</span></div>
+    <div className="health-ring-number" aria-hidden="true"><strong>{pending ? "—" : <CountUp value={value}/>}<small>{!pending && "%"}</small></strong><span>{pending ? "Checking" : "complete"}</span></div>
   </div>;
 }
 

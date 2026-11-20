@@ -1,0 +1,46 @@
+/* Ask Structor's orb (structor-orb.tsx, NEW_LOOK_DEMO.md §3). Structor orange, two pill eyes. */
+.structor-orb {
+  --orb: 40px; --look-x: 0px; --look-y: 0px;
+  position: relative; display: inline-block; flex: none; width: var(--orb); height: var(--orb); border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #ffc29d 0, #ff8a4c 22%, #f05a22 56%, #d94710 80%, #b93b0c 100%);
+  box-shadow: inset 0 calc(var(--orb) * -0.08) calc(var(--orb) * 0.18) rgb(120 30 0 / 0.28),
+    0 calc(var(--orb) * 0.12) calc(var(--orb) * 0.36) calc(var(--orb) * -0.1) rgb(217 71 16 / 0.6),
+    0 0 calc(var(--orb) * 0.45) rgb(255 138 76 / 0.28);
+}
+.structor-orb::before { /* the gloss */
+  content: ""; position: absolute; left: 18%; top: 11%; width: 34%; height: 22%; border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgb(255 255 255 / 0.75), rgb(255 255 255 / 0)); transform: rotate(-24deg);
+}
+.structor-orb .orb-eye {
+  position: absolute; top: 37%; width: 11%; height: 25%; border-radius: 999px; background: #fff;
+  translate: var(--look-x) var(--look-y); transition: translate 0.18s ease-out, height 0.2s, width 0.2s, top 0.2s;
+  animation: orb-blink 4.8s infinite; transform-origin: 50% 60%;
+}
+.structor-orb .orb-eye:first-child { left: 33%; }
+.structor-orb .orb-eye:last-child { left: 56%; animation-delay: 0.02s; }
+@keyframes orb-blink { 0%, 92%, 100% { scale: 1 1; } 94% { scale: 1 0.12; } 96% { scale: 1 1; } }
+
+/* Happy: the eyes become arches (^ ^). */
+.structor-orb.mood-happy .orb-eye {
+  top: 40%; width: 15%; height: 9%; background: transparent; border: calc(var(--orb) * 0.04) solid #fff; border-bottom: 0;
+  border-radius: 999px 999px 0 0; animation: none; translate: 0 0;
+}
+.structor-orb.mood-happy .orb-eye:first-child { left: 29%; }
+.structor-orb.mood-happy .orb-eye:last-child { left: 55%; }
+
+/* Thinking: eyes glance up and aside, the orb breathes. */
+.structor-orb.mood-thinking { animation: orb-think 1.6s ease-in-out infinite; }
+.structor-orb.mood-thinking .orb-eye { translate: calc(var(--orb) * 0.07) calc(var(--orb) * -0.05); height: 20%; animation: orb-blink 3.2s infinite 0.6s; }
+@keyframes orb-think {
+  0%, 100% { scale: 1; box-shadow: inset 0 calc(var(--orb) * -0.08) calc(var(--orb) * 0.18) rgb(120 30 0 / 0.28), 0 calc(var(--orb) * 0.12) calc(var(--orb) * 0.36) calc(var(--orb) * -0.1) rgb(217 71 16 / 0.6), 0 0 calc(var(--orb) * 0.35) rgb(255 138 76 / 0.22); }
+  50% { scale: 1.05; box-shadow: inset 0 calc(var(--orb) * -0.08) calc(var(--orb) * 0.18) rgb(120 30 0 / 0.28), 0 calc(var(--orb) * 0.12) calc(var(--orb) * 0.36) calc(var(--orb) * -0.1) rgb(217 71 16 / 0.6), 0 0 calc(var(--orb) * 0.7) rgb(255 138 76 / 0.45); }
+}
+
+/* A slow float, for an orb on its own (the greeting, the panel). */
+.structor-orb.is-floating { animation: orb-float 3.4s ease-in-out infinite; }
+.structor-orb.is-floating.mood-thinking { animation: orb-float 3.4s ease-in-out infinite, orb-think 1.6s ease-in-out infinite; }
+@keyframes orb-float { 0%, 100% { translate: 0 0; } 50% { translate: 0 calc(var(--orb) * -0.07); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .structor-orb, .structor-orb .orb-eye { animation: none !important; transition: none !important; translate: 0 0 !important; }
+}

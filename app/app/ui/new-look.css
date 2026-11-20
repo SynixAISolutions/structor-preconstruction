@@ -1,0 +1,135 @@
+/* The new look (NEW_LOOK_DEMO.md), as a layer over the existing styles: everything here is scoped to .new-look on the
+   shell (page.tsx), so the existing CSS files stay as they are and main keeps merging in cleanly. Brand unchanged:
+   navy sidebar, orange for the one main action and the orb. Motion only on the home screens, page changes, loading
+   and Ask Structor; .motion-off (Settings → Appearance) and prefers-reduced-motion turn it off. */
+
+.new-look {
+  --nl-radius: 20px;
+  --nl-radius-sm: 16px;
+  --nl-shadow: 0 1px 2px rgb(16 34 53 / 0.04), 0 10px 28px -14px rgb(16 34 53 / 0.16);
+  --nl-shadow-hover: 0 2px 4px rgb(16 34 53 / 0.05), 0 20px 38px -16px rgb(16 34 53 / 0.24);
+  --nl-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --nl-canvas: #f5f6f4; /* the shell's --ui-canvas, also for what is drawn outside the shell (Ask Structor) */
+}
+
+/* ---------- Cards: rounder, borderless, a soft wide shadow ---------- */
+.new-look .ui-panel { border-color: transparent; border-radius: var(--nl-radius); box-shadow: var(--nl-shadow); }
+.new-look .ui-panel-head { padding: 22px 24px 16px; }
+.new-look .portfolio-card { border-color: transparent; border-radius: var(--nl-radius); box-shadow: var(--nl-shadow); }
+.new-look .portfolio-card:hover { transform: translateY(-4px); box-shadow: var(--nl-shadow-hover); }
+.new-look .todo-status-summary { gap: 14px; }
+.new-look .todo-status-summary > div {
+  position: relative; border-color: transparent; border-radius: var(--nl-radius-sm); box-shadow: var(--nl-shadow);
+  padding: 18px 20px; transition: transform 0.25s var(--nl-ease), box-shadow 0.25s var(--nl-ease);
+}
+.new-look .todo-status-summary > div:hover { transform: translateY(-3px); box-shadow: var(--nl-shadow-hover); }
+.new-look .todo-status-summary strong { font-size: 30px; font-variant-numeric: tabular-nums; }
+.new-look .todo-progress-banner {
+  border-radius: 24px;
+  background: radial-gradient(120% 160% at 100% 0%, #1f3d4a 0%, #15282f 55%, #102235 100%);
+  box-shadow: 0 22px 44px -26px rgb(16 34 53 / 0.7);
+}
+.new-look .todo-progress-count strong { font-variant-numeric: tabular-nums; }
+
+/* ---------- Top bar: quieter, with a real search pill ---------- */
+.new-look .product-topbar { border-bottom-color: transparent; background: var(--ui-canvas); }
+.new-look .top-search {
+  min-width: 230px; padding: 7px 8px 7px 14px; border-radius: 999px; background: #fff !important;
+  box-shadow: var(--nl-shadow); font-size: 11px !important; transition: box-shadow 0.2s var(--nl-ease);
+}
+.new-look .top-search:hover { box-shadow: var(--nl-shadow-hover); }
+.new-look .top-search span { flex: 1; text-align: left; }
+.new-look .top-search kbd { border-radius: 999px; }
+@media (max-width: 900px) { .new-look .top-search { min-width: 0; } }
+
+/* ---------- Home-screen entrance: placeholders first, then content comes into focus ---------- */
+@keyframes nl-arrive { from { opacity: 0; filter: blur(8px); transform: translateY(10px) scale(0.985); } to { opacity: 1; filter: blur(0); transform: none; } }
+@keyframes nl-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes nl-placeholder { 0%, 55% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
+@keyframes nl-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+.new-look .page-enter[data-screen="turnover"],
+.new-look .page-enter[data-screen="projects"] { animation: none; }
+
+/* Preconstruction to-do: header, banner, tiles, then the steps. */
+.new-look [data-screen="turnover"] .todo-workspace > .ui-page-header { animation: nl-arrive 0.5s var(--nl-ease) 0.05s both; }
+.new-look [data-screen="turnover"] .todo-progress-banner { animation: nl-arrive 0.55s var(--nl-ease) 0.12s both; }
+.new-look [data-screen="turnover"] .todo-status-summary > div { animation: nl-arrive 0.5s var(--nl-ease) both; }
+.new-look [data-screen="turnover"] .todo-status-summary > div:nth-child(1) { animation-delay: 0.2s; }
+.new-look [data-screen="turnover"] .todo-status-summary > div:nth-child(2) { animation-delay: 0.26s; }
+.new-look [data-screen="turnover"] .todo-status-summary > div:nth-child(3) { animation-delay: 0.32s; }
+.new-look [data-screen="turnover"] .todo-status-summary > div:nth-child(4) { animation-delay: 0.38s; }
+.new-look [data-screen="turnover"] .todo-workspace > .ui-panel { animation: nl-rise 0.55s var(--nl-ease) 0.45s both; }
+
+/* All projects: header, tools, then the cards one by one. */
+.new-look [data-screen="projects"] > .ui-page-header { animation: nl-arrive 0.5s var(--nl-ease) 0.05s both; }
+.new-look [data-screen="projects"] > .project-list-tools { animation: nl-rise 0.5s var(--nl-ease) 0.12s both; }
+.new-look [data-screen="projects"] .project-card-grid > * { animation: nl-arrive 0.55s var(--nl-ease) both; }
+.new-look [data-screen="projects"] .project-card-grid > :nth-child(1) { animation-delay: 0.18s; }
+.new-look [data-screen="projects"] .project-card-grid > :nth-child(2) { animation-delay: 0.24s; }
+.new-look [data-screen="projects"] .project-card-grid > :nth-child(3) { animation-delay: 0.3s; }
+.new-look [data-screen="projects"] .project-card-grid > :nth-child(4) { animation-delay: 0.36s; }
+.new-look [data-screen="projects"] .project-card-grid > :nth-child(n + 5) { animation-delay: 0.42s; }
+
+/* The placeholder sheen over each tile, gone once its content has arrived. */
+.new-look [data-screen="turnover"] .todo-status-summary > div::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(100deg, #eef1f4 30%, #f8fafb 50%, #eef1f4 70%) 0 0 / 200% 100%;
+  animation: nl-shimmer 0.9s linear, nl-placeholder 0.9s var(--nl-ease) forwards;
+}
+
+/* ---------- Ask Structor: the orb in the button, the panel slides in and the page makes room ---------- */
+.new-look .ask-launcher { padding: 6px 18px 6px 6px; gap: 10px; background: #15282f; box-shadow: 0 14px 30px -14px rgb(16 34 53 / 0.75); transition: transform 0.2s var(--nl-ease), box-shadow 0.2s var(--nl-ease); }
+.new-look .ask-launcher:hover { transform: translateY(-2px); background: #15282f; }
+.new-look .ask-launcher:active { transform: scale(0.97); }
+.new-look .ask-launcher.orb-arrived .structor-orb { animation: nl-pop 0.6s var(--nl-ease); }
+@keyframes nl-pop { 0% { scale: 0.6; } 55% { scale: 1.18; } 100% { scale: 1; } }
+
+.new-look .ask-panel { border: 0; border-radius: 22px; box-shadow: 0 26px 60px -26px rgb(16 34 53 / 0.5); animation: nl-panel-in 0.38s var(--nl-ease) both; }
+@keyframes nl-panel-in { from { opacity: 0; transform: translateX(28px) scale(0.98); } to { opacity: 1; transform: none; } }
+.new-look .ask-panel header { justify-content: flex-start; gap: 12px; padding: 14px 16px; }
+.new-look .ask-panel header > div { flex: 1; min-width: 0; }
+.new-look .ask-hello { display: grid; justify-items: center; gap: 10px; width: 100%; margin: 14px 0 6px; text-align: center; }
+.new-look .ask-hello strong { font-size: 18px; font-weight: 600; letter-spacing: -0.4px; }
+.new-look .ask-starters { justify-items: stretch; }
+.new-look .ask-starters p { text-align: center; }
+.new-look .ask-starters button { text-align: left; padding: 9px 12px; border-radius: 12px; border-color: transparent; background: var(--nl-canvas); transition: background 0.15s; }
+.new-look .ask-starters button:hover { background: #fdeee6; }
+.new-look .ask-message { border-radius: 14px; }
+.new-look .ask-panel form input { border-radius: 999px; padding: 9px 14px; }
+
+@media (min-width: 900px) {
+  .new-look .ask-panel { top: 12px; bottom: 12px; right: 12px; width: 384px; max-height: none; }
+  .new-look .product-main { transition: margin-right 0.38s var(--nl-ease); }
+  html.ask-open .new-look .product-main { margin-right: 408px; }
+  /* Record feedback steps left of the open panel instead of sitting on it. */
+  .new-look .voice-launcher { transition: right 0.38s var(--nl-ease); }
+  html.ask-open.new-look .voice-launcher { right: 420px; }
+}
+
+/* ---------- The AI run card: the orb thinks while the AI reads ---------- */
+.new-look .ai-run-card { border-radius: 18px; box-shadow: 0 18px 40px -22px rgb(16 34 53 / 0.55); }
+.new-look .ai-run-icon { width: auto; height: auto; background: none; animation: none; }
+
+/* ---------- The greeting (orb-greeting.tsx) ---------- */
+.orb-greeting { position: fixed; left: 0; top: 0; z-index: 58; opacity: 0; cursor: pointer; will-change: transform; }
+.orb-greeting .structor-orb { display: block; }
+.orb-greeting .orb-bubble {
+  position: absolute; left: calc(100% + 14px); top: 50%; translate: 0 -50%; margin: 0; padding: 10px 15px;
+  width: max-content; max-width: min(320px, calc(100vw - 110px)); border-radius: 16px; background: #fff; color: #142233;
+  font-size: 13px; line-height: 1.4; box-shadow: var(--nl-shadow-hover);
+  opacity: 0; scale: 0.9; transform-origin: left center; transition: opacity 0.25s, scale 0.35s var(--nl-ease);
+}
+.orb-greeting .orb-bubble::before {
+  content: ""; position: absolute; left: -5px; top: 50%; width: 12px; height: 12px; background: #fff;
+  border-radius: 2px; transform: translateY(-50%) rotate(45deg);
+}
+.orb-greeting.phase-greet .orb-bubble { opacity: 1; scale: 1; }
+
+/* Reduced motion: no entrance, no placeholder (it would otherwise stay over the tiles), no slide. */
+.new-look.motion-off [data-screen="turnover"] .todo-status-summary > div::after { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .new-look [data-screen] *, .new-look .ask-panel { animation: none !important; }
+  .new-look [data-screen="turnover"] .todo-status-summary > div::after { display: none; }
+  .new-look .product-main { transition: none !important; }
+}

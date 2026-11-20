@@ -35,6 +35,8 @@ import { PageVoiceFeedback } from "./ui/voice-feedback";
 import { modelViewForScreen } from "../lib/model";
 import { DEFAULT_QUANTITY_FILTERS, type ModelInspection, type ModelQuantityFilters } from "./ui/model-quantity-rows";
 import "./ui/product.css";
+import { OrbGreeting } from "./ui/orb-greeting";
+import "./ui/new-look.css";
 import dynamic from "next/dynamic";
 const ModelStudio = dynamic(() => import("./ui/model-studio"), { ssr: false, loading: () => <div className="ui-empty">Opening model studio…</div> });
 
@@ -67,7 +69,7 @@ export default function StructorApp(){
  const props={navigate,notify,projectName:project.name};
  function inspectModel(target:ModelInspection){navigate("model");setModelInspection(target);}
  function createProject(p:Project,uploading=0){setProjects(v=>[...v,p]);selectProject(p.id);setNewProject(false);navigate("turnover");notify(uploading?`Project created. ${uploading===1?"Your file is":`${uploading} files are`} uploading in the background; keep working and we'll tell you when it's done.`:"Project created. Start with your drawings or project manual.");}
- return <div className={`product-app ${reduced?"motion-off":""}`}>
+ return <div className={`product-app new-look ${reduced?"motion-off":""}`}>
   {menuOpen&&<button className="mobile-scrim" aria-label="Close navigation" onClick={()=>setMenuOpen(false)}/>}
   <aside className={`product-sidebar ${menuOpen?"is-open":""}`}>
    <button className="product-brand" onClick={()=>navigate(projectOpen?"turnover":"projects")} aria-label={projectOpen?"Preconstruction to-do":"All projects"}><span className="product-logomark"><i/><i/><i/></span><span>structor<span className="brand-dot">.</span></span><Badge>AI</Badge></button>
@@ -79,7 +81,7 @@ export default function StructorApp(){
     <header className="product-topbar"><div className="topbar-left"><button className="ui-icon-btn mobile-menu" aria-label="Open navigation" onClick={()=>setMenuOpen(true)}><Menu size={21}/></button><span className="breadcrumb-home">{screenGroup(screen)?.label??"WORKSPACE"}</span><ChevronRight size={14}/><strong>{screenLabel(screen)}</strong></div><div className="topbar-right"><SharedStatus/><button className="top-search" aria-label="Search workspace" onClick={()=>setSearchOpen(true)}><Search size={16}/><span>Quick find</span><kbd>⌘ K</kbd></button><button className="ui-icon-btn notification-btn" aria-label="Open notifications" onClick={()=>setNotifications(v=>!v)}><Bell size={18}/><i/></button><button className="top-avatar" onClick={()=>navigate("settings")} aria-label="Open profile">MK</button></div></header>
    {notifications&&<ActivityInbox project={project} onOpen={s=>{setNotifications(false);navigate(s);}}/>}
    <div className="product-content" ref={scrollRef}>
-    <div className="page-enter" key={screen}>
+    <div className="page-enter" key={screen} data-screen={screen}>
       {activeId===SAMPLE_PROJECT_ID&&<SampleRefreshBanner refresh={sampleRefresh}/>}
      {screen==="turnover"&&<TurnoverView key={project.id} {...props} project={project} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Reviewed project information saved.");}}/>}
      {modelView&&<ModelStudio project={project} view={modelView} projectId={project.id} projectName={project.name} navigate={navigate} notify={notify} inspection={modelView==="interior"?modelInspection:null}/>}
@@ -103,7 +105,7 @@ export default function StructorApp(){
   </div>
   {toast&&<div className="product-toast" role="status"><CheckCheck size={18}/><span>{toast}</span><button onClick={()=>setToast("")} aria-label="Dismiss notification"><X size={16}/></button></div>}
    {searchOpen&&<Modal title="Find your next step" subtitle="Jump to any part of your workspace." onClose={()=>setSearchOpen(false)}><SearchBox value={search} onChange={setSearch} placeholder="Search scopes, budget, drawings…"/><div className="command-list">{searchScreens(search).map(s=><button key={s.id} onClick={()=>navigate(s.id)}><NavIcon id={s.id} name={s.icon} size={19}/>{s.label}<ArrowRight size={15}/></button>)}</div></Modal>}
-  {deleting&&<DeleteProjectModal project={deleting} by="Marcel Khoury" onClose={()=>setDeleting(null)} onDeleted={projectDeleted}/>}<div className="work-status"><UploadBanner onOpenFiles={id => { if (id && id !== activeId) selectProject(id); navigate("documents"); }}/><AiRunCard projectId={activeId}/></div>
+  {deleting&&<DeleteProjectModal project={deleting} by="Marcel Khoury" onClose={()=>setDeleting(null)} onDeleted={projectDeleted}/>}<div className="work-status"><UploadBanner onOpenFiles={id => { if (id && id !== activeId) selectProject(id); navigate("documents"); }}/><AiRunCard projectId={activeId}/></div><OrbGreeting screen={screen} reduced={reduced}/>
   <UserManual open={helpOpen} onOpen={()=>setHelpOpen(true)} onClose={()=>setHelpOpen(false)} currentScreen={screen} onNavigate={id=>{const next=resolveScreen(id);if(next&&next!==screen)navigate(next);}}/>
   <PageVoiceFeedback page={{screen,projectId:projectOpen?project.id:null,projectName:projectOpen?project.name:null}} notify={notify} onOpenPage={message=>{if(message.projectId){if(!projects.some(p=>p.id===message.projectId)){notify(`The message is for ${message.projectName}. That project is not saved in this browser.`);return false;}selectProject(message.projectId);}navigate(message.screen);return true;}}/>
    {newProject&&<Modal title="A new project starts here" subtitle="Set up the workspace, then add your RFP and project documents." wide onClose={()=>{if(!newProjectBusy)setNewProject(false);}}><ProjectForm onBusyChange={setNewProjectBusy} onCancel={()=>setNewProject(false)} onSave={createProject}/></Modal>}

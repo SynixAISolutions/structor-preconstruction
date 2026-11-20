@@ -170,9 +170,18 @@ The source is a low-resolution social video: match the feel, not exact pixels.
 
 ---
 
-## 9. Open questions
+## 9. Progress
 
-1. Orb colour: orange (proposed) or navy with an orange glow?
-2. Add the `motion` library, or stay with CSS?
-3. Which agent builds which part (UI dev / Core dev)?
+**Decided (Danial, 20 Nov):** orange orb; CSS motion only (no `motion` library); built in the session that set up the demo.
+
+**First build (20 Nov), all on `demo/new-look`:**
+- `app/app/ui/new-look.css`: the layer (cards, top bar search pill, banner, home-screen entrance, Ask Structor panel, AI run card, greeting). Scoped to `.new-look`, which the shell sets on itself and on `<html>` (Ask Structor is drawn straight into `<body>`).
+- `structor-orb.tsx/.css` (idle, happy, thinking; blinks, follows the pointer), `orb-greeting.tsx` (once a day on the to-do), `count-up.tsx` (headline numbers), `ask-starters.ts` (questions per screen).
+- Small hooks into existing files: `page.tsx` (class, `data-screen`, greeting), `ask-structor.tsx` (orb, hello, per-screen questions, page makes room), `ai-run-card.tsx` (orb instead of the sparkle), `todo-ui.tsx` and `project-health.tsx` (count-ups).
+
+**Next:** "Ask Structor about this trade" on Scopes & bid forms; a happy orb when a run finishes; the search pill offering "Ask Structor" for a typed question.
+
+## 10. Open questions
+
+1. Should PR previews also get their own database copy, so testing a preview stops touching live data?
 4. Should PR previews also get their own database copy, so testing a preview stops touching live data?
