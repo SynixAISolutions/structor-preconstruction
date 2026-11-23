@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as THREE from "three";
+import { schematicCameraFit, schematicObjectPick } from "./schematic-scene";
 import { alignSheetFrame, footprintValid, openOutline, printedSheetFrame, schematicColumns, schematicDoors, schematicGeometry, schematicGlazing, schematicPartitions, schematicRailings, schematicRoomFloors, schematicStairs, schematicWalls, sheetPoint, wallTotals } from "./schematic-geometry";
 import { moveOutlinePoint, setLevelHeight, type Point, type SchematicLevel, type SchematicModel } from "../../lib/schematic-model";
 
@@ -137,4 +138,41 @@ test("stairs arriving at a level: treads and landings hanging down to the floor 
   const area = (g: THREE.BufferGeometry) => { const p = g.getAttribute("position"), index = g.getIndex()!; let sum = 0; for (let i = 0; i < index.count; i += 3) { const [a, b, c] = [0, 1, 2].map(k => new THREE.Vector3().fromBufferAttribute(p, index.getX(i + k))); sum += new THREE.Vector3().crossVectors(b.clone().sub(a), c.clone().sub(a)).length() / 2; } return sum; };
   assert.equal(Math.round(area(floor.geometry)), Math.round(18 * 9.1 - (6.32 * 3.76 + 6.32 * 3.95 + 3.95 * 8.125)), "The room's floor less the two flights and the west landing");
   assert.equal((schematicRoomFloors([{ ...room, outline: [[195, 101.4], [209, 101.4], [209, 110.5], [195, 110.5]] }], stairs.openings)!.children[0] as THREE.Mesh).geometry.getAttribute("position").count, 4 + 4 * 2, "An opening reaching past the room's outline isn't cut from it");
+});
+
+test("sports floors use the detected room index and omit open-to-below areas", () => {
+  const outline: Point[] = [[0, 0], [90, 0], [90, 70], [0, 70]];
+  const room = { outline, area: 6300, name: "GYM (60' x 70')", number: "103", at: [45, 35] as Point };
+  const floor = schematicRoomFloors([{ ...room, open: true }, { ...room, name: "Gym storage" }, room])!;
+  assert.equal(floor.children.length, 2);
+  assert.equal(floor.children[0].userData.sportsFloor, undefined);
+  floor.children[1].userData.levelId = "L1";
+  assert.deepEqual(schematicObjectPick({ object: floor.children[1] } as THREE.Intersection), {
+    kind: "sports-floor", levelId: "L1", index: 2,
+  });
+});
+
+test("both leaves of a double door resolve past a stall to the same source door", () => {
+  const door = { a: [10, 20] as Point, b: [16, 20] as Point, width: 6, leaves: 2, hinges: [[10, 20], [16, 20]] as Point[],
+    openTo: [[10, 23], [16, 23]] as Point[], kind: "door" as const, thickness: .4 };
+  const model = schematicDoors({ ...level, height: 5, doors: [{ ...door, kind: "compartment" }, door] }, 5)!;
+  const [leaves] = model.children;
+  for (const instanceId of [0, 1]) {
+    assert.deepEqual(schematicObjectPick({ object: leaves, instanceId } as THREE.Intersection), {
+      kind: "door", levelId: "L1", index: 1,
+    });
+  }
+});
+
+test("camera fit keeps a wide plan inside a narrow viewer", () => {
+  const box = new THREE.Box3(new THREE.Vector3(0, 0, 0), new THREE.Vector3(248, 14, 108));
+  const camera = new THREE.PerspectiveCamera(42, .75, .1, 1000);
+  const fit = schematicCameraFit(box, camera.fov, camera.aspect, false);
+  camera.position.copy(fit.position);
+  camera.lookAt(fit.center);
+  camera.updateMatrixWorld();
+  for (const x of [0, 248]) for (const y of [0, 14]) for (const z of [0, 108]) {
+    const point = new THREE.Vector3(x, y, z).project(camera);
+    assert.ok(Math.abs(point.x) < .97 && Math.abs(point.y) < .97);
+  }
 });

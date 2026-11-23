@@ -1256,3 +1256,67 @@ html.new-look:has(.product-app.motion-off) .structor-orb.mood-idle .orb-eye { tr
   }
   .new-look .product-main { transition: none !important; }
 }
+
+/* Drawing-derived model viewer */
+.new-look .sm-workspace { grid-template-columns: minmax(0, 1fr) minmax(265px, 310px); gap: 18px; }
+.new-look .sm-viewer {
+  --sm-stage: #edf0f1;
+  --sm-stage-fade: #fafafa;
+  --sm-grid: rgb(86 105 130 / .12);
+  border-color: var(--nl-line);
+  border-radius: var(--nl-radius);
+  background: var(--nl-surface);
+  box-shadow: var(--nl-shadow);
+}
+html.new-look[data-structor-theme="dark"] .sm-viewer {
+  --sm-stage: #1b2230;
+  --sm-stage-fade: #272e3d;
+  --sm-grid: rgb(174 189 209 / .11);
+}
+.new-look .sm-toolbar { justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--nl-line); }
+.new-look .sm-view-caption { font-size: 13px; font-weight: 650; color: var(--nl-ink); }
+.new-look :is(.sm-view-buttons, .sm-zoom) { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.new-look .sm-zoom .ui-btn { width: 34px; min-width: 0; padding: 0; font-size: 15px !important; }
+.new-look .sm-canvas {
+  height: clamp(335px, 50dvh, 560px);
+  background: radial-gradient(circle, var(--sm-grid) 1px, transparent 1px) 0 0 / 18px 18px,
+    radial-gradient(ellipse at center, var(--sm-stage-fade), var(--sm-stage));
+}
+.new-look .sm-canvas canvas:focus-visible { outline: 2px solid var(--nl-accent-text); outline-offset: -2px; }
+.new-look .sm-options { border-top: 1px solid var(--nl-line); color: var(--nl-ink); }
+.new-look :is(.sm-options, .sm-viewer > small) { background: var(--nl-surface); }
+.new-look .sm-viewer > small { color: var(--nl-muted); }
+.new-look .sm-empty-view { margin: 0; padding: 12px 14px; color: var(--nl-muted); }
+.new-look .sm-level-heading { display: flex; gap: 8px; align-items: center; }
+.new-look .sm-level-heading > span { width: 10px; height: 10px; border-radius: 3px; }
+.new-look .sm-level-heading button { font-weight: 650; }
+.new-look .sm-levels article { border-bottom-color: var(--nl-line); }
+.new-look .sm-levels article.active { border-left-color: var(--nl-accent-text); background: var(--nl-accent-wash); }
+.new-look :is(.sm-levels article p, .sm-outline > p, .sm-studio > p) { color: var(--nl-muted); }
+.new-look :is(.sm-levels article button, .sm-source-link) { color: var(--nl-accent-text); }
+.new-look .sm-review { background: var(--nl-caution-surface); border-color: var(--nl-line); }
+.new-look :is(.sm-outline-tools select, .sm-inspector select, .sm-pick, .sm-layers, .sm-layer-list button) {
+  background: var(--nl-surface); border-color: var(--nl-line); color: var(--nl-ink);
+}
+.new-look :is(.sm-layers header strong, .sm-inspected-head strong) { color: var(--nl-ink); }
+.new-look :is(.sm-layers header span, .sm-layers-close, .sm-layer-list button span:last-child, .sm-inspected p, .sm-inspected dt) { color: var(--nl-muted); }
+.new-look :is(.sm-layers-warn, .sm-studio > [role="alert"]) { color: var(--nl-danger); }
+.new-look :is(.sm-layer-list button[aria-pressed="true"], .sm-sports-shortcuts button[aria-pressed="true"]) {
+  background: var(--nl-accent-wash); border-color: var(--nl-accent-text); color: var(--nl-accent-text);
+}
+.new-look .sm-inspector-body { display: grid; gap: 12px; padding: 0 16px 16px; }
+.new-look .sm-inspector-body > .ui-field { margin: 0; }
+.new-look .sm-sports-shortcuts { display: grid; gap: 6px; }
+.new-look .sm-sports-shortcuts .ui-btn { height: auto; min-height: 36px; padding-block: 6px; text-align: left; white-space: normal; }
+.new-look .sm-inspected { display: grid; gap: 10px; border-top: 1px solid var(--nl-line); padding-top: 12px; }
+.new-look .sm-inspected-head, .new-look .sm-inspected dl > div { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.new-look .sm-inspected dl { display: grid; gap: 5px; margin: 0; font-size: 12px; }
+.new-look .sm-inspected dd { margin: 0; text-align: right; }
+.new-look .sm-inspected p { margin: 0; font-size: 12px; }
+
+@container workspace (max-width: 720px) {
+  .new-look .sm-workspace { grid-template-columns: minmax(0, 1fr); }
+  .new-look .sm-viewer { position: relative; top: auto; }
+  .new-look .sm-canvas { height: clamp(285px, 48dvh, 420px); }
+  .new-look .sm-layers { position: static; width: auto; max-height: none; border-radius: 0; border-width: 1px 0 0; box-shadow: none; }
+}

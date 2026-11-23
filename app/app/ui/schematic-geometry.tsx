@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { isSportsFloor } from "./schematic-scene";
 import { polygonArea, type Point, type SchematicLevel } from "../../lib/schematic-model";
 import { inside, type Room } from "../../lib/room-detection";
 import { stairPieces } from "../../lib/stair-detection";
@@ -106,7 +107,7 @@ export const DEFAULT_DOOR_HEIGHT = 7;
  * up to the level's height, at the host wall's thickness; and each leaf as a thin panel, standing open.
  */
 export function schematicDoors(level: SchematicLevel, doorHeight = DEFAULT_DOOR_HEIGHT): THREE.Group | null {
-  const doors = (level.doors ?? []).filter(d => d.kind === "door");
+  const doors = (level.doors ?? []).flatMap((door, index) => door.kind === "door" ? [{ door, index }] : []);
   if (!doors.length) return null;
   const group = new THREE.Group(), place = new THREE.Object3D();
   const box = (a: Point, b: Point, base: number, height: number, thickness: number) => {
@@ -119,13 +120,20 @@ export function schematicDoors(level: SchematicLevel, doorHeight = DEFAULT_DOOR_
   const above = Math.max(level.height - doorHeight, 0);
   if (above > 0) {
     const headers = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#d8d1c4", roughness: .9 }), doors.length);
-    doors.forEach((d, i) => headers.setMatrixAt(i, box(d.a, d.b, doorHeight, above, d.thickness)));
+    doors.forEach(({ door }, i) => headers.setMatrixAt(i, box(door.a, door.b, doorHeight, above, door.thickness)));
+    headers.userData = { levelId: level.id, doors: doors.map(({ index }) => index) };
     headers.instanceMatrix.needsUpdate = true; group.add(headers);
   }
-  const leaves = doors.flatMap(d => d.hinges.map((h, i) => [h, d.openTo[i]] as [Point, Point]));
-  const panels = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#9a6b3f", roughness: .7 }), leaves.length);
-  leaves.forEach(([h, open], i) => panels.setMatrixAt(i, box(h, open, 0, doorHeight, .15)));
-  panels.instanceMatrix.needsUpdate = true; group.add(panels);
+  const leaves = doors.flatMap(({ door, index }) => door.hinges.flatMap((hinge, i) => {
+    const open = door.openTo[i];
+    return open ? [{ hinge, open, index }] : [];
+  }));
+  if (leaves.length) {
+    const panels = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#a16e46", roughness: .7 }), leaves.length);
+    leaves.forEach(({ hinge, open }, i) => panels.setMatrixAt(i, box(hinge, open, 0, doorHeight, .15)));
+    panels.userData = { levelId: level.id, doors: leaves.map(({ index }) => index) };
+    panels.instanceMatrix.needsUpdate = true; group.add(panels);
+  }
   return group;
 }
 /** Glass is drawn up to 10 ft (a storefront's usual head), or the level's height if lower. */
@@ -222,15 +230,25 @@ export function schematicStairs(level: SchematicLevel, rise: number | null): { m
  * level below has no floor; `openings` (a stair's well) are cut from the room they lie wholly inside.
  */
 export function schematicRoomFloors(rooms: Room[], openings: Point[][] = []): THREE.Group | null {
-  rooms = rooms.filter(r => !r.open);
-  if (!rooms.length) return null;
-  const group = new THREE.Group(), named = new THREE.MeshStandardMaterial({ color: "#e6cf9f", roughness: .9, side: THREE.DoubleSide }), unnamed = new THREE.MeshStandardMaterial({ color: "#cdd8d4", roughness: .9, side: THREE.DoubleSide });
-  for (const room of rooms) {
+  if (rooms.every(room => room.open)) return null;
+  const group = new THREE.Group();
+  const materials = new Map<string, THREE.MeshStandardMaterial>();
+  for (const [index, room] of rooms.entries()) {
+    if (room.open) continue;
+    const sports = isSportsFloor(room), color = sports ? "#d8af6d" : room.name ? "#e2d9cc" : "#c7d0d2";
+    let material = materials.get(color);
+    if (!material) {
+      material = new THREE.MeshStandardMaterial({ color, roughness: .9, side: THREE.DoubleSide });
+      materials.set(color, material);
+    }
     const shape = new THREE.Shape(room.outline.map(([x, y]) => new THREE.Vector2(x, y)));
     for (const hole of openings) if (hole.every(p => inside(p, room.outline))) shape.holes.push(new THREE.Path(hole.map(([x, y]) => new THREE.Vector2(x, y))));
     const geometry = new THREE.ShapeGeometry(shape);
     geometry.rotateX(-Math.PI / 2);
-    const floor = new THREE.Mesh(geometry, room.name ? named : unnamed); floor.position.y = .05; group.add(floor);
+    const floor = new THREE.Mesh(geometry, material);
+    floor.position.y = .05;
+    if (sports) floor.userData.sportsFloor = index;
+    group.add(floor);
   }
   return group;
 }

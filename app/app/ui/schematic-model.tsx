@@ -11,15 +11,17 @@ import { openStoredPdf, renderStoredPage, useProjectDocuments } from "../../lib/
 import { drawingRegister, type StoredDocument } from "../../lib/project-files";
 import type { Project } from "../../lib/projects";
 import { useLocalDraft } from "../../lib/use-local-draft";
-import { alignSheetFrame, footprintValid, openOutline, printedSheetFrame, wallLayerGroup, schematicColumns, schematicDoors, schematicGeometry, schematicGlazing, schematicPartitions, schematicRailings, schematicRoomFloors, schematicShape, schematicStairs, schematicWalls, sheetPoint, wallTotals, type SheetFrame } from "./schematic-geometry";
+import { alignSheetFrame, footprintValid, openOutline, printedSheetFrame, DEFAULT_DOOR_HEIGHT, wallLayerGroup, schematicColumns, schematicDoors, schematicGeometry, schematicGlazing, schematicPartitions, schematicRailings, schematicRoomFloors, schematicShape, schematicStairs, schematicWalls, sheetPoint, wallTotals, type SheetFrame } from "./schematic-geometry";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, PreviewNote, type ViewProps } from "./shared";
+import { SchematicObjectInspector } from "./schematic-object-inspector";
+import { CUTAWAY_HEIGHT, isSportsFloor, schematicCameraFit, schematicObjectPick, type SchematicPick, type WallPick } from "./schematic-scene";
 import { StoredDocumentViewer } from "./project-file-viewer";
 import type { Room } from "../../lib/room-detection";
 import { stairPieces } from "../../lib/stair-detection";
 import "./schematic-model.css";
 
 const colors = ["#6d9e9a", "#a193b8", "#d4a66c", "#8fa7c0", "#98ad80"];
-type CameraApi = { home: () => void; top: () => void };
+type CameraApi = { home: () => void; top: () => void; zoom: (factor: number) => void };
 function disposeGroup(group: THREE.Group) {
   group.traverse(object => {
     const drawable = object as THREE.Mesh;
@@ -38,8 +40,6 @@ function roomLabel(text: string) {
   const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
   return new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false }));
 }
-/** A wall picked in the 3D view: its level, its index in level.walls, and the layer clicked once it has opened. */
-type WallPick = { levelId: string; index: number; layer?: number };
 const NO_TYPES: PartitionType[] = [];
 /** A wall's layers, when the partition type sheet's reading gave its type some. */
 const wallLayersOf = (level: SchematicLevel, index: number, schedule: PartitionType[]) => { const type = level.walls?.[index]?.type; return (type && scheduleRow(type, schedule)?.layers) || []; };
@@ -60,29 +60,41 @@ function layerLabel(text: string, swatch: string) {
   const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
   return new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true, opacity: 0 }));
 }
-type SceneApi = { group: THREE.Group; opened: THREE.Group; fit: (top?: boolean) => void; focus: (wall: THREE.Object3D) => void; labelsTowardCamera: (wall: THREE.Object3D) => void };
-function SchematicCanvas({ model, visible, explode, pins, roof, walls, schedule, pick, onPick, camera, onError }: { model: SchematicModel; visible: string[]; explode: boolean; pins: boolean; roof: boolean; walls: boolean; schedule: PartitionType[]; pick: WallPick | null; onPick: (pick: WallPick | null) => void; camera: React.RefObject<CameraApi | null>; onError: (error: string) => void }) {
-  const host = useRef<HTMLDivElement>(null), sceneRef = useRef<SceneApi | null>(null), fitted = useRef(false);
+type SceneApi = {
+  group: THREE.Group; opened: THREE.Group; highlight: THREE.Group; pickables: THREE.Object3D[];
+  fit: (top?: boolean) => void; focus: (wall: THREE.Object3D) => void;
+  labelsTowardCamera: (wall: THREE.Object3D) => void; invalidate: () => void;
+};
+function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, roof, walls, cutaway, footprint, schedule, selection, onPick, camera, onError }: {
+  model: SchematicModel; spacesByLevel: ReadonlyMap<string, Room[]>; visible: string[]; explode: boolean; pins: boolean;
+  roof: boolean; walls: boolean; cutaway: boolean; footprint: boolean; schedule: PartitionType[];
+  selection: SchematicPick | null; onPick: (pick: SchematicPick | null) => void;
+  camera: React.RefObject<CameraApi | null>; onError: (error: string) => void;
+}) {
+  const host = useRef<HTMLDivElement>(null), sceneRef = useRef<SceneApi | null>(null), fitted = useRef("");
+  const pick = selection?.kind === "wall" ? selection : null;
   const error = useRef(onError); error.current = onError;
   const picked = useRef(onPick); picked.current = onPick;
   useEffect(() => {
     const mount = host.current!; let renderer: THREE.WebGLRenderer;
-    try { renderer = new THREE.WebGLRenderer({ antialias: true }); } catch { error.current("3D graphics are unavailable. Source drawings, heights and outline corrections remain available below."); return; }
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setClearColor("#edf2ef"); renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.domElement.tabIndex = 0; renderer.domElement.setAttribute("aria-label", "Schematic building model. Drag to rotate, scroll to zoom, click a wall to open it into its layers; Escape closes it. Use level checkboxes, room lists and the wall type list for keyboard access."); mount.append(renderer.domElement);
-    const scene = new THREE.Scene(), group = new THREE.Group(), opened = new THREE.Group(); scene.add(group, opened);
+    try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); } catch { error.current("3D graphics are unavailable. Source drawings, heights and outline corrections remain available below."); return; }
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setClearColor(0, 0); renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.domElement.tabIndex = 0; renderer.domElement.setAttribute("aria-label", "Schematic building model. Drag to orbit, scroll to zoom, and click a wall, door or sports floor to inspect it. Escape clears the selection. Use the object inspector and level controls for keyboard access."); mount.append(renderer.domElement);
+    const scene = new THREE.Scene(), group = new THREE.Group(), opened = new THREE.Group(), highlight = new THREE.Group(); scene.add(group, opened, highlight);
     // The geometry runs plan y (down the sheet) toward -z, which on its own is the building's mirror image. The group flips it
     // back, so south is toward the viewer and east to the right, as on the plan and in the prepared model.
     group.scale.z = -1; opened.scale.z = -1;
-    scene.add(new THREE.HemisphereLight("#ffffff", "#6d857d", 2.7)); const sun = new THREE.DirectionalLight("#fff4df", 2.4); sun.position.set(100, 250, 150); scene.add(sun);
+    scene.add(new THREE.HemisphereLight("#f5f7ff", "#90968e", 1.9)); const sun = new THREE.DirectionalLight("#fff7ed", 2.0); sun.position.set(100, 250, 150); scene.add(sun);
     const view = new THREE.PerspectiveCamera(FOV, 1, .1, 100000), controls = new OrbitControls(view, renderer.domElement); controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2.02;
+    let frame = 0;
+    const invalidate = () => { if (!frame) frame = requestAnimationFrame(render); };
     let tween: { start: number; fromTarget: THREE.Vector3; toTarget: THREE.Vector3; fromPos: THREE.Vector3; toPos: THREE.Vector3 } | null = null;
     controls.addEventListener("start", () => { tween = null; }); // the estimator's own drag wins over the move to a wall
     const fit = (top = false) => {
       tween = null;
       const bounds = new THREE.Box3().setFromObject(group); if (bounds.isEmpty()) return;
-      const center = bounds.getCenter(new THREE.Vector3()), size = bounds.getSize(new THREE.Vector3()), span = Math.max(size.x, size.y, size.z, 30);
-      controls.target.copy(center); view.position.copy(center).add(new THREE.Vector3(top ? 0 : span, top ? span * 2.3 : span * 1.15, top ? .01 : span * 1.2)); view.lookAt(center); controls.update();
+      const { center, position } = schematicCameraFit(bounds, FOV, view.aspect, top);
+      controls.target.copy(center); view.position.copy(position); view.lookAt(center); controls.update(); invalidate();
     };
     // A picked wall's axes in the world: its middle, along its length, across its thickness (each pointing toward the camera).
     const axes = (wall: THREE.Object3D) => {
@@ -100,106 +112,246 @@ function SchematicCanvas({ model, visible, explode, pins, roof, walls, schedule,
       // On a wide screen the layer list covers the view's right side (schematic-model.css): the wall goes in the open part.
       if (window.innerWidth > 800) { const right = target.clone().sub(toPos).cross(new THREE.Vector3(0, 1, 0)).normalize().multiplyScalar(distance * .23); target.add(right); toPos.add(right); }
       tween = { start: performance.now(), fromTarget: controls.target.clone(), toTarget: target, fromPos: view.position.clone(), toPos };
+      invalidate();
     };
     // The layer labels go to the wall's end nearer the camera (they are drawn at its -x end).
     const labelsTowardCamera = (wall: THREE.Object3D) => {
       const { end } = axes(wall);
       wall.children.forEach(part => { if (part.userData.label) { if ((part as THREE.Sprite).isSprite) part.position.x = end < 0 ? part.userData.x0 : -part.userData.x0; else part.scale.x = -end; } });
     };
-    sceneRef.current = { group, opened, fit, focus, labelsTowardCamera }; camera.current = { home: () => fit(), top: () => fit(true) };    // A click (not a drag) on a wall picks it; on an opened layer, picks that layer; on nothing, closes the wall.
+    const api: SceneApi = { group, opened, highlight, pickables: [], fit, focus, labelsTowardCamera, invalidate };
+    sceneRef.current = api;
+    camera.current = { home: () => fit(), top: () => fit(true), zoom: factor => {
+      tween = null;
+      view.position.sub(controls.target).multiplyScalar(factor).add(controls.target);
+      controls.update();
+      invalidate();
+    } };
     const ray = new THREE.Raycaster(), pointer = new THREE.Vector2();
-    const hitAt = (x: number, y: number) => {
-      const box = renderer.domElement.getBoundingClientRect(); pointer.set((x - box.left) / box.width * 2 - 1, -(y - box.top) / box.height * 2 + 1); ray.setFromCamera(pointer, view);
-      // The open wall's layers come first: the faded walls around and in front of it don't get in the way.
-      const layers: THREE.Object3D[] = [], walls: THREE.Object3D[] = [];
+    const hitAt = (x: number, y: number): SchematicPick | null => {
+      const box = renderer.domElement.getBoundingClientRect();
+      if (!box.width || !box.height) return null;
+      pointer.set((x - box.left) / box.width * 2 - 1, -(y - box.top) / box.height * 2 + 1);
+      ray.setFromCamera(pointer, view);
+      const layers: THREE.Object3D[] = [];
       opened.traverse(o => { if (o.userData.layer !== undefined || o.userData.whole) layers.push(o); });
-      group.traverse(o => { if (o.userData.walls) walls.push(o); });
-      return ray.intersectObjects(layers, false)[0] ?? ray.intersectObjects(walls, false).find(h => h.instanceId !== undefined && h.instanceId !== h.object.userData.hidden) ?? null;
+      const layer = ray.intersectObjects(layers, false)[0]?.object;
+      if (layer) {
+        const wall = layer.parent?.userData.pick as WallPick | undefined;
+        if (wall) return { ...wall, layer: layer.userData.layer };
+      }
+      for (const hit of ray.intersectObjects(api.pickables, false)) {
+        const pick = schematicObjectPick(hit);
+        if (pick) return pick;
+      }
+      return null;
     };
-    let down: [number, number] | null = null, hovering = false;
+    let down: [number, number] | null = null, hoverFrame = 0;
     const onDown = (e: PointerEvent) => { down = e.button === 0 ? [e.clientX, e.clientY] : null; };
     const onUp = (e: PointerEvent) => {
-      if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5) { down = null; return; }
-      down = null; const hit = hitAt(e.clientX, e.clientY), o = hit?.object;
-      if (!o) picked.current(null);
-      else if (o.userData.whole) return; // the picked wall itself, without layers to open
-      else if (o.userData.layer !== undefined) picked.current({ ...(o.parent!.userData.pick as WallPick), layer: o.userData.layer });
-      else picked.current({ levelId: o.userData.levelId, index: o.userData.walls[hit!.instanceId!] });
+      const start = down;
+      down = null;
+      if (!start || Math.hypot(e.clientX - start[0], e.clientY - start[1]) > 5) return;
+      picked.current(hitAt(e.clientX, e.clientY));
     };
+    const onCancel = () => { down = null; };
     const onMove = (e: PointerEvent) => {
-      if (e.buttons || hovering) return; hovering = true;
-      requestAnimationFrame(() => { hovering = false; renderer.domElement.style.cursor = hitAt(e.clientX, e.clientY) ? "pointer" : ""; });
+      if (e.buttons || hoverFrame) return;
+      hoverFrame = requestAnimationFrame(() => {
+        hoverFrame = 0;
+        renderer.domElement.style.cursor = hitAt(e.clientX, e.clientY) ? "pointer" : "";
+      });
     };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") picked.current(null); };
-    renderer.domElement.addEventListener("pointerdown", onDown); renderer.domElement.addEventListener("pointerup", onUp); renderer.domElement.addEventListener("pointermove", onMove); renderer.domElement.addEventListener("keydown", onKey);
-    const observer = new ResizeObserver(() => { const width = mount.clientWidth, height = mount.clientHeight; if (!width || !height) return; renderer.setSize(width, height); view.aspect = width / height; view.updateProjectionMatrix(); }); observer.observe(mount);
-    let frame = 0; const render = () => {
-      frame = requestAnimationFrame(render); const now = performance.now();
-      if (tween) { const k = ease(Math.min(1, (now - tween.start) / OPEN_TIME)); controls.target.lerpVectors(tween.fromTarget, tween.toTarget, k); view.position.lerpVectors(tween.fromPos, tween.toPos, k); if (k >= 1) tween = null; }
+    renderer.domElement.addEventListener("pointerdown", onDown);
+    renderer.domElement.addEventListener("pointerup", onUp);
+    renderer.domElement.addEventListener("pointercancel", onCancel);
+    renderer.domElement.addEventListener("pointermove", onMove);
+    renderer.domElement.addEventListener("keydown", onKey);
+
+    const resize = () => {
+      const width = mount.clientWidth, height = mount.clientHeight;
+      if (!width || !height) return;
+      renderer.setSize(width, height, false);
+      view.aspect = width / height;
+      view.updateProjectionMatrix();
+      invalidate();
+    };
+    const observer = new ResizeObserver(resize);
+    observer.observe(mount);
+    resize();
+    controls.addEventListener("change", invalidate);
+
+    function render(now: number) {
+      frame = 0;
+      if (tween) {
+        const k = ease(Math.min(1, (now - tween.start) / OPEN_TIME));
+        controls.target.lerpVectors(tween.fromTarget, tween.toTarget, k);
+        view.position.lerpVectors(tween.fromPos, tween.toPos, k);
+        if (k >= 1) tween = null;
+      }
+      let opening = false;
       opened.children.forEach(wall => {
-        const t = Math.min(1, Math.max(0, (now - wall.userData.start - OPEN_DELAY) / OPEN_TIME)), k = ease(t), labels = Math.min(1, Math.max(0, (t - .55) / .45));
+        const t = Math.min(1, Math.max(0, (now - wall.userData.start - OPEN_DELAY) / OPEN_TIME));
+        const k = ease(t), labels = Math.min(1, Math.max(0, (t - .55) / .45));
+        opening ||= t < 1;
         wall.children.forEach(part => {
           if (part.userData.closed !== undefined) part.position.z = part.userData.closed + (part.userData.opened - part.userData.closed) * k;
           if (part.userData.label) ((part as THREE.Sprite | THREE.Line).material as THREE.Material).opacity = labels;
         });
       });
-      controls.update(); renderer.render(scene, view);
-    }; render();
+      controls.update();
+      renderer.render(scene, view);
+      if (tween || opening) invalidate();
+    }
+    invalidate();
     return () => {
-      cancelAnimationFrame(frame); observer.disconnect(); controls.dispose();
-      renderer.domElement.removeEventListener("pointerdown", onDown); renderer.domElement.removeEventListener("pointerup", onUp); renderer.domElement.removeEventListener("pointermove", onMove); renderer.domElement.removeEventListener("keydown", onKey);
-      disposeGroup(group); disposeGroup(opened); renderer.dispose(); renderer.domElement.remove(); sceneRef.current = null; camera.current = null;
-      fitted.current = false; // a new view (React's development double start) fits the model again
+      cancelAnimationFrame(frame);
+      cancelAnimationFrame(hoverFrame);
+      observer.disconnect();
+      controls.removeEventListener("change", invalidate);
+      controls.dispose();
+      renderer.domElement.removeEventListener("pointerdown", onDown);
+      renderer.domElement.removeEventListener("pointerup", onUp);
+      renderer.domElement.removeEventListener("pointercancel", onCancel);
+      renderer.domElement.removeEventListener("pointermove", onMove);
+      renderer.domElement.removeEventListener("keydown", onKey);
+      disposeGroup(group); disposeGroup(opened); disposeGroup(highlight);
+      renderer.dispose();
+      renderer.domElement.remove();
+      sceneRef.current = null;
+      camera.current = null;
+      fitted.current = "";
     };
   }, []);
+
   useEffect(() => {
-    const current = sceneRef.current; if (!current) return; disposeGroup(current.group);
+    const current = sceneRef.current;
+    if (!current) return;
+    disposeGroup(current.group);
+    current.pickables = [];
     const errors: string[] = [];
-      model.levels.forEach((level, index) => {
-        if (!visible.includes(level.id)) return;
-        try {
-        const base = levelBase(model, level, explode), color = colors[index % colors.length];
-        // With walls read from the drawing, the mass turns into a light envelope so the walls inside show.
-        const wallMesh = walls ? schematicWalls(level) : null;
-        if (wallMesh) wallMesh.userData.levelId = level.id;
-        const body = new THREE.Mesh(schematicGeometry(level), new THREE.MeshStandardMaterial({ color, transparent: true, opacity: wallMesh ? .2 : .72, roughness: .8, side: THREE.DoubleSide, depthWrite: !wallMesh })); body.position.y = base; current.group.add(body);
-        if (wallMesh) { wallMesh.position.y = base; current.group.add(wallMesh); }
-        const glassMesh = walls ? schematicGlazing(level) : null;
-        if (glassMesh) { glassMesh.position.y = base; current.group.add(glassMesh); }
-        const partitionMesh = walls ? schematicPartitions(level) : null;
-        if (partitionMesh) { partitionMesh.position.y = base; current.group.add(partitionMesh); }
-        const railingMesh = walls ? schematicRailings(level) : null;
-        if (railingMesh) { railingMesh.position.y = base; current.group.add(railingMesh); }
-        const columnMesh = walls ? schematicColumns(level) : null;
-        if (columnMesh) { columnMesh.position.y = base; current.group.add(columnMesh); }
-        const doorMesh = walls ? schematicDoors(level) : null;
-        if (doorMesh) { doorMesh.position.y = base; current.group.add(doorMesh); }
+    for (const [index, level] of model.levels.entries()) {
+      if (!visible.includes(level.id)) continue;
+      const scope = new THREE.Group();
+      scope.position.y = levelBase(model, level, explode);
+      try {
+        const display = cutaway ? { ...level, height: Math.min(level.height, CUTAWAY_HEIGHT) } : level;
+        const spaces = spacesByLevel.get(level.id) ?? [];
+        const wallMesh = walls ? schematicWalls(display) : null;
+        if (wallMesh) { wallMesh.userData.levelId = level.id; scope.add(wallMesh); }
+        const doorMesh = walls ? schematicDoors(display, Math.min(display.height, DEFAULT_DOOR_HEIGHT)) : null;
+        for (const mesh of [
+          doorMesh, walls ? schematicGlazing(display) : null, walls ? schematicPartitions(display) : null,
+          walls ? schematicRailings(display) : null, walls ? schematicColumns(display) : null,
+        ]) if (mesh) scope.add(mesh);
         const stairs = walls ? schematicStairs(level, stairRise(model, level)) : null;
-        if (stairs) { stairs.mesh.position.y = base; current.group.add(stairs.mesh); }
-        const spaces = levelSpaces(level), floors = walls ? schematicRoomFloors(spaces, stairs?.openings) : null;
-        if (floors) { floors.position.y = base; current.group.add(floors); }
-        const edges = new THREE.LineSegments(new THREE.EdgesGeometry(body.geometry, 25), new THREE.LineBasicMaterial({ color: "#496361", transparent: true, opacity: .7 })); edges.position.y = base; current.group.add(edges);
-        if (roof) { const geometry = new THREE.ShapeGeometry(schematicShape(level)); geometry.rotateX(-Math.PI / 2); const cap = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: "#4f6c68", transparent: true, opacity: .5, side: THREE.DoubleSide })); cap.position.y = base + level.height + .08; current.group.add(cap); }
-        if (pins) level.rooms.forEach(room => {
-          const pin = new THREE.Mesh(new THREE.SphereGeometry(.55, 8, 8), new THREE.MeshBasicMaterial({ color: "#244f90", depthTest: false })); pin.position.set(room.at[0], base + level.height + .8, -room.at[1]); current.group.add(pin);
-          const space = spaces.find(s => s.name === room.name && s.number === room.number), label = roomLabel(`${room.number} ${room.name}`.trim() + (space ? ` · ${space.area.toLocaleString()} SF` : "")); label.position.copy(pin.position).add(new THREE.Vector3(0, 2.5, 0)); label.scale.set(28, 3.94, 1); current.group.add(label);
+        if (stairs) scope.add(stairs.mesh);
+        const floors = walls ? schematicRoomFloors(spaces, stairs?.openings) : null;
+        if (floors) {
+          floors.children.forEach(floor => { floor.userData.levelId = level.id; });
+          scope.add(floors);
+        }
+
+        // Only an outline-only reading needs an extruded footprint. It would obscure the real rooms of a detailed level.
+        const outlineOnly = !level.walls?.some(wall => !wall.excluded) && !doorMesh && !floors;
+        if (outlineOnly) {
+          const body = new THREE.Mesh(schematicGeometry(level), new THREE.MeshStandardMaterial({
+            color: colors[index % colors.length], transparent: true, opacity: .3, roughness: .86, depthWrite: false,
+          }));
+          scope.add(body);
+        }
+        if (footprint || !floors) {
+          const plane = new THREE.ShapeGeometry(schematicShape(level));
+          plane.rotateX(-Math.PI / 2);
+          const edges = new THREE.LineSegments(new THREE.EdgesGeometry(plane), new THREE.LineBasicMaterial({
+            color: "#7290a2", transparent: true, opacity: .7,
+          }));
+          plane.dispose();
+          edges.position.y = .08;
+          scope.add(edges);
+        }
+        if (roof) {
+          const geometry = new THREE.ShapeGeometry(schematicShape(level));
+          geometry.rotateX(-Math.PI / 2);
+          const cap = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
+            color: "#98a7b4", transparent: true, opacity: .22, side: THREE.DoubleSide, depthWrite: false,
+          }));
+          cap.position.y = level.height + .08;
+          scope.add(cap);
+        }
+        if (walls) for (const room of level.rooms) {
+          const space = spaces.find(s => s.name === room.name && s.number === room.number);
+          const sports = space && isSportsFloor(space);
+          if (!pins && !sports) continue;
+          const label = roomLabel([room.number, room.name].filter(Boolean).join(" ") + (space ? " · " + space.area.toLocaleString() + " SF" : ""));
+          label.position.set(room.at[0], sports ? .9 : display.height + 1.7, -room.at[1]);
+          label.scale.set(sports ? 30 : 22, sports ? 4.2 : 3.1, 1);
+          scope.add(label);
+        }
+        scope.traverse(object => {
+          const data = object.userData;
+          if (data.walls || data.doors || data.sportsFloor !== undefined) current.pickables.push(object);
         });
-        } catch (failure) { errors.push(failure instanceof Error ? failure.message : "The schematic could not be drawn."); }
-      });
-      error.current(errors.join(" ")); if (!fitted.current && current.group.children.length) { current.fit(); fitted.current = true; }
-  }, [model, visible, explode, pins, roof, walls]);
+        current.group.add(scope);
+      } catch (failure) {
+        disposeGroup(scope);
+        errors.push(failure instanceof Error ? failure.message : "The schematic could not be drawn.");
+      }
+    }
+    error.current(errors.join(" "));
+    const fitKey = [model.builtAt, explode, ...visible].join(":");
+    if (current.group.children.length && fitted.current !== fitKey) {
+      current.fit();
+      fitted.current = fitKey;
+    }
+    current.invalidate();
+  }, [model, spacesByLevel, visible, explode, pins, roof, walls, cutaway, footprint]);
+
+  useEffect(() => {
+    const current = sceneRef.current;
+    if (!current) return;
+    disposeGroup(current.highlight);
+    if (selection && selection.kind !== "wall") {
+      current.group.updateWorldMatrix(true, true);
+      const matrix = new THREE.Matrix4();
+      for (const object of current.pickables) {
+        if (object.userData.levelId !== selection.levelId) continue;
+        const mesh = object as THREE.Mesh | THREE.InstancedMesh;
+        const addOutline = (transform: THREE.Matrix4) => {
+          const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({ color: "#608cff" }));
+          edges.matrix.copy(transform);
+          edges.matrixAutoUpdate = false;
+          current.highlight.add(edges);
+        };
+        if (selection.kind === "door" && mesh instanceof THREE.InstancedMesh) {
+          (object.userData.doors as number[] | undefined)?.forEach((door, i) => {
+            if (door === selection.index) {
+              mesh.getMatrixAt(i, matrix);
+              addOutline(new THREE.Matrix4().multiplyMatrices(mesh.matrixWorld, matrix));
+            }
+          });
+        } else if (selection.kind === "sports-floor" && object.userData.sportsFloor === selection.index) {
+          addOutline(mesh.matrixWorld);
+        }
+      }
+    }
+    current.invalidate();
+  }, [model, selection, visible, explode, pins, roof, walls, cutaway, footprint, spacesByLevel]);
+
   // The picked wall: hidden in the model and drawn again as its layers, which open apart (once per wall: a redraw of the model
   // shows them already open). The camera turns to it the first time.
   const shown = useRef(""), hold = useRef({ mesh: null as THREE.InstancedMesh | null, instance: -1, matrix: new THREE.Matrix4() }).current;
   useEffect(() => {
     const current = sceneRef.current; if (!current) return;
     disposeGroup(current.opened);
+    current.invalidate();
     const level = pick ? model.levels.find(l => l.id === pick.levelId) : undefined, wall = level && pick ? level.walls?.[pick.index] : undefined;
     if (!pick || !level || !wall || wall.excluded || !walls || !visible.includes(level.id)) { shown.current = ""; return; }
     const layers = wallLayersOf(level, pick.index, schedule), opened = wallLayerGroup(level, pick.index, layers);
     if (!opened) return;
     opened.position.y += levelBase(model, level, explode);
-    opened.userData.pick = { levelId: level.id, index: pick.index };
+    opened.userData.pick = { kind: "wall", levelId: level.id, index: pick.index } satisfies WallPick;
     let instances: THREE.InstancedMesh | null = null;
     current.group.traverse(o => { if (o.userData.levelId === level.id && o.userData.walls) instances = o as THREE.InstancedMesh; });
     const mesh = instances as THREE.InstancedMesh | null, instance = mesh ? (mesh.userData.walls as number[]).indexOf(pick.index) : -1;
@@ -237,11 +389,12 @@ function SchematicCanvas({ model, visible, explode, pins, roof, walls, schedule,
       faded.forEach(f => { f.material.opacity = f.opacity; f.material.transparent = f.transparent; f.material.depthWrite = f.depthWrite; f.material.needsUpdate = true; });
       hiddenLabels.forEach(o => { o.visible = true; });
     };
-  }, [model, visible, explode, pins, roof, walls, schedule, pick?.levelId, pick?.index, pick?.layer]);
+  }, [model, visible, explode, pins, roof, walls, cutaway, footprint, schedule, pick?.levelId, pick?.index, pick?.layer]);
   return <div className="sm-canvas" ref={host}/>;
 }
 
 type PlanPick = { kind: "wall" | "door" | "glazing" | "partition" | "column"; index: number };
+type PlanFocus = { levelId: string; kind: "wall" | "door"; index: number; at: number };
 type Change = { type?: string; excluded?: boolean };
 /** The estimator's correction of the wall, door, glass, operable partition, guardrail or column picked on the plan. */
 function PickEditor({ level, pick, types, onWall, onDoor, onGlazing, onPartition, onColumn, onClose }: { level: SchematicLevel; pick: PlanPick; types: string[]; onWall: (change: Change) => void; onDoor: (number: string) => void; onGlazing: (change: Change) => void; onPartition: (excluded: boolean) => void; onColumn: (excluded: boolean) => void; onClose: () => void }) {
@@ -271,21 +424,23 @@ function PickEditor({ level, pick, types, onWall, onDoor, onGlazing, onPartition
   </form>;
 }
 
-function OutlineSheet({ focus, onPickWall, level, spaces, doc, frameKey, frames, saveFrame, onMove, editable, types, onEditWall, onEditDoor, onEditGlazing, onEditPartition, onEditColumn }: { /** A wall to pick and bring into sight, from "Show on the plan" in 3D. */ focus?: { index: number; at: number } | null; /** A wall picked on the plan, to open in 3D too. */ onPickWall?: (index: number) => void; level: SchematicLevel; spaces: Room[]; doc: StoredDocument; frameKey: string; frames: Record<string, SheetFrame>; saveFrame: (key: string, frame: SheetFrame) => void; onMove: (index: number, point: Point) => void; editable: boolean; types: string[]; onEditWall: (index: number, change: Change) => void; onEditDoor: (index: number, number: string) => void; onEditGlazing: (index: number, change: Change) => void; onEditPartition: (index: number, excluded: boolean) => void; onEditColumn: (index: number, excluded: boolean) => void }) {
+function OutlineSheet({ focus, onPickWall, level, spaces, doc, frameKey, frames, saveFrame, onMove, editable, types, onEditWall, onEditDoor, onEditGlazing, onEditPartition, onEditColumn }: { /** An opening or wall to locate in the source plan. */ focus?: PlanFocus | null; /** A wall picked on the plan, to open in 3D too. */ onPickWall?: (index: number) => void; level: SchematicLevel; spaces: Room[]; doc: StoredDocument; frameKey: string; frames: Record<string, SheetFrame>; saveFrame: (key: string, frame: SheetFrame) => void; onMove: (index: number, point: Point) => void; editable: boolean; types: string[]; onEditWall: (index: number, change: Change) => void; onEditDoor: (index: number, number: string) => void; onEditGlazing: (index: number, change: Change) => void; onEditPartition: (index: number, excluded: boolean) => void; onEditColumn: (index: number, excluded: boolean) => void }) {
   const [pick, setPick] = useState<PlanPick | null>(null);
   const [page, setPage] = useState<{ image: string; frame: SheetFrame | null } | null>(null), [error, setError] = useState("");
   const [aligning, setAligning] = useState(false), [drag, setDrag] = useState<{ index: number; point: Point } | null>(null), [corner, setCorner] = useState(0);
   const [coordinates, setCoordinates] = useState<Point>(level.outline[0]), [zoom, setZoom] = useState(1), [showWalls, setShowWalls] = useState(true);
   const svg = useRef<SVGSVGElement>(null), scroller = useRef<HTMLDivElement>(null), image = useRef<HTMLImageElement>(null);
-  // "Show on the plan" from the 3D view: the wall picked here too, zoomed in and scrolled to the middle of the view.
-  useEffect(() => { if (focus && level.walls?.[focus.index]) { setPick({ kind: "wall", index: focus.index }); setShowWalls(true); setZoom(z => Math.max(z, 2)); } }, [focus?.at]);
+  const focusedElement = focus && (focus.kind === "door" ? level.doors?.[focus.index] : level.walls?.[focus.index]);
   useEffect(() => {
-    const wall = focus ? level.walls?.[focus.index] : undefined, sheet = frames[frameKey] ?? page?.frame;
-    if (!wall || !sheet || !image.current) return;
+    if (focus && focusedElement) { setPick({ kind: focus.kind, index: focus.index }); setShowWalls(true); setZoom(z => Math.max(z, 2)); }
+  }, [focus?.at]);
+  useEffect(() => {
+    const sheet = frames[frameKey] ?? page?.frame;
+    if (!focusedElement || !sheet || !image.current) return;
     let live = true;
     image.current.decode().catch(() => undefined).then(() => requestAnimationFrame(() => {
       const box = scroller.current; if (!live || !box) return;
-      const x = (wall.a[0] + wall.b[0]) / 2 / sheet.width, y = (wall.a[1] + wall.b[1]) / 2 / sheet.height;
+      const x = (focusedElement.a[0] + focusedElement.b[0]) / 2 / sheet.width, y = (focusedElement.a[1] + focusedElement.b[1]) / 2 / sheet.height;
       box.scrollTo({ left: x * box.scrollWidth - box.clientWidth / 2, top: y * box.scrollHeight - box.clientHeight / 2, behavior: "smooth" });
     }));
     return () => { live = false; };
@@ -399,25 +554,41 @@ function WallLayersCard({ level, index, layer, schedule, sheet, reading, onLayer
 export function SchematicModelStudio({ project, navigate, notify }: { project: Project } & Pick<ViewProps, "navigate" | "notify">) {
   const { model, run } = useSchematicModel(), { documents, ready } = useProjectDocuments();
   const [pending, setPending] = useState<SchematicModel | null>(null), [busy, setBusy] = useState(false), [progress, setProgress] = useState(""), [error, setError] = useState(""), [graphicsError, setGraphicsError] = useState("");
-  const [selected, setSelected] = useState(""), [hidden, setHidden] = useState<string[]>([]), [explode, setExplode] = useState(false), [pins, setPins] = useState(true), [roof, setRoof] = useState(true), [walls, setWalls] = useState(true), [showOutline, setShowOutline] = useState(false), [source, setSource] = useState<{ documentId: string; sheet: string; page: number; label: string } | null>(null);
+  const [selected, setSelected] = useState(""), [shown, setShown] = useState<string[] | null>(null), [explode, setExplode] = useState(false), [pins, setPins] = useState(false), [roof, setRoof] = useState(false), [walls, setWalls] = useState(true), [showOutline, setShowOutline] = useState(false), [source, setSource] = useState<{ documentId: string; sheet: string; page: number; label: string } | null>(null);
+  const [cutaway, setCutaway] = useState(true), [footprint, setFootprint] = useState(false);
   const [untaggedType, setUntaggedType] = useState("");
   const [height, setHeight] = useState("14"), [frames, setFrames] = useLocalDraft<Record<string, SheetFrame>>("schematic-sheet-frames", {});
-  const [wallPick, setWallPick] = useState<WallPick | null>(null), [planFocus, setPlanFocus] = useState<{ index: number; at: number } | null>(null), [readingLayers, setReadingLayers] = useState(false);
+  const [selection, setSelection] = useState<SchematicPick | null>(null), [planFocus, setPlanFocus] = useState<PlanFocus | null>(null), [readingLayers, setReadingLayers] = useState(false);
   const abort = useRef<AbortController | null>(null), layersAbort = useRef<AbortController | null>(null), camera = useRef<CameraApi | null>(null), viewer = useRef<HTMLDivElement>(null), outlinePanel = useRef<HTMLDivElement>(null);
   const current = pending ?? model, level = current?.levels.find(l => l.id === selected) ?? current?.levels[0];
-  const visible = useMemo(() => current?.levels.filter(l => !hidden.includes(l.id)).map(l => l.id) ?? [], [current, hidden]);
-  const spaces = useMemo(() => level ? levelSpaces(level) : [], [level]);
+  const firstLevelId = current?.levels[0]?.id;
+  const visible = useMemo(() => current?.levels.filter(l => shown ? shown.includes(l.id) : l.id === firstLevelId).map(l => l.id) ?? [], [current, shown, firstLevelId]);
+  const spacesByLevel = useMemo(() => new Map(current?.levels.map(item => [item.id, levelSpaces(item)])), [current]);
+  const spaces = (level && spacesByLevel.get(level.id)) ?? [];
+  const activePick = walls && selection && visible.includes(selection.levelId) ? selection : null;
+  const wallPick = activePick?.kind === "wall" ? activePick : null;
   const doc = documents.find(d => d.id === level?.source.documentId), sourceDoc = documents.find(d => d.id === source?.documentId);
   const register = drawingRegister(documents), section = heightSheet(register);
   const schedule = current?.partitionTypes ?? NO_TYPES, typeSheet = partitionTypeSheet(register), typeSheetName = current?.partitionSheet ?? typeSheet?.sheet;
   const typeSheetRow = register.find(r => r.sheet === typeSheetName), pickLevel = wallPick ? current?.levels.find(l => l.id === wallPick.levelId) : undefined;
   useEffect(() => () => { abort.current?.abort(); layersAbort.current?.abort(); }, []);
-  useEffect(() => { setWallPick(null); }, [current?.builtAt]);
+  useEffect(() => { setSelection(null); setPlanFocus(null); }, [current?.builtAt]);
   useEffect(() => { if (planFocus) outlinePanel.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [planFocus]);
-  /** Opens a wall in 3D from the lists (the keyboard's way in): its level and the walls shown, the view in sight. */
+  function inspect(pick: SchematicPick) {
+    setWalls(true);
+    if (!visible.includes(pick.levelId)) { setShown([pick.levelId]); setExplode(false); }
+    if (planFocus?.levelId !== pick.levelId) setPlanFocus(null);
+    setSelected(pick.levelId);
+    setSelection(pick);
+  }
   function openWall(levelId: string, index: number) {
-    setWalls(true); setHidden(ids => ids.filter(id => id !== levelId)); setSelected(levelId); setWallPick({ levelId, index });
-    viewer.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    inspect({ kind: "wall", levelId, index });
+    viewer.current?.scrollIntoView({ block: "nearest" });
+  }
+  function showOnPlan(levelId: string, kind: PlanFocus["kind"], index: number) {
+    setSelected(levelId);
+    setShowOutline(true);
+    setPlanFocus({ levelId, kind, index, at: Date.now() });
   }
   async function readLayers() {
     const control = new AbortController(); layersAbort.current = control; setReadingLayers(true); setError("");
@@ -433,19 +604,71 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
   useEffect(() => { setHeight(String(level?.height ?? 14)); }, [level?.id, level?.height]);
   async function build() {
     const control = new AbortController(); abort.current = control; setBusy(true); setError(""); setProgress("Finding floor plans…");
-    try { const built = await buildSchematicModel({ documents, project, signal: control.signal, onProgress: text => { if (!control.signal.aborted) setProgress(text); } }); if (!control.signal.aborted) { setPending(built); setHidden([]); setSelected(built.levels[0]?.id ?? ""); setProgress("Review the schematic and its source sheets before saving."); } }
+    try { const built = await buildSchematicModel({ documents, project, signal: control.signal, onProgress: text => { if (!control.signal.aborted) setProgress(text); } }); if (!control.signal.aborted) { setPending(built); setShown(null); setSelected(built.levels[0]?.id ?? ""); setProgress("Review the schematic and its source sheets before saving."); } }
     catch (failure) { if (!control.signal.aborted) setError(failure instanceof Error ? failure.message : "The schematic model could not be built."); }
     finally { if (abort.current === control) { setBusy(false); abort.current = null; } }
   }
   function change(action: (m: SchematicModel) => SchematicModel) { if (pending) { try { setPending(action(pending)); setError(""); } catch (failure) { setError(failure instanceof Error ? failure.message : "The preview could not be corrected."); } return; } const message = run(m => { if (!m) throw new Error("Build and accept a schematic first."); return action(m); }); setError(message ?? ""); }
-  return <div className="sm-studio"><PageHeader eyebrow={`${project.name} / Model studio`} title="Schematic model" description="A draft building mass from your floor plans and section heights." actions={<><Button onClick={() => navigate("documents")}>Project files</Button>{busy ? <Button onClick={() => { abort.current?.abort(); setProgress("Build stopped. The saved model is retained."); }}>Stop building</Button> : <Button disabled={!ready || !documents.length} variant="primary" onClick={build}>{model || pending ? "Rebuild schematic model" : "Build a schematic model from the drawings"}</Button>}</>}/>
+  return <div className="sm-studio"><PageHeader eyebrow={`${project.name} / Model studio`} title="Schematic model" description="Inspect the rooms, openings and levels read from your floor plans." actions={<><Button onClick={() => navigate("documents")}>Project files</Button>{busy ? <Button onClick={() => { abort.current?.abort(); setProgress("Build stopped. The saved model is retained."); }}>Stop building</Button> : <Button disabled={!ready || !documents.length} variant="primary" onClick={build}>{model || pending ? "Rebuild schematic model" : "Build a schematic model from the drawings"}</Button>}</>}/>
     <PreviewNote><strong>Schematic: not measured</strong> · Check the footprint, scale and heights. Room names are read by AI; check them.</PreviewNote>
     {(busy || progress) && <p role="status">{progress}</p>}{error && <p role="alert">{error}</p>}
     {pending && <div className="sm-review"><Badge tone="amber">AI preview · Not saved</Badge><Button disabled={busy} variant="primary" onClick={() => { if (pending.levels.some(l => !footprintValid(l.outline) || !Number.isFinite(l.height) || l.height < 6 || l.height > 60)) { setError("Correct crossing or collapsed outlines and heights outside 6 to 60 ft before saving."); return; } const message = run(() => pending); if (message) setError(message); else { setPending(null); setProgress(""); notify("Schematic saved. Check its source sheets and correct the outline or heights as needed."); } }}>Use this schematic model</Button><Button onClick={() => { setPending(null); setProgress(""); }}>Discard preview</Button></div>}
     {!current ? <Panel><Empty title={documents.length ? "Ready to read your floor plans" : "Upload floor plans and building sections"} description="Architectural floor-plan titles identify levels. A section or elevation sheet provides floor heights. Missing scales or heights are labelled as assumptions." action={<Button onClick={() => navigate("documents")}>Open project files</Button>}/></Panel> : <>
-      <div className="sm-workspace"><div className="sm-viewer" ref={viewer}><div className="sm-toolbar"><Badge tone="amber">Schematic: not measured</Badge><Button onClick={() => camera.current?.home()}>Reset view</Button><Button onClick={() => camera.current?.top()}>Top view</Button></div>{!visible.length && <p role="status">No levels shown. Use the level checkboxes to show the model.</p>}<div className="sm-canvas-wrap"><SchematicCanvas model={current} visible={visible} explode={explode} pins={pins} roof={roof} walls={walls} schedule={schedule} pick={wallPick} onPick={p => { setWallPick(p); if (p) setSelected(p.levelId); }} camera={camera} onError={setGraphicsError}/>
-        {wallPick && pickLevel && <WallLayersCard key={`${pickLevel.id}:${wallPick.index}`} level={pickLevel} index={wallPick.index} layer={wallPick.layer} schedule={schedule} sheet={typeSheetName} reading={readingLayers} onLayer={layer => setWallPick({ ...wallPick, layer: wallPick.layer === layer ? undefined : layer })} onClose={() => setWallPick(null)} onShowPlan={() => { setSelected(pickLevel.id); setShowOutline(true); setPlanFocus({ index: wallPick.index, at: Date.now() }); }} onOpenSheet={typeSheetRow ? () => setSource({ documentId: typeSheetRow.doc.id, sheet: typeSheetRow.sheet, page: typeSheetRow.page, label: "Partition types" }) : undefined} onRead={busy || !typeSheet ? undefined : readLayers}/>}</div>{graphicsError && <p role="alert">{graphicsError}</p>}<div className="sm-options"><label><input type="checkbox" checked={explode} onChange={e => setExplode(e.target.checked)}/>Explode levels</label><label><input type="checkbox" checked={pins} onChange={e => setPins(e.target.checked)}/>Room pins and labels</label><label><input type="checkbox" checked={roof} onChange={e => setRoof(e.target.checked)}/>Roof caps</label><label><input type="checkbox" checked={walls} onChange={e => setWalls(e.target.checked)}/>Walls and doors read from the plans</label></div><small>Click a wall to open it into its layers · Drag to orbit · Scroll to zoom · Right-drag to pan · Feet</small></div>
-      <aside className="sm-levels"><Panel title="Levels and sources" subtitle={`${current.levels.length} levels · ${new Date(current.builtAt).toLocaleDateString()}`}>{current.levels.map((l, i) => <article key={l.id} className={level?.id === l.id ? "active" : ""}><label><input type="checkbox" aria-label={`Show ${l.name}`} checked={!hidden.includes(l.id)} onChange={e => setHidden(ids => e.target.checked ? ids.filter(id => id !== l.id) : [...ids, l.id])}/><span style={{ background: colors[i % colors.length] }}/><button onClick={() => setSelected(l.id)}>{l.name}</button></label><p>Elevation {l.elevation} ft · Height {l.height} ft<br/>{Math.round(polygonArea(l.outline)).toLocaleString()} SF footprint · {l.rooms.length} rooms<br/>{(t => t ? `${t.count.toLocaleString()} walls · ${t.feet.toLocaleString()} ft of wall${t.doors === null ? "" : ` · ${t.doors} doors${t.compartments ? ` (+${t.compartments} toilet-stall doors)` : ""}`}${t.glassFeet === null ? "" : ` · ${t.glassFeet.toLocaleString()} ft of glass`}${t.partitionFeet ? ` · ${t.partitionFeet.toLocaleString()} ft of operable partition` : ""}${t.railingFeet ? ` · ${t.railingFeet.toLocaleString()} ft of guardrail` : ""}${t.columns ? ` · ${t.columns} columns` : ""}${t.stairs ? ` · ${t.stairs} ${t.stairs === 1 ? "stair" : "stairs"} up from the level below` : ""}` : "Rebuild to read walls from the plan's lines")(wallTotals(l))}</p><p>{l.sizing}</p><button className="sm-source-link" onClick={() => { setSelected(l.id); setSource({ ...l.source, label: l.name }); }}>{l.source.sheet} · PDF page {l.source.page}</button></article>)}</Panel>
+      <div className="sm-workspace">
+        <div className="sm-viewer" ref={viewer}>
+          <div className="sm-toolbar">
+            <span className="sm-view-caption">{visible.length === 1 ? current.levels.find(item => item.id === visible[0])?.name : "Drawing model"}</span>
+            <div className="sm-view-buttons">
+              <Button onClick={() => { setSelection(null); camera.current?.home(); }}>Reset view</Button>
+              <Button onClick={() => { setSelection(null); camera.current?.top(); }}>Top view</Button>
+              <div className="sm-zoom" role="group" aria-label="Model zoom">
+                <button type="button" className="ui-btn secondary" aria-label="Zoom out" onClick={() => camera.current?.zoom(1.2)}>−</button>
+                <button type="button" className="ui-btn secondary" aria-label="Zoom in" onClick={() => camera.current?.zoom(1 / 1.2)}>+</button>
+              </div>
+            </div>
+          </div>
+          {!visible.length && <p className="sm-empty-view" role="status">Select a level to show its model.</p>}
+          <div className="sm-canvas-wrap">
+            <SchematicCanvas model={current} spacesByLevel={spacesByLevel} visible={visible} explode={explode} pins={pins}
+              roof={roof} walls={walls} cutaway={cutaway} footprint={footprint} schedule={schedule}
+              selection={activePick} onPick={pick => { setSelection(pick); if (pick) setSelected(pick.levelId); }}
+              camera={camera} onError={setGraphicsError}/>
+            {wallPick && pickLevel && <WallLayersCard key={pickLevel.id + ":" + wallPick.index} level={pickLevel} index={wallPick.index}
+              layer={wallPick.layer} schedule={schedule} sheet={typeSheetName} reading={readingLayers}
+              onLayer={layer => setSelection({ ...wallPick, layer: wallPick.layer === layer ? undefined : layer })}
+              onClose={() => setSelection(null)} onShowPlan={() => showOnPlan(pickLevel.id, "wall", wallPick.index)}
+              onOpenSheet={typeSheetRow ? () => setSource({ documentId: typeSheetRow.doc.id, sheet: typeSheetRow.sheet, page: typeSheetRow.page, label: "Partition types" }) : undefined}
+              onRead={busy || !typeSheet ? undefined : readLayers}/>}
+          </div>
+          {graphicsError && <p className="sm-empty-view" role="alert">{graphicsError}</p>}
+          <div className="sm-options" role="group" aria-label="Model display options">
+            <label><input type="checkbox" checked={cutaway} onChange={e => setCutaway(e.target.checked)}/>Cutaway walls</label>
+            <label><input type="checkbox" checked={pins} onChange={e => setPins(e.target.checked)}/>All room labels</label>
+            <label><input type="checkbox" checked={footprint} onChange={e => setFootprint(e.target.checked)}/>Footprint outline</label>
+            <label><input type="checkbox" checked={roof} onChange={e => setRoof(e.target.checked)}/>Roof caps</label>
+            <label><input type="checkbox" checked={walls} onChange={e => setWalls(e.target.checked)}/>Plan details</label>
+            {current.levels.length > 1 && <label><input type="checkbox" checked={explode} onChange={e => {
+              setExplode(e.target.checked);
+              if (e.target.checked) setShown(current.levels.map(item => item.id));
+            }}/>Explode levels</label>}
+          </div>
+          <small>Drag to orbit · Scroll to zoom · Select a wall, door or sports floor to inspect</small>
+        </div>
+        <aside className="sm-levels">
+          <SchematicObjectInspector levels={current.levels} spaces={spacesByLevel}
+            pick={activePick?.kind === "wall" ? null : activePick} canOpenPlan={item => documents.some(document => document.id === item.source.documentId)}
+            onPick={pick => {
+              inspect(pick);
+              if (pick.kind === "sports-floor") {
+                setShown([pick.levelId]); setRoof(false); setCutaway(true); setExplode(false);
+                viewer.current?.scrollIntoView({ block: "nearest" });
+              }
+            }}
+            onClose={() => setSelection(null)} onPlan={(item, pick) => {
+              if (pick.kind === "door") showOnPlan(item.id, "door", pick.index);
+              else setSource({ ...item.source, label: item.name });
+            }}/>
+          <Panel title="Levels and sources" subtitle={current.levels.length + (current.levels.length === 1 ? " level" : " levels")} action={current.levels.length > 1 && visible.length < current.levels.length ? <Button onClick={() => setShown(current.levels.map(item => item.id))}>Show all</Button> : undefined}>{current.levels.map((l, i) => <article key={l.id} className={level?.id === l.id ? "active" : ""}><div className="sm-level-heading"><input type="checkbox" aria-label={"Show " + l.name} checked={visible.includes(l.id)} onChange={e => { setShown(e.target.checked ? [...visible, l.id] : visible.filter(id => id !== l.id)); if (!e.target.checked && selection?.levelId === l.id) setSelection(null); }}/><span aria-hidden="true" style={{ background: colors[i % colors.length] }}/><button type="button" onClick={() => { setSelected(l.id); setShown([l.id]); setExplode(false); setSelection(null); setPlanFocus(null); }}>{l.name}</button></div><p>Elevation {l.elevation} ft · Height {l.height} ft<br/>{Math.round(polygonArea(l.outline)).toLocaleString()} SF footprint · {l.rooms.length} rooms<br/>{(t => t ? `${t.count.toLocaleString()} walls · ${t.feet.toLocaleString()} ft of wall${t.doors === null ? "" : ` · ${t.doors} doors${t.compartments ? ` (+${t.compartments} toilet-stall doors)` : ""}`}${t.glassFeet === null ? "" : ` · ${t.glassFeet.toLocaleString()} ft of glass`}${t.partitionFeet ? ` · ${t.partitionFeet.toLocaleString()} ft of operable partition` : ""}${t.railingFeet ? ` · ${t.railingFeet.toLocaleString()} ft of guardrail` : ""}${t.columns ? ` · ${t.columns} columns` : ""}${t.stairs ? ` · ${t.stairs} ${t.stairs === 1 ? "stair" : "stairs"} up from the level below` : ""}` : "Rebuild to read walls from the plan's lines")(wallTotals(l))}</p><p>{l.sizing}</p><button className="sm-source-link" onClick={() => { setSelected(l.id); setSource({ ...l.source, label: l.name }); }}>{l.source.sheet} · PDF page {l.source.page}</button></article>)}</Panel>
       {level && <Panel title={`${level.name} corrections`}><form onSubmit={e => { e.preventDefault(); change(m => setLevelHeight(m, level.id, Number(height))); }}><label className="ui-field">Floor-to-floor height · ft<input disabled={busy} type="number" min="6" max="60" step=".01" required value={height} onChange={e => setHeight(e.target.value)}/></label><Button disabled={busy} type="submit">Apply height</Button></form><p>Levels above move with this height. Verify AI-read heights against the section drawing.</p>{section && <Button onClick={() => setSource({ documentId: section.doc.id, sheet: section.sheet, page: section.page, label: "Height source" })}>Check heights on {section.sheet}</Button>}<Button onClick={() => setShowOutline(v => !v)}>{showOutline ? "Hide outline correction" : "Correct outline on source sheet"}</Button>{level.wallNote && <p>Walls: {level.wallNote} They are read from the drawing's own lines, not traced by hand; check them on the sheet. Wall quantities are not priced yet.</p>}
       {!!level.walls?.length && <details><summary>Wall length by type · {keptWalls(level).filter(w => w.type && !w.typeSet && !w.edited).length} walls typed from the plan's tags{level.walls.some(w => w.edited || w.excluded) ? ` · ${level.walls.filter(w => w.edited || w.excluded).length} corrected by you` : ""}</summary>
         <div className="sm-table-wrap"><table className="ui-table"><thead><tr><th>Type</th><th>What it is</th><th>Rough thickness</th><th>Rating</th><th>Walls</th><th>Length · ft</th><th>Face area · SF</th><th>Layers</th></tr></thead><tbody>{wallTypeTotals(keptWalls(level), level.height).map(t => {
@@ -457,7 +680,7 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
         <form onSubmit={e => { e.preventDefault(); change(m => setUntaggedWallType(m, level.id, untaggedType)); }}><label className="ui-field">Set untagged walls to<input disabled={busy} maxLength={16} value={untaggedType} onChange={e => setUntaggedType(e.target.value)} placeholder="e.g. SA3.10"/></label><Button disabled={busy} type="submit">{untaggedType.trim() ? "Apply to untagged walls" : "Clear the type I set"}</Button></form>
       </details>}<StairsDetails level={level} rise={stairRise(current, level)} onExclude={busy ? undefined : (index, excluded) => change(m => editStair(m, level.id, index, excluded))}/><RoomsDetails level={level} spaces={spaces} onOpen={busy || level.order === Math.min(...current.levels.map(l => l.order)) ? undefined : (space, open) => change(m => setOpenToBelow(m, level.id, space, open))}/></Panel>}</aside></div>
       {current.warnings.length > 0 && <Panel title="Sizing and reading warnings"><ul>{current.warnings.map((warning, i) => <li key={i}>{warning}</li>)}</ul></Panel>}
-      {showOutline && level && <div ref={outlinePanel} className="sm-outline-panel"><Panel title={`${level.name} outline correction`} subtitle="Uses the original stored plan. Printed scale or your explicit alignment fixes the image-to-feet conversion.">{doc ? <OutlineSheet key={`${current.builtAt}:${level.id}`} focus={wallPick?.levelId === level.id ? planFocus : null} onPickWall={index => setWallPick({ levelId: level.id, index })} level={level} spaces={spaces} doc={doc} frameKey={`${current.builtAt}:${level.id}`} frames={frames} saveFrame={(key, frame) => setFrames(values => ({ ...values, [key]: frame }))} editable={!busy} types={[...new Set([...current.levels.flatMap(l => (l.walls ?? []).map(w => w.type).filter((t): t is string => !!t)), ...(current.partitionTypes ?? []).map(t => t.tag)])].sort()} onEditWall={(index, edit) => change(m => editWall(m, level.id, index, edit))} onEditDoor={(index, number) => change(m => editDoorNumber(m, level.id, index, number))} onEditGlazing={(index, edit) => change(m => editGlazing(m, level.id, index, edit))} onEditPartition={(index, excluded) => change(m => editPartition(m, level.id, index, excluded))} onEditColumn={(index, excluded) => change(m => editColumn(m, level.id, index, excluded))} onMove={(index, point) => change(m => { const original = m.levels.find(l => l.id === level.id)!; const moved = moveOutlinePoint(m, level.id, index, point); return index === 0 && openOutline(original.outline).length !== original.outline.length ? moveOutlinePoint(moved, level.id, original.outline.length - 1, point) : moved; })}/> : <p role="alert">The original source document is unavailable. Restore it in Project files to correct this outline.</p>}</Panel></div>}
+      {showOutline && level && <div ref={outlinePanel} className="sm-outline-panel"><Panel title={`${level.name} outline correction`} subtitle="Uses the original stored plan. Printed scale or your explicit alignment fixes the image-to-feet conversion.">{doc ? <OutlineSheet key={`${current.builtAt}:${level.id}`} focus={planFocus?.levelId === level.id ? planFocus : null} onPickWall={index => inspect({ kind: "wall", levelId: level.id, index })} level={level} spaces={spaces} doc={doc} frameKey={`${current.builtAt}:${level.id}`} frames={frames} saveFrame={(key, frame) => setFrames(values => ({ ...values, [key]: frame }))} editable={!busy} types={[...new Set([...current.levels.flatMap(l => (l.walls ?? []).map(w => w.type).filter((t): t is string => !!t)), ...(current.partitionTypes ?? []).map(t => t.tag)])].sort()} onEditWall={(index, edit) => change(m => editWall(m, level.id, index, edit))} onEditDoor={(index, number) => change(m => editDoorNumber(m, level.id, index, number))} onEditGlazing={(index, edit) => change(m => editGlazing(m, level.id, index, edit))} onEditPartition={(index, excluded) => change(m => editPartition(m, level.id, index, excluded))} onEditColumn={(index, excluded) => change(m => editColumn(m, level.id, index, excluded))} onMove={(index, point) => change(m => { const original = m.levels.find(l => l.id === level.id)!; const moved = moveOutlinePoint(m, level.id, index, point); return index === 0 && openOutline(original.outline).length !== original.outline.length ? moveOutlinePoint(moved, level.id, original.outline.length - 1, point) : moved; })}/> : <p role="alert">The original source document is unavailable. Restore it in Project files to correct this outline.</p>}</Panel></div>}
     </>}
     {source && <Modal wide title={`${source.sheet} source drawing`} subtitle={`${source.label} · PDF page ${source.page}`} onClose={() => setSource(null)}>{sourceDoc ? <StoredDocumentViewer doc={sourceDoc} page={source.page} onPageChange={() => {}} range={{ first: source.page, last: source.page }}/> : <p role="alert">This source document is unavailable. Open Project files to restore it.</p>}</Modal>}
   </div>;
