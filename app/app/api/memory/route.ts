@@ -2,7 +2,8 @@ import { MemoryRuleError, MEMORY_KINDS, MEMORY_ORIGINS, MEMORY_STATUSES, type Me
 import { memoryStore } from "../../../lib/memory-store";
 
 // The AI memory (lib/memory, lib/memory-store):
-//   GET   ?status=&kind=&origin=&project=&projectOnly=&trades=&q=&limit=   entries, best match first when q is given
+//   GET   ?status=&kind=&origin=&project=&projectOnly=&trades=&q=&limit=&offset=   entries, best match first when q
+//         is given; at most 500 a page, `offset` for the next
 //         ?counts=1                                                 how many are proposed, approved and retired
 //   POST  { entry }                                                 an estimator's entry, approved at once (200 with
 //                                                                   created: false when it is already there)
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
     const entries = await store.search({
       status: list<MemoryStatus>(params.get("status"), MEMORY_STATUSES), kind: list<MemoryKind>(params.get("kind"), MEMORY_KINDS), origin: list<MemoryOrigin>(params.get("origin"), MEMORY_ORIGINS),
       forProject: project, projectOnly, trades: (params.get("trades") ?? "").split("|").map(t => t.trim()).filter(Boolean).slice(0, 12),
-      q: params.get("q") ?? undefined, limit: Number(params.get("limit")) || undefined,
+      q: params.get("q") ?? undefined, limit: Number(params.get("limit")) || undefined, offset: Math.max(0, Math.floor(Number(params.get("offset")) || 0)),
     });
     return json({ entries });
   } catch (error) { return failed(error); }

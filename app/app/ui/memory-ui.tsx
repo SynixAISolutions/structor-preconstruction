@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { BrainCircuit, Check, CheckCheck, Eye, FileSpreadsheet, Pencil, Plus, RotateCcw, X } from "lucide-react";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, SearchBox, Stats, Tabs, type ViewProps } from "./shared";
 import { contextPack, planMemory, tradeTags, type MemoryEntry, type MemoryKind, type MemoryOrigin, type MemoryStatus } from "../../lib/memory";
-import { addMemory, changeMemory, fetchMemory, memoryCounts, setMemoryStatus } from "../../lib/memory-client";
+import { addMemory, changeMemory, fetchMemory, memoryCounts, memoryForScan, setMemoryStatus } from "../../lib/memory-client";
 import { BidSheetImport } from "./memory-import";
 import type { MemoryCounts } from "../../lib/memory-store";
 import { readDraft } from "../../lib/use-local-draft";
@@ -165,7 +165,8 @@ function MemoryPreview({ projectId, packages, onClose }: { projectId: string; pa
   const [tradeId, setTradeId] = useState(packages[0]?.id ?? "");
   const [entries, setEntries] = useState<MemoryEntry[] | null>(null);
   const [error, setError] = useState("");
-  useEffect(() => { fetchMemory({ status: ["approved"], project: projectId, limit: 500 }).then(setEntries, e => setError(e instanceof Error ? e.message : "The AI memory couldn't be reached.")); }, [projectId]);
+  // The same read as a scan (every page), so the preview never shows more or less than the AI gets.
+  useEffect(() => { memoryForScan(projectId).then(r => { if (r.error) setError(r.error); else setEntries(r.entries); }); }, [projectId]);
   const pkg = packages.find(p => p.id === tradeId);
   const pack = entries && pkg ? contextPack(entries, { projectId, code: pkg.code, name: pkg.name }) : "";
   const plan = entries ? planMemory(entries, projectId) : "";

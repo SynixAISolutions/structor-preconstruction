@@ -18,7 +18,7 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-export type MemoryFilter = { status?: MemoryStatus[]; kind?: MemoryKind[]; origin?: MemoryOrigin[]; project?: string; projectOnly?: string; trades?: string[]; q?: string; limit?: number };
+export type MemoryFilter = { status?: MemoryStatus[]; kind?: MemoryKind[]; origin?: MemoryOrigin[]; project?: string; projectOnly?: string; trades?: string[]; q?: string; limit?: number; offset?: number };
 export function fetchMemory(filter: MemoryFilter = {}): Promise<MemoryEntry[]> {
   const params = new URLSearchParams();
   if (filter.status?.length) params.set("status", filter.status.join(","));
@@ -29,6 +29,7 @@ export function fetchMemory(filter: MemoryFilter = {}): Promise<MemoryEntry[]> {
   if (filter.trades?.length) params.set("trades", filter.trades.join("|"));
   if (filter.q?.trim()) params.set("q", filter.q.trim());
   if (filter.limit) params.set("limit", String(filter.limit));
+  if (filter.offset) params.set("offset", String(filter.offset));
   return call<{ entries: MemoryEntry[] }>(`/api/memory?${params}`).then(r => r.entries);
 }
 export const memoryCounts = () => call<{ counts: MemoryCounts }>("/api/memory?counts=1").then(r => r.counts);
@@ -39,13 +40,26 @@ export const learnMemory = (learn: MemoryInput[]) => call<{ added: number; seenA
 /** Approves or retires many entries at once; resolves to how many changed. */
 export const setMemoryStatus = (ids: string[], to: MemoryStatus) => call<{ changed: number }>("/api/memory", { method: "POST", body: JSON.stringify({ status: { ids, to } }) }).then(r => r.changed);
 
+/** The API's page size, and how many pages a scan reads at most (20,000 entries). */
+export const MEMORY_PAGE = 500;
+const MAX_PAGES = 40;
+
 /**
- * What a scan of this project may read: every approved entry for the whole company and for this project. Read once per
- * run; contextPack then picks each trade's part. Resolves to [] (and the reason) when the memory can't be reached.
+ * What a scan of this project may read: every approved entry for the whole company and for this project, page by page.
+ * One page isn't enough: the API returns at most 500, newest first, so once hundreds of wording examples are approved
+ * a single page leaves out the trade split and the rules. Read once per run; contextPack and planMemory then pick what
+ * each step needs. Resolves to [] (and the reason) when the memory can't be reached.
  */
 export async function memoryForScan(projectId: string): Promise<{ entries: MemoryEntry[]; error: string | null }> {
-  try { return { entries: await fetchMemory({ status: ["approved"], project: projectId, limit: 500 }), error: null }; }
-  catch (error) { return { entries: [], error: error instanceof Error ? error.message : String(error) }; }
+  try {
+    const entries = new Map<string, MemoryEntry>();
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const batch = await fetchMemory({ status: ["approved"], project: projectId, limit: MEMORY_PAGE, offset: page * MEMORY_PAGE });
+      for (const entry of batch) entries.set(entry.id, entry);
+      if (batch.length < MEMORY_PAGE) break;
+    }
+    return { entries: [...entries.values()], error: null };
+  } catch (error) { return { entries: [], error: error instanceof Error ? error.message : String(error) }; }
 }
 
 /**
