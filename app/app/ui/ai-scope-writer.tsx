@@ -7,12 +7,12 @@ import { addPage } from "../../lib/drawing-flip";
 import { notOnSheet, recordRun } from "../../lib/extraction";
 import { drawingRegister, latestDocuments, specificationSections } from "../../lib/project-files";
 import { useProjectDocuments } from "../../lib/project-files-client";
-import { readersBySection, sectionsByTrade, sheetsForTrade, uncoveredSections } from "../../lib/project-scopes";
+import { readersBySection, sectionsByTrade, sheetsByTrade, uncoveredSections } from "../../lib/project-scopes";
 import { applyBidPackagePlan, type BidPackagePlan } from "../../lib/bid-package-ai";
 import { planBidPackages } from "../../lib/bid-package-client";
 import { CONFIRM_ABOVE, dollars, estimateCost } from "../../lib/ai-cost";
 import { useAiReader } from "../../lib/ai-reader-client";
-import { planMemory, rememberedSections, tradeMemory, type MemoryEntry } from "../../lib/memory";
+import { leftOut, planMemory, rememberedSections, tradeMemory, type MemoryEntry } from "../../lib/memory";
 import { memoryForScan, useScanMemory } from "../../lib/memory-client";
 import { readTradeScope } from "../../lib/scope-reading";
 import { getActiveProjectId, useActiveProject } from "../../lib/project-scope";
@@ -68,7 +68,9 @@ export function AiScopeWriter({ review, notify, onOpenFiles, onReview }: { revie
     notify(`Bid packages set by the AI: ${added} new, ${plan.packages.length - added} updated with their sections and sheets.`);
   }
   const [withDrawings, setWithDrawings] = useState(true);
-  const sheetsFor = (id: string) => withDrawings ? sheetsForTrade(register, packages.find(p => p.id === id) ?? "") : [];
+  // A trade's approved exclusions can hand its drawing sheets to the trade that carries the work (site demolition to Earthwork).
+  const sheetSplit = useMemo(() => sheetsByTrade(register, packages, p => leftOut(remembered, p, activeProject ?? "")), [register, packages, remembered, activeProject]);
+  const sheetsFor = (id: string) => withDrawings ? sheetSplit.sheets.get(id) ?? [] : [];
   const [chosen, setChosen] = useState<string[]>([]);
   const [states, setStates] = useState<Record<string, TradeState>>({});
   const [busy, setBusy] = useState(false);
@@ -97,7 +99,7 @@ export function AiScopeWriter({ review, notify, onOpenFiles, onReview }: { revie
     const pkg = packages.find(p => p.id === id)!;
     update(id, { status: "reading" });
     const outcome = await readTradeScope({
-      pkg, sections: assigned.get(id) ?? [], sheets: sheetsFor(id), signal, memory: tradeMemory(memory, pkg, projectId, assigned.get(id) ?? [], readers, split.partial.get(id)),
+      pkg, sections: assigned.get(id) ?? [], sheets: sheetsFor(id), signal, memory: tradeMemory(memory, pkg, projectId, assigned.get(id) ?? [], readers, split.partial.get(id), withDrawings ? sheetSplit.handed.get(id) : []),
       onProgress: p => update(id, { status: "reading", done: p.done, total: p.total, note: p.note }),
       addFlipPages: pages => { const errors = latest.current.runFlip(current => pages.reduce((state, page) => state.pages.some(x => x.sheet === page.sheet) ? state : addPage(state, page), current)); return errors ? Object.values(errors)[0] ?? "A sheet could not be added to Drawing Flip." : null; },
     });

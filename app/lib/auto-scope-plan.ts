@@ -4,7 +4,7 @@
 
 import { drawingLog, drawingRegister, latestDocuments, specificationSections, type StoredDocument, type VolumeSection } from "./project-files";
 import type { TradePackage } from "./procurement";
-import { sectionsByTrade, sheetsForTrade } from "./project-scopes";
+import { sectionsByTrade, sheetsByTrade } from "./project-scopes";
 import { AUTO_READ_UNDER, dollars } from "./ai-cost";
 
 /**
@@ -59,12 +59,14 @@ export type TradeToRead<P> = { pkg: P; sections: VolumeSection[]; sheets: Return
 /**
  * Every trade with specification sections (from every specification volume) or drawing sheets to read, in bid-package
  * order. `remembered` and `partial`: the contractor's approved trade split for these packages, the sections each
- * carries and the ones it carries only in part (lib/memory rememberedSections).
+ * carries and the ones it carries only in part (lib/memory rememberedSections). `leavesOut`: what each trade's
+ * approved rules say it doesn't carry (lib/memory leftOut), which can hand its drawing sheets to another trade.
  */
-export function tradesToRead<P extends Pick<TradePackage, "id" | "division" | "code" | "sections" | "sheets">>(packages: P[], docs: StoredDocument[], remembered?: Map<string, string[]>, partial?: Map<string, string[]>): TradeToRead<P>[] {
+export function tradesToRead<P extends Pick<TradePackage, "id" | "division" | "code" | "name" | "sections" | "sheets">>(packages: P[], docs: StoredDocument[], remembered?: Map<string, string[]>, partial?: Map<string, string[]>, leavesOut?: (pkg: P) => string[]): TradeToRead<P>[] {
   const register = drawingRegister(docs);
   const assigned = sectionsByTrade(specificationSections(docs), packages, remembered, partial);
-  return packages.map(pkg => ({ pkg, sections: assigned.get(pkg.id) ?? [], sheets: sheetsForTrade(register, pkg) })).filter(t => t.sections.length || t.sheets.length);
+  const { sheets } = sheetsByTrade(register, packages, leavesOut);
+  return packages.map(pkg => ({ pkg, sections: assigned.get(pkg.id) ?? [], sheets: sheets.get(pkg.id) ?? [] })).filter(t => t.sections.length || t.sheets.length);
 }
 
 /**

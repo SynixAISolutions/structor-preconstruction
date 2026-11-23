@@ -94,6 +94,41 @@ const planned = B.bidPackageMessages(B.parseBidPackageJob({ ...job, memory: plan
 assert(planned[0].content.includes("When the contractor's own trade split is supplied, it wins over every rule above") && planned[1].content.startsWith("The contractor's own trade split, approved by its estimators:\nTrades this contractor buys"), "The AI's package plan gets the split, and is told it wins");
 assert.deepEqual(B.bidPackageMessages(B.parseBidPackageJob(job)), B.bidPackageMessages(B.parseBidPackageJob({ ...job, memory: "" })), "Without memory the plan's request is as before");
 
+// ── Drawn work a trade doesn't carry goes to the trade that does ──
+const demoRules = [
+  entry({ kind: "rule", text: "Demolition doesn't carry: Site Demo.", trades: ["02 41 19", "demolition"] }),
+  entry({ kind: "rule", text: "Demolition doesn't carry: HAZ MAT remediation.", trades: ["02 41 19", "demolition"] }),
+  entry({ kind: "rule", text: "Every trade cleans up daily.", trades: [] }),
+  entry({ kind: "rule", text: "Demolition doesn't carry: Earthwork.", trades: ["02 41 19", "demolition"], status: "proposed" }),
+];
+assert.deepEqual(M.leftOut(demoRules, { code: "02 41 19", name: "Demolition" }, "p1"), ["Site Demo", "HAZ MAT remediation"], "A trade's own approved exclusions; not every-trade rules, not proposals");
+const siteRegister = [
+  { sheet: "CIV0102", title: "Demolition plan", discipline: "Civil" },
+  { sheet: "ED1.1", title: "Electrical demolition plan", discipline: "Electrical" },
+  { sheet: "AD1.1", title: "Level 1 demolition plan", discipline: "Architectural" },
+  { sheet: "L0.1", title: "Site demolition plan", discipline: "Landscape" },
+  { sheet: "C1.0", title: "Grading plan", discipline: "Civil" },
+];
+const sitePackages = [
+  { id: "demolition", name: "Demolition", code: "02 41 19" },
+  { id: "dewatering", name: "Dewatering", code: "31 23 19" },
+  { id: "earthwork", name: "Earthwork", code: "31 00 00" },
+];
+const sheetIds = m => Object.fromEntries([...m].map(([id, rows]) => [id, rows.map(r => r.sheet)]));
+const leaves = pkg => M.leftOut(demoRules, pkg, "p1");
+assert.deepEqual(sheetIds(P.sheetsByTrade(siteRegister, sitePackages).sheets), { demolition: ["CIV0102", "ED1.1", "AD1.1", "L0.1"], dewatering: ["C1.0"], earthwork: ["C1.0"] }, "Without the contractor's exclusions every demolition sheet is Demolition's");
+const handedOff = P.sheetsByTrade(siteRegister, sitePackages, leaves);
+assert.deepEqual([sheetIds(handedOff.sheets), [...handedOff.handed]], [{ demolition: ["ED1.1", "AD1.1"], dewatering: ["C1.0"], earthwork: ["C1.0", "CIV0102", "L0.1"] },
+  [["earthwork", [{ sheet: "CIV0102", title: "Demolition plan", work: "site demolition", from: "Demolition" }, { sheet: "L0.1", title: "Site demolition plan", work: "site demolition", from: "Demolition" }]]]],
+  "Demolition doesn't carry site demo: the civil and site demolition sheets go to Earthwork (preferred over Dewatering); building and MEP demolition stay");
+assert.deepEqual(sheetIds(P.sheetsByTrade(siteRegister, sitePackages.filter(p => p.id === "demolition"), leaves).sheets).demolition, ["CIV0102", "ED1.1", "AD1.1", "L0.1"], "No earthwork trade on the project: the sheets stay, never unread");
+assert.deepEqual(sheetIds(P.sheetsByTrade(siteRegister, sitePackages, pkg => pkg.id === "demolition" ? ["HAZ MAT remediation"] : []).sheets).demolition, ["CIV0102", "ED1.1", "AD1.1", "L0.1"], "Other exclusions move nothing");
+const siteDocs = [{ id: "d", name: "Drawings.pdf", kind: "drawings", revision: 1, series: "drawings", sections: [], sheets: siteRegister.map((r, i) => ({ ...r, page: i + 1 })) }];
+assert.deepEqual(A.tradesToRead(sitePackages.map(p => ({ ...p, division: p.code.slice(0, 2) })), siteDocs, undefined, undefined, leaves).map(t => [t.pkg.id, t.sheets.map(s => s.sheet)]),
+  [["demolition", ["ED1.1", "AD1.1"]], ["dewatering", ["C1.0"]], ["earthwork", ["C1.0", "CIV0102", "L0.1"]]], "What each trade reads follows the hand-off");
+const earthMemory = M.tradeMemory(demoRules, { id: "earthwork", code: "31 00 00", name: "Earthwork" }, "p1", [], new Map(), [], handedOff.handed.get("earthwork"));
+assert(earthMemory.startsWith("Drawing sheets given to Earthwork because another trade doesn't carry their work on this contractor's bid forms (write Earthwork's lines for that work):\n- CIV0102 Demolition plan: site demolition (Demolition doesn't carry it).\n- L0.1 Site demolition plan: site demolition (Demolition doesn't carry it)."), "Earthwork's scan is told why it reads those sheets");
+
 // ── A bid sheet as the starting playbook ──
 assert.deepEqual(I.splitTradeLabel("09 - DRYWALL & CEILINGS"), { division: "09", name: "Drywall & ceilings" });
 assert.deepEqual([["02", "Demolition"], ["05", "Ss & mm"], ["09", "Drywall & ceilings"], ["08", "Doors, frames, hardware"], ["23", "Hvac"], ["07", "Joint sealants"], ["10", "Toilet accessories"], ["07", "Roofing"], ["33", "Wet utilities"], ["01", "Survey"]]
@@ -151,4 +186,4 @@ await assert.rejects(store.setStatus(["x"], "bogus", "M"), /Choose proposed, app
 const live = M.rememberedSections(await store.search({ status: ["approved"], forProject: "p1" }), [{ id: "dw", name: "Drywall", code: "09 29 00" }], "p1", ["06 16 43", "09 29 00"]);
 assert.deepEqual([...live.byPackage], [["dw", ["06 16 43"]]], "Straight from the table to the trades' sections: the partly carried 09 29 00 isn't routed");
 
-console.log("Trade split checked: which sections a remembered split covers, the split on a project's packages (by code or name; a section several trades carry goes to each, a part claim adds a reader), what each trade is told it shares, which sections each trade reads, the scans' and the package plan's memory, a bid sheet read, matched and imported as proposals, what Section coverage teaches, and the table upgraded for trade splits with many approved at once.");
+console.log("Trade split checked: which sections a remembered split covers, the split on a project's packages (by code or name; a section several trades carry goes to each, a part claim adds a reader), what each trade is told it shares, drawing sheets handed to the trade that carries the work, which sections each trade reads, the scans' and the package plan's memory, a bid sheet read, matched and imported as proposals, what Section coverage teaches, and the table upgraded for trade splits with many approved at once.");

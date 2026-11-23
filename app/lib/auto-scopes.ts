@@ -13,7 +13,7 @@ import { addPage, DrawingFlipRuleError, type DrawingFlipState } from "./drawing-
 import { addPackage, type Procurement } from "./procurement";
 import { drawingRegister, specificationSections, type StoredDocument } from "./project-files";
 import { readStoredText, storedDocuments, uploadsSettleIn, useProjectDocuments } from "./project-files-client";
-import { readersBySection, sectionsByTrade, tradesToAdd } from "./project-scopes";
+import { readersBySection, sectionsByTrade, sheetsByTrade, tradesToAdd } from "./project-scopes";
 import { applyBidPackagePlan } from "./bid-package-ai";
 import { planBidPackages } from "./bid-package-client";
 import { aiReader } from "./ai-reader-client";
@@ -25,7 +25,7 @@ import { AI_REQUESTS_AT_ONCE, aiTimes } from "./ai-pool";
 import { OCR_WORKERS, ocrWork } from "./sheet-ocr";
 import { blendPace, checkShare, FIRST_PACE, measurePace, secondsLeft, steadyLeft, tradesLeft, type Pace, type TradeLeft } from "./run-time-left";
 import { readTradeScope } from "./scope-reading";
-import { planMemory, rememberedSections, tradeMemory } from "./memory";
+import { leftOut, planMemory, rememberedSections, tradeMemory } from "./memory";
 import { memoryForScan } from "./memory-client";
 import { readDraft, writeDraft } from "./use-local-draft";
 import { writeGeneralScope } from "./general-scope-client";
@@ -253,7 +253,10 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   // for the estimator to pick trades in Write scopes.
   const reader = await aiReader().catch(() => null);
   const split = rememberedSections(memory.entries, procurement.packages, projectId, specificationSections(documents).map(s => s.section));
-  const all = tradesToRead(procurement.packages, documents, split.byPackage, split.partial);
+  // A trade's approved exclusions can hand its drawing sheets to the trade that carries the work (site demolition to Earthwork).
+  const leaves = (pkg: { code: string; name: string }) => leftOut(memory.entries, pkg, projectId);
+  const all = tradesToRead(procurement.packages, documents, split.byPackage, split.partial, leaves);
+  const handed = sheetsByTrade(drawingRegister(documents), procurement.packages, leaves).handed;
   const assigned = sectionsByTrade(specificationSections(documents), procurement.packages, split.byPackage, split.partial);
   const readers = readersBySection(assigned, procurement.packages);
   const refPackages = procurement.packages.map(p => ({ id: p.id, name: p.name, code: p.code, sections: (assigned.get(p.id) ?? []).map(s => `${s.section} ${s.title}`) }));
@@ -300,7 +303,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
       setTrade(pkg.id, { status: "reading", note: "" });
       try {
         const outcome = await readTradeScope({
-          pkg, sections, sheets, signal: controller.signal, memory: tradeMemory(memory.entries, pkg, projectId, sections, readers, split.partial.get(pkg.id)),
+          pkg, sections, sheets, signal: controller.signal, memory: tradeMemory(memory.entries, pkg, projectId, sections, readers, split.partial.get(pkg.id), handed.get(pkg.id)),
           onProgress: p => {
             const left = ledger.get(pkg.id);
             if (left) left.counts = p.counts;

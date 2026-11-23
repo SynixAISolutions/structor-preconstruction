@@ -199,27 +199,39 @@ export function rememberedSections(entries: MemoryEntry[], packages: { id: strin
   return { byPackage, partial };
 }
 
+/** What a trade's own approved rules say it doesn't carry ("Demolition doesn't carry: Site Demo." gives "Site Demo"). */
+export function leftOut(entries: MemoryEntry[], target: { code: string; name: string }, projectId: string): string[] {
+  return entries.filter(e => e.kind === "rule" && e.trades.length && entryApplies(e, { projectId, ...target }))
+    .flatMap(e => { const m = e.text.match(/\bdoesn['’]t carry:?\s*(.+?)\.?$/i); return m ? [m[1]] : []; });
+}
+
 /** The longest note on shared sections a trade's scan carries, so it and the memory stay within MEMORY_REQUEST_CHARS. */
 const SHARING_CHARS = 1_800;
 
 /**
- * What one trade's scan reads from the memory: first the sections it shares (the ones it reads only for its part, and
- * the ones other trades read too), then its contextPack. `readers`: each section the trade reads, with every package
- * reading it (lib/project-scopes sectionsByTrade, inverted). Empty when there is nothing, as before the memory.
+ * What one trade's scan reads from the memory: first the drawing sheets other trades' exclusions handed it
+ * (lib/project-scopes sheetsByTrade), then the sections it shares (the ones it reads only for its part, and the ones
+ * other trades read too), then its contextPack. `readers`: each section the trade reads, with every package reading it
+ * (lib/project-scopes sectionsByTrade, inverted). Empty when there is nothing, as before the memory.
  */
 export function tradeMemory(entries: MemoryEntry[], target: { id: string; code: string; name: string }, projectId: string,
-  sections: { section: string; title?: string }[], readers: Map<string, { id: string; name: string }[]>, partial: string[] = []): string {
-  const lines: string[] = [];
-  for (const s of sections) {
-    const others = (readers.get(s.section) ?? []).filter(p => p.id !== target.id).map(p => p.name);
-    const part = partial.includes(s.section);
-    if (!part && !others.length) continue;
-    const name = `${s.section}${s.title ? ` ${s.title}` : ""}`;
-    lines.push(`- ${name}: ${part ? `${target.name} carries only the parts that apply to its own work` : `${target.name} carries its own part`}${others.length ? `; also read for ${others.join(", ")}` : ""}.`);
-  }
+  sections: { section: string; title?: string }[], readers: Map<string, { id: string; name: string }[]>, partial: string[] = [],
+  handed: { sheet: string; title: string; work: string; from: string }[] = []): string {
+  const blocks: [string, string[]][] = [
+    [`Drawing sheets given to ${target.name} because another trade doesn't carry their work on this contractor's bid forms (write ${target.name}'s lines for that work):`,
+      handed.map(h => `- ${h.sheet} ${h.title}: ${h.work} (${h.from} doesn't carry it).`)],
+    [`Sections ${target.name} shares with other trades on this contractor's bid forms (write only ${target.name}'s part of each; leave the rest to the others):`,
+      sections.flatMap(s => {
+        const others = (readers.get(s.section) ?? []).filter(p => p.id !== target.id).map(p => p.name);
+        const part = partial.includes(s.section);
+        if (!part && !others.length) return [];
+        return [`- ${s.section}${s.title ? ` ${s.title}` : ""}: ${part ? `${target.name} carries only the parts that apply to its own work` : `${target.name} carries its own part`}${others.length ? `; also read for ${others.join(", ")}` : ""}.`];
+      })],
+  ];
   let note = "";
-  if (lines.length) {
-    note = `Sections ${target.name} shares with other trades on this contractor's bid forms (write only ${target.name}'s part of each; leave the rest to the others):`;
+  for (const [title, lines] of blocks) {
+    if (!lines.length || note.length + title.length + 2 > SHARING_CHARS) continue;
+    note += `${note ? "\n" : ""}${title}`;
     for (const line of lines) { if (note.length + line.length + 1 > SHARING_CHARS) { note += "\n(more not shown)"; break; } note += `\n${line}`; }
   }
   const pack = contextPack(entries, { projectId, code: target.code, name: target.name });
