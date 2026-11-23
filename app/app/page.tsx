@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Activity, ArrowRight, BadgeCheck, ArrowUpRight, Bell, BookOpen, BookOpenText, Box, Building2, CalendarDays, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, ClipboardCheck, ClipboardList, Clock3, Command, FileCheck2, FileStack, FileText, FolderOpen, Gauge, GitCompareArrows, HardHat, Layers3, LayoutDashboard, Lightbulb, ListChecks, LogOut, MapPin, Menu, MessageSquare, Plus, Ruler, Search, Settings2, ShieldCheck, Sparkles, Star, TrendingUp, Upload, UserCheck, Users, Wallet, X, Trash2 } from "lucide-react";
+import { Activity, ArrowRight, BadgeCheck, ArrowUpRight, Bell, BookOpen, BookOpenText, Box, Building2, CalendarDays, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, ClipboardCheck, ClipboardList, Clock3, Command, FileCheck2, FileStack, FileText, FolderOpen, Gauge, GitCompareArrows, HardHat, Layers3, LayoutDashboard, Lightbulb, ListChecks, LogOut, MapPin, MessageSquare, Plus, Ruler, Search, Settings2, ShieldCheck, Sparkles, Star, TrendingUp, Upload, UserCheck, Users, Wallet, X, Trash2 } from "lucide-react";
 import BidLevelingPage from "./leveling-workspace";
 import { IntelligenceView } from "./ui/intelligence";
 import { ActivityInbox } from "./ui/activity-inbox";
@@ -19,6 +19,7 @@ import { ProjectForm, ProjectInformation } from "./ui/project-record";
 import { TurnoverView } from "./ui/todo-ui";
 import { RfpRequirementsView } from "./ui/rfp-requirements";
 import { SidebarNavigation } from "./ui/sidebar-navigation";
+import { SidebarToggle } from "./ui/sidebar-controls";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, SearchBox, Tabs, usd, type Screen } from "./ui/shared";
 import { DEFAULT_SCREEN, resolveScreen, screenGroup, screenLabel, searchScreens } from "../lib/screens";
 import { PROJECT_TABS, demoProject, filterProjects, loadProjects, sampleProjectRecords, saveProjects, squareFeetLabel, type Project } from "../lib/projects";
@@ -50,6 +51,7 @@ function BuildingModel({small=false}:{small?:boolean}) { return <div className={
 
 export default function StructorApp(){
  const [screen,setScreen]=useState<Screen>(DEFAULT_SCREEN); const [menuOpen,setMenuOpen]=useState(false); const [searchOpen,setSearchOpen]=useState(false); const [search,setSearch]=useState(""); const [helpOpen,setHelpOpen]=useState(false); const [notifications,setNotifications]=useState(false); const [toast,setToast]=useState(""); const [projects,setProjects]=useState<Project[]>(sampleProjectRecords); const activeId=useActiveProject(); const sampleRefresh=useSampleRefresh(); const [newProject,setNewProject]=useState(false); const [ready,setReady]=useState(false); const [reduced,setReduced]=useState(false); const scrollRef=useRef<HTMLDivElement>(null);
+ const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
  const [modelInspection,setModelInspection]=useState<ModelInspection|null>(null);
  const [quantityFilters,setQuantityFilters]=useState<ModelQuantityFilters>(DEFAULT_QUANTITY_FILTERS);
  useEffect(()=>{setModelInspection(null);setQuantityFilters(DEFAULT_QUANTITY_FILTERS);},[activeId]);
@@ -57,7 +59,17 @@ export default function StructorApp(){
  const modelView=modelViewForScreen(screen);
  const projectOpen=["project","subcontractor","architect"].includes(screenGroup(screen)?.scope??"global");
  const notify=useCallback((message:string)=>setToast(message),[]);
- const navigate=useCallback((next:Screen)=>{setScreen(next);setModelInspection(null);setMenuOpen(false);setSearchOpen(false); window.location.hash=next;scrollRef.current?.scrollTo({top:0});},[]);
+ const navigate = useCallback((next: Screen) => {
+   const fromSidebar = document.getElementById("workspace-navigation")?.contains(document.activeElement);
+   setScreen(next);
+   setModelInspection(null);
+   setMenuOpen(false);
+   setSidebarCollapsed(true);
+   setSearchOpen(false);
+   window.location.hash = next;
+   scrollRef.current?.scrollTo({ top: 0 });
+   if (fromSidebar) scrollRef.current?.focus({ preventScroll: true });
+ }, []);
  useEffect(()=>{const sync=()=>{const value=location.hash.slice(1);const next=resolveScreen(value);if(next){setScreen(next);if(value!==next)history.replaceState(null,"",`#${next}`);}};sync();window.addEventListener("hashchange",sync);const saved=loadProjects();if(saved)setProjects(saved);setReady(true);return()=>window.removeEventListener("hashchange",sync);},[]);
  useEffect(()=>{if(ready){saveProjects(projects);noteProjectsSaved(projects);}},[projects,ready]);
  useSharedSync(activeId);
@@ -71,18 +83,18 @@ export default function StructorApp(){
  const props={navigate,notify,projectName:project.name};
  function inspectModel(target:ModelInspection){navigate("model");setModelInspection(target);}
  function createProject(p:Project,uploading=0){setProjects(v=>[...v,p]);selectProject(p.id);setNewProject(false);navigate("turnover");notify(uploading?`Project created. ${uploading===1?"Your file is":`${uploading} files are`} uploading in the background; keep working and we'll tell you when it's done.`:"Project created. Start with your drawings or project manual.");}
- return <div className={`product-app new-look ${reduced?"motion-off":""}`}>
+ return <div className={`product-app new-look ${reduced?"motion-off":""}${sidebarCollapsed?" sidebar-collapsed":""}`}>
   {menuOpen&&<button className="mobile-scrim" aria-label="Close navigation" onClick={()=>setMenuOpen(false)}/>}
-  <aside className={`product-sidebar ${menuOpen?"is-open":""}`}>
+  <aside id="workspace-navigation" className={`product-sidebar ${menuOpen?"is-open":""}`}>
    <button className="product-brand" onClick={()=>navigate(projectOpen?"turnover":"projects")} aria-label={projectOpen?"Preconstruction to-do":"All projects"}><span className="product-logomark"><i/><i/><i/></span><span>structor<span className="brand-dot">.</span></span><Badge>AI</Badge></button>
    <div className="workspace-picker"><span className="workspace-icon">S</span><div><strong>Synix workspace</strong><small>Preconstruction team</small></div><ChevronDown size={14}/></div>
    <SidebarNavigation screen={screen} projectOpen={projectOpen} navigate={navigate} icon={NavIcon}/>
    <div className="sidebar-footer"><button onClick={()=>navigate("settings")} className={screen==="settings"?"active":""}><Settings2 size={17}/>Settings</button><button onClick={()=>setHelpOpen(true)}><CircleHelp size={17}/>Help & glossary<ArrowUpRight size={14}/></button><div className="sidebar-user"><span className="user-avatar">MK</span><div><strong>Marcel Khoury</strong><small>Project manager</small></div><span className="online-dot"/><button className="sidebar-signout" onClick={signOut} aria-label="Sign out" title="Sign out"><LogOut size={15}/></button></div></div>
   </aside>
   <div className="product-main">
-    <header className="product-topbar"><div className="topbar-left"><button className="ui-icon-btn mobile-menu" aria-label="Open navigation" onClick={()=>setMenuOpen(true)}><Menu size={21}/></button><span className="breadcrumb-home">{screenGroup(screen)?.label??"WORKSPACE"}</span><ChevronRight size={14}/><strong>{screenLabel(screen)}</strong></div><div className="topbar-right"><SharedStatus/><button className="top-search" aria-label="Search workspace" onClick={()=>setSearchOpen(true)}><Search size={16}/><span>Quick find</span><kbd>⌘ K</kbd></button><ThemeToggle reduced={reduced}/><button className="ui-icon-btn notification-btn" aria-label="Open notifications" onClick={()=>setNotifications(v=>!v)}><Bell size={18}/><i/></button><button className="top-avatar" onClick={()=>navigate("settings")} aria-label="Open profile">MK</button></div></header>
+    <header className="product-topbar"><div className="topbar-left"><SidebarToggle expanded={!sidebarCollapsed} onToggle={() => setSidebarCollapsed(value => !value)}/><SidebarToggle mobile expanded={menuOpen} onToggle={() => setMenuOpen(value => !value)}/><span className="breadcrumb-home">{screenGroup(screen)?.label??"WORKSPACE"}</span><ChevronRight size={14}/><strong>{screenLabel(screen)}</strong></div><div className="topbar-right"><SharedStatus/><button className="top-search" aria-label="Search workspace" onClick={()=>setSearchOpen(true)}><Search size={16}/><span>Quick find</span><kbd>⌘ K</kbd></button><ThemeToggle reduced={reduced}/><button className="ui-icon-btn notification-btn" aria-label="Open notifications" onClick={()=>setNotifications(v=>!v)}><Bell size={18}/><i/></button><button className="top-avatar" onClick={()=>navigate("settings")} aria-label="Open profile">MK</button></div></header>
    {notifications&&<ActivityInbox project={project} onOpen={s=>{setNotifications(false);navigate(s);}}/>}
-   <div className="product-content" ref={scrollRef}>
+   <div className="product-content" ref={scrollRef} role="main" tabIndex={-1}>
     <div className="page-enter" key={screen} data-screen={screen}>
       {activeId===SAMPLE_PROJECT_ID&&<SampleRefreshBanner refresh={sampleRefresh}/>}
      {screen==="turnover"&&<TurnoverView key={project.id} {...props} project={project} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Reviewed project information saved.");}}/>}
