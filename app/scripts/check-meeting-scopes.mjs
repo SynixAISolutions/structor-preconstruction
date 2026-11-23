@@ -81,4 +81,14 @@ assert.throws(()=>S.addGeneralScopes({...review.procurement,packages:[]},general
   assert.equal(combined.procurement.packages.some(p => p.id === "drywall"), false);
   assert.throws(() => S.combineTrades({ ...records, procurement: sampleProcurement }, sampleProcurement.packages.find(p => p.published).id, into, "M"), /published|invited/);
 }
+// 23 Nov: a new reading's proposals come first, the rejected ones last, and the newest live reading is the one marked new.
+{
+  const d = (id, runId, status = "pending-review") => ({ id, runId, packageId: "drywall", kind: "scope", status, removed: false, title: id });
+  const runs = [{ id: "sample", finishedAt: "2026-10-13T10:00:00Z", engine: { mode: "sample" } }, { id: "old", finishedAt: "2026-11-20T10:00:00Z", engine: { mode: "live" } }, { id: "new", finishedAt: "2026-11-23T08:20:00Z", engine: { mode: "live" } }];
+  const drafts = [d("s1", "sample"), d("o1", "old"), d("o2", "old", "rejected"), d("n1", "new"), d("n2", "new"), d("x", "new", "accepted")];
+  assert.deepEqual(S.inlineDrafts(drafts, "drywall", runs).map(x => x.id), ["n1", "n2", "o1", "s1", "o2"], "Newest reading first, in its own order; rejected last; accepted lines live in the bid form");
+  assert.deepEqual(S.inlineDrafts(drafts, "drywall").map(x => x.id), ["s1", "o1", "o2", "n1", "n2"], "Without the runs, the stored order");
+  assert.equal(S.newestRun(drafts, runs), "new");
+  assert.equal(S.newestRun([d("s1", "sample")], runs), null, "The illustrative sample is never new");
+}
 console.log('Meeting scope checks passed: inline accept/move/reject/delete, approving a line places its highlights, audit, drawing unlinking, all-trade requirements and idempotency, combining trades.');

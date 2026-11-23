@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Check, MoveRight, RotateCcw, Trash2, X } from "lucide-react";
 import { deleteDraft, editDraft, notOnSheet, rejectDraft, reopenDraft, type Citation, type Draft } from "../../lib/extraction";
-import { inlineDrafts } from "../../lib/scope-review";
+import { inlineDrafts, newestRun } from "../../lib/scope-review";
 import { citationEvidence } from "../../lib/scope-evidence";
 import { useProjectDocuments } from "../../lib/project-files-client";
 import { OpenSourceButton, ScopeSourceModal } from "./package-scope-sources";
@@ -20,7 +20,10 @@ export function InlineScopeDrafts({ review, packageId, query, sections, colors, 
   const [source, setSource] = useState<{draft: Draft; citation: Citation} | null>(null);
   const { documents } = useProjectDocuments();
   const [viewer, setViewer] = useState<{ draft: Draft; index: number } | null>(null);
-  const drafts = inlineDrafts(review.extraction.drafts, packageId).filter(d => findingTitle(d).toLowerCase().includes(query.toLowerCase()));
+  const all = inlineDrafts(review.extraction.drafts, packageId, review.extraction.runs);
+  const drafts = all.filter(d => findingTitle(d).toLowerCase().includes(query.toLowerCase()));
+  // The newest reading's proposals come first and say so, ahead of older readings and the illustrative sample.
+  const newest = newestRun(all, review.extraction.runs);
   const act = (message: string | null, success: string) => { notify(message || success); return !message; };
   // A cited page in Project files opens in the document viewer on the words; the illustrative sample keeps its dialog.
   const openCitation = (draft: Draft, citation: Citation) => {
@@ -30,7 +33,7 @@ export function InlineScopeDrafts({ review, packageId, query, sections, colors, 
   return <>
     {drafts.map(draft => <article className={`proc-scope-row proc-ai-line ${draft.status}`} key={draft.id}>
       <button className={`proc-approval ${draft.status === "accepted" ? "approved" : "draft"}`} disabled={draft.status === "accepted"} aria-label={`${draft.status === "rejected" ? "Restore" : "Accept"} ${findingTitle(draft)}`} onClick={() => act(draft.status === "rejected" ? review.run(s => reopenDraft(s, draft.id, by)) : review.accept(draft.id, by), "Scope review saved.")}>{draft.status === "rejected" ? <RotateCcw size={14}/> : <Check size={14}/>}</button>
-      <div className="proc-scope-copy"><span className="proc-scope-meta"><Badge tone={draft.status === "accepted" ? "green" : draft.status === "rejected" ? "neutral" : "blue"}>{draft.status === "accepted" ? "Accepted" : draft.status === "rejected" ? "Rejected" : "AI proposed"}</Badge>{review.extraction.runs.find(r => r.id === draft.runId)?.engine.mode === "sample" && <Badge tone="amber">Illustrative sample</Badge>}{draft.kind !== "scope" && <Badge>{draft.kind === "region" ? "Drawing region" : "Quantity"}</Badge>}{draft.status === "pending-review" && notOnSheet(draft) && <Badge tone="amber">Not on the sheet</Badge>}</span><strong>{findingTitle(draft)}</strong>{draft.status === "pending-review" && notOnSheet(draft) && <small className="proc-ai-flag">{IMAGE_CHECK_NOTES["not-printed"]}</small>}{draft.kind === "quantity" && <small>{draft.quantity.toLocaleString()} {draft.unit} · {draft.basis}</small>}{draft.citations.map((citation,index) => <button type="button" className="proc-citation-link" key={index} onClick={() => openCitation(draft, citation)}>{citation.sheet || citation.document} · p. {citation.page}</button>)}</div>
+      <div className="proc-scope-copy"><span className="proc-scope-meta"><Badge tone={draft.status === "accepted" ? "green" : draft.status === "rejected" ? "neutral" : "blue"}>{draft.status === "accepted" ? "Accepted" : draft.status === "rejected" ? "Rejected" : "AI proposed"}</Badge>{review.extraction.runs.find(r => r.id === draft.runId)?.engine.mode === "sample" && <Badge tone="amber">Illustrative sample</Badge>}{draft.runId === newest && draft.status === "pending-review" && <Badge tone="green">New</Badge>}{draft.kind !== "scope" && <Badge>{draft.kind === "region" ? "Drawing region" : "Quantity"}</Badge>}{draft.status === "pending-review" && notOnSheet(draft) && <Badge tone="amber">Not on the sheet</Badge>}</span><strong>{findingTitle(draft)}</strong>{draft.status === "pending-review" && notOnSheet(draft) && <small className="proc-ai-flag">{IMAGE_CHECK_NOTES["not-printed"]}</small>}{draft.kind === "quantity" && <small>{draft.quantity.toLocaleString()} {draft.unit} · {draft.basis}</small>}{draft.citations.map((citation,index) => <button type="button" className="proc-citation-link" key={index} onClick={() => openCitation(draft, citation)}>{citation.sheet || citation.document} · p. {citation.page}</button>)}</div>
       {draft.kind === "scope" && <OpenSourceButton evidence={citationEvidence(draft.citations, documents).filter(e => e.doc)} onOpen={index => setViewer({ draft, index })}/>}
       <div className="proc-inline-actions">{draft.status === "pending-review" && <><button className="ui-icon-btn" aria-label={`Reject ${findingTitle(draft)}`} title="Reject" onClick={() => act(review.run(s => rejectDraft(s, draft.id, "not-required", "", by)), "Scope proposal rejected.")}><X size={15}/></button><button className="ui-icon-btn" aria-label={`Move ${findingTitle(draft)}`} title="Move trade" onClick={() => { setMoving(draft); setDestination(review.procurement.packages.find(p => p.id !== packageId)?.id || ""); }}><MoveRight size={15}/></button></>}{draft.status !== "accepted" && <button className="ui-icon-btn" aria-label={`Delete ${findingTitle(draft)}`} title="Delete proposal" onClick={() => act(review.run(s => deleteDraft(s,draft.id,by)), "Proposal removed. The source and review history are retained.")}><Trash2 size={15}/></button>}</div>
     </article>)}
