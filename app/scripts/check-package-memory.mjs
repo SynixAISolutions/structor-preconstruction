@@ -129,11 +129,45 @@ assert.deepEqual(A.tradesToRead(sitePackages.map(p => ({ ...p, division: p.code.
 const earthMemory = M.tradeMemory(demoRules, { id: "earthwork", code: "31 00 00", name: "Earthwork" }, "p1", [], new Map(), [], handedOff.handed.get("earthwork"));
 assert(earthMemory.startsWith("Drawing sheets given to Earthwork because another trade doesn't carry their work on this contractor's bid forms (write Earthwork's lines for that work):\n- CIV0102 Demolition plan: site demolition (Demolition doesn't carry it).\n- L0.1 Site demolition plan: site demolition (Demolition doesn't carry it)."), "Earthwork's scan is told why it reads those sheets");
 
+// ── One project's memory: its own sheet and "Not on this project" win over the company-wide entries ──
+const doorTags = ["08 11 13", "doors frames and hardware"];
+const company = [
+  entry({ id: "c-glass", kind: "rule", text: "Doors, frames & hardware doesn't carry: Glass lites in doors and borrowed lites/sidelites.", trades: doorTags }),
+  entry({ id: "c-split", text: "Doors, frames & hardware carries 08 11 13 Hollow Metal Doors and Frames.", section: "08 11 13", trades: doorTags }),
+  entry({ id: "c-own", kind: "rule", origin: "estimator", text: "Doors, frames & hardware furnishes; Drywall installs.", trades: doorTags }),
+  entry({ id: "c-dw", kind: "rule", text: "Drywall doesn't carry: Fire safing at curtainwall slab edges.", trades: drywallTags }),
+];
+const whittier = [
+  entry({ id: "w-glass", kind: "example", projectId: "whit", text: "Glass integrated within wood doors shall be included in the scope of work", trades: doorTags }),
+  entry({ id: "w-split", projectId: "whit", text: "Doors, frames & hardware carries 08 14 16 Flush Wood Doors.", section: "08 14 16", trades: doorTags }),
+];
+const mem = [...company, ...whittier];
+const idsOf = list => list.map(e => e.id).sort();
+assert.deepEqual([idsOf(M.projectMemory(mem, "whit")), idsOf(M.projectMemory(mem, "jel"))], [["c-dw", "c-own", "w-glass", "w-split"], ["c-dw", "c-glass", "c-own", "c-split"]],
+  "A project's own sheet replaces the company-wide import for the trades it covers, there only; estimators' entries and other trades stay");
+const doorsOn = projectId => M.contextPack(mem, { projectId, code: "08 11 13", name: "Doors, frames & hardware" });
+assert(!doorsOn("whit").includes("Glass lites") && doorsOn("whit").includes("Glass integrated within wood doors") && doorsOn("jel").includes("Glass lites"), "Whittier's scan reads Whittier's Doors lines, Jelleff's still reads the company's");
+const doorPkgs = [{ id: "openings", code: "08 11 13", name: "Doors, frames & hardware" }];
+assert.deepEqual([[...M.rememberedSections(mem, doorPkgs, "whit", ["08 11 13", "08 14 16"]).byPackage], [...M.rememberedSections(mem, doorPkgs, "jel", ["08 11 13", "08 14 16"]).byPackage]],
+  [[["openings", ["08 14 16"]]], [["openings", ["08 11 13"]]]], "and the trade split comes from the project's sheet");
+assert(M.planMemory(mem, "whit").includes("08 14 16") && !M.planMemory(mem, "whit").includes("08 11 13") && !M.planMemory(mem, "whit").includes("Glass lites"), "So does the package plan");
+// "Not on this project" on one company-wide entry, without a sheet.
+const hide = entry({ id: "h1", kind: "decision", origin: "estimator", projectId: "p2", text: M.notHereText(company[0]), trades: doorTags, source: { overrides: "c-glass" } });
+assert.equal(hide.text, "Not on this project: Doors, frames & hardware doesn't carry: Glass lites in doors and borrowed lites/sidelites.");
+const withHide = [...mem, hide];
+assert.deepEqual([idsOf(M.projectMemory(withHide, "p2")), idsOf(M.projectMemory(withHide, "p3"))], [["c-dw", "c-own", "c-split", "h1"], ["c-dw", "c-glass", "c-own", "c-split"]], "It hides that entry on that project only");
+const p2Doors = M.contextPack(withHide, { projectId: "p2", code: "08 11 13", name: "Doors, frames & hardware" });
+assert(p2Doors.startsWith("This contractor's memory: rules and examples its estimators approved on earlier projects and reviews.\nDecisions on this project:\n- Not on this project: Doors") && !p2Doors.includes("\n- Doors, frames & hardware doesn't carry: Glass"), "The AI reads the decision, not the hidden rule");
+assert.deepEqual([M.leftOut(withHide, doorPkgs[0], "p2"), M.leftOut(withHide, doorPkgs[0], "p3")], [[], ["Glass lites in doors and borrowed lites/sidelites"]], "and the exclusion no longer moves sheets there");
+assert(M.MEMORY_PROMPT_RULE.includes("Where an entry for this project differs from the company-wide ones, follow this project's."), "The AI is told the project wins");
+
 // ── A bid sheet as the starting playbook ──
 assert.deepEqual(I.splitTradeLabel("09 - DRYWALL & CEILINGS"), { division: "09", name: "Drywall & ceilings" });
 assert.deepEqual([["02", "Demolition"], ["05", "Ss & mm"], ["09", "Drywall & ceilings"], ["08", "Doors, frames, hardware"], ["23", "Hvac"], ["07", "Joint sealants"], ["10", "Toilet accessories"], ["07", "Roofing"], ["33", "Wet utilities"], ["01", "Survey"]]
   .map(([d, n]) => I.matchStandardTrade(d, n)), ["demolition", "steel", "drywall", "openings", "mechanical", "waterproofing", null, "thermal", "utilities", null],
   "Matched by division and words, with the sheet's abbreviations; a tab the words don't decide, or a division with no trade, stays its own");
+assert.deepEqual([I.matchStandardTrade("02", "Demolition & Abatement"), I.matchStandardTrade("02", "Abatement & demolition")], ["demolition", "abatement"],
+  "A tab naming two trades (Whittier's \"02 - DEMOLITION & Abatement\") goes to the one named first");
 const tab = (trade, bidders, specs, lines, exclusions) => [
   ["Project:", "Somewhere", "", "Subcontractor:", ...bidders, "Bid Summary", "Base", "Total"], ["Trade:", trade], [], ["", "Section 3 - Scope of Work"],
   ["A", "Specifications"], ...specs.map(s => ["", s, "Y"]), ["B", "Inclusions"], ["1", "SPECIFIC SCOPE ITEMS", "Y"], ...lines.map((l, i) => [String(i + 2), l, "Y"]),
@@ -186,4 +220,4 @@ await assert.rejects(store.setStatus(["x"], "bogus", "M"), /Choose proposed, app
 const live = M.rememberedSections(await store.search({ status: ["approved"], forProject: "p1" }), [{ id: "dw", name: "Drywall", code: "09 29 00" }], "p1", ["06 16 43", "09 29 00"]);
 assert.deepEqual([...live.byPackage], [["dw", ["06 16 43"]]], "Straight from the table to the trades' sections: the partly carried 09 29 00 isn't routed");
 
-console.log("Trade split checked: which sections a remembered split covers, the split on a project's packages (by code or name; a section several trades carry goes to each, a part claim adds a reader), what each trade is told it shares, drawing sheets handed to the trade that carries the work, which sections each trade reads, the scans' and the package plan's memory, a bid sheet read, matched and imported as proposals, what Section coverage teaches, and the table upgraded for trade splits with many approved at once.");
+console.log("Trade split checked: which sections a remembered split covers, the split on a project's packages (by code or name; a section several trades carry goes to each, a part claim adds a reader), what each trade is told it shares, drawing sheets handed to the trade that carries the work, one project's own sheet and \"Not on this project\" over the company-wide entries, which sections each trade reads, the scans' and the package plan's memory, a bid sheet read, matched and imported as proposals, what Section coverage teaches, and the table upgraded for trade splits with many approved at once.");
