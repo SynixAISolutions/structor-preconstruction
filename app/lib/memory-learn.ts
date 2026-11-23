@@ -6,6 +6,8 @@
 //   an AI proposal rejected as wrong trade rule      "<line>" is not <trade> work.
 //   an AI proposal rejected as not needed  rule      for that project only: Leave out "<line>" unless ...
 //   an AI proposal reworded, then accepted example   the estimator's wording, the AI's in the detail
+//   a section assigned to a trade          assignment  <trade> carries <section> (Section coverage, Assign to a trade)
+//   a section split between trades         rule      Section <n> is split: <trade> carries <portion>; ...
 //
 // Moves and decisions by Structor AI itself teach nothing, and neither do moves made by combining two trades (the old
 // trade is gone), duplicates, or the built-in illustrative run of the sample project. Each correction has a fixed id, so sending the same ones again changes nothing.
@@ -15,15 +17,34 @@ import { AI_ACTOR, type ExtractionState } from "./extraction";
 import type { MemoryInput } from "./memory";
 import { tradeTags } from "./memory";
 import type { Procurement, TradePackage } from "./procurement";
+import type { CoverageDecisions } from "./section-coverage";
 
 export type Correction = MemoryInput & { events: [string] };
 
 const quoted = (title: string) => `"${title.replace(/\s+/g, " ").trim().replace(/[.;:]+$/, "").slice(0, 200)}"`;
 const by = (who: string) => !!who.trim() && who.trim() !== AI_ACTOR;
 
-export function correctionsFrom(projectId: string, procurement: Procurement, extraction: ExtractionState): Correction[] {
+/** `decisions`: the project's Section coverage decisions (its recorded splits). */
+export function correctionsFrom(projectId: string, procurement: Procurement, extraction: ExtractionState, decisions: CoverageDecisions = {}): Correction[] {
   const pkg = (id: string): TradePackage | undefined => procurement.packages.find(p => p.id === id);
   const out: Correction[] = [];
+
+  // Sections an estimator gave a trade in Section coverage (Assign to a trade adds "<title> (Section 07 27 26)").
+  for (const item of procurement.scopes) {
+    const m = item.origin === "specification" && !item.allTrades ? item.title.match(/^(.*) \(Section (\d{2} \d{2} \d{2}(?:\.\d{1,2})?)\)$/) : null;
+    const there = pkg(item.packageId), made = item.history[0];
+    if (!m || !there || !made || made.kind !== "created" || !by(made.by)) continue;
+    out.push({ kind: "assignment", origin: "correction", text: `${there.name} carries ${m[2]} ${m[1]}.`, section: m[2], trades: tradeTags(there), projectId: null,
+      events: [`assign:${projectId}:${item.id}`], source: { projectId, line: item.id, trade: there.name } });
+  }
+  // Sections split between trades, with each trade's part.
+  for (const decision of Object.values(decisions)) {
+    if (decision.kind !== "split" || !by(decision.by)) continue;
+    const parts = decision.parts.map(p => ({ pkg: pkg(p.packageId), portion: p.portion.trim() })).filter((p): p is { pkg: TradePackage; portion: string } => !!p.pkg && !!p.portion);
+    if (parts.length < 2) continue;
+    out.push({ kind: "rule", origin: "correction", text: `Section ${decision.section} is split: ${parts.map(p => `${p.pkg.name} carries ${p.portion}`).join("; ")}.`, section: decision.section,
+      trades: parts.flatMap(p => tradeTags(p.pkg)), projectId: null, events: [`split:${projectId}:${decision.section}:${decision.at}`], source: { projectId } });
+  }
   const moved = (title: string, from: TradePackage, to: TradePackage, event: string, source: Record<string, string>) => out.push({
     kind: "rule", origin: "correction", text: `Put ${quoted(title)} in ${to.name}, not ${from.name}.`,
     trades: [...tradeTags(to), ...tradeTags(from)], projectId: null, events: [event],

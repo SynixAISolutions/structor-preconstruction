@@ -15,14 +15,16 @@ const digits = (code: string) => code.replace(/\D/g, "").padEnd(6, "0").slice(0,
 const AFFINITY: Record<string, string> = { "093": "096", "095": "092", "097": "092", "098": "092", "087": "081", "079": "071" };
 
 /**
- * Each section goes to the package the AI put it in (TradePackage.sections, lib/bid-package-ai). A section no
- * package lists goes to the trade of its CSI division. When several trades share a division: the trade
+ * Each section goes to the package the contractor's approved trade split gives it (`remembered`: lib/memory
+ * rememberedSections, package id to sections), then to the package the AI put it in (TradePackage.sections,
+ * lib/bid-package-ai). A section neither places goes to the trade of its CSI division. When several trades share a division: the trade
  * with the same level-2 code (10 14 signage), then a whole-division trade (10 00 00 specialties), then
  * the same CSI group (09 2x drywall), then the group's usual partner (AFFINITY), then the closest code.
  */
-export function sectionsByTrade<S extends StoredSection>(sections: S[], packages: Pick<TradePackage, "id" | "division" | "code" | "sections">[]): Map<string, S[]> {
+export function sectionsByTrade<S extends StoredSection>(sections: S[], packages: Pick<TradePackage, "id" | "division" | "code" | "sections">[], remembered?: Map<string, string[]>): Map<string, S[]> {
   const out = new Map<string, S[]>(packages.map(p => [p.id, []]));
   const placed = new Map<string, string>();
+  for (const [id, list] of remembered ?? []) if (out.has(id)) for (const s of list) placed.set(s, id);
   for (const p of packages) for (const s of p.sections ?? []) if (!placed.has(s)) placed.set(s, p.id);
   for (const section of sections) {
     const code = digits(section.section);

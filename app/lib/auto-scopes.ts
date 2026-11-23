@@ -25,7 +25,7 @@ import { AI_REQUESTS_AT_ONCE, aiTimes } from "./ai-pool";
 import { OCR_WORKERS, ocrWork } from "./sheet-ocr";
 import { blendPace, checkShare, FIRST_PACE, measurePace, secondsLeft, steadyLeft, tradesLeft, type Pace, type TradeLeft } from "./run-time-left";
 import { readTradeScope } from "./scope-reading";
-import { contextPack } from "./memory";
+import { contextPack, planMemory, rememberedSections } from "./memory";
 import { memoryForScan } from "./memory-client";
 import { readDraft, writeDraft } from "./use-local-draft";
 import { writeGeneralScope } from "./general-scope-client";
@@ -217,6 +217,10 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
     await Promise.all(filesToCompare(documents, before).map(async d => texts.set(d.id, new Map((await readStoredText(d).catch(() => [])).map(p => [p.page, p.text])))));
     update = { since: prior.id, ...changedSince(documents, before, (id, page) => texts.get(id)?.get(page)) };
   }
+  // What the contractor's estimators have taught the AI (lib/memory), read once: its trade split sets the packages and
+  // which sections each trade reads, and each trade's scan gets the part that applies. When the memory can't be reached
+  // the run reads without it, as it did before the memory existed.
+  const memory = await memoryForScan(projectId);
   // 1. The bid packages: on a first run, and after a revision that brings sheet numbers or sections no package lists yet
   // (a discipline's drawings sent later), so the AI places them before the trades are read.
   const added = prior && !previous ? addedSince(documents, new Set(prior.key.split("|"))) : { sheets: [], sections: [] };
@@ -224,7 +228,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
     if (prior) setupFrom = Date.now();
     emit({ run: { id: "", projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades: [], trades: [], added: 0, duplicates: 0, update } });
     try {
-      const plan = await planBidPackages(documents, procurement.packages, controller.signal);
+      const plan = await planBidPackages(documents, procurement.packages, controller.signal, planMemory(memory.entries, projectId));
       // The latest copy: the team may have changed the packages while the AI read.
       const applied = applyBidPackagePlan(readDraft<Procurement>(projectId, "procurement", sampleProcurement), plan);
       procurement = applied.procurement; newTrades = applied.added;
@@ -248,8 +252,9 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   // "Yes, under $2"), like Wyre reading a small set: two drawings and two specification sections. A larger set waits
   // for the estimator to pick trades in Write scopes.
   const reader = await aiReader().catch(() => null);
-  const all = tradesToRead(procurement.packages, documents);
-  const assigned = sectionsByTrade(specificationSections(documents), procurement.packages);
+  const remembered = rememberedSections(memory.entries, procurement.packages, projectId, specificationSections(documents).map(s => s.section)).byPackage;
+  const all = tradesToRead(procurement.packages, documents, remembered);
+  const assigned = sectionsByTrade(specificationSections(documents), procurement.packages, remembered);
   const refPackages = procurement.packages.map(p => ({ id: p.id, name: p.name, code: p.code, sections: (assigned.get(p.id) ?? []).map(s => `${s.section} ${s.title}`) }));
   // The drawing search runs again only when sheets changed.
   const candidates = update ? onlyChanged(all, update) : all, search = !update || update.sheets.length > 0;
@@ -286,9 +291,6 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   })() : null;
   if (!references) searchLeft = 0;
 
-  // What the contractor's estimators have taught the AI (lib/memory): read once; each trade gets the part that applies.
-  // When the memory can't be reached the trades read without it, as they did before it existed.
-  const memory = await memoryForScan(projectId);
   // The biggest trades start first; every request shares the tab's pool (lib/ai-pool), so the last trades use every slot.
   const queue = biggestFirst(stillToRead(readable, previous));
   await Promise.all(Array.from({ length: Math.min(PARALLEL_TRADES, queue.length) }, async () => {
