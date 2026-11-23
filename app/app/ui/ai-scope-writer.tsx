@@ -30,7 +30,8 @@ let reopenAfterTrades = false;
  * files and proposes bid-form lines for every trade. Proposals land inside each trade for accept /
  * reject / move / delete; nothing is uploaded twice.
  */
-export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnType<typeof useExtraction>; notify: (text: string) => void; onOpenFiles: () => void }) {
+/** `onReview` opens a trade's detailed scope, where a finished reading's proposals wait (newest first). */
+export function AiScopeWriter({ review, notify, onOpenFiles, onReview }: { review: ReturnType<typeof useExtraction>; notify: (text: string) => void; onOpenFiles: () => void; onReview?: (packageId: string) => void }) {
   const { documents, ready } = useProjectDocuments();
   // The project manual may come in volumes (24 Oct); every one is read.
   const volumes = useMemo(() => latestDocuments(documents).filter(d => d.kind === "manual"), [documents]);
@@ -75,6 +76,10 @@ export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnT
   useEffect(() => setConfirming(false), [chosen]);
 
   const pages = (id: string) => (assigned.get(id) ?? []).reduce((n: number, s: { first: number; last: number }) => n + s.last - s.first + 1, 0);
+  // A finished reading: its trades with proposals, biggest first, and how many proposals in all.
+  const finished = Object.entries(states).filter(([, st]) => st.status === "done" && st.found > 0).sort((a, b) => b[1].found - a[1].found).map(([id]) => id);
+  const proposals = finished.reduce((n, id) => n + states[id].found, 0);
+  const openTrade = (id: string) => { setOpen(false); onReview?.(id); };
   const update = (id: string, change: Partial<TradeState>) => setStates(prev => ({ ...prev, [id]: { ...(prev[id] ?? { status: "queued", done: 0, total: 0, found: 0, note: "" }), ...change } }));
 
   function record(outcome: ScopeRunResult) {
@@ -140,7 +145,7 @@ export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnT
           return <label key={pkg.id}><input type="checkbox" disabled={busy || (!sections.length && !sheets.length)} checked={chosen.includes(pkg.id)} onChange={e => setChosen(e.target.checked ? [...chosen, pkg.id] : chosen.filter(id => id !== pkg.id))}/><span>
             <strong>{pkg.code} · {pkg.name}</strong>
             <small>{sections.length ? `${sections.length} section${sections.length === 1 ? "" : "s"} · ${pages(pkg.id)} pages: ${sections.slice(0, 6).map((s: { section: string }) => s.section).join(", ")}${sections.length > 6 ? "…" : ""}` : "No sections in this trade's division"}{sheets.length ? ` · drawings: ${sheets.map(s => s.sheet).join(", ")}` : ""}</small>
-            {state && <small role="status">{state.status === "reading" ? (state.total ? `Reading request ${state.done} of ${state.total}` : state.note) : state.status === "done" ? `Done · ${state.found} scope proposal${state.found === 1 ? "" : "s"}${state.note ? ` · ${state.note}` : ""}` : state.status === "failed" ? `Failed · ${state.note}` : state.status === "skipped" ? state.note : "Waiting"}</small>}
+            {state && <small role="status">{state.status === "reading" ? (state.total ? `Reading request ${state.done} of ${state.total}` : state.note) : state.status === "done" ? <>{`Done · ${state.found} scope proposal${state.found === 1 ? "" : "s"}${state.note ? ` · ${state.note}` : ""}`}{onReview && state.found > 0 && <> · <button type="button" className="ai-review-link" onClick={e => { e.preventDefault(); openTrade(pkg.id); }}>Review them</button></>}</> : state.status === "failed" ? `Failed · ${state.note}` : state.status === "skipped" ? state.note : "Waiting"}</small>}
           </span></label>;
         })}</div>
         <div className="ai-new-trades">
@@ -160,7 +165,7 @@ export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnT
         </div>
         {uncovered.length > 0 && <details><summary>{uncovered.length} section{uncovered.length === 1 ? "" : "s"} have no trade package yet</summary><p>{uncovered.map(s => `${s.section} ${s.title}`).join(" · ")}</p></details>}
         <p className="ai-privacy">Selected section text goes to Structor's AI (Claude when it is set up on the server), about five pages per request ({Math.ceil(totalPages / 5)} requests for {totalPages} pages){totalSheets ? `, and ${totalSheets} drawing sheets, one image each` : ""}. Every proposal keeps its page and the exact words it relied on.{estimate !== null && <> <strong>Estimated cost with {reader!.model}: about {dollars(estimate)}.</strong> Pick fewer trades to spend less.</>}</p>
-        <div className="proc-form-actions">{busy ? <Button onClick={() => controller.current?.abort()}>Stop and keep finished trades</Button> : <Button onClick={() => setOpen(false)}>Close</Button>}<Button variant="primary" disabled={busy || !chosen.length || confirming} onClick={() => { if (estimate !== null && estimate > CONFIRM_ABOVE) setConfirming(true); else void start(); }}>{busy ? "Reading…" : `Read ${chosen.length} trade${chosen.length === 1 ? "" : "s"}${estimate !== null ? ` · about ${dollars(estimate)}` : ""}`}</Button></div>
+        <div className="proc-form-actions">{busy ? <Button onClick={() => controller.current?.abort()}>Stop and keep finished trades</Button> : <Button onClick={() => setOpen(false)}>Close</Button>}{!busy && finished.length > 0 && <Button disabled={!chosen.length || confirming} onClick={() => { if (estimate !== null && estimate > CONFIRM_ABOVE) setConfirming(true); else void start(); }}>{`Read again${estimate !== null ? ` · about ${dollars(estimate)}` : ""}`}</Button>}<Button variant="primary" disabled={busy || !chosen.length || confirming} onClick={() => { if (!busy && finished.length && onReview) { openTrade(finished[0]); return; } if (estimate !== null && estimate > CONFIRM_ABOVE) setConfirming(true); else void start(); }}>{busy ? "Reading…" : finished.length && onReview ? `Review ${proposals} proposal${proposals === 1 ? "" : "s"}` : `Read ${chosen.length} trade${chosen.length === 1 ? "" : "s"}${estimate !== null ? ` · about ${dollars(estimate)}` : ""}`}</Button></div>
         {confirming && !busy && <div className="ai-cost-confirm" role="alertdialog" aria-label="Confirm the AI reading">
           <p><strong>This reading costs about {dollars(estimate ?? 0)} of Claude credits</strong> for {chosen.length} trade{chosen.length === 1 ? "" : "s"}. Read them?</p>
           <div className="proc-form-actions"><Button onClick={() => setConfirming(false)}>Cancel</Button><Button variant="primary" onClick={() => { setConfirming(false); void start(); }}>Yes, read them</Button></div>
