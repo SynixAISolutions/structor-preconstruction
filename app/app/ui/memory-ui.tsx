@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { BrainCircuit, Check, CheckCheck, Eye, FileSpreadsheet, Pencil, Plus, RotateCcw, X } from "lucide-react";
+import { BrainCircuit, Check, CheckCheck, Eye, EyeOff, FileSpreadsheet, Pencil, Plus, RotateCcw, X } from "lucide-react";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, SearchBox, Stats, Tabs, type ViewProps } from "./shared";
-import { contextPack, planMemory, tradeTags, type MemoryEntry, type MemoryKind, type MemoryOrigin, type MemoryStatus } from "../../lib/memory";
+import { contextPack, notHereText, planMemory, tradeTags, type MemoryEntry, type MemoryKind, type MemoryOrigin, type MemoryStatus } from "../../lib/memory";
 import { addMemory, changeMemory, fetchMemory, memoryCounts, memoryForScan, setMemoryStatus } from "../../lib/memory-client";
 import { BidSheetImport } from "./memory-import";
 import type { MemoryCounts } from "../../lib/memory-store";
@@ -56,6 +56,16 @@ export function MemoryView({ projects, notify }: ViewProps & { projects: Project
     try { await changeMemory(entry, next); notify(done); await load(); return null; }
     catch (error) { const message = error instanceof Error ? error.message : "The change couldn't be saved."; notify(message); await load(); return message; }
   }
+  // A company-wide entry that doesn't hold on the open project: a decision there hides it and tells the AI why
+  // (lib/memory projectMemory). Retiring that decision brings the entry back on the project.
+  async function notHere(entry: MemoryEntry) {
+    if (!projectId) return;
+    try {
+      const r = await addMemory({ kind: "decision", projectId, text: notHereText(entry), trades: entry.trades, section: entry.section, source: { overrides: entry.id } });
+      notify(r.created ? `Not used on ${projectName(projectId)} any more. Retire the decision "Not on this project…" to use it there again.` : `Already not used on ${projectName(projectId)}.`);
+      await load();
+    } catch (error) { notify(error instanceof Error ? error.message : "The change couldn't be saved."); }
+  }
 
   return <div className="cm-view memory-view">
     <PageHeader eyebrow="WORKSPACE" title="AI memory" description="What Structor's AI has learned about how you split and word your scopes. Corrections made while reviewing scopes arrive here as proposals; only entries in use are read when the AI reads drawings and specifications."
@@ -90,6 +100,7 @@ export function MemoryView({ projects, notify }: ViewProps & { projects: Project
           <div className="memory-entry-actions">
             {entry.status === "proposed" && <Button variant="primary" onClick={() => void change(entry, { status: "approved" }, "In use: scans read it from now on.")}><Check size={14}/>Approve</Button>}
             {entry.status !== "retired" && <Button onClick={() => setEditing(entry)}><Pencil size={14}/>Edit</Button>}
+            {entry.status === "approved" && !entry.projectId && projectId && <Button onClick={() => void notHere(entry)}><EyeOff size={14}/>Not on this project</Button>}
             {entry.status !== "retired" && <Button onClick={() => void change(entry, { status: "retired" }, "Retired: scans no longer read it.")}><X size={14}/>Retire</Button>}
             {entry.status === "retired" && <Button onClick={() => void change(entry, { status: "approved" }, "Back in use.")}><RotateCcw size={14}/>Use again</Button>}
           </div>
@@ -105,7 +116,7 @@ export function MemoryView({ projects, notify }: ViewProps & { projects: Project
       return message;
     }}/>}
     {previewing && projectId && <MemoryPreview projectId={projectId} packages={packages} onClose={() => setPreviewing(false)}/>}
-    {importing && <BidSheetImport onClose={() => setImporting(false)} notify={notify} onDone={() => { setImporting(false); setTab("To review"); setOrigin("import"); void load(); }}/>}
+    {importing && <BidSheetImport projectId={projectId} projectName={projectId ? projectName(projectId) : ""} onClose={() => setImporting(false)} notify={notify} onDone={() => { setImporting(false); setTab("To review"); setOrigin("import"); void load(); }}/>}
     {approvingAll && <Modal title={`Approve ${entries.length} entries?`} subtitle="Every scan they apply to reads them from now on. Retire any one later to stop it." onClose={() => setApprovingAll(false)}>
       <div className="memory-form">
         <p className="memory-confirm">These are the {entries.length} proposals listed now{kind ? `, ${KIND_LABEL[kind].toLowerCase()}s only` : ""}{origin ? `, ${ORIGIN_LABEL[origin].toLowerCase()}` : ""}{search ? `, matching "${search}"` : ""}. Read through them first: approving puts them all in use at once.</p>

@@ -62,6 +62,14 @@ export function matchStandardTrade(division: string, name: string): string | nul
   const mine = words(said(name));
   const scored = pool.map(t => ({ t, score: [...words(tradeName(t.name))].filter(w => mine.has(w)).length })).sort((a, b) => b.score - a.score);
   if (scored[0].score > 0 && (scored.length === 1 || scored[0].score > scored[1].score)) return scored[0].t.id;
+  // A tie between trades the tab both names ("02 - DEMOLITION & Abatement" on Whittier): the one named first is the
+  // tab's main trade, so its package is the one that reads the tab.
+  const tied = scored.filter(s => s.score > 0 && s.score === scored[0].score);
+  if (tied.length > 1) {
+    const order = [...words(said(name))];
+    const first = (t: { name: string }) => Math.min(...[...words(tradeName(t.name))].map(w => order.indexOf(w)).filter(i => i >= 0));
+    return [...tied].sort((a, b) => first(a.t) - first(b.t))[0].t.id;
+  }
   return pool.length === 1 ? pool[0].id : null;
 }
 

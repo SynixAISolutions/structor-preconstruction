@@ -42,3 +42,8 @@
 .memory-import-row small { color: #8b979e; font-size: 11px; }
 .memory-import-row select { min-width: 0; padding: 6px 8px; border: 1px solid #dde3e0; border-radius: 6px; background: #fff; font: inherit; font-size: 12px; }
 @media (max-width: 760px) { .memory-import-row { grid-template-columns: 28px 1fr; } .memory-import-row > :nth-child(n+3) { grid-column: 2; } .memory-import-row.head { display: none; } }
+
+/* Import scope: every project or only the open one */
+.memory-import-scope { display: grid; gap: 6px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line, #e3e3e3); border-radius: 8px; }
+.memory-import-scope legend { padding: 0 4px; font-weight: 600; font-size: 0.85rem; }
+.memory-import-scope label { display: flex; gap: 8px; align-items: flex-start; font-size: 0.9rem; }

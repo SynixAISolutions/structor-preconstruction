@@ -13,12 +13,15 @@ import { Badge, Button, Modal } from "./shared";
 const BATCH = 200;
 type Choice = { on: boolean; standard: string };
 
-export function BidSheetImport({ onClose, onDone, notify }: { onClose: () => void; onDone: () => void; notify: (message: string) => void }) {
+export function BidSheetImport({ projectId, projectName, onClose, onDone, notify }: { projectId: string | null; projectName: string; onClose: () => void; onDone: () => void; notify: (message: string) => void }) {
   const [file, setFile] = useState("");
   const [trades, setTrades] = useState<SheetTrade[] | null>(null);
   const [choices, setChoices] = useState<Record<string, Choice>>({});
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState("");
+  // Every project (the contractor's usual split), or one project's own sheet, which replaces the company-wide import
+  // on that project for each trade it covers (lib/memory projectMemory).
+  const [onlyHere, setOnlyHere] = useState(false);
 
   async function read(picked: File) {
     setError(""); setTrades(null); setFile(picked.name);
@@ -34,7 +37,8 @@ export function BidSheetImport({ onClose, onDone, notify }: { onClose: () => voi
   }
 
   const chosen = useMemo(() => (trades ?? []).filter(t => choices[t.tab]?.on), [trades, choices]);
-  const entries = useMemo(() => chosen.flatMap(t => bidSheetEntries(t, file, choices[t.tab].standard || null)), [chosen, choices, file]);
+  const scope = onlyHere && projectId ? projectId : null;
+  const entries = useMemo(() => chosen.flatMap(t => bidSheetEntries(t, file, choices[t.tab].standard || null)).map(e => ({ ...e, projectId: scope })), [chosen, choices, file, scope]);
   const count = (kind: string) => entries.filter(e => e.kind === kind).length;
   // Both are rules: a section the trade carries only in part names its section; an exclusion doesn't.
   const inPart = entries.filter(e => e.kind === "rule" && e.section).length;
@@ -60,6 +64,11 @@ export function BidSheetImport({ onClose, onDone, notify }: { onClose: () => voi
       <label className="memory-import-file"><FileSpreadsheet size={18}/><span>{file || "Choose a live bid sheet (.xlsx)"}</span>
         <input type="file" accept=".xlsx,.xlsm,.xls" disabled={busy} onChange={e => { const f = e.target.files?.[0]; if (f) void read(f); }}/></label>
       {trades && <>
+        <fieldset className="memory-import-scope" disabled={busy}>
+          <legend>Use this sheet for</legend>
+          <label><input type="radio" name="import-scope" checked={!onlyHere} onChange={() => setOnlyHere(false)}/> Every project: this contractor's usual trade split and wording</label>
+          <label><input type="radio" name="import-scope" checked={onlyHere} disabled={!projectId} onChange={() => setOnlyHere(true)}/> {projectId ? `Only ${projectName}: replaces the every-project entries there, trade by trade` : "Only one project: open the project first"}</label>
+        </fieldset>
         <p className="memory-confirm">{trades.length} trade tabs. Ticked: the trades with bidders named or a section list on this sheet; untouched template tabs aren't. Check each tab's Structor trade: its entries apply to that trade's packages on every project.</p>
         <div className="memory-import-list" role="table" aria-label="Trade tabs">
           <div className="memory-import-row head" role="row"><span/><span>Tab and trade on the sheet</span><span>Structor trade</span><span>Sections</span><span>Exclusions</span><span>Lines</span></div>

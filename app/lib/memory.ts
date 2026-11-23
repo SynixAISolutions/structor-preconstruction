@@ -98,6 +98,27 @@ export function entryApplies(entry: Pick<MemoryEntry, "status" | "projectId" | "
   return entry.trades.some(t => tags.includes(t.toLowerCase()));
 }
 
+// ── One project's memory ─────────────────────────────────────────────────────
+// Company-wide entries are the contractor's usual practice; a project can differ (Whittier, 23 Nov: its Doors trade
+// carries the glass in wood doors, which Jelleff's sheet leaves to others). Two overrides, read by every scan:
+//   - a project's own imported bid sheet replaces the company-wide import for each trade it covers;
+//   - "Not on this project": a decision on the project that names a company-wide entry (source.overrides) hides that
+//     entry there, and tells the AI why.
+// Estimators' own entries and corrections are never dropped by an import.
+
+/** The text of a "Not on this project" decision for an entry. */
+export const notHereText = (entry: Pick<MemoryEntry, "text">) => `Not on this project: ${entry.text}`.slice(0, MEMORY_LIMITS.text);
+
+/** The approved entries a project reads, with its overrides applied. Every reader of the memory starts here. */
+export function projectMemory(entries: MemoryEntry[], projectId: string): MemoryEntry[] {
+  const live = entries.filter(e => e.status === "approved" && (!e.projectId || e.projectId === projectId));
+  const own = live.filter(e => e.projectId === projectId);
+  const hidden = new Set(own.map(e => e.source.overrides).filter(Boolean));
+  const ownSheetTrades = new Set(own.filter(e => e.origin === "import").flatMap(e => e.trades.map(t => t.toLowerCase())));
+  const replaced = (e: MemoryEntry) => !e.projectId && e.origin === "import" && e.trades.some(t => ownSheetTrades.has(t.toLowerCase()));
+  return live.filter(e => !hidden.has(e.id) && !replaced(e));
+}
+
 export const PACK_CHARS = 6_000;
 const byWeight = (a: MemoryEntry, b: MemoryEntry) => b.seen - a.seen || a.text.localeCompare(b.text);
 
@@ -107,7 +128,7 @@ const byWeight = (a: MemoryEntry, b: MemoryEntry) => b.seen - a.seen || a.text.l
  * `maxChars` (examples give way first). Empty when nothing applies, so a scan without memory reads exactly as before.
  */
 export function contextPack(entries: MemoryEntry[], target: { projectId: string; code: string; name: string }, maxChars = PACK_CHARS): string {
-  const apply = entries.filter(e => entryApplies(e, target));
+  const apply = projectMemory(entries, target.projectId).filter(e => entryApplies(e, target));
   const groups: [string, MemoryEntry[]][] = [
     ["Decisions on this project", apply.filter(e => e.kind === "decision").sort(byWeight)],
     [`Specification sections ${target.name} carries on this contractor's bid forms`, apply.filter(e => e.kind === "assignment").sort((a, b) => (a.section ?? "").localeCompare(b.section ?? ""))],
@@ -139,7 +160,7 @@ export function contextPack(entries: MemoryEntry[], target: { projectId: string;
 /** The longest memory a scan request carries (a little over PACK_CHARS, for the header lines). */
 export const MEMORY_REQUEST_CHARS = 8_000;
 /** The system line a reading job adds when its request carries the contractor's memory; nothing when it doesn't. */
-export const MEMORY_PROMPT_RULE = "If the contractor's memory is supplied, follow it: which trade carries what, what to leave out, and how lines are worded on this contractor's bid forms. It came from this contractor's estimators. It never replaces evidence: every item still needs its quote from the source, and work the source doesn't require is still left out.";
+export const MEMORY_PROMPT_RULE = "If the contractor's memory is supplied, follow it: which trade carries what, what to leave out, and how lines are worded on this contractor's bid forms. It came from this contractor's estimators. Where an entry for this project differs from the company-wide ones, follow this project's. It never replaces evidence: every item still needs its quote from the source, and work the source doesn't require is still left out.";
 /** The memory as the request carries it, checked: a string of at most MEMORY_REQUEST_CHARS, or undefined. */
 export function memoryField(raw: unknown, fail: (message: string) => never): string | undefined {
   if (raw === undefined || raw === null || raw === "") return undefined;
@@ -181,7 +202,7 @@ export function partClaim(e: Pick<MemoryEntry, "kind" | "section" | "text">): bo
  *   furnishes). Whoever carries the section in full still reads it.
  */
 export function rememberedSections(entries: MemoryEntry[], packages: { id: string; code: string; name: string }[], projectId: string, sections: string[]): { byPackage: Map<string, string[]>; partial: Map<string, string[]> } {
-  const live = entries.filter(e => e.status === "approved" && e.section && (!e.projectId || e.projectId === projectId));
+  const live = projectMemory(entries, projectId).filter(e => e.section);
   const claims = (pick: (e: MemoryEntry) => boolean) => {
     const out = new Map<string, Set<string>>();
     for (const section of sections) for (const e of live) {
@@ -201,7 +222,7 @@ export function rememberedSections(entries: MemoryEntry[], packages: { id: strin
 
 /** What a trade's own approved rules say it doesn't carry ("Demolition doesn't carry: Site Demo." gives "Site Demo"). */
 export function leftOut(entries: MemoryEntry[], target: { code: string; name: string }, projectId: string): string[] {
-  return entries.filter(e => e.kind === "rule" && e.trades.length && entryApplies(e, { projectId, ...target }))
+  return projectMemory(entries, projectId).filter(e => e.kind === "rule" && e.trades.length && entryApplies(e, { projectId, ...target }))
     .flatMap(e => { const m = e.text.match(/\bdoesn['’]t carry:?\s*(.+?)\.?$/i); return m ? [m[1]] : []; });
 }
 
@@ -243,7 +264,7 @@ export function tradeMemory(entries: MemoryEntry[], target: { id: string; code: 
  * trade with the sections it carries, then what trades leave to others. Empty when there is none.
  */
 export function planMemory(entries: MemoryEntry[], projectId: string, maxChars = PACK_CHARS): string {
-  const live = entries.filter(e => e.status === "approved" && (!e.projectId || e.projectId === projectId));
+  const live = projectMemory(entries, projectId);
   const label = (e: MemoryEntry) => e.source.trade || e.trades.find(t => !/^\d/.test(t)) || e.trades[0] || "Every trade";
   const byTrade = new Map<string, string[]>();
   for (const e of live.filter(e => e.kind === "assignment" && e.section)) byTrade.set(label(e), [...(byTrade.get(label(e)) ?? []), e.section!]);
