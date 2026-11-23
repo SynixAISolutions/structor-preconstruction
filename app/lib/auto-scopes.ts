@@ -26,6 +26,7 @@ import { OCR_WORKERS, ocrWork } from "./sheet-ocr";
 import { blendPace, checkShare, FIRST_PACE, measurePace, secondsLeft, steadyLeft, tradesLeft, type Pace, type TradeLeft } from "./run-time-left";
 import { readTradeScope } from "./scope-reading";
 import { leftOut, planMemory, rememberedSections, tradeMemory } from "./memory";
+import { borrowedTags, tagFamilies } from "./finish-schedule";
 import { memoryForScan } from "./memory-client";
 import { readDraft, writeDraft } from "./use-local-draft";
 import { writeGeneralScope } from "./general-scope-client";
@@ -260,6 +261,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   const assigned = sectionsByTrade(specificationSections(documents), procurement.packages, split.byPackage, split.partial);
   const readers = readersBySection(assigned, procurement.packages);
   const owners = sectionOwners(readers, procurement.packages, split.partial);
+  const borrowed = borrowedTags(memory.entries, projectId);
   const refPackages = procurement.packages.map(p => ({ id: p.id, name: p.name, code: p.code, sections: (assigned.get(p.id) ?? []).map(s => `${s.section} ${s.title}`) }));
   // The drawing search runs again only when sheets changed.
   const candidates = update ? onlyChanged(all, update) : all, search = !update || update.sheets.length > 0;
@@ -270,6 +272,10 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   }
   const scopesLater = waitsForGoAhead(fullCost, previous?.readAll);
   const readable = scopesLater ? [] : candidates;
+  // Tags the memory borrows from other projects' bid forms, checked against every tag family this project's drawings
+  // print (lib/finish-schedule). Unreadable drawings: no line is dropped.
+  const printedTexts = borrowed.size && readable.length ? sheetTexts ?? await loadSheetTexts(documents).catch(() => null) : null;
+  const printed = printedTexts ? tagFamilies(printedTexts.sheets.map(s => s.text)) : undefined;
   ledger = ledgerOf(readable, id => !!previous?.trades.some(t => t.packageId === id && t.status === "done"));
   const queued = (t: (typeof readable)[number]): AutoTrade => ({ packageId: t.pkg.id, name: t.pkg.name, status: "queued", added: 0, note: "" });
   let run: AutoRun = previous
@@ -305,7 +311,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
       try {
         const outcome = await readTradeScope({
           pkg, sections, sheets, signal: controller.signal, memory: tradeMemory(memory.entries, pkg, projectId, sections, readers, split.partial.get(pkg.id), handed.get(pkg.id)),
-          owners, leavesOut: leaves(pkg),
+          owners, leavesOut: leaves(pkg), borrowed, printed,
           onProgress: p => {
             const left = ledger.get(pkg.id);
             if (left) left.counts = p.counts;

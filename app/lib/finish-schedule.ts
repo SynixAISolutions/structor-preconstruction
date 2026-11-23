@@ -9,6 +9,7 @@
 
 import type { Dropped } from "./ai-jobs";
 import type { DraftInput } from "./extraction";
+import { projectMemory, type MemoryEntry } from "./memory";
 
 /** One row of a finish legend: its tag as printed, its type words, the type's usual section and the printed row. */
 export type FinishRow = { tag: string; type: string; section: string; line: string; text: string };
@@ -132,8 +133,9 @@ export function finishLegend(text: string): FinishRow[] {
 }
 
 /**
- * The tags a line names, normalised: "ACP-1", "F4", and the tags inside a range ("ACP-1 to ACP-5", "AWP-1..3",
- * "AWP-1 through 3"). Only capital letters count as a tag, so "Level 5" isn't one.
+ * The tags a line names, normalised: "ACP-1", "F4", the tags inside a range ("ACP-1 to ACP-5", "AWP-1..3", "AWP-1
+ * through 3") and a slash list ("AWP-1/2/3", "ACP-1/ACP-2"; Whittier run 4 wrote "AWP-1/2/3" and got an extra AWP-2
+ * line). Only capital letters count as a tag, so "Level 5" isn't one.
  */
 export function namedTags(text: string): Set<string> {
   const out = new Set<string>();
@@ -142,7 +144,61 @@ export function namedTags(text: string): Set<string> {
     const from = Number(m[2]), to = Number(m[3]);
     if (to > from && to - from <= 20) for (let n = from; n <= to; n++) out.add(canonical(m[1], String(n)));
   }
+  for (const m of text.matchAll(/\b([A-Z]{1,5})-\d{1,3}[A-Z]?((?:\/(?:[A-Z]{1,5}-?)?\d{1,3}[A-Z]?)+)\b/g))
+    for (const n of m[2].matchAll(/\/(?:([A-Z]{1,5})-?)?(\d{1,3})([A-Z]?)/g)) if (!n[1] || n[1] === m[1]) out.add(canonical(m[1], n[2], n[3]));
   return out;
+}
+
+// ── Tags borrowed from another project (Whittier run 4: "Install sound absorbing panels SAW-01") ──
+// SAW-01 is Project 1's tag. Its wording reached Whittier's Drywall through the company-wide memory imported from
+// Project 1's bid sheet, while no Whittier drawing or specification prints it. A tag like that on a bid-form line is
+// another project's, so the line is left out with a note; the legend check above names this project's own tags.
+
+/**
+ * The tags the memory a project reads names in its company-wide entries but not in the project's own: the ones a
+ * scan could borrow from another project's bid forms. Only hyphened tags of two letters or more ("SAW-01"), so a
+ * standard ("NFPA 80", "ASTM C 645") or a detail ("D3") is never one.
+ */
+export function borrowedTags(entries: MemoryEntry[], projectId: string): Set<string> {
+  const seen = projectMemory(entries, projectId);
+  const tags = (list: MemoryEntry[]) => new Set(list.flatMap(e => [...`${e.text} ${e.detail}`.matchAll(/\b([A-Z]{2,5})-(\d{1,3})([A-Z]?)\b/g)].map(m => canonical(m[1], m[2], m[3]))));
+  const own = tags(seen.filter(e => e.projectId === projectId));
+  return new Set([...tags(seen.filter(e => !e.projectId))].filter(t => !own.has(t)));
+}
+
+/** A tag's family: "SAW" for SAW-01. */
+const family = (tag: string) => tag.split("-")[0];
+/** The tag families printed on some pages ("SAW", "LVT"), from their text. */
+export const tagFamilies = (texts: string[]): Set<string> => new Set(texts.flatMap(t => [...namedTags(t)].map(family)));
+
+/** A page a trade's reading read, with its text: a specification page or a drawing sheet. */
+export type ReadPage = { document: string; page: number; text: string };
+
+/**
+ * A trade's reading without its lines that name a borrowed tag (borrowedTags) in their titles whose family is printed
+ * nowhere: not on any page the trade read, nor on any of the project's drawings (`printed`, tagFamilies of every
+ * sheet). The whole project, because a tag defined on a sheet another trade reads is still this project's (Drywall
+ * installing Project 1's GB-1 grab bars); a family, not the exact tag, so Project 1's "LVT-01" wording on a project that
+ * prints LVT-1 to LVT-3 stays. Only a line whose cited page has a text layer is judged: a scanned sheet's words aren't in
+ * `pages`. The line's highlights and quantity go with it.
+ */
+export function dropBorrowedTags(args: { drafts: DraftInput[]; pkg: TagOwner; pages: ReadPage[]; printed: Set<string>; borrowed: Set<string> }): { drafts: DraftInput[]; dropped: Dropped[] } {
+  const { drafts, pkg, pages, borrowed } = args;
+  if (!borrowed.size || !pages.length) return { drafts, dropped: [] };
+  const printed = new Set([...args.printed, ...tagFamilies(pages.map(p => p.text))]);
+  const hasText = (d: DraftInput) => pages.some(p => p.document === d.citations[0]?.document && p.page === d.citations[0]?.page && p.text.trim().length >= 200);
+  const dropped: Dropped[] = [], gone = new Set<string>();
+  for (const d of drafts) {
+    if (d.kind !== "scope" || d.packageId !== pkg.id || !hasText(d)) continue;
+    const foreign = [...namedTags(d.title)].filter(t => borrowed.has(t) && !printed.has(family(t)));
+    if (!foreign.length) continue;
+    gone.add(d.key);
+    // As written in the line ("SAW-01"), not normalised.
+    const written = foreign.map(t => [...d.title.matchAll(/\b([A-Z]{1,5})[- ]?(\d{1,3})([A-Z]?)\b/g)].find(m => canonical(m[1], m[2], m[3]) === t)?.[0] ?? t);
+    const one = written.length === 1;
+    dropped.push({ what: d.title, reason: `No ${written.map(t => `${family(normal(t))}-`).join(" or ")} tag is printed on this project's drawings or the pages ${pkg.name} read: ${written.join(", ")} ${one ? "comes" : "come"} from another project's bid form wording in the AI memory.` });
+  }
+  return { drafts: drafts.filter(d => !gone.has(d.key) && !(d.kind === "region" && d.scopeKeys?.some(k => gone.has(k))) && !(d.kind === "quantity" && d.scopeKey && gone.has(d.scopeKey))), dropped };
 }
 
 /**
