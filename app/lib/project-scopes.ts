@@ -65,7 +65,10 @@ export function readersBySection<S extends StoredSection>(assigned: Map<string, 
 // Which drawing sheets carry a trade's scope (15 Oct: scopes come from all the project files, the
 // drawings as well as the specifications). Title keywords by CSI code, most telling first, capped
 // so a trade costs a handful of vision requests.
-const SHEET_RULES: { code: RegExp; titles: RegExp[]; disciplines?: string[] }[] = [
+// `schedules`: sheets a trade reads on top of its others, because they define the tags its lines name. Whittier's
+// A-506 Interior Finish Schedules is where ACP-1 to ACP-5, WDC-1, BAF-1, CG-1 and AWP-1 to AWP-3 are defined; without
+// it Drywall's scan saw "ACP-1" on a ceiling plan with nothing to say what it is (23 Nov fair test).
+const SHEET_RULES: { code: RegExp; titles: RegExp[]; disciplines?: string[]; schedules?: RegExp }[] = [
   { code: /^02 4/, titles: [/DEMOLITION/] },
   { code: /^02 8/, titles: [/HAZARD|ABATEMENT|ASBESTOS/] },
   { code: /^03/, titles: [/FOUNDATION|CONCRETE/, /STRUCTURAL NOTES/] },
@@ -74,7 +77,7 @@ const SHEET_RULES: { code: RegExp; titles: RegExp[]; disciplines?: string[] }[] 
   { code: /^06/, titles: [/CASEWORK|MILLWORK/, /INTERIOR DETAILS/] },
   { code: /^07/, titles: [/ROOF PLAN/, /WALL SECTIONS|EXTERIOR SECTION|MOCK-UP/] },
   { code: /^08/, titles: [/DOOR/, /WINDOW|STOREFRONT|GLAZING|CURTAIN WALL/] },
-  { code: /^09 [245]/, titles: [/PARTITION/, /REFLECTED CEILING|CEILING DETAILS/, /^LEVEL \d+ - \w+ FLOOR PLAN/] },
+  { code: /^09 [245]/, titles: [/PARTITION/, /REFLECTED CEILING|CEILING DETAILS/, /^LEVEL \d+ - \w+ FLOOR PLAN/], schedules: /FINISH SCHEDULE/ },
   { code: /^09 [36]/, titles: [/FINISH/] },
   { code: /^09 9/, titles: [/FINISH/, /INTERIOR ELEVATIONS/] },
   { code: /^10/, titles: [/SIGNAGE|TOILET ACCESSOR|SPECIALT/] },
@@ -94,22 +97,27 @@ const SHEET_RULES: { code: RegExp; titles: RegExp[]; disciplines?: string[] }[] 
   { code: /^33/, titles: [/UTILIT|STORM ?WATER|SEWER/] },
 ];
 export const MAX_SHEETS_PER_TRADE = 6;
+/** The most schedule sheets a trade adds on top of MAX_SHEETS_PER_TRADE. */
+export const MAX_SCHEDULE_SHEETS = 2;
 
 type SheetRow = { title: string; discipline?: string };
 const ruleFor = (code: string) => SHEET_RULES.find(r => r.code.test(code));
 
 /**
  * The drawing sheets (from drawingRegister) that show a trade's work: the ones the AI chose for the package
- * (TradePackage.sheets), else by its CSI code: title keywords first, then its discipline's sheets.
+ * (TradePackage.sheets), else by its CSI code: title keywords first, then its discipline's sheets. Then the trade's
+ * schedule sheets (SHEET_RULES schedules), up to MAX_SCHEDULE_SHEETS more, whichever way the others were chosen.
  */
 export function sheetsForTrade<T extends SheetRow & { sheet?: string }>(register: T[], trade: string | Pick<TradePackage, "code" | "sheets">, max = MAX_SHEETS_PER_TRADE): T[] {
-  if (typeof trade !== "string" && trade.sheets?.length) return trade.sheets.flatMap(s => register.filter(r => r.sheet === s).slice(0, 1)).slice(0, max);
   const code = typeof trade === "string" ? trade : trade.code;
-  const rule = ruleFor(code), out: T[] = [];
+  const rule = ruleFor(code);
+  const withSchedules = (out: T[]) => [...out, ...(rule?.schedules ? register.filter(row => rule.schedules!.test(row.title.toUpperCase()) && !out.includes(row)).slice(0, MAX_SCHEDULE_SHEETS) : [])];
+  if (typeof trade !== "string" && trade.sheets?.length) return withSchedules(trade.sheets.flatMap(s => register.filter(r => r.sheet === s).slice(0, 1)).slice(0, max));
+  const out: T[] = [];
   const add = (match: (row: T) => boolean) => { for (const row of register) if (out.length < max && !out.includes(row) && match(row)) out.push(row); };
   for (const re of rule?.titles ?? []) add(row => re.test(row.title.toUpperCase()));
   if (rule?.disciplines) add(row => rule.disciplines!.includes(row.discipline ?? ""));
-  return out;
+  return withSchedules(out);
 }
 
 // Drawn work a contractor's bid forms move from one trade to another (Marcel's Jelleff forms: Demolition "doesn't
