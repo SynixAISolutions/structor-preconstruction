@@ -39,8 +39,10 @@ export const mergeRuns = (a: ScopeRunResult, b: ScopeRunResult): ScopeRunResult 
 export async function readTradeScope(args: {
   pkg: Pick<TradePackage, "id" | "name" | "code">; sections: VolumeSection[]; sheets: RegisterRow[];
   signal: AbortSignal; onProgress: (progress: TradeReadProgress) => void; addFlipPages: (pages: PageInput[]) => string | null;
+  /** The contractor's approved memory for this trade (lib/memory contextPack); empty reads as before. */
+  memory?: string;
 }): Promise<ScopeRunResult> {
-  const { pkg, sections: stored, sheets, signal } = args;
+  const { pkg, sections: stored, sheets, signal, memory } = args;
   // Both halves report at once: "Reading part 3 of 46 · Reading drawing sheet 2 of 6".
   const notes = { specification: stored.length ? "Loading section text…" : "", sheets: sheets.length ? "Reading drawing sheets…" : "" };
   const counts: TradeCounts = { ...NO_COUNTS, specDone: !stored.length };
@@ -61,7 +63,7 @@ export async function readTradeScope(args: {
     let before = 0;
     for (const { doc, sections, chunks } of volumes) {
       if (!sections.length || signal.aborted) continue;
-      const read = await extractTradeScope({ pkg, manual: { name: doc.name, pageCount: doc.pageCount }, sections, signal, onProgress: done => { counts.partsDone = before + done; say("specification", `Reading part ${Math.min(before + done + 1, total)} of ${total}`); } });
+      const read = await extractTradeScope({ pkg, manual: { name: doc.name, pageCount: doc.pageCount }, sections, memory, signal, onProgress: done => { counts.partsDone = before + done; say("specification", `Reading part ${Math.min(before + done + 1, total)} of ${total}`); } });
       before += chunks;
       outcome = outcome ? mergeRuns(outcome, read) : read;
     }
@@ -90,7 +92,7 @@ export async function readTradeScope(args: {
       const doc = rows[0].doc, aspects = new Map<number, number>();
       const text = await readStoredText(doc, { first: Math.min(...rows.map(r => r.page)), last: Math.max(...rows.map(r => r.page)) });
       const drawn = await extractDrawingScope({
-        pkg, document: doc.name, pageCount: doc.pageCount, signal, onProgress: d => { counts.sheetsRead = done + d; say("sheets", `Reading drawing sheet ${Math.min(done + d + 1, sheets.length)} of ${sheets.length}`); },
+        pkg, document: doc.name, pageCount: doc.pageCount, memory, signal, onProgress: d => { counts.sheetsRead = done + d; say("sheets", `Reading drawing sheet ${Math.min(done + d + 1, sheets.length)} of ${sheets.length}`); },
         pages: rows.map(r => ({ page: r.page, sheet: r.sheet, text: text.find(p => p.page === r.page)?.text ?? "" })),
         render: page => renderStoredPage(doc, page, 2000, true).then(r => { aspects.set(page, r.aspect); return { image: r.image }; }),
       });

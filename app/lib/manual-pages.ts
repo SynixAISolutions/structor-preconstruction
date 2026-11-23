@@ -44,6 +44,27 @@ export const pageGuides = [
     related: ["projects", "information", "scopes"],
   },
   {
+    id: "memory",
+    group: "Workspace",
+    title: "AI memory",
+    purpose: "Teach Structor's AI how your company splits and words its scopes, once, so every later scan reads it first: which trade carries what, what to leave out, how lines read on your bid forms, and what was decided on a project.",
+    steps: [
+      "Corrections teach it by themselves. In Scopes & bid forms, moving a line to another trade, moving an AI proposal to another trade, rejecting an AI proposal as Belongs to another trade or Not required by the documents, or rewording an AI proposal before accepting it adds a proposal under To review a few seconds later.",
+      "Under To review, choose Approve to put an entry in use, Edit to sharpen its wording or its trade first, or Retire when it was a one-off. Nothing waiting for review is ever read by a scan, so one bad correction can't teach the AI something wrong. Seen 3 times means three corrections pointed at the same lesson.",
+      "Choose Add to memory to write what a new estimator should be told: a Rule (\"Put acoustic ceiling panels in Drywall, not Acoustical ceilings\"), a Wording example (a line as your bid forms word it) or a Project decision (\"Owner provides FF&E\"). Pick the trade it concerns, or Every trade, and tick Only for this project when it doesn't hold elsewhere. What you add is in use at once.",
+      "Choose What the AI reads and pick a trade to see exactly what a scan of that trade is given: this project's decisions, the trade's rules, the rules for every trade, then wording examples, the most confirmed first.",
+      "Search matches the words in any form (\"air barriers\" finds \"air barrier\"), in the entry, its detail, its trades and its section; the kind filter narrows to rules, examples or decisions. Retired entries stay listed under Retired; Use again puts one back in use.",
+    ],
+    terms: [
+      { name: "In use", meaning: "An approved entry: every scan it applies to reads it before the drawings and specifications." },
+      { name: "To review", meaning: "Learned from a correction and waiting for an estimator; never read by a scan." },
+      { name: "Wording example", meaning: "A line as your bid forms word it, so the AI writes its proposals the same way." },
+    ],
+    example: "An estimator moves \"Provide acoustic ceiling panels\" from Acoustical ceilings to Drywall on Maple Street. A proposal appears under To review: Put \"Provide acoustic ceiling panels\" in Drywall, not Acoustical ceilings. Once approved, the next scan of any project's Drywall and Acoustical ceilings trades reads it first.",
+    reality: "Kept in the shared database for the whole company, with project decisions kept to their project. A scan reads at most about 6,000 characters of it per trade, the most specific and most confirmed first. The AI still cites the drawings or specifications for every line: the memory guides it, it never replaces the documents.",
+    related: ["scopes", "documents", "projects"],
+  },
+  {
     id: "assumptions",
     group: "Preconstruction",
     title: "Assumptions & clarifications",

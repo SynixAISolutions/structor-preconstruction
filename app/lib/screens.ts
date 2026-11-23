@@ -14,7 +14,7 @@ export type Screen =
   | "contracts" | "contract-compare" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
   | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
   | "architect" | "ratings" | "prequalification" | "drawing-flip" | "buyout" | "model-mep" | "model-structural" | "model-exterior"
-  | "rfp-requirements" | "compliance" | "assumptions" | "workload" | "exhibits";
+  | "rfp-requirements" | "compliance" | "assumptions" | "workload" | "exhibits" | "memory";
 
 export type ViewProps = { navigate: (screen: Screen) => void; notify: (message: string) => void; projectName: string };
 
@@ -48,6 +48,8 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     { id: "workload", label: "Estimator workload", icon: "Users", keywords: ["resource tracking", "capacity", "estimators", "workload", "who is free", "over worked"] },
     // Marcel's process doc: rates kept from each job as a benchmark for the next.
     { id: "unit-costs", label: "Unit cost database", icon: "Gauge", keywords: ["unit prices", "benchmark", "cost database", "cost per square foot", "historical rates", "price book"] },
+    // Danial, 23 Nov: "an AI agent that keeps context always so for next scan or extract it knows exactly what to extract".
+    { id: "memory", label: "AI memory", icon: "BrainCircuit", keywords: ["company memory", "playbook", "rules", "learned", "corrections", "wording examples", "project decisions", "what the ai knows", "training"] },
   ]},
   { label: "PRECONSTRUCTION", scope: "project", items: [
     { id: "turnover", label: "Preconstruction to-do", icon: "ClipboardCheck", keywords: ["project turnover", "percent complete", "checklist", "overview", "dashboard", "project health", "progress", "project setup", "getting started", "onboarding", "missing documents", "upload"] },

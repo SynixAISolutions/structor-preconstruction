@@ -49,7 +49,7 @@ export type ScopeRunResult = { input: RunInput; dropped: Dropped[]; failures: { 
  * Reads the chosen specification sections for a trade, a few pages per request, and returns the run
  * to record. Keys are made unique across requests. If every request failed the run is a failed run.
  */
-export async function extractTradeScope(args: { pkg: Pick<TradePackage, "id" | "name" | "code">; manual: Pick<PdfText, "name" | "pageCount">; sections: ManualSection[]; brief?: string; signal?: AbortSignal; onProgress?: (done: number, total: number) => void }): Promise<ScopeRunResult> {
+export async function extractTradeScope(args: { pkg: Pick<TradePackage, "id" | "name" | "code">; manual: Pick<PdfText, "name" | "pageCount">; sections: ManualSection[]; brief?: string; memory?: string; signal?: AbortSignal; onProgress?: (done: number, total: number) => void }): Promise<ScopeRunResult> {
   const startedAt = new Date().toISOString();
   const jobs = args.sections.flatMap(section => chunkPages(section.pages).map(pages => ({ section, pages })));
   const drafts: DraftInput[] = [], dropped: Dropped[] = [], failures: ScopeRunResult["failures"] = [];
@@ -63,7 +63,7 @@ export async function extractTradeScope(args: { pkg: Pick<TradePackage, "id" | "
       if (stop || next >= jobs.length) return;
       const i = next++, { section, pages } = jobs[i];
       try {
-        const result = await post<{ drafts: DraftInput[]; dropped: Dropped[] }>("scope", { pkg: args.pkg, document: args.manual.name, section: { section: section.section, title: section.title }, pages, ...(args.brief ? { brief: args.brief } : {}) }, args.signal);
+        const result = await post<{ drafts: DraftInput[]; dropped: Dropped[] }>("scope", { pkg: args.pkg, document: args.manual.name, section: { section: section.section, title: section.title }, pages, ...(args.brief ? { brief: args.brief } : {}), ...(args.memory ? { memory: args.memory } : {}) }, args.signal);
         consecutiveFailures = 0;
         model = result.model;
         answers[i] = result;
@@ -91,7 +91,7 @@ export async function extractTradeScope(args: { pkg: Pick<TradePackage, "id" | "
 export type ProposalReadResult = { input: ReadingInput; dropped: Dropped[] };
 
 /** Reads selected sheets as images and text; review remains mandatory for geometry and measurements. */
-export async function extractDrawingScope(args: { pkg: Pick<TradePackage, "id" | "name" | "code">; document: string; pageCount: number; pages: (PageText & { sheet: string })[]; render: (page: number) => Promise<{ image: string }>; signal?: AbortSignal; onProgress?: (done: number, total: number) => void }): Promise<ScopeRunResult> {
+export async function extractDrawingScope(args: { pkg: Pick<TradePackage, "id" | "name" | "code">; document: string; pageCount: number; pages: (PageText & { sheet: string })[]; render: (page: number) => Promise<{ image: string }>; memory?: string; signal?: AbortSignal; onProgress?: (done: number, total: number) => void }): Promise<ScopeRunResult> {
   const startedAt = new Date().toISOString(), drafts: DraftInput[] = [], dropped: Dropped[] = [], failures: ScopeRunResult["failures"] = [];
   const drawingPages: (PageText & { sheet: string })[] = [];
   let model = "";
@@ -104,7 +104,7 @@ export async function extractDrawingScope(args: { pkg: Pick<TradePackage, "id" |
       try {
         const { image } = await args.render(page.page);
         args.signal?.throwIfAborted();
-        answers[i] = await inAiPool(() => post<{ sheet: string; drafts: DraftInput[]; dropped: Dropped[] }>("drawing", { pkg: args.pkg, document: args.document, sheet: page.sheet, page: page.page, text: page.text, image }, args.signal));
+        answers[i] = await inAiPool(() => post<{ sheet: string; drafts: DraftInput[]; dropped: Dropped[] }>("drawing", { pkg: args.pkg, document: args.document, sheet: page.sheet, page: page.page, text: page.text, image, ...(args.memory ? { memory: args.memory } : {}) }, args.signal));
         consecutiveFailures = 0;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

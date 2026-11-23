@@ -59,7 +59,8 @@ export const REJECT_REASONS: Record<RejectReason, string> = {
 
 export type DraftEvent =
   | { kind: "proposed" | "accepted" | "reopened"; at: string; by: string }
-  | { kind: "edited"; at: string; by: string; fields: string[] }
+  /** `fromPackage`: the trade a finding was moved out of, when `fields` holds packageId (what lib/memory-learn learns from). */
+  | { kind: "edited"; at: string; by: string; fields: string[]; fromPackage?: string }
   | { kind: "rejected"; at: string; by: string; reason: RejectReason; note: string };
 
 type DraftBase = {
@@ -311,7 +312,8 @@ export function editDraft(state: ExtractionState, procurement: Procurement, draf
   const fields = (Object.keys(changes) as (keyof DraftChanges)[]).filter(k => k in next && (next as Record<string, unknown>)[k] !== (draft as Record<string, unknown>)[k]);
   if (!fields.length) return state;
   const original = draft.original ?? pick(draft);
-  let drafts = state.drafts.map(d => d.id === draft.id ? { ...next, original, history: [...draft.history, { kind: "edited" as const, at, by: by.trim(), fields }] } as Draft : d);
+  const event = { kind: "edited" as const, at, by: by.trim(), fields, ...(packageId !== draft.packageId ? { fromPackage: draft.packageId } : {}) };
+  let drafts = state.drafts.map(d => d.id === draft.id ? { ...next, original, history: [...draft.history, event] } as Draft : d);
   if (packageId !== draft.packageId) drafts = drafts.map(d => unlinkMoved(d, draft, packageId));
   return { ...state, drafts };
 }
