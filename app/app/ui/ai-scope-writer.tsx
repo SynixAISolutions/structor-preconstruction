@@ -7,12 +7,12 @@ import { addPage } from "../../lib/drawing-flip";
 import { notOnSheet, recordRun } from "../../lib/extraction";
 import { drawingRegister, latestDocuments, specificationSections } from "../../lib/project-files";
 import { useProjectDocuments } from "../../lib/project-files-client";
-import { sectionsByTrade, sheetsForTrade, uncoveredSections } from "../../lib/project-scopes";
+import { readersBySection, sectionsByTrade, sheetsForTrade, uncoveredSections } from "../../lib/project-scopes";
 import { applyBidPackagePlan, type BidPackagePlan } from "../../lib/bid-package-ai";
 import { planBidPackages } from "../../lib/bid-package-client";
 import { CONFIRM_ABOVE, dollars, estimateCost } from "../../lib/ai-cost";
 import { useAiReader } from "../../lib/ai-reader-client";
-import { contextPack, planMemory, rememberedSections, type MemoryEntry } from "../../lib/memory";
+import { planMemory, rememberedSections, tradeMemory, type MemoryEntry } from "../../lib/memory";
 import { memoryForScan, useScanMemory } from "../../lib/memory-client";
 import { readTradeScope } from "../../lib/scope-reading";
 import { getActiveProjectId, useActiveProject } from "../../lib/project-scope";
@@ -41,8 +41,10 @@ export function AiScopeWriter({ review, notify, onOpenFiles, onReview }: { revie
   // The contractor's approved trade split decides which sections each trade reads (lib/memory, 23 Nov).
   const activeProject = useActiveProject();
   const remembered = useScanMemory(activeProject);
-  const split = useMemo(() => rememberedSections(remembered, packages, activeProject ?? "", specs.map(s => s.section)).byPackage, [remembered, packages, activeProject, specs]);
-  const assigned = useMemo(() => sectionsByTrade(specs, packages, split), [specs, packages, split]);
+  // A section several trades carry goes to each; one a trade carries only in part ("as applicable") is read by it too.
+  const split = useMemo(() => rememberedSections(remembered, packages, activeProject ?? "", specs.map(s => s.section)), [remembered, packages, activeProject, specs]);
+  const assigned = useMemo(() => sectionsByTrade(specs, packages, split.byPackage, split.partial), [specs, packages, split]);
+  const readers = useMemo(() => readersBySection(assigned, packages), [assigned, packages]);
   const register = useMemo(() => drawingRegister(documents), [documents]);
   const uncovered = useMemo(() => uncoveredSections(specs, packages), [specs, packages]);
   // The bid packages are the AI's to set (Danial, 28 Oct: "YOU CANT WRITE THE WHOLE LIST U NEED AI"): it reads the
@@ -95,7 +97,7 @@ export function AiScopeWriter({ review, notify, onOpenFiles, onReview }: { revie
     const pkg = packages.find(p => p.id === id)!;
     update(id, { status: "reading" });
     const outcome = await readTradeScope({
-      pkg, sections: assigned.get(id) ?? [], sheets: sheetsFor(id), signal, memory: contextPack(memory, { projectId, code: pkg.code, name: pkg.name }),
+      pkg, sections: assigned.get(id) ?? [], sheets: sheetsFor(id), signal, memory: tradeMemory(memory, pkg, projectId, assigned.get(id) ?? [], readers, split.partial.get(id)),
       onProgress: p => update(id, { status: "reading", done: p.done, total: p.total, note: p.note }),
       addFlipPages: pages => { const errors = latest.current.runFlip(current => pages.reduce((state, page) => state.pages.some(x => x.sheet === page.sheet) ? state : addPage(state, page), current)); return errors ? Object.values(errors)[0] ?? "A sheet could not be added to Drawing Flip." : null; },
     });

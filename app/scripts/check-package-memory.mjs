@@ -40,17 +40,41 @@ const split = [
   entry({ text: "Another project's.", section: "06 41 16", trades: drywallTags, projectId: "p2" }),
 ];
 const sections = ["06 16 43", "06 10 53", "06 41 16", "07 92 00", "07 27 26", "09 51 13"];
-const remembered = M.rememberedSections(split, packages, "p1", sections);
-assert.deepEqual([[...remembered.byPackage], remembered.ambiguous], [[["dw", ["06 16 43"]], ["waterproofing", ["07 27 26"]]], ["07 92 00"]],
-  "Drywall gets the sheathing under 06 16 00 (found by its name, whatever its code), Waterproofing the air barrier; sealants claimed by two trades are left to the usual rules; proposals and other projects' entries don't count");
+// A bid form's "as applicable" section is a part claim; an estimator's split too; a rule that leaves a section out isn't.
+const parts = [
+  entry({ kind: "rule", text: "Drywall carries the parts of 07 27 26 Fluid-Applied Membrane Air Barriers that apply to it.", section: "07 27 26", trades: drywallTags }),
+  entry({ kind: "rule", text: "Drywall doesn't carry: 06 41 16 casework.", section: "06 41 16", trades: drywallTags }),
+  entry({ kind: "rule", text: "Section 09 51 13 is split: Drywall carries the grid; Carpentry carries the wood ceilings.", section: "09 51 13", trades: [...drywallTags, "06 10 00", "carpentry"] }),
+];
+assert.deepEqual(parts.map(M.partClaim), [true, false, true], "Part claims: \"carries the parts of\" and an estimator's split; never a rule that leaves a section out");
+const remembered = M.rememberedSections([...split, ...parts], packages, "p1", sections);
+assert.deepEqual([[...remembered.byPackage], [...remembered.partial]], [[["dw", ["06 16 43", "07 92 00"]], ["waterproofing", ["07 92 00", "07 27 26"]]], [["dw", ["07 27 26", "09 51 13"]], ["carpentry", ["09 51 13"]]]],
+  "Drywall gets the sheathing under 06 16 00 (found by its name, whatever its code), Waterproofing the air barrier; sealants both trades carry go to both; Drywall reads the air barrier for its part, and both trades of the split ceilings section theirs; proposals and other projects' entries don't count");
 const stored = sections.map((section, i) => ({ section, title: `S${i}`, firstPage: 1, lastPage: 2 }));
-const before = P.sectionsByTrade(stored, packages), after = P.sectionsByTrade(stored, packages, remembered.byPackage);
+const before = P.sectionsByTrade(stored, packages), after = P.sectionsByTrade(stored, packages, remembered.byPackage, remembered.partial);
 const ids = (m, id) => (m.get(id) ?? []).map(s => s.section);
 assert.deepEqual([ids(before, "carpentry"), ids(before, "panels")], [["06 16 43", "06 10 53", "06 41 16"], ["07 27 26"]], "Before: sheathing by its division, the air barrier where the AI put it");
-assert.deepEqual([ids(after, "carpentry"), ids(after, "dw"), ids(after, "waterproofing"), ids(after, "panels")], [["06 10 53", "06 41 16"], ["06 16 43", "09 51 13"], ["07 92 00", "07 27 26"], []],
-  "After: the remembered split wins over the division and over the AI's packages");
+assert.deepEqual([ids(after, "carpentry"), ids(after, "dw"), ids(after, "waterproofing"), ids(after, "panels")], [["06 10 53", "06 41 16", "09 51 13"], ["06 16 43", "07 92 00", "07 27 26", "09 51 13"], ["07 92 00", "07 27 26"], []],
+  "After: the remembered split wins over the division and over the AI's packages; a shared section goes to each trade that carries it, and a part claim adds a reader without taking it from its trade");
 const docs = [{ id: "m", name: "Manual.pdf", kind: "manual", revision: 1, series: "manual", sections: sections.map((s, i) => ({ section: s, title: `S${i}`, first: i + 1, last: i + 1 })), sheets: [] }];
-assert.deepEqual(A.tradesToRead(packages, docs, remembered.byPackage).map(t => [t.pkg.id, t.sections.map(s => s.section)]).find(t => t[0] === "dw"), ["dw", ["06 16 43", "09 51 13"]], "What a trade reads follows the split");
+assert.deepEqual(A.tradesToRead(packages, docs, remembered.byPackage, remembered.partial).map(t => [t.pkg.id, t.sections.map(s => s.section)]).find(t => t[0] === "dw"), ["dw", ["06 16 43", "07 92 00", "07 27 26", "09 51 13"]], "What a trade reads follows the split");
+
+// ── Each trade is told what it shares ──
+const named = packages.map(p => ({ ...p, name: p.id === "dw" ? "Drywall" : p.name }));
+const readers = P.readersBySection(after, named);
+const dwMemory = M.tradeMemory([...split, ...parts], named[1], "p1", after.get("dw"), readers, remembered.partial.get("dw"));
+assert.equal(dwMemory.split("\n\n")[0], [
+  "Sections Drywall shares with other trades on this contractor's bid forms (write only Drywall's part of each; leave the rest to the others):",
+  "- 07 92 00 S3: Drywall carries its own part; also read for Waterproofing, air barrier & joint sealants.",
+  "- 07 27 26 S4: Drywall carries only the parts that apply to its own work; also read for Waterproofing, air barrier & joint sealants.",
+  "- 09 51 13 S5: Drywall carries only the parts that apply to its own work; also read for Carpentry.",
+].join("\n"), "A trade's scan is told which sections it reads only for its part and which others read too");
+assert(dwMemory.includes("This contractor's memory:") && dwMemory.length <= M.MEMORY_REQUEST_CHARS, "then its memory, within the request's limit");
+assert.equal(M.tradeMemory([], named[0], "p1", [{ section: "06 10 53" }], readers), "", "Nothing shared, no memory: nothing, as before");
+const many = Array.from({ length: 80 }, (_, i) => ({ section: `07 ${String(10 + i).padStart(2, "0")} 00`, title: "A long section title for the length check" }));
+const crowded = new Map(many.map(s => [s.section, [{ id: "dw", name: "Drywall" }, { id: "x", name: "Another trade with a long name" }]]));
+const big = M.tradeMemory(Array.from({ length: 200 }, (_, i) => entry({ kind: "example", text: `Line ${i} `.repeat(12), trades: drywallTags })), named[1], "p1", many, crowded);
+assert(big.includes("(more not shown)") && big.length <= M.MEMORY_REQUEST_CHARS, "Many shared sections and a full memory still fit the request");
 
 // ── What the AI reads ──
 const pack = M.contextPack(split, { projectId: "p1", code: "09 29 00", name: "Drywall" });
@@ -127,4 +151,4 @@ await assert.rejects(store.setStatus(["x"], "bogus", "M"), /Choose proposed, app
 const live = M.rememberedSections(await store.search({ status: ["approved"], forProject: "p1" }), [{ id: "dw", name: "Drywall", code: "09 29 00" }], "p1", ["06 16 43", "09 29 00"]);
 assert.deepEqual([...live.byPackage], [["dw", ["06 16 43"]]], "Straight from the table to the trades' sections: the partly carried 09 29 00 isn't routed");
 
-console.log("Trade split checked: which sections a remembered split covers, the split on a project's packages (by code or name, ambiguous claims left alone), which sections each trade reads, the scans' and the package plan's memory, a bid sheet read, matched and imported as proposals, what Section coverage teaches, and the table upgraded for trade splits with many approved at once.");
+console.log("Trade split checked: which sections a remembered split covers, the split on a project's packages (by code or name; a section several trades carry goes to each, a part claim adds a reader), what each trade is told it shares, which sections each trade reads, the scans' and the package plan's memory, a bid sheet read, matched and imported as proposals, what Section coverage teaches, and the table upgraded for trade splits with many approved at once.");

@@ -165,25 +165,65 @@ export function sectionCovers(remembered: string, section: string): boolean {
 const packageTags = (pkg: { code: string; name: string }) => tradeTags(pkg).map(t => t.toLowerCase());
 
 /**
- * The approved trade split as it applies to a project's packages: for each of its sections that a remembered split
- * gives to exactly one of its packages, that package. A section two packages' splits claim (joint sealants carried by
- * several trades) is left to the usual assignment and reported.
+ * A rule that gives a trade part of a section: "<trade> carries the parts of <section> … that apply to it" (a bid
+ * form's "as applicable to this Bid Package") or "Section <n> is split: …" (an estimator's Section coverage split).
  */
-export function rememberedSections(entries: MemoryEntry[], packages: { id: string; code: string; name: string }[], projectId: string, sections: string[]): { byPackage: Map<string, string[]>; ambiguous: string[] } {
-  const splits = entries.filter(e => e.kind === "assignment" && e.status === "approved" && e.section && (!e.projectId || e.projectId === projectId));
-  const claims = new Map<string, Set<string>>();
-  for (const section of sections) for (const e of splits) {
-    if (!sectionCovers(e.section!, section)) continue;
-    const tags = e.trades.map(t => t.toLowerCase());
-    for (const pkg of packages) if (packageTags(pkg).some(t => tags.includes(t))) claims.set(section, (claims.get(section) ?? new Set()).add(pkg.id));
+export function partClaim(e: Pick<MemoryEntry, "kind" | "section" | "text">): boolean {
+  return e.kind === "rule" && !!e.section && (/\bcarries the parts of\b/i.test(e.text) || /^Section \d{2} \d{2} \d{2}(?:\.\d{1,2})? is split:/i.test(e.text));
+}
+
+/**
+ * The approved trade split as it applies to a project's packages (Marcel's bid forms, 23 Nov):
+ * - `byPackage`: the sections a remembered split gives each package. A section several trades carry on the forms
+ *   (joint sealants and firestopping on every envelope trade, insulation on four) goes to each of them, and each
+ *   writes its own part.
+ * - `partial`: sections a package reads only for its part ("as applicable": Drywall installs the doors that Doors
+ *   furnishes). Whoever carries the section in full still reads it.
+ */
+export function rememberedSections(entries: MemoryEntry[], packages: { id: string; code: string; name: string }[], projectId: string, sections: string[]): { byPackage: Map<string, string[]>; partial: Map<string, string[]> } {
+  const live = entries.filter(e => e.status === "approved" && e.section && (!e.projectId || e.projectId === projectId));
+  const claims = (pick: (e: MemoryEntry) => boolean) => {
+    const out = new Map<string, Set<string>>();
+    for (const section of sections) for (const e of live) {
+      if (!pick(e) || !sectionCovers(e.section!, section)) continue;
+      const tags = e.trades.map(t => t.toLowerCase());
+      for (const pkg of packages) if (packageTags(pkg).some(t => tags.includes(t))) out.set(section, (out.get(section) ?? new Set()).add(pkg.id));
+    }
+    return out;
+  };
+  const full = claims(e => e.kind === "assignment"), part = claims(partClaim);
+  const byPackage = new Map<string, string[]>(), partial = new Map<string, string[]>();
+  const add = (map: Map<string, string[]>, id: string, section: string) => map.set(id, [...(map.get(id) ?? []), section]);
+  for (const [section, ids] of full) for (const id of ids) add(byPackage, id, section);
+  for (const [section, ids] of part) for (const id of ids) if (!full.get(section)?.has(id)) add(partial, id, section);
+  return { byPackage, partial };
+}
+
+/** The longest note on shared sections a trade's scan carries, so it and the memory stay within MEMORY_REQUEST_CHARS. */
+const SHARING_CHARS = 1_800;
+
+/**
+ * What one trade's scan reads from the memory: first the sections it shares (the ones it reads only for its part, and
+ * the ones other trades read too), then its contextPack. `readers`: each section the trade reads, with every package
+ * reading it (lib/project-scopes sectionsByTrade, inverted). Empty when there is nothing, as before the memory.
+ */
+export function tradeMemory(entries: MemoryEntry[], target: { id: string; code: string; name: string }, projectId: string,
+  sections: { section: string; title?: string }[], readers: Map<string, { id: string; name: string }[]>, partial: string[] = []): string {
+  const lines: string[] = [];
+  for (const s of sections) {
+    const others = (readers.get(s.section) ?? []).filter(p => p.id !== target.id).map(p => p.name);
+    const part = partial.includes(s.section);
+    if (!part && !others.length) continue;
+    const name = `${s.section}${s.title ? ` ${s.title}` : ""}`;
+    lines.push(`- ${name}: ${part ? `${target.name} carries only the parts that apply to its own work` : `${target.name} carries its own part`}${others.length ? `; also read for ${others.join(", ")}` : ""}.`);
   }
-  const byPackage = new Map<string, string[]>(), ambiguous: string[] = [];
-  for (const [section, ids] of claims) {
-    if (ids.size > 1) { ambiguous.push(section); continue; }
-    const id = [...ids][0];
-    byPackage.set(id, [...(byPackage.get(id) ?? []), section]);
+  let note = "";
+  if (lines.length) {
+    note = `Sections ${target.name} shares with other trades on this contractor's bid forms (write only ${target.name}'s part of each; leave the rest to the others):`;
+    for (const line of lines) { if (note.length + line.length + 1 > SHARING_CHARS) { note += "\n(more not shown)"; break; } note += `\n${line}`; }
   }
-  return { byPackage, ambiguous: ambiguous.sort() };
+  const pack = contextPack(entries, { projectId, code: target.code, name: target.name });
+  return [note, pack].filter(Boolean).join("\n\n");
 }
 
 /**
