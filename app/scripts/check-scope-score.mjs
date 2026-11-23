@@ -41,4 +41,12 @@ assert.deepEqual(score.other.map(l => l.id), ["a4"], "AI lines on the form's wor
 const report = S.scoreReport([score], "Test");
 assert(report.includes("| 02 - DEMOLITION | 2 of 3 (67%) | 1 |") && report.includes("### Missed (1)"), "The report's table and sections");
 
+// Decimal sections stay whole however the form spaces them; the scorer counts one as cited by its six-digit number.
+const metals = S.readTradeTab("Metals", [["Trade:", "05 - SS & MM"], ["", "Section 3 - Scope of Work"], ["A", "Specifications"],
+  ["", "05 52 13 .13 - PIPE AND TUBE RAILINGS - INTERIOR", "Y"], ["", "07 42 13.13 Formed Metal Wall Panels (as applicable to this Bid Package)", "Y"], ["", "05 50 00 - METAL FABRICATIONS", "Y"], ["B", "Inclusions"]]);
+assert.deepEqual([metals.sections, metals.partial, metals.sectionTitles], [["05 52 13.13", "07 42 13.13", "05 50 00"], ["07 42 13.13"],
+  { "05 52 13.13": "PIPE AND TUBE RAILINGS - INTERIOR", "07 42 13.13": "Formed Metal Wall Panels", "05 50 00": "METAL FABRICATIONS" }], "Decimal sections and their titles");
+assert.deepEqual(S.scoreTrade(metals, [{ id: "m1", title: "Interior pipe railings.", detail: "", source: "05 52 13 · §2.1" }]).sections,
+  { cited: ["05 52 13"], missed: ["07 42 13.13", "05 50 00"], notOnForm: [] }, "A decimal section on the form is cited by its six-digit number");
+
 console.log("Scope scoreboard checked: a bid sheet tab read into sections, scope lines, pointers, general lines and exclusions; trade synonyms; found, missed, excluded, sections cited and other lines; the report.");

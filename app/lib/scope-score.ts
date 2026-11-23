@@ -52,9 +52,10 @@ export function readTradeTab(tab: string, rows: unknown[][]): TradeKey {
     if (/^(allowances|alternates|unit prices)$/i.test(text) || part.startsWith("schedule")) break;
     if (!text) continue;
     if (part.startsWith("specification")) {
-      const section = text.match(/^(\d{2}) ?(\d{2}) ?(\d{2})\b/);
+      // A decimal section stays whole, however it's spaced: "07 42 13.13" and "07 42 13 .13 - Formed Metal Wall Panels".
+      const section = text.match(/^(\d{2}) ?(\d{2}) ?(\d{2})(?: ?\.(\d{1,2}))?\b/);
       const division = text.match(/^Division (\d{1,2})\b/i);
-      if (section && `${section[1]}${section[2]}${section[3]}` !== "000000") { const code = `${section[1]} ${section[2]} ${section[3]}`; key.sections.push(code); key.sectionTitles[code] = text.replace(/^\d{2} ?\d{2} ?\d{2}\s*[-–:]?\s*/, "").replace(/\s*\(as appl(?:icable|ies)[^)]*\)?\s*$/i, "").trim(); if (/\(as appl(?:icable|ies)/i.test(text)) key.partial.push(code); }
+      if (section && `${section[1]}${section[2]}${section[3]}` !== "000000") { const code = `${section[1]} ${section[2]} ${section[3]}${section[4] ? `.${section[4]}` : ""}`; key.sections.push(code); key.sectionTitles[code] = text.replace(/^\d{2} ?\d{2} ?\d{2}(?: ?\.\d{1,2})?\s*[-–:]?\s*/, "").replace(/\s*\(as appl(?:icable|ies)[^)]*\)?\s*$/i, "").trim(); if (/\(as appl(?:icable|ies)/i.test(text)) key.partial.push(code); }
       else if (division) key.divisions.push(division[1].padStart(2, "0"));
       continue;
     }
@@ -141,10 +142,12 @@ export function scoreTrade(key: TradeKey, ai: AiLine[]): TradeScore {
   // Also count an AI line as on the form when it holds half of any contractor line's words, even if another line was that line's best.
   for (const line of ai) if (key.inclusions.some(k => enough(k.text, coverage(k.text, line)))) supported.add(line.id);
   const cited = [...new Set(ai.flatMap(l => { const m = l.source.match(SECTION_IN); return m ? [`${m[1]} ${m[2]} ${m[3]}`] : []; }))].sort();
-  const onForm = (s: string) => key.sections.includes(s) || key.divisions.includes(s.slice(0, 2));
+  // Cited sections are read to six digits, so a form's "07 42 13.13" counts as cited when "07 42 13" is.
+  const base = (s: string) => s.slice(0, 8);
+  const onForm = (s: string) => key.sections.some(k => base(k) === s) || key.divisions.includes(s.slice(0, 2));
   return {
     tab: key.tab, trade: key.trade, found, missed, excluded,
-    sections: { cited: cited.filter(onForm), missed: key.sections.filter(s => !cited.includes(s)), notOnForm: cited.filter(s => !onForm(s)) },
+    sections: { cited: cited.filter(onForm), missed: key.sections.filter(s => !cited.includes(base(s))), notOnForm: cited.filter(s => !onForm(s)) },
     other: ai.filter(l => !supported.has(l.id) && !excluded.some(e => e.line.id === l.id)), aiLines: ai.length,
   };
 }

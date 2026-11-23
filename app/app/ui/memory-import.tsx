@@ -36,6 +36,8 @@ export function BidSheetImport({ onClose, onDone, notify }: { onClose: () => voi
   const chosen = useMemo(() => (trades ?? []).filter(t => choices[t.tab]?.on), [trades, choices]);
   const entries = useMemo(() => chosen.flatMap(t => bidSheetEntries(t, file, choices[t.tab].standard || null)), [chosen, choices, file]);
   const count = (kind: string) => entries.filter(e => e.kind === kind).length;
+  // Both are rules: a section the trade carries only in part names its section; an exclusion doesn't.
+  const inPart = entries.filter(e => e.kind === "rule" && e.section).length;
   const set = (tab: string, change: Partial<Choice>) => setChoices(c => ({ ...c, [tab]: { ...c[tab], ...change } }));
 
   async function save() {
@@ -71,7 +73,7 @@ export function BidSheetImport({ onClose, onDone, notify }: { onClose: () => voi
             <span>{t.key.sections.length}</span><span>{t.key.exclusions.length}</span><span>{t.key.inclusions.length}</span>
           </div>)}
         </div>
-        <p className="memory-confirm"><strong>{chosen.length} tabs:</strong> {count("assignment")} trade splits, {count("rule")} exclusions and {count("example")} wording examples, as proposals. Importing the same sheet again adds nothing new.</p>
+        <p className="memory-confirm"><strong>{chosen.length} tabs:</strong> {count("assignment")} trade splits, {count("rule") - inPart} exclusions, {inPart} sections carried only in part and {count("example")} wording examples, as proposals. Importing the same sheet again adds nothing new.</p>
       </>}
       {progress && <p className="proc-ai-progress" role="status">Importing {progress.done} of {progress.total}…</p>}
       {error && <p role="alert" className="memory-error">{error}</p>}
