@@ -12,10 +12,10 @@ import { applyBidPackagePlan, type BidPackagePlan } from "../../lib/bid-package-
 import { planBidPackages } from "../../lib/bid-package-client";
 import { CONFIRM_ABOVE, dollars, estimateCost } from "../../lib/ai-cost";
 import { useAiReader } from "../../lib/ai-reader-client";
-import { contextPack, type MemoryEntry } from "../../lib/memory";
-import { memoryForScan } from "../../lib/memory-client";
+import { contextPack, planMemory, rememberedSections, type MemoryEntry } from "../../lib/memory";
+import { memoryForScan, useScanMemory } from "../../lib/memory-client";
 import { readTradeScope } from "../../lib/scope-reading";
-import { getActiveProjectId } from "../../lib/project-scope";
+import { getActiveProjectId, useActiveProject } from "../../lib/project-scope";
 import type { useExtraction } from "../../lib/use-extraction";
 import { Button, Modal } from "./shared";
 
@@ -38,7 +38,11 @@ export function AiScopeWriter({ review, notify, onOpenFiles, onReview }: { revie
   const specs = useMemo(() => specificationSections(documents), [documents]);
   const [open, setOpen] = useState(() => { const again = reopenAfterTrades; reopenAfterTrades = false; return again; });
   const packages = review.procurement.packages;
-  const assigned = useMemo(() => sectionsByTrade(specs, packages), [specs, packages]);
+  // The contractor's approved trade split decides which sections each trade reads (lib/memory, 23 Nov).
+  const activeProject = useActiveProject();
+  const remembered = useScanMemory(activeProject);
+  const split = useMemo(() => rememberedSections(remembered, packages, activeProject ?? "", specs.map(s => s.section)).byPackage, [remembered, packages, activeProject, specs]);
+  const assigned = useMemo(() => sectionsByTrade(specs, packages, split), [specs, packages, split]);
   const register = useMemo(() => drawingRegister(documents), [documents]);
   const uncovered = useMemo(() => uncoveredSections(specs, packages), [specs, packages]);
   // The bid packages are the AI's to set (Danial, 28 Oct: "YOU CANT WRITE THE WHOLE LIST U NEED AI"): it reads the
@@ -48,7 +52,7 @@ export function AiScopeWriter({ review, notify, onOpenFiles, onReview }: { revie
   const [planning, setPlanning] = useState<{ reading: boolean; error: string }>({ reading: false, error: "" });
   async function askForPackages() {
     setPlan(null); setPlanning({ reading: true, error: "" });
-    try { setPlan(await planBidPackages(documents, packages)); setPlanning({ reading: false, error: "" }); }
+    try { setPlan(await planBidPackages(documents, packages, undefined, planMemory(remembered, activeProject ?? ""))); setPlanning({ reading: false, error: "" }); }
     catch (error) { setPlanning({ reading: false, error: error instanceof Error ? error.message : "The AI could not set the bid packages." }); }
   }
   function applyPlan() {

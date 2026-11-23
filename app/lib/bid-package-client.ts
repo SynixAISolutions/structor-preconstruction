@@ -8,11 +8,13 @@ import { drawingRegister, specificationSections, type StoredDocument } from "./p
 import type { TradePackage } from "./procurement";
 import { timed } from "./ai-pool";
 
-export const planBidPackages = (documents: StoredDocument[], packages: Pick<TradePackage, "id" | "name" | "code">[], signal?: AbortSignal): Promise<BidPackagePlan & { model: string }> => timed("bid-packages", async () => {
+/** `memory`: the contractor's approved trade split and exclusions (lib/memory planMemory), when there are any. */
+export const planBidPackages = (documents: StoredDocument[], packages: Pick<TradePackage, "id" | "name" | "code">[], signal?: AbortSignal, memory?: string): Promise<BidPackagePlan & { model: string }> => timed("bid-packages", async () => {
   const input = {
     sections: specificationSections(documents).map(s => ({ section: s.section, title: s.title })),
     sheets: drawingRegister(documents).map(r => ({ sheet: r.sheet, title: r.title, discipline: r.discipline })),
     packages: packages.map(p => ({ id: p.id, name: p.name, code: p.code })),
+    ...(memory ? { memory } : {}),
   };
   const response = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job: "bid-packages", input }), signal });
   const body = await response.json().catch(() => ({ error: `The AI request failed (${response.status}).` }));

@@ -5,13 +5,16 @@
 //   rule      how this contractor splits or treats work ("Put acoustic ceiling panels in Drywall, not Ceilings")
 //   example   how a line is worded on this contractor's bid forms
 //   decision  something settled on one project ("Owner provides FF&E")
+//   assignment  a specification section a trade carries, the contractor's trade split ("Drywall carries 06 16 00
+//            Sheathing"): read when each trade gets its sections (rememberedSections, lib/project-scopes) and when the
+//            AI sets the bid packages (planMemory), not only as words in a scan
 //
 // An estimator's own entry is approved at once. One learned from a correction (lib/memory-learn) is only proposed,
 // and the AI never reads a proposed or retired entry: one bad correction can't teach it something wrong. Each entry is
 // tagged with the trades it concerns (code and name, none for every trade) and its project (none for the whole
 // company), which is what the database indexes and what contextPack picks by. Pure: shared by the server and browser.
 
-export const MEMORY_KINDS = ["rule", "example", "decision"] as const;
+export const MEMORY_KINDS = ["rule", "example", "decision", "assignment"] as const;
 export const MEMORY_STATUSES = ["proposed", "approved", "retired"] as const;
 export const MEMORY_ORIGINS = ["estimator", "correction", "import"] as const;
 export type MemoryKind = typeof MEMORY_KINDS[number];
@@ -72,6 +75,7 @@ export function cleanMemoryInput(raw: MemoryInput): Required<MemoryInput> & { st
   if (kind === "decision" && !projectId) fail("A decision belongs to one project: open the project first.");
   const trades = [...new Set((Array.isArray(raw.trades) ? raw.trades : []).map(t => clean(t, MEMORY_LIMITS.tag)).filter(Boolean))].slice(0, MEMORY_LIMITS.trades);
   const section = raw.section ? (SECTION.test(raw.section.trim()) ? raw.section.trim() : fail("Write the specification section as 09 51 13.")) : null;
+  if (kind === "assignment" && (!section || !trades.length)) fail("A trade split names the trade and the specification section it carries.");
   const origin = raw.origin && (MEMORY_ORIGINS as readonly string[]).includes(raw.origin) ? raw.origin : "estimator";
   const source = Object.fromEntries(Object.entries(raw.source ?? {}).filter(([k, v]) => /^[a-zA-Z]{1,30}$/.test(k) && typeof v === "string").slice(0, 12).map(([k, v]) => [k, clean(v, MEMORY_LIMITS.sourceValue)]));
   const events = [...new Set((raw.events ?? []).filter(e => typeof e === "string" && e.length <= 200))].slice(0, MEMORY_LIMITS.events);
@@ -106,6 +110,7 @@ export function contextPack(entries: MemoryEntry[], target: { projectId: string;
   const apply = entries.filter(e => entryApplies(e, target));
   const groups: [string, MemoryEntry[]][] = [
     ["Decisions on this project", apply.filter(e => e.kind === "decision").sort(byWeight)],
+    [`Specification sections ${target.name} carries on this contractor's bid forms`, apply.filter(e => e.kind === "assignment").sort((a, b) => (a.section ?? "").localeCompare(b.section ?? ""))],
     [`Rules for ${target.name}`, apply.filter(e => e.kind === "rule" && e.trades.length).sort(byWeight)],
     ["Rules for every trade", apply.filter(e => e.kind === "rule" && !e.trades.length).sort(byWeight)],
     [`How ${target.name} lines are worded on this contractor's bid forms`, apply.filter(e => e.kind === "example").sort(byWeight)],
@@ -143,3 +148,59 @@ export function memoryField(raw: unknown, fail: (message: string) => never): str
 }
 /** The memory's place in the request, before the source it is read with. */
 export const memoryBlock = (memory: string | undefined) => memory ? `Contractor's memory (approved by its estimators; source text stays the evidence):\n${memory}\n\n` : "";
+
+// ── The trade split ──────────────────────────────────────────────────────────
+
+/**
+ * Whether a remembered section covers one of a project's sections: the same number, or for a level-2 number ("06 16 00
+ * Sheathing") every section under it ("06 16 43 Gypsum Sheathing"); a decimal suffix ("07 42 10.11") goes with its base.
+ */
+export function sectionCovers(remembered: string, section: string): boolean {
+  const base = (s: string) => s.trim().replace(/\.\d+$/, "");
+  const r = base(remembered), p = base(section);
+  return r === p || (/ 00$/.test(r) && !/ 00 00$/.test(r) && p.slice(0, 5) === r.slice(0, 5));
+}
+
+/** A project package and the remembered entries that name it: by its code or its name. */
+const packageTags = (pkg: { code: string; name: string }) => tradeTags(pkg).map(t => t.toLowerCase());
+
+/**
+ * The approved trade split as it applies to a project's packages: for each of its sections that a remembered split
+ * gives to exactly one of its packages, that package. A section two packages' splits claim (joint sealants carried by
+ * several trades) is left to the usual assignment and reported.
+ */
+export function rememberedSections(entries: MemoryEntry[], packages: { id: string; code: string; name: string }[], projectId: string, sections: string[]): { byPackage: Map<string, string[]>; ambiguous: string[] } {
+  const splits = entries.filter(e => e.kind === "assignment" && e.status === "approved" && e.section && (!e.projectId || e.projectId === projectId));
+  const claims = new Map<string, Set<string>>();
+  for (const section of sections) for (const e of splits) {
+    if (!sectionCovers(e.section!, section)) continue;
+    const tags = e.trades.map(t => t.toLowerCase());
+    for (const pkg of packages) if (packageTags(pkg).some(t => tags.includes(t))) claims.set(section, (claims.get(section) ?? new Set()).add(pkg.id));
+  }
+  const byPackage = new Map<string, string[]>(), ambiguous: string[] = [];
+  for (const [section, ids] of claims) {
+    if (ids.size > 1) { ambiguous.push(section); continue; }
+    const id = [...ids][0];
+    byPackage.set(id, [...(byPackage.get(id) ?? []), section]);
+  }
+  return { byPackage, ambiguous: ambiguous.sort() };
+}
+
+/**
+ * The trade split and the trades' exclusions as the AI reads them when it sets a project's bid packages: one line per
+ * trade with the sections it carries, then what trades leave to others. Empty when there is none.
+ */
+export function planMemory(entries: MemoryEntry[], projectId: string, maxChars = PACK_CHARS): string {
+  const live = entries.filter(e => e.status === "approved" && (!e.projectId || e.projectId === projectId));
+  const label = (e: MemoryEntry) => e.source.trade || e.trades.find(t => !/^\d/.test(t)) || e.trades[0] || "Every trade";
+  const byTrade = new Map<string, string[]>();
+  for (const e of live.filter(e => e.kind === "assignment" && e.section)) byTrade.set(label(e), [...(byTrade.get(label(e)) ?? []), e.section!]);
+  const lines: string[] = [];
+  if (byTrade.size) lines.push("Trades this contractor buys, with the specification sections each carries (its own bid forms; follow this split over the general rules):",
+    ...[...byTrade].sort((a, b) => a[0].localeCompare(b[0])).map(([trade, sections]) => `- ${trade}: ${[...new Set(sections)].sort().join(", ")}`));
+  const rules = live.filter(e => e.kind === "rule" && e.trades.length);
+  if (rules.length) lines.push("What trades carry or leave to others:", ...rules.sort(byWeight).map(e => `- ${e.text}`));
+  let out = lines.join("\n");
+  if (out.length > maxChars) out = `${out.slice(0, maxChars - 40).replace(/\n[^\n]*$/, "")}\n(more not shown: over the length limit)`;
+  return out;
+}

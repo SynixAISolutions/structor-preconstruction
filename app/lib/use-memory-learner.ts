@@ -9,6 +9,8 @@ import { useEffect } from "react";
 import type { ExtractionState } from "./extraction";
 import { learnMemory } from "./memory-client";
 import { correctionsFrom } from "./memory-learn";
+import type { CoverageDecisions } from "./section-coverage";
+import { useLocalDraft } from "./use-local-draft";
 import type { Procurement } from "./procurement";
 
 const SENT_LIMIT = 5_000, BATCH = 100, DELAY_MS = 4_000;
@@ -19,12 +21,13 @@ function sentIds(projectId: string): string[] {
 }
 
 export function useMemoryLearner(projectId: string | null, procurement: Procurement, extraction: ExtractionState) {
+  const [decisions] = useLocalDraft<CoverageDecisions>("coverage-decisions", {});
   useEffect(() => {
     if (!projectId) return;
     let live = true;
     const timer = setTimeout(async () => {
       const sent = new Set(sentIds(projectId));
-      const fresh = correctionsFrom(projectId, procurement, extraction).filter(c => !sent.has(c.events[0])).slice(0, BATCH);
+      const fresh = correctionsFrom(projectId, procurement, extraction, decisions).filter(c => !sent.has(c.events[0])).slice(0, BATCH);
       if (!fresh.length || !live) return;
       try {
         await learnMemory(fresh);
@@ -33,5 +36,5 @@ export function useMemoryLearner(projectId: string | null, procurement: Procurem
       } catch { /* the memory isn't reachable: these go with the next change */ }
     }, DELAY_MS);
     return () => { live = false; clearTimeout(timer); };
-  }, [projectId, procurement, extraction]);
+  }, [projectId, procurement, extraction, decisions]);
 }

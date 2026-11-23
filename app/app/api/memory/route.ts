@@ -1,12 +1,13 @@
-import { MemoryRuleError, MEMORY_KINDS, MEMORY_STATUSES, type MemoryChange, type MemoryInput, type MemoryKind, type MemoryStatus } from "../../../lib/memory";
+import { MemoryRuleError, MEMORY_KINDS, MEMORY_ORIGINS, MEMORY_STATUSES, type MemoryChange, type MemoryInput, type MemoryKind, type MemoryOrigin, type MemoryStatus } from "../../../lib/memory";
 import { memoryStore } from "../../../lib/memory-store";
 
 // The AI memory (lib/memory, lib/memory-store):
-//   GET   ?status=&kind=&project=&projectOnly=&trades=&q=&limit=   entries, best match first when q is given
+//   GET   ?status=&kind=&origin=&project=&projectOnly=&trades=&q=&limit=   entries, best match first when q is given
 //         ?counts=1                                                 how many are proposed, approved and retired
 //   POST  { entry }                                                 an estimator's entry, approved at once (200 with
 //                                                                   created: false when it is already there)
 //   POST  { learn: [corrections] }                                  corrections as proposals; the same one twice is a no-op
+//   POST  { status: { ids, to } }                                   approves or retires many at once (an imported sheet)
 //   PATCH { id, version, change }                                   approve, retire, restore or reword; 409 with the
 //                                                                   current entry when someone else changed it first
 // The sign-in (proxy.ts) guards it. 503 when no database is connected.
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
     if (params.get("counts")) return json({ counts: await store.counts() });
     const project = params.get("project") ?? undefined, projectOnly = params.get("projectOnly") ?? undefined;
     const entries = await store.search({
-      status: list<MemoryStatus>(params.get("status"), MEMORY_STATUSES), kind: list<MemoryKind>(params.get("kind"), MEMORY_KINDS),
+      status: list<MemoryStatus>(params.get("status"), MEMORY_STATUSES), kind: list<MemoryKind>(params.get("kind"), MEMORY_KINDS), origin: list<MemoryOrigin>(params.get("origin"), MEMORY_ORIGINS),
       forProject: project, projectOnly, trades: (params.get("trades") ?? "").split("|").map(t => t.trim()).filter(Boolean).slice(0, 12),
       q: params.get("q") ?? undefined, limit: Number(params.get("limit")) || undefined,
     });
@@ -37,12 +38,14 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const store = memoryStore();
   if (!store) return notSetUp();
-  let body: { entry?: MemoryInput; learn?: MemoryInput[] };
+  let body: { entry?: MemoryInput; learn?: MemoryInput[]; status?: { ids?: unknown; to?: unknown } };
   try { body = await request.json(); } catch { return json({ error: "The request isn't valid JSON." }, 400); }
   const by = byOf(request);
   if (!by) return json({ error: "Say who is making the change." }, 400);
   try {
     if (Array.isArray(body?.learn)) return json(await store.learn(body.learn.slice(0, 200), by));
+    if (body?.status && Array.isArray(body.status.ids) && typeof body.status.to === "string" && (MEMORY_STATUSES as readonly string[]).includes(body.status.to))
+      return json({ changed: await store.setStatus(body.status.ids.filter((id): id is string => typeof id === "string"), body.status.to as MemoryStatus, by) });
     if (body?.entry && typeof body.entry === "object") return json(await store.add(body.entry, by));
     return json({ error: "Send an entry, or corrections to learn from." }, 400);
   } catch (error) { return failed(error); }

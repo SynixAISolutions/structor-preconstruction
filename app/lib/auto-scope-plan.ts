@@ -56,10 +56,13 @@ export function runTarget(docs: StoredDocument[], from = AUTO_SCOPES_FROM): { ke
 }
 
 export type TradeToRead<P> = { pkg: P; sections: VolumeSection[]; sheets: ReturnType<typeof drawingRegister> };
-/** Every trade with specification sections (from every specification volume) or drawing sheets to read, in bid-package order. */
-export function tradesToRead<P extends Pick<TradePackage, "id" | "division" | "code" | "sections" | "sheets">>(packages: P[], docs: StoredDocument[]): TradeToRead<P>[] {
+/**
+ * Every trade with specification sections (from every specification volume) or drawing sheets to read, in bid-package
+ * order. `remembered`: the contractor's approved trade split for these packages (lib/memory rememberedSections).
+ */
+export function tradesToRead<P extends Pick<TradePackage, "id" | "division" | "code" | "sections" | "sheets">>(packages: P[], docs: StoredDocument[], remembered?: Map<string, string[]>): TradeToRead<P>[] {
   const register = drawingRegister(docs);
-  const assigned = sectionsByTrade(specificationSections(docs), packages);
+  const assigned = sectionsByTrade(specificationSections(docs), packages, remembered);
   return packages.map(pkg => ({ pkg, sections: assigned.get(pkg.id) ?? [], sheets: sheetsForTrade(register, pkg) })).filter(t => t.sections.length || t.sheets.length);
 }
 

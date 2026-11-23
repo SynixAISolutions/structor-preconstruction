@@ -17,13 +17,13 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
-import { cleanMemoryInput, dedupeKey, MemoryRuleError, type MemoryChange, type MemoryEntry, type MemoryEvent, type MemoryInput, type MemoryKind, type MemoryStatus, MEMORY_STATUSES, MEMORY_LIMITS, MEMORY_KINDS } from "./memory";
+import { cleanMemoryInput, dedupeKey, MemoryRuleError, type MemoryChange, type MemoryEntry, type MemoryEvent, type MemoryInput, type MemoryKind, type MemoryOrigin, type MemoryStatus, MEMORY_STATUSES, MEMORY_LIMITS, MEMORY_KINDS } from "./memory";
 
 /** What the store needs from a database: a parameterized query returning rows. */
 export type Db = { query: (text: string, params?: unknown[]) => Promise<Record<string, unknown>[]> };
 
 export type MemoryQuery = {
-  status?: MemoryStatus[]; kind?: MemoryKind[];
+  status?: MemoryStatus[]; kind?: MemoryKind[]; origin?: MemoryOrigin[];
   /** Entries for the whole company plus this project's own. */
   forProject?: string;
   /** Only this project's own entries. */
@@ -47,7 +47,11 @@ export interface MemoryStore {
   learn(inputs: MemoryInput[], by: string): Promise<{ added: number; seenAgain: number }>;
   /** Changes an entry saved at version `base`; refused, with the current entry, when someone else's change landed first. */
   update(id: string, base: number, change: MemoryChange, by: string): Promise<UpdateResult>;
+  /** Approves or retires many entries at once (an imported bid sheet's proposals); resolves to how many changed. */
+  setStatus(ids: string[], status: MemoryStatus, by: string): Promise<number>;
 }
+export const MAX_STATUS_IDS = 3000;
+const statusAction = (from: MemoryStatus, to: MemoryStatus): MemoryEvent["action"] => to === "approved" ? (from === "retired" ? "restored" : "approved") : to === "retired" ? "retired" : "edited";
 
 export const MAX_RESULTS = 500;
 
@@ -55,7 +59,7 @@ export const MAX_RESULTS = 500;
 export const MEMORY_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS memory_entries (
     id text PRIMARY KEY,
-    kind text NOT NULL CHECK (kind IN ('rule', 'example', 'decision')),
+    kind text NOT NULL CHECK (kind IN ('rule', 'example', 'decision', 'assignment')),
     status text NOT NULL CHECK (status IN ('proposed', 'approved', 'retired')),
     origin text NOT NULL CHECK (origin IN ('estimator', 'correction', 'import')),
     project_id text,
@@ -78,6 +82,13 @@ export const MEMORY_SCHEMA = [
       setweight(to_tsvector('english', text), 'A') || setweight(to_tsvector('english', detail), 'B') || setweight(to_tsvector('simple', coalesce(section, '') || ' ' || tags), 'C')
     ) STORED
   )`,
+  // 23 Nov: trade splits ("assignment") joined the kinds; a table made before then takes them too.
+  `DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'memory_entries_kind_check' AND pg_get_constraintdef(oid) NOT LIKE '%assignment%') THEN
+      ALTER TABLE memory_entries DROP CONSTRAINT memory_entries_kind_check;
+      ALTER TABLE memory_entries ADD CONSTRAINT memory_entries_kind_check CHECK (kind IN ('rule', 'example', 'decision', 'assignment'));
+    END IF;
+  END $$`,
   `CREATE UNIQUE INDEX IF NOT EXISTS memory_entries_dedupe ON memory_entries (dedupe_key)`,
   `CREATE INDEX IF NOT EXISTS memory_entries_lookup ON memory_entries (status, kind)`,
   `CREATE INDEX IF NOT EXISTS memory_entries_trades ON memory_entries USING GIN (trades)`,
@@ -125,6 +136,7 @@ export function postgresMemory(db: Db): MemoryStore {
       const add = (value: unknown) => { params.push(value); return params.length; };
       if (query.status?.length) where.push(`status = ANY(${asTextArray(add(JSON.stringify(query.status)))})`);
       if (query.kind?.length) where.push(`kind = ANY(${asTextArray(add(JSON.stringify(query.kind)))})`);
+      if (query.origin?.length) where.push(`origin = ANY(${asTextArray(add(JSON.stringify(query.origin)))})`);
       if (query.forProject) where.push(`(project_id IS NULL OR project_id = $${add(query.forProject)})`);
       if (query.projectOnly) where.push(`project_id = $${add(query.projectOnly)}`);
       if (query.trades?.length) where.push(`(trades = '{}' OR trades && ${asTextArray(add(JSON.stringify(query.trades)))})`);
@@ -189,6 +201,20 @@ export function postgresMemory(db: Db): MemoryStore {
       });
       return rows[0] ? { saved: true, entry: rowToEntry(rows[0]) } : { saved: false, entry: await one(id) };
     },
+    async setStatus(ids, status, by) {
+      await table();
+      if (!(MEMORY_STATUSES as readonly string[]).includes(status)) throw new MemoryRuleError("Choose proposed, approved or retired.");
+      const list = [...new Set(ids.filter(id => typeof id === "string" && id.length <= 100))].slice(0, MAX_STATUS_IDS);
+      if (!list.length) return 0;
+      const now = new Date().toISOString();
+      const rows = await db.query(
+        `UPDATE memory_entries SET status = $2, history = history || jsonb_build_array(jsonb_build_object('at', $3::text, 'by', $4::text,
+           'action', CASE WHEN $2 = 'approved' AND status = 'retired' THEN 'restored' WHEN $2 = 'approved' THEN 'approved' WHEN $2 = 'retired' THEN 'retired' ELSE 'edited' END)),
+           version = version + 1, updated_at = now(), updated_by = $4
+         WHERE id = ANY(${asTextArray(1)}) AND status <> $2 RETURNING id`,
+        [JSON.stringify(list), status, now, by]);
+      return rows.length;
+    },
   };
 }
 
@@ -218,7 +244,7 @@ export function fileMemory(file: string): MemoryStore {
     async search(query) {
       const terms = words(query.q ?? "").map(stem), tags = (query.trades ?? []).map(t => t.toLowerCase());
       const rank: Record<MemoryStatus, number> = { proposed: 0, approved: 1, retired: 2 };
-      return (await read()).filter(e => (!query.status?.length || query.status.includes(e.status)) && (!query.kind?.length || query.kind.includes(e.kind))
+      return (await read()).filter(e => (!query.status?.length || query.status.includes(e.status)) && (!query.kind?.length || query.kind.includes(e.kind)) && (!query.origin?.length || query.origin.includes(e.origin))
         && (!query.forProject || !e.projectId || e.projectId === query.forProject) && (!query.projectOnly || e.projectId === query.projectOnly)
         && (!tags.length || !e.trades.length || e.trades.some(t => tags.includes(t.toLowerCase())))
         && (!terms.length || terms.every(t => words(`${e.text} ${e.detail} ${e.section ?? ""} ${e.trades.join(" ")}`).map(stem).includes(t))))
@@ -265,6 +291,18 @@ export function fileMemory(file: string): MemoryStore {
         rows[i] = { ...next, history: [...next.history, { at: new Date().toISOString(), by, action }], version: next.version + 1, updatedAt: new Date().toISOString(), updatedBy: by };
         await write(rows);
         return { saved: true, entry: rows[i] };
+      });
+    },
+    setStatus(ids, status, by) {
+      return serial(async () => {
+        const rows = await read(), wanted = new Set(ids.slice(0, MAX_STATUS_IDS)), at = new Date().toISOString();
+        let n = 0;
+        for (const e of rows) if (wanted.has(e.id) && e.status !== status) {
+          Object.assign(e, { status, history: [...e.history, { at, by, action: statusAction(e.status, status) }], version: e.version + 1, updatedAt: at, updatedBy: by });
+          n++;
+        }
+        if (n) await write(rows);
+        return n;
       });
     },
   };

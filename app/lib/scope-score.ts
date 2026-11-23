@@ -15,7 +15,8 @@
 // its meaningful words. Pure; scripts/score-scopes.mjs reads the bid sheet and the AI's run.
 
 export type KeyLine = { n: string; text: string; group: string };
-export type TradeKey = { tab: string; trade: string; sections: string[]; divisions: string[]; inclusions: KeyLine[]; general: KeyLine[]; references: KeyLine[]; exclusions: KeyLine[] };
+/** `sectionTitles`: each listed section's title as the form gives it ("05 40 00" → "Cold-Formed Metal Framing"). */
+export type TradeKey = { tab: string; trade: string; sections: string[]; sectionTitles: Record<string, string>; divisions: string[]; inclusions: KeyLine[]; general: KeyLine[]; references: KeyLine[]; exclusions: KeyLine[] };
 export type AiLine = { id: string; title: string; detail: string; source: string };
 export type LineMatch = { key: KeyLine; best: AiLine | null; coverage: number; shared: string[] };
 export type TradeScore = {
@@ -36,7 +37,7 @@ const cell = (v: unknown) => String(v ?? "").replace(/\s+/g, " ").trim();
  * inclusions (sorted into scope lines, general lines, pointers and headers) and exclusions.
  */
 export function readTradeTab(tab: string, rows: unknown[][]): TradeKey {
-  const key: TradeKey = { tab, trade: "", sections: [], divisions: [], inclusions: [], general: [], references: [], exclusions: [] };
+  const key: TradeKey = { tab, trade: "", sections: [], sectionTitles: {}, divisions: [], inclusions: [], general: [], references: [], exclusions: [] };
   const tradeRow = rows.find(r => /^trade:?$/i.test(cell(r[0])));
   key.trade = tradeRow ? cell(tradeRow.slice(1).find(c => cell(c))) : tab;
   const start = rows.findIndex(r => r.some(c => /^Section 3\b/i.test(cell(c))));
@@ -50,7 +51,7 @@ export function readTradeTab(tab: string, rows: unknown[][]): TradeKey {
     if (part.startsWith("specification")) {
       const section = text.match(/^(\d{2}) ?(\d{2}) ?(\d{2})\b/);
       const division = text.match(/^Division (\d{1,2})\b/i);
-      if (section) key.sections.push(`${section[1]} ${section[2]} ${section[3]}`);
+      if (section && `${section[1]}${section[2]}${section[3]}` !== "000000") { const code = `${section[1]} ${section[2]} ${section[3]}`; key.sections.push(code); key.sectionTitles[code] = text.replace(/^\d{2} ?\d{2} ?\d{2}\s*[-–:]?\s*/, "").replace(/\s*\(as applicable[^)]*\)\s*$/i, "").trim(); }
       else if (division) key.divisions.push(division[1].padStart(2, "0"));
       continue;
     }
