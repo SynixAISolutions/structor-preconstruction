@@ -7,7 +7,7 @@ import { addPage } from "../../lib/drawing-flip";
 import { notOnSheet, recordRun } from "../../lib/extraction";
 import { drawingRegister, latestDocuments, specificationSections } from "../../lib/project-files";
 import { useProjectDocuments } from "../../lib/project-files-client";
-import { readersBySection, sectionsByTrade, sheetsByTrade, uncoveredSections } from "../../lib/project-scopes";
+import { readersBySection, sectionOwners, sectionsByTrade, sheetsByTrade, uncoveredSections } from "../../lib/project-scopes";
 import { applyBidPackagePlan, type BidPackagePlan } from "../../lib/bid-package-ai";
 import { planBidPackages } from "../../lib/bid-package-client";
 import { CONFIRM_ABOVE, dollars, estimateCost } from "../../lib/ai-cost";
@@ -45,6 +45,7 @@ export function AiScopeWriter({ review, notify, onOpenFiles, onReview }: { revie
   const split = useMemo(() => rememberedSections(remembered, packages, activeProject ?? "", specs.map(s => s.section)), [remembered, packages, activeProject, specs]);
   const assigned = useMemo(() => sectionsByTrade(specs, packages, split.byPackage, split.partial), [specs, packages, split]);
   const readers = useMemo(() => readersBySection(assigned, packages), [assigned, packages]);
+  const owners = useMemo(() => sectionOwners(readers, packages, split.partial), [readers, packages, split]);
   const register = useMemo(() => drawingRegister(documents), [documents]);
   const uncovered = useMemo(() => uncoveredSections(specs, packages), [specs, packages]);
   // The bid packages are the AI's to set (Danial, 28 Oct: "YOU CANT WRITE THE WHOLE LIST U NEED AI"): it reads the
@@ -100,6 +101,7 @@ export function AiScopeWriter({ review, notify, onOpenFiles, onReview }: { revie
     update(id, { status: "reading" });
     const outcome = await readTradeScope({
       pkg, sections: assigned.get(id) ?? [], sheets: sheetsFor(id), signal, memory: tradeMemory(memory, pkg, projectId, assigned.get(id) ?? [], readers, split.partial.get(id), withDrawings ? sheetSplit.handed.get(id) : []),
+      owners, leavesOut: leftOut(memory, pkg, projectId),
       onProgress: p => update(id, { status: "reading", done: p.done, total: p.total, note: p.note }),
       addFlipPages: pages => { const errors = latest.current.runFlip(current => pages.reduce((state, page) => state.pages.some(x => x.sheet === page.sheet) ? state : addPage(state, page), current)); return errors ? Object.values(errors)[0] ?? "A sheet could not be added to Drawing Flip." : null; },
     });
