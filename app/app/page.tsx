@@ -20,6 +20,7 @@ import { TurnoverView } from "./ui/todo-ui";
 import { RfpRequirementsView } from "./ui/rfp-requirements";
 import { SidebarNavigation } from "./ui/sidebar-navigation";
 import { SidebarToggle } from "./ui/sidebar-controls";
+import { WorkspacePage } from "./ui/workspace-page";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, SearchBox, Tabs, usd, type Screen } from "./ui/shared";
 import { DEFAULT_SCREEN, resolveScreen, screenGroup, screenLabel, searchScreens } from "../lib/screens";
 import { PROJECT_TABS, demoProject, filterProjects, loadProjects, sampleProjectRecords, saveProjects, squareFeetLabel, type Project } from "../lib/projects";
@@ -67,7 +68,7 @@ export default function StructorApp(){
    setSidebarCollapsed(true);
    setSearchOpen(false);
    window.location.hash = next;
-   scrollRef.current?.scrollTo({ top: 0 });
+   scrollRef.current?.scrollTo({ top: 0, behavior: "instant" });
    if (fromSidebar) scrollRef.current?.focus({ preventScroll: true });
  }, []);
  useEffect(()=>{const sync=()=>{const value=location.hash.slice(1);const next=resolveScreen(value);if(next){setScreen(next);if(value!==next)history.replaceState(null,"",`#${next}`);}};sync();window.addEventListener("hashchange",sync);const saved=loadProjects();if(saved)setProjects(saved);setReady(true);return()=>window.removeEventListener("hashchange",sync);},[]);
@@ -84,7 +85,7 @@ export default function StructorApp(){
  function inspectModel(target:ModelInspection){navigate("model");setModelInspection(target);}
  function createProject(p:Project,uploading=0){setProjects(v=>[...v,p]);selectProject(p.id);setNewProject(false);navigate("turnover");notify(uploading?`Project created. ${uploading===1?"Your file is":`${uploading} files are`} uploading in the background; keep working and we'll tell you when it's done.`:"Project created. Start with your drawings or project manual.");}
  return <div className={`product-app new-look ${reduced?"motion-off":""}${sidebarCollapsed?" sidebar-collapsed":""}`}>
-  {menuOpen&&<button className="mobile-scrim" aria-label="Close navigation" onClick={()=>setMenuOpen(false)}/>}
+  <button type="button" className={`mobile-scrim${menuOpen?" is-open":""}`} inert={!menuOpen} aria-label="Close navigation" onClick={()=>setMenuOpen(false)}/>
   <aside id="workspace-navigation" className={`product-sidebar ${menuOpen?"is-open":""}`}>
    <button className="product-brand" onClick={()=>navigate(projectOpen?"turnover":"projects")} aria-label={projectOpen?"Preconstruction to-do":"All projects"}><span className="product-logomark"><i/><i/><i/></span><span>structor<span className="brand-dot">.</span></span><Badge>AI</Badge></button>
    <div className="workspace-picker"><span className="workspace-icon">S</span><div><strong>Synix workspace</strong><small>Preconstruction team</small></div><ChevronDown size={14}/></div>
@@ -95,7 +96,7 @@ export default function StructorApp(){
     <header className="product-topbar"><div className="topbar-left"><SidebarToggle expanded={!sidebarCollapsed} onToggle={() => setSidebarCollapsed(value => !value)}/><SidebarToggle mobile expanded={menuOpen} onToggle={() => setMenuOpen(value => !value)}/><span className="breadcrumb-home">{screenGroup(screen)?.label??"WORKSPACE"}</span><ChevronRight size={14}/><strong>{screenLabel(screen)}</strong></div><div className="topbar-right"><SharedStatus/><button className="top-search" aria-label="Search workspace" onClick={()=>setSearchOpen(true)}><Search size={16}/><span>Quick find</span><kbd>⌘ K</kbd></button><ThemeToggle reduced={reduced}/><button className="ui-icon-btn notification-btn" aria-label="Open notifications" onClick={()=>setNotifications(v=>!v)}><Bell size={18}/><i/></button><button className="top-avatar" onClick={()=>navigate("settings")} aria-label="Open profile">MK</button></div></header>
    {notifications&&<ActivityInbox project={project} onOpen={s=>{setNotifications(false);navigate(s);}}/>}
    <div className="product-content" ref={scrollRef} role="main" tabIndex={-1}>
-    <div className="page-enter" key={screen} data-screen={screen}>
+    <WorkspacePage key={screen} screen={screen}>
       {activeId===SAMPLE_PROJECT_ID&&<SampleRefreshBanner refresh={sampleRefresh}/>}
      {screen==="turnover"&&<TurnoverView key={project.id} {...props} project={project} onSave={p=>{setProjects(v=>v.map(i=>i.id===p.id?p:i));notify("Reviewed project information saved.");}}/>}
      {modelView&&<ModelStudio project={project} view={modelView} projectId={project.id} projectName={project.name} navigate={navigate} notify={notify} inspection={modelView==="interior"?modelInspection:null}/>}
@@ -113,7 +114,7 @@ export default function StructorApp(){
      {screen==="leveling"&&<><PageHeader eyebrow="BID & AWARD" title="Bid leveling" description="A complete scope. A comparable price. A confident decision." actions={<Button onClick={()=>navigate("budget")}><Wallet size={16}/>Budget summary<ArrowRight size={16}/></Button>}/><BidLevelingPage key={project.id} projectName={project.name} squareFeet={project.squareFeet}/></>}
      {screen==="unit-costs"&&<UnitCostsView key={project.id} {...props} project={project}/>}
      {screen==="settings"&&<WorkspaceSettings notify={notify} reduced={reduced} setReduced={setReduced} navigate={navigate} sampleRefresh={sampleRefresh}/>}
-    </div>
+    </WorkspacePage>
     <footer className="product-footer"><span><span className="footer-dot"/>STRUCTOR WORKSPACE</span><span>From first drawing to final award.</span><button onClick={()=>setHelpOpen(true)}>Learn the terminology <ArrowUpRight size={12}/></button></footer>
    </div>
   </div>

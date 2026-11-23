@@ -751,12 +751,6 @@ html.new-look[data-structor-theme="dark"] .ms-scene-caption { padding: 7px 10px;
 .new-look .quick-find-ask svg { flex: none; }
 @media (max-width: 900px) { .new-look .top-search { min-width: 0; } }
 
-/* ---------- Home-screen entrance: placeholders first, then content comes into focus ---------- */
-@keyframes nl-arrive { from { opacity: 0; filter: blur(8px); transform: translateY(10px) scale(0.985); } to { opacity: 1; filter: blur(0); transform: none; } }
-@keyframes nl-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
-@keyframes nl-placeholder { 0%, 55% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
-@keyframes nl-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
-
 /* Project files */
 .new-look .pf-explorer .cm-file-grid { padding: var(--nl-panel-gutter, 16px); }
 .new-look .pf-explorer .cm-files-table.grid { min-width: 0; }
@@ -942,14 +936,59 @@ html.new-look[data-structor-theme="dark"] .flip-error {
 .new-look .product-sidebar .sidebar-group > summary:focus-visible { outline-offset: -2px; }
 .new-look .product-sidebar .nav-group.sidebar-group + .nav-group.sidebar-group { margin-top: 5px; }
 .new-look .product-sidebar .sidebar-group.nav-section > summary { margin: 5px 0 2px; padding-left: 7px; }
+.new-look.product-app { --nl-sidebar-slide: 220ms; }
+.new-look > .product-sidebar {
+  transition: transform var(--nl-sidebar-slide) var(--nl-ease), visibility 0s;
+}
 @media (min-width: 701px) {
-  .new-look.product-app.sidebar-collapsed { grid-template-columns: minmax(0, 1fr); }
-  .new-look.sidebar-collapsed > .product-sidebar, .new-look > .mobile-scrim { display: none; }
+  .new-look.product-app {
+    --nl-sidebar-width: 238px;
+    grid-template-columns: var(--nl-sidebar-width) minmax(0, 1fr);
+  }
+  .new-look.product-app.sidebar-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
+  .new-look > .product-sidebar {
+    grid-area: 1 / 1;
+    justify-self: start;
+    width: var(--nl-sidebar-width);
+  }
+  .new-look > .product-main { grid-area: 1 / 2; }
+  .new-look.sidebar-collapsed > .product-sidebar {
+    transform: translateX(-100%);
+    visibility: hidden;
+    pointer-events: none;
+    interactivity: inert;
+    transition-delay: 0s, var(--nl-sidebar-slide);
+  }
+  .new-look > .mobile-scrim { display: none; }
   .new-look .nav-toggle-desktop { border: 1px solid var(--nl-line); background: var(--nl-surface); }
+}
+@media (701px <= width <= 1200px) {
+  .new-look.product-app { --nl-sidebar-width: 216px; }
+}
+@media (701px <= width <= 950px) {
+  .new-look.product-app { --nl-sidebar-width: 190px; }
 }
 @media (max-width: 700px) {
   .new-look .nav-toggle-desktop { display: none; }
-  .new-look .product-sidebar:not(.is-open) { visibility: hidden; }
+  .new-look > .product-sidebar:not(.is-open) {
+    visibility: hidden;
+    pointer-events: none;
+    interactivity: inert;
+    transition-delay: 0s, var(--nl-sidebar-slide);
+  }
+  .new-look > .mobile-scrim {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    backdrop-filter: none;
+    transition: opacity var(--nl-sidebar-slide) var(--nl-ease), visibility 0s var(--nl-sidebar-slide);
+  }
+  .new-look > .mobile-scrim.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition-delay: 0s;
+  }
   html.new-look:has(.product-sidebar.is-open) :is(.voice-launcher, .ask-launcher) { visibility: hidden; }
 }
 
@@ -1067,34 +1106,25 @@ html.new-look[data-structor-theme="dark"] .flip-error {
 }
 
 
-.new-look .page-enter[data-screen="turnover"],
-.new-look .page-enter[data-screen="projects"] { animation: none; }
+/* Keep the entrance on the main surfaces so the workspace stays ready to use. */
+.new-look .page-enter { animation: none; }
 
-/* Preconstruction to-do: header, banner, tiles, then the steps. */
-.new-look [data-screen="turnover"] .todo-workspace > .ui-page-header { animation: nl-arrive 0.5s var(--nl-ease) 0.05s both; }
-.new-look [data-screen="turnover"] .todo-progress-banner { animation: nl-arrive 0.55s var(--nl-ease) 0.12s both; }
-.new-look [data-screen="turnover"] .todo-status-summary > div { animation: nl-arrive 0.5s var(--nl-ease) both; }
-.new-look [data-screen="turnover"] .todo-status-summary > div:nth-child(1) { animation-delay: 0.2s; }
-.new-look [data-screen="turnover"] .todo-status-summary > div:nth-child(2) { animation-delay: 0.26s; }
-.new-look [data-screen="turnover"] .todo-status-summary > div:nth-child(3) { animation-delay: 0.32s; }
-.new-look [data-screen="turnover"] .todo-status-summary > div:nth-child(4) { animation-delay: 0.38s; }
-.new-look [data-screen="turnover"] .todo-workspace > .ui-panel { animation: nl-rise 0.55s var(--nl-ease) 0.45s both; }
+@keyframes nl-panel-rise {
+  from { transform: translateY(8px); }
+  to { transform: none; }
+}
 
-/* All projects: header, tools, then the cards one by one. */
-.new-look [data-screen="projects"] > .ui-page-header { animation: nl-arrive 0.5s var(--nl-ease) 0.05s both; }
-.new-look [data-screen="projects"] > .project-list-tools { animation: nl-rise 0.5s var(--nl-ease) 0.12s both; }
-.new-look [data-screen="projects"] .project-card-grid > * { animation: nl-arrive 0.55s var(--nl-ease) both; }
-.new-look [data-screen="projects"] .project-card-grid > :nth-child(1) { animation-delay: 0.18s; }
-.new-look [data-screen="projects"] .project-card-grid > :nth-child(2) { animation-delay: 0.24s; }
-.new-look [data-screen="projects"] .project-card-grid > :nth-child(3) { animation-delay: 0.3s; }
-.new-look [data-screen="projects"] .project-card-grid > :nth-child(4) { animation-delay: 0.36s; }
-.new-look [data-screen="projects"] .project-card-grid > :nth-child(n + 5) { animation-delay: 0.42s; }
-
-/* The placeholder sheen over each tile, gone once its content has arrived. */
-.new-look [data-screen="turnover"] .todo-status-summary > div::after {
-  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
-  background: linear-gradient(100deg, var(--nl-surface-quiet) 30%, var(--nl-surface) 50%, var(--nl-surface-quiet) 70%) 0 0 / 200% 100%;
-  animation: nl-shimmer 0.9s linear, nl-placeholder 0.9s var(--nl-ease) forwards;
+@media (min-width: 701px) and (prefers-reduced-motion: no-preference) {
+  .new-look .page-enter[data-page-entering] :is(
+    .ui-page-header, .ui-stats, .info-cover, .info-links, .project-list-tools,
+    .todo-progress-banner, .todo-status-summary, .bid-docs, .proc-detail-column,
+    .proc-package-summary
+  ),
+  .new-look .page-enter[data-page-entering] > .ui-empty,
+  .new-look .page-enter[data-page-entering] :is(.todo-workspace, .proc-scope-layout) > .ui-panel,
+  .new-look .page-enter[data-page-entering] .project-card-grid > :nth-child(-n + 4) {
+    animation: nl-panel-rise 160ms var(--nl-ease);
+  }
 }
 
 /* Dense workspaces render immediately. */
@@ -1183,8 +1213,7 @@ html.new-look[data-structor-theme="dark"] .flip-error {
   .new-look .ask-panel form input { font-size: 16px; }
 }
 
-/* Reduced motion: no entrance, no placeholder (it would otherwise stay over the tiles), no slide. */
-.new-look.motion-off [data-screen="turnover"] .todo-status-summary > div::after { display: none; }
+/* Reduced motion for the controls that render outside the workspace. */
 html.new-look:has(.product-app.motion-off) :is(.ask-panel, .ask-panel *, .ask-launcher, .ask-launcher *, .voice-launcher) {
   animation: none !important;
   transition: none !important;
@@ -1195,6 +1224,5 @@ html.new-look:has(.product-app.motion-off) .structor-orb.mood-idle .orb-eye { tr
     animation: none !important;
     transition: none !important;
   }
-  .new-look [data-screen="turnover"] .todo-status-summary > div::after { display: none; }
   .new-look .product-main { transition: none !important; }
 }
