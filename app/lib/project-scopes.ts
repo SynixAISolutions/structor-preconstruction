@@ -117,9 +117,11 @@ export function sheetsForTrade<T extends SheetRow & { sheet?: string }>(register
 // contractor). The sheets move only when the trade's own approved exclusions name the work and the project has the
 // receiving trade; otherwise they stay, so a sheet is never left unread.
 // ponytail: a hand table; add a row when a contractor moves other drawn work between trades.
+const MEP_DISCIPLINES = ["Electrical", "Mechanical", "Plumbing", "Fire protection", "Technology"];
 const SHEET_HAND_OFFS: { work: string; from: RegExp; to: RegExp; prefer: RegExp; excluded: RegExp; sheet: (row: SheetRow) => boolean }[] = [
   { work: "site demolition", from: /^02 4/, to: /^31/, prefer: /earth|excavat|site ?work/i, excluded: /\bsite\s*demo(lition)?\b/i,
-    sheet: row => /DEMOLITION/.test(row.title.toUpperCase()) && (row.discipline === "Civil" || /\bSITE\b/.test(row.title.toUpperCase())) },
+    // An MEP sheet stays ("ELECTRICAL DEMOLITION SITE PLAN" on Jelleff: the trade demolishes MEP; cut and cap is others').
+    sheet: row => /DEMOLITION/.test(row.title.toUpperCase()) && !MEP_DISCIPLINES.includes(row.discipline ?? "") && (row.discipline === "Civil" || /\bSITE\b/.test(row.title.toUpperCase())) },
 ];
 
 /** A drawing sheet another trade's exclusions sent to this one, and why. */
