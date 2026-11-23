@@ -1,10 +1,27 @@
-import { acceptDraft, ExtractionRuleError, type Draft, type ExtractionState, type RegionDraft, type ReviewRecords } from "./extraction";
+import { acceptDraft, ExtractionRuleError, type Draft, type ExtractionRun, type ExtractionState, type RegionDraft, type ReviewRecords } from "./extraction";
 import { linkScope } from "./drawing-flip";
 import { addScope, applyScopeToAllTrades, approveScope, combinePackages, type Procurement } from "./procurement";
 
 export type GeneralScope = { id: string; title: string; detail: string; source: string };
-/** The AI's proposals still to review in a trade's bid form: an accepted line or highlight now lives in the bid form or on Drawing Flip. */
-export const inlineDrafts = (drafts: Draft[], packageId: string) => drafts.filter(d => d.packageId === packageId && !d.removed && !(d.kind !== "quantity" && d.status === "accepted"));
+/**
+ * The AI's proposals still to review in a trade's bid form: an accepted line or highlight now lives in the bid form or on
+ * Drawing Flip. With the runs, the ones waiting come before the rejected ones and the newest reading's first, in the
+ * order it found them (Danial, 23 Nov: "even after the run finished it just stayed on same screen doesn't show new things
+ * it scanned": a new reading's lines sat below the older ones).
+ */
+export function inlineDrafts(drafts: Draft[], packageId: string, runs?: Pick<ExtractionRun, "id" | "finishedAt">[]): Draft[] {
+  const shown = drafts.filter(d => d.packageId === packageId && !d.removed && !(d.kind !== "quantity" && d.status === "accepted"));
+  if (!runs) return shown;
+  const finished = new Map(runs.map(r => [r.id, r.finishedAt]));
+  const at = (d: Draft) => finished.get(d.runId) ?? "";
+  return shown.map((d, i) => ({ d, i })).sort((a, b) => Number(a.d.status === "rejected") - Number(b.d.status === "rejected") || at(b.d).localeCompare(at(a.d)) || a.i - b.i).map(x => x.d);
+}
+
+/** The run that read last, among those with proposals in this trade: its lines are marked new. */
+export function newestRun(drafts: Draft[], runs: Pick<ExtractionRun, "id" | "finishedAt" | "engine">[]): string | null {
+  const live = runs.filter(r => r.engine.mode !== "sample" && drafts.some(d => d.runId === r.id && d.status === "pending-review"));
+  return live.sort((a, b) => b.finishedAt.localeCompare(a.finishedAt))[0]?.id ?? null;
+}
 
 /**
  * The highlights proposed with a bid-form line the AI read from a drawing: the region findings of the line's own
