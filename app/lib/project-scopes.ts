@@ -112,6 +112,39 @@ export function sheetsForTrade<T extends SheetRow & { sheet?: string }>(register
   return out;
 }
 
+// Drawn work a contractor's bid forms move from one trade to another (Marcel's Jelleff forms: Demolition "doesn't
+// carry: Site Demo"; Asphalt and Site concrete leave the demolition of existing pavement and curbs to the earthwork
+// contractor). The sheets move only when the trade's own approved exclusions name the work and the project has the
+// receiving trade; otherwise they stay, so a sheet is never left unread.
+// ponytail: a hand table; add a row when a contractor moves other drawn work between trades.
+const SHEET_HAND_OFFS: { work: string; from: RegExp; to: RegExp; prefer: RegExp; excluded: RegExp; sheet: (row: SheetRow) => boolean }[] = [
+  { work: "site demolition", from: /^02 4/, to: /^31/, prefer: /earth|excavat|site ?work/i, excluded: /\bsite\s*demo(lition)?\b/i,
+    sheet: row => /DEMOLITION/.test(row.title.toUpperCase()) && (row.discipline === "Civil" || /\bSITE\b/.test(row.title.toUpperCase())) },
+];
+
+/** A drawing sheet another trade's exclusions sent to this one, and why. */
+export type HandedSheet = { sheet: string; title: string; work: string; from: string };
+
+/**
+ * The drawing sheets each package reads (sheetsForTrade), after the contractor's exclusions: a sheet showing work a
+ * trade doesn't carry (`leavesOut`: its approved "doesn't carry" lines, lib/memory leftOut) goes to the trade that
+ * does (SHEET_HAND_OFFS). `handed`: what each receiving package was given, so its scan can be told why.
+ */
+export function sheetsByTrade<T extends SheetRow & { sheet?: string }, P extends Pick<TradePackage, "id" | "code" | "name" | "sheets">>(register: T[], packages: P[], leavesOut?: (pkg: P) => string[]): { sheets: Map<string, T[]>; handed: Map<string, HandedSheet[]> } {
+  const sheets = new Map<string, T[]>(packages.map(p => [p.id, sheetsForTrade(register, p)]));
+  const handed = new Map<string, HandedSheet[]>();
+  for (const rule of SHEET_HAND_OFFS) for (const from of packages.filter(p => rule.from.test(p.code))) {
+    if (!(leavesOut?.(from) ?? []).some(text => rule.excluded.test(text))) continue;
+    const to = packages.filter(p => p.id !== from.id && rule.to.test(p.code)).sort((a, b) => Number(!rule.prefer.test(a.name)) - Number(!rule.prefer.test(b.name)) || a.code.localeCompare(b.code))[0];
+    const moving = (sheets.get(from.id) ?? []).filter(rule.sheet);
+    if (!to || !moving.length) continue;
+    sheets.set(from.id, sheets.get(from.id)!.filter(row => !moving.includes(row)));
+    sheets.set(to.id, [...(sheets.get(to.id) ?? []), ...moving.filter(row => !sheets.get(to.id)?.includes(row))]);
+    handed.set(to.id, [...(handed.get(to.id) ?? []), ...moving.map(row => ({ sheet: row.sheet ?? "", title: row.title, work: rule.work, from: from.name }))]);
+  }
+  return { sheets, handed };
+}
+
 export type TradeSuggestion = TradePackage & { sections: string[]; sheets: string[] };
 
 /**
