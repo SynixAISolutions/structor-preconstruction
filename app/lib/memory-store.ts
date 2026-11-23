@@ -33,6 +33,8 @@ export type MemoryQuery = {
   /** Full-text search over the words, detail, trades and section. */
   q?: string;
   limit?: number;
+  /** Skips this many results: the next page, in the same order (ties broken by id, so pages never overlap). */
+  offset?: number;
 };
 export type MemoryCounts = Record<MemoryStatus, number>;
 export type UpdateResult = { saved: true; entry: MemoryEntry } | { saved: false; entry: MemoryEntry | null };
@@ -140,14 +142,14 @@ export function postgresMemory(db: Db): MemoryStore {
       if (query.forProject) where.push(`(project_id IS NULL OR project_id = $${add(query.forProject)})`);
       if (query.projectOnly) where.push(`project_id = $${add(query.projectOnly)}`);
       if (query.trades?.length) where.push(`(trades = '{}' OR trades && ${asTextArray(add(JSON.stringify(query.trades)))})`);
-      let order = "CASE status WHEN 'proposed' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, seen DESC, updated_at DESC";
+      let order = "CASE status WHEN 'proposed' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, seen DESC, updated_at DESC, id";
       if (query.q?.trim()) {
         const n = add(query.q.trim().slice(0, 200));
         where.push(`search @@ websearch_to_tsquery('english', $${n})`);
-        order = `ts_rank(search, websearch_to_tsquery('english', $${n})) DESC, seen DESC, updated_at DESC`;
+        order = `ts_rank(search, websearch_to_tsquery('english', $${n})) DESC, seen DESC, updated_at DESC, id`;
       }
-      const limit = add(Math.max(1, Math.min(MAX_RESULTS, query.limit ?? 200)));
-      const rows = await db.query(`SELECT ${COLUMNS} FROM memory_entries ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY ${order} LIMIT $${limit}`, params);
+      const limit = add(Math.max(1, Math.min(MAX_RESULTS, query.limit ?? 200))), offset = add(Math.max(0, Math.floor(query.offset ?? 0)));
+      const rows = await db.query(`SELECT ${COLUMNS} FROM memory_entries ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY ${order} LIMIT $${limit} OFFSET $${offset}`, params);
       return rows.map(rowToEntry);
     },
     async counts() {
@@ -248,7 +250,8 @@ export function fileMemory(file: string): MemoryStore {
         && (!query.forProject || !e.projectId || e.projectId === query.forProject) && (!query.projectOnly || e.projectId === query.projectOnly)
         && (!tags.length || !e.trades.length || e.trades.some(t => tags.includes(t.toLowerCase())))
         && (!terms.length || terms.every(t => words(`${e.text} ${e.detail} ${e.section ?? ""} ${e.trades.join(" ")}`).map(stem).includes(t))))
-        .sort((a, b) => rank[a.status] - rank[b.status] || b.seen - a.seen || b.updatedAt.localeCompare(a.updatedAt)).slice(0, Math.min(MAX_RESULTS, query.limit ?? 200));
+        .sort((a, b) => rank[a.status] - rank[b.status] || b.seen - a.seen || b.updatedAt.localeCompare(a.updatedAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        .slice(Math.max(0, Math.floor(query.offset ?? 0))).slice(0, Math.min(MAX_RESULTS, query.limit ?? 200));
     },
     async counts() { const rows = await read(); return Object.fromEntries(MEMORY_STATUSES.map(s => [s, rows.filter(e => e.status === s).length])) as MemoryCounts; },
     async get(id) { return (await read()).find(e => e.id === id) ?? null; },

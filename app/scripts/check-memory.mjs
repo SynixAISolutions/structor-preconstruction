@@ -145,6 +145,10 @@ await store.add({ kind: "rule", text: "Coordinate the grid layout with the light
 const ranked = texts(await store.search({ q: "ceiling panel" }));
 assert.deepEqual([ranked.length, ranked.at(-1)], [3, "Coordinate the grid layout with the lighting."], "Best match first: the words in the entry itself rank above the same words in its detail");
 assert.equal((await store.search({ limit: 2 })).length, 2);
+const everything = (await store.search({ limit: 500 })).map(e => e.id);
+const paged = [];
+for (let offset = 0; offset < everything.length + 2; offset += 2) paged.push(...(await store.search({ limit: 2, offset })).map(e => e.id));
+assert.deepEqual(paged, everything, "Pages of 2 give every entry once, in the same order (ties broken by id)");
 
 // Approving, retiring, rewording: one change at a time.
 const proposal = (await store.search({ q: "shaft wall" }))[0];
@@ -184,6 +188,25 @@ assert.deepEqual(texts(await local.search({ status: ["proposed"], forProject: "p
 const one = (await local.search({ status: ["approved"] }))[0];
 assert.equal((await local.update(one.id, one.version, { status: "retired" }, "S")).saved, true);
 assert.equal((await local.update(one.id, one.version, { status: "approved" }, "S")).saved, false);
+const localAll = (await local.search({ limit: 500 })).map(e => e.id);
+assert.deepEqual([...(await local.search({ limit: 3 })), ...(await local.search({ limit: 3, offset: 3 })), ...(await local.search({ limit: 3, offset: 6 }))].map(e => e.id), localAll.slice(0, 9), "The stand-in pages the same way");
+
+// ── A scan reads every approved entry, page by page ──
+// The live memory had 1,228 approved entries: one page of 500, newest first, held 483 wording examples and no rules.
+const MC = await import("../lib/memory-client.ts");
+const many = Array.from({ length: 1100 }, (_, i) => ({ id: `e${String(i).padStart(4, "0")}`, kind: i < 900 ? "example" : i < 1000 ? "assignment" : "rule", text: `Entry ${i}.` }));
+const asked = [];
+globalThis.fetch = async url => {
+  const q = new URL(String(url), "http://local").searchParams; asked.push([q.get("status"), q.get("project"), q.get("limit"), q.get("offset")]);
+  const offset = Number(q.get("offset") ?? 0), limit = Number(q.get("limit"));
+  return Response.json({ entries: [...many.slice(offset, offset + limit), ...(offset === 500 ? [many[499]] : [])] });
+};
+const scanRead = await MC.memoryForScan("p1");
+assert.deepEqual([scanRead.error, scanRead.entries.length, scanRead.entries.filter(e => e.kind === "rule").length, asked],
+  [null, 1100, 100, [["approved", "p1", "500", null], ["approved", "p1", "500", "500"], ["approved", "p1", "500", "1000"]]],
+  "Three pages for 1,100 entries, the rules on the last one included; an entry seen on two pages counted once");
+globalThis.fetch = async () => Response.json({ error: "down" }, { status: 503 });
+assert.deepEqual(await MC.memoryForScan("p1"), { entries: [], error: "down" }, "A scan reads without the memory when it can't be reached, and says why");
 
 // ── The browser sends each trade's memory with its readings ──
 const sent = [];
@@ -195,4 +218,4 @@ await C.extractDrawingScope({ pkg: reading.pkg, document: "D.pdf", pageCount: 1,
 await C.extractTradeScope(reading);
 assert.deepEqual(sent.map(b => [b.job, b.input.memory === scanPack, "memory" in b.input]), [["scope", true, true], ["drawing", true, true], ["scope", false, false]], "Specification and drawing readings carry the trade's memory; without memory the request is as before");
 
-console.log("AI memory checked: entries and their rules, what a scan reads (most specific first, within its limit, nothing unapproved), requests unchanged without memory, the lessons corrections teach and the ones they don't, and the table in a real Postgres: created on first use, one row per lesson, corrections counted once, search by status, kind, project, trade and stemmed words with the best match first, one change at a time, and every lookup on its index.");
+console.log("AI memory checked: entries and their rules, what a scan reads (most specific first, within its limit, nothing unapproved), requests unchanged without memory, the lessons corrections teach and the ones they don't, and the table in a real Postgres: created on first use, one row per lesson, corrections counted once, search by status, kind, project, trade and stemmed words with the best match first, one change at a time, pages that never overlap, a scan reading every page, and every lookup on its index.");
