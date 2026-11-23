@@ -1,0 +1,31 @@
+/* AI memory (lib/memory). */
+.memory-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.memory-toolbar .ui-search { flex: 1 1 220px; }
+.memory-list { display: flex; flex-direction: column; }
+.memory-list[aria-busy="true"] { opacity: .6; }
+.memory-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: start; padding: 16px 22px; border-top: 1px solid #edf0ee; }
+.memory-entry:first-child { border-top: 0; }
+.memory-entry-copy { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.memory-entry-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.memory-entry-meta small { color: #8b979e; font-size: 11px; }
+.memory-entry-copy > strong { color: #33434d; font-size: 13px; font-weight: 600; line-height: 1.55; overflow-wrap: anywhere; }
+.memory-entry-copy > p { margin: 0; color: #6f7f88; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.memory-entry-copy > small { color: #98a2a9; font-size: 11px; }
+.memory-entry-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.memory-entry-actions .ui-btn { padding: 7px 10px; font-size: 11px; }
+.memory-form { display: flex; flex-direction: column; gap: 14px; }
+.memory-form label { display: flex; flex-direction: column; gap: 6px; color: #5d6d76; font-size: 12px; font-weight: 600; }
+.memory-form input, .memory-form select, .memory-form textarea, .memory-preview select { padding: 9px 10px; border: 1px solid #dde3e0; border-radius: 7px; background: #fff; color: #33434d; font: inherit; font-size: 13px; font-weight: 400; }
+.memory-form > small { color: #8b979e; font-size: 11px; }
+.memory-form-row { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 12px; }
+.memory-form label.memory-check { flex-direction: row; align-items: center; gap: 8px; font-weight: 500; }
+.memory-error { margin: 0; color: #8d3f32; font-size: 12px; }
+.memory-preview { display: flex; flex-direction: column; gap: 14px; }
+.memory-preview label { display: flex; flex-direction: column; gap: 6px; max-width: 420px; color: #5d6d76; font-size: 12px; font-weight: 600; }
+.memory-preview pre { margin: 0; padding: 14px 16px; max-height: 60vh; overflow: auto; border: 1px solid #e3e8e5; border-radius: 8px; background: #f8faf9; color: #33434d; font: 12px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.memory-empty { display: flex; align-items: center; gap: 8px; margin: 0; color: #7c8992; font-size: 13px; }
+@media (max-width: 760px) {
+  .memory-entry { grid-template-columns: 1fr; }
+  .memory-entry-actions { justify-content: flex-start; }
+  .memory-form-row { grid-template-columns: 1fr; }
+}

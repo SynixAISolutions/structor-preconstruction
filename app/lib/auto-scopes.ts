@@ -25,6 +25,8 @@ import { AI_REQUESTS_AT_ONCE, aiTimes } from "./ai-pool";
 import { OCR_WORKERS, ocrWork } from "./sheet-ocr";
 import { blendPace, checkShare, FIRST_PACE, measurePace, secondsLeft, steadyLeft, tradesLeft, type Pace, type TradeLeft } from "./run-time-left";
 import { readTradeScope } from "./scope-reading";
+import { contextPack } from "./memory";
+import { memoryForScan } from "./memory-client";
 import { readDraft, writeDraft } from "./use-local-draft";
 import { writeGeneralScope } from "./general-scope-client";
 import { DRAFT_CHANGED, sharedReady, useSharedStatus } from "./shared-sync";
@@ -284,6 +286,9 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   })() : null;
   if (!references) searchLeft = 0;
 
+  // What the contractor's estimators have taught the AI (lib/memory): read once; each trade gets the part that applies.
+  // When the memory can't be reached the trades read without it, as they did before it existed.
+  const memory = await memoryForScan(projectId);
   // The biggest trades start first; every request shares the tab's pool (lib/ai-pool), so the last trades use every slot.
   const queue = biggestFirst(stillToRead(readable, previous));
   await Promise.all(Array.from({ length: Math.min(PARALLEL_TRADES, queue.length) }, async () => {
@@ -292,7 +297,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
       setTrade(pkg.id, { status: "reading", note: "" });
       try {
         const outcome = await readTradeScope({
-          pkg, sections, sheets, signal: controller.signal,
+          pkg, sections, sheets, signal: controller.signal, memory: contextPack(memory.entries, { projectId, code: pkg.code, name: pkg.name }),
           onProgress: p => {
             const left = ledger.get(pkg.id);
             if (left) left.counts = p.counts;

@@ -12,6 +12,8 @@ import { applyBidPackagePlan, type BidPackagePlan } from "../../lib/bid-package-
 import { planBidPackages } from "../../lib/bid-package-client";
 import { CONFIRM_ABOVE, dollars, estimateCost } from "../../lib/ai-cost";
 import { useAiReader } from "../../lib/ai-reader-client";
+import { contextPack, type MemoryEntry } from "../../lib/memory";
+import { memoryForScan } from "../../lib/memory-client";
 import { readTradeScope } from "../../lib/scope-reading";
 import { getActiveProjectId } from "../../lib/project-scope";
 import type { useExtraction } from "../../lib/use-extraction";
@@ -80,11 +82,11 @@ export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnT
     return latest.current.run(current => recordRun(current, latest.current.procurement, input));
   }
 
-  async function readTrade(id: string, signal: AbortSignal) {
+  async function readTrade(id: string, signal: AbortSignal, memory: MemoryEntry[], projectId: string) {
     const pkg = packages.find(p => p.id === id)!;
     update(id, { status: "reading" });
     const outcome = await readTradeScope({
-      pkg, sections: assigned.get(id) ?? [], sheets: sheetsFor(id), signal,
+      pkg, sections: assigned.get(id) ?? [], sheets: sheetsFor(id), signal, memory: contextPack(memory, { projectId, code: pkg.code, name: pkg.name }),
       onProgress: p => update(id, { status: "reading", done: p.done, total: p.total, note: p.note }),
       addFlipPages: pages => { const errors = latest.current.runFlip(current => pages.reduce((state, page) => state.pages.some(x => x.sheet === page.sheet) ? state : addPage(state, page), current)); return errors ? Object.values(errors)[0] ?? "A sheet could not be added to Drawing Flip." : null; },
     });
@@ -104,11 +106,13 @@ export function AiScopeWriter({ review, notify, onOpenFiles }: { review: ReturnT
     setStates(Object.fromEntries(chosen.map(id => [id, { status: "queued", done: 0, total: 0, found: 0, note: "" } as TradeState])));
     // The biggest trades start first, so they don't finish the reading alone (lib/auto-scope-plan biggestFirst).
     const queue = [...chosen].sort((a, b) => Math.ceil(pages(b) / 5) + sheetsFor(b).length - Math.ceil(pages(a) / 5) - sheetsFor(a).length);
+    // The contractor's approved memory (lib/memory), read once; each trade gets its part. Unreachable: read without it.
+    const memory = (await memoryForScan(projectId)).entries;
     let found = 0, failed = 0;
     await Promise.all(Array.from({ length: Math.min(PARALLEL_TRADES, queue.length) }, async () => {
       while (queue.length && !signal.aborted && projectId === getActiveProjectId()) {
         const id = queue.shift()!;
-        try { await readTrade(id, signal); found++; }
+        try { await readTrade(id, signal, memory, projectId); found++; }
         catch (error) { failed++; update(id, { status: "failed", note: error instanceof Error ? error.message : "The reading failed." }); }
       }
     }));

@@ -67,6 +67,7 @@ import { ScopeDashboardView } from "./scope-dashboard";
 import { BidThread, PortalLinkDialog, useBidMessages } from "./bid-portal-link";
 import { unreadMessages } from "../../lib/bid-portal";
 import { useActiveProject } from "../../lib/project-scope";
+import { useMemoryLearner } from "../../lib/use-memory-learner";
 import { ScopeMatrixView } from "./scope-matrix";
 import { notOnSheet } from "../../lib/extraction";
 import { GeneralScopes } from "./general-scopes";
@@ -153,6 +154,8 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
   // Marcel, 18 Nov: each trade's general scope first, the detailed items a tab away.
   const [packageView, setPackageView] = useState("General scope");
   const projectId = useActiveProject();
+  // Every correction made while reviewing goes to the AI memory as a proposal (lib/memory-learn).
+  useMemoryLearner(projectId, state, review.extraction);
 
   const [specSections] = useLocalDraft("specification-sections", initialSpecSections);
   const [generalOpen, setGeneralOpen] = useState(false);
