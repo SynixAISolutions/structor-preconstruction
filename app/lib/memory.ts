@@ -134,7 +134,8 @@ export function contextPack(entries: MemoryEntry[], target: { projectId: string;
     [`Specification sections ${target.name} carries on this contractor's bid forms`, apply.filter(e => e.kind === "assignment").sort((a, b) => (a.section ?? "").localeCompare(b.section ?? ""))],
     [`Rules for ${target.name}`, apply.filter(e => e.kind === "rule" && e.trades.length).sort(byWeight)],
     ["Rules for every trade", apply.filter(e => e.kind === "rule" && !e.trades.length).sort(byWeight)],
-    [`How ${target.name} lines are worded on this contractor's bid forms`, apply.filter(e => e.kind === "example").sort(byWeight)],
+    [`Lines this contractor's bid forms give ${target.name} (scope it carries, in its words; a specific line here wins over a general exclusion of the same work)`, apply.filter(e => e.kind === "example" && e.origin === "import").sort(byWeight)],
+    [`How ${target.name} lines are worded on this contractor's bid forms`, apply.filter(e => e.kind === "example" && e.origin !== "import").sort(byWeight)],
   ];
   const head = "This contractor's memory: rules and examples its estimators approved on earlier projects and reviews.";
   const lines: string[] = [head];
@@ -160,7 +161,7 @@ export function contextPack(entries: MemoryEntry[], target: { projectId: string;
 /** The longest memory a scan request carries (a little over PACK_CHARS, for the header lines). */
 export const MEMORY_REQUEST_CHARS = 8_000;
 /** The system line a reading job adds when its request carries the contractor's memory; nothing when it doesn't. */
-export const MEMORY_PROMPT_RULE = "If the contractor's memory is supplied, follow it: which trade carries what, what to leave out, and how lines are worded on this contractor's bid forms. It came from this contractor's estimators. Where an entry for this project differs from the company-wide ones, follow this project's. It never replaces evidence: every item still needs its quote from the source, and work the source doesn't require is still left out.";
+export const MEMORY_PROMPT_RULE = "If the contractor's memory is supplied, follow it: which trade carries what, what to leave out, and how lines are worded on this contractor's bid forms. It came from this contractor's estimators. Where an entry for this project differs from the company-wide ones, follow this project's. A specific line the contractor's bid forms give a trade (glass integrated in wood doors) wins over a general exclusion of the same work (glass lites in doors). It never replaces evidence: every item still needs its quote from the source, and work the source doesn't require is still left out.";
 /** The memory as the request carries it, checked: a string of at most MEMORY_REQUEST_CHARS, or undefined. */
 export function memoryField(raw: unknown, fail: (message: string) => never): string | undefined {
   if (raw === undefined || raw === null || raw === "") return undefined;
@@ -224,6 +225,39 @@ export function rememberedSections(entries: MemoryEntry[], packages: { id: strin
 export function leftOut(entries: MemoryEntry[], target: { code: string; name: string }, projectId: string): string[] {
   return projectMemory(entries, projectId).filter(e => e.kind === "rule" && e.trades.length && entryApplies(e, { projectId, ...target }))
     .flatMap(e => { const m = e.text.match(/\bdoesn['’]t carry:?\s*(.+?)\.?$/i); return m ? [m[1]] : []; });
+}
+
+// ── The contractor's standard lines ─────────────────────────────────────────
+// Marcel reuses his bid-form lines from job to job (41 of Whittier's 69 Drywall lines are on Jelleff's sheet too), and
+// many aren't in any drawing or specification: LEED requirements, R-values, keying, finish coordination. The AI writes
+// only what the documents show, so these are offered on the bid form instead, for an estimator to add.
+
+/** `title`: the line as a bid-form item; a sub-bullet ("- Louvers") carries its heading, so it reads alone. */
+export type StandardLine = { text: string; title: string; group: string; sheets: string[] };
+/** The bid forms an imported line was on: the file named in each of its import events. */
+export const sheetsOf = (entry: Pick<MemoryEntry, "events" | "source">): string[] =>
+  [...new Set(entry.events.filter(e => e.startsWith("import:")).map(e => e.split(":")[1]).filter(Boolean))];
+const lineWords = (s: string) => new Set(s.toLowerCase().replace(/&/g, " and ").split(/[^a-z0-9]+/).filter(w => w.length > 2 && !["and", "the", "for", "all", "with", "per", "include", "provide", "furnish", "install"].includes(w)));
+
+/**
+ * The lines this contractor's imported bid forms give a trade, for one project's bid form: the project's overrides
+ * applied (projectMemory), each line once with every sheet it was on, most-repeated first, leaving out a line the form
+ * already has (`existing`: its items' titles and details; most of a line's words already in one item).
+ */
+export function standardLines(entries: MemoryEntry[], target: { code: string; name: string }, projectId: string, existing: string[]): StandardLine[] {
+  const have = existing.map(lineWords);
+  const covered = (text: string) => { const w = [...lineWords(text)]; return !w.length || have.some(h => w.filter(x => h.has(x)).length / w.length >= 0.8); };
+  const byText = new Map<string, StandardLine>();
+  for (const e of projectMemory(entries, projectId)) {
+    if (e.kind !== "example" || e.origin !== "import" || !e.trades.length || !entryApplies(e, { projectId, ...target })) continue;
+    const key = e.text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const group = e.detail.match(/^Under "(.+)"$/)?.[1] ?? "";
+    const bullet = /^[-•*]\s+/.test(e.text) && group;
+    const line = byText.get(key) ?? { text: e.text, title: bullet ? `${group.replace(/[:.]\s*$/, "")}: ${e.text.replace(/^[-•*]\s+/, "")}` : e.text, group, sheets: [] };
+    line.sheets = [...new Set([...line.sheets, ...sheetsOf(e)])];
+    byText.set(key, line);
+  }
+  return [...byText.values()].filter(l => !covered(l.text)).sort((a, b) => b.sheets.length - a.sheets.length);
 }
 
 /** The longest note on shared sections a trade's scan carries, so it and the memory stay within MEMORY_REQUEST_CHARS. */
