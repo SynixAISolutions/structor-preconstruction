@@ -3,7 +3,7 @@ import { test } from "node:test";
 import * as THREE from "three";
 import { schematicCameraFit, schematicObjectPick } from "./schematic-scene";
 import { alignSheetFrame, footprintValid, openOutline, printedSheetFrame, schematicColumns, schematicDoors, schematicGeometry, schematicGlazing, schematicPartitions, schematicRailings, schematicRoomFloors, schematicStairs, schematicWalls, sheetPoint, wallTotals } from "./schematic-geometry";
-import { moveOutlinePoint, setLevelHeight, type Point, type SchematicLevel, type SchematicModel } from "../../lib/schematic-model";
+import { levelSpaces, moveOutlinePoint, setLevelHeight, setOpenToBelow, type Point, type SchematicLevel, type SchematicModel } from "../../lib/schematic-model";
 
 const level: SchematicLevel = { id: "L1", name: "Level 01", order: 1, elevation: 0, height: 14, outline: [[10, 20], [50, 20], [50, 60], [10, 60]], rooms: [{ name: "Lobby", number: "101", at: [20, 30] }], source: { documentId: "qa", sheet: "A1.1", page: 1 }, sizing: "Printed scale, 8 ft per inch" };
 test("schematic geometry flips drawing y, extrudes to the read height, and corrections move upper levels", () => {
@@ -140,16 +140,45 @@ test("stairs arriving at a level: treads and landings hanging down to the floor 
   assert.equal((schematicRoomFloors([{ ...room, outline: [[195, 101.4], [209, 101.4], [209, 110.5], [195, 110.5]] }], stairs.openings)!.children[0] as THREE.Mesh).geometry.getAttribute("position").count, 4 + 4 * 2, "An opening reaching past the room's outline isn't cut from it");
 });
 
-test("sports floors use the detected room index and omit open-to-below areas", () => {
-  const outline: Point[] = [[0, 0], [90, 0], [90, 70], [0, 70]];
-  const room = { outline, area: 6300, name: "GYM (60' x 70')", number: "103", at: [45, 35] as Point };
-  const floor = schematicRoomFloors([{ ...room, open: true }, { ...room, name: "Gym storage" }, room])!;
-  assert.equal(floor.children.length, 2);
-  assert.equal(floor.children[0].userData.sportsFloor, undefined);
-  floor.children[1].userData.levelId = "L1";
-  assert.deepEqual(schematicObjectPick({ object: floor.children[1] } as THREE.Intersection), {
-    kind: "sports-floor", levelId: "L1", index: 2,
-  });
+test("floors generated from plan lines pick the right room through an upper opening", () => {
+  const outline: Point[] = [[0, 0], [80, 0], [80, 80], [0, 80]];
+  const interior: Point[] = [[25, 25], [55, 25], [55, 55], [25, 55]];
+  const walls = [outline, interior].flatMap(ring =>
+    ring.map((a, index) => ({ a, b: ring[(index + 1) % ring.length], thickness: .5 })),
+  );
+  const lower = { ...level, outline, walls, rooms: [] };
+  const upper = { ...lower, id: "L2", order: 2, elevation: 14, openings: [[40, 40]] as Point[],
+    rooms: [{ name: "Circulation", number: "201", at: [10, 40] as Point }] };
+  const model: SchematicModel = { levels: [lower, upper], builtAt: "qa", warnings: [] };
+  const upperRooms = levelSpaces(upper);
+  const around = upperRooms.find(room => room.name === "Circulation")!;
+  assert.equal(around.area, 5500);
+  const corrected = setOpenToBelow(model, "L2", { ...around, at: [40, 40] }, true);
+  assert.equal(corrected.levels[1].openings?.length, 2, "Opening the outer area preserves the inner opening");
+  const restored = setOpenToBelow(corrected, "L2", around, false);
+  assert.deepEqual(restored.levels[1].openings, upper.openings, "Restoring the outer floor leaves the inner opening");
+
+  const scene = new THREE.Group();
+  const overlappingStair: Point[] = [[35, 20], [45, 20], [45, 60], [35, 60]];
+  for (const slab of model.levels) {
+    const mesh = schematicRoomFloors(levelSpaces(slab), slab.id === "L2" ? [overlappingStair] : [])!;
+    mesh.position.y = slab.elevation;
+    mesh.children.forEach(floor => { floor.userData.levelId = slab.id; });
+    scene.add(mesh);
+  }
+  scene.updateMatrixWorld(true);
+  const pickFromAbove = (x: number, y: number) => {
+    const ray = new THREE.Raycaster(new THREE.Vector3(x, 30, -y), new THREE.Vector3(0, -1, 0));
+    const hit = ray.intersectObject(scene, true)[0];
+    return hit && schematicObjectPick(hit);
+  };
+  assert.deepEqual(pickFromAbove(10, 40), { kind: "floor", levelId: "L2", index: upperRooms.indexOf(around) });
+  assert.deepEqual(pickFromAbove(40, 22), { kind: "floor", levelId: "L2", index: upperRooms.indexOf(around) },
+    "A stair well crossing the opening's edges cannot corrupt the floor triangulation");
+  const lowerRooms = levelSpaces(lower);
+  const unnamed = lowerRooms.findIndex(room => room.area === 900);
+  assert.ok(unnamed >= 0);
+  assert.deepEqual(pickFromAbove(40, 40), { kind: "floor", levelId: "L1", index: unnamed });
 });
 
 test("both leaves of a double door resolve past a stall to the same source door", () => {

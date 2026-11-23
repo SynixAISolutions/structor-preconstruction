@@ -79,7 +79,7 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
     const mount = host.current!; let renderer: THREE.WebGLRenderer;
     try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); } catch { error.current("3D graphics are unavailable. Source drawings, heights and outline corrections remain available below."); return; }
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setClearColor(0, 0); renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.domElement.tabIndex = 0; renderer.domElement.setAttribute("aria-label", "Schematic building model. Drag to orbit, scroll to zoom, and click a wall, door or sports floor to inspect it. Escape clears the selection. Use the object inspector and level controls for keyboard access."); mount.append(renderer.domElement);
+    renderer.domElement.tabIndex = 0; renderer.domElement.setAttribute("aria-label", "Schematic building model. Drag to orbit, scroll to zoom, and click a wall, door or floor to inspect it. Escape clears the selection. Use the object inspector and level controls for keyboard access."); mount.append(renderer.domElement);
     const scene = new THREE.Scene(), group = new THREE.Group(), opened = new THREE.Group(), highlight = new THREE.Group(); scene.add(group, opened, highlight);
     // The geometry runs plan y (down the sheet) toward -z, which on its own is the building's mirror image. The group flips it
     // back, so south is toward the viewer and east to the right, as on the plan and in the prepared model.
@@ -135,12 +135,12 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
       ray.setFromCamera(pointer, view);
       const layers: THREE.Object3D[] = [];
       opened.traverse(o => { if (o.userData.layer !== undefined || o.userData.whole) layers.push(o); });
-      const layer = ray.intersectObjects(layers, false)[0]?.object;
-      if (layer) {
-        const wall = layer.parent?.userData.pick as WallPick | undefined;
-        if (wall) return { ...wall, layer: layer.userData.layer };
-      }
-      for (const hit of ray.intersectObjects(api.pickables, false)) {
+      for (const hit of ray.intersectObjects([...layers, ...api.pickables], false)) {
+        const layer = hit.object;
+        if (layer.userData.layer !== undefined || layer.userData.whole) {
+          const wall = layer.parent?.userData.pick as WallPick | undefined;
+          if (wall) return { ...wall, layer: layer.userData.layer };
+        }
         const pick = schematicObjectPick(hit);
         if (pick) return pick;
       }
@@ -274,7 +274,7 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
         }
         scope.traverse(object => {
           const data = object.userData;
-          if (data.walls || data.doors || data.sportsFloor !== undefined) current.pickables.push(object);
+          if (data.walls || data.doors || data.floorIndex !== undefined) current.pickables.push(object);
         });
         if (scope.children.length) current.group.add(scope);
       } catch (failure) {
@@ -314,7 +314,7 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
               addOutline(new THREE.Matrix4().multiplyMatrices(mesh.matrixWorld, matrix));
             }
           });
-        } else if (selection.kind === "sports-floor" && object.userData.sportsFloor === selection.index) {
+        } else if (selection.kind === "floor" && object.userData.floorIndex === selection.index) {
           addOutline(mesh.matrixWorld);
         }
       }
@@ -454,7 +454,11 @@ function OutlineSheet({ focus, onPickWall, level, spaces, doc, frameKey, frames,
       try { saveFrame(frameKey, alignSheetFrame(points[corner], fraction(event))); setAligning(false); setError(""); } catch (failure) { setError(failure instanceof Error ? failure.message : "The sheet could not be aligned."); }
     }} onPointerMove={event => { if (drag && frame) setDrag({ ...drag, point: sheetPoint(fraction(event), frame) }); }} onPointerUp={event => { if (drag && frame) { commit(drag.index, sheetPoint(fraction(event), frame)); setDrag(null); } }} onPointerCancel={() => setDrag(null)}>
       {frame && showWalls && <g aria-label={`${level.walls?.length ?? 0} walls read from the plan's lines`}>
-        {spaces.map((r, i) => <g key={`r${i}`} pointerEvents="none"><polygon points={r.outline.map(p => p.join(",")).join(" ")} fill={r.open ? "#ffffff00" : r.name ? "#d9a44a33" : "#94a3b833"}/><text x={r.at[0]} y={r.at[1] + (r.name ? frame.width / 140 : 0)} fontSize={frame.width / 260} fill="#78350f" textAnchor="middle">{r.open ? "Open to below · " : ""}{r.area.toLocaleString()} SF</text></g>)}
+        {spaces.map((r, i) => <g key={`r${i}`} pointerEvents="none">
+          <path d={[r.outline, ...(r.holes ?? [])].map(ring => `M${ring.map(p => p.join(",")).join("L")}Z`).join(" ")}
+            fillRule="evenodd" fill={r.open ? "none" : r.name ? "#d9a44a33" : "#94a3b833"}/>
+          <text x={r.at[0]} y={r.at[1] + (r.name ? frame.width / 140 : 0)} fontSize={frame.width / 260} fill="#78350f" textAnchor="middle">{r.open ? "Open to below · " : ""}{r.area.toLocaleString()} SF</text>
+        </g>)}
         {level.walls?.map((w, i) => { const on = pick?.kind === "wall" && pick.index === i; return <g key={i} onClick={editable && !aligning ? () => { setPick({ kind: "wall", index: i }); if (!w.excluded) onPickWall?.(i); } : undefined} style={{ cursor: editable ? "pointer" : undefined }}>
           <line x1={w.a[0]} y1={w.a[1]} x2={w.b[0]} y2={w.b[1]} stroke={on ? "#7c3aed" : w.excluded ? "#9ca3af" : "#c2410c"} strokeOpacity={.85} strokeDasharray={w.excluded ? `${frame.width / 300}` : undefined} strokeWidth={Math.max(w.thickness, frame.width / (on ? 450 : 900))}/>
           <line x1={w.a[0]} y1={w.a[1]} x2={w.b[0]} y2={w.b[1]} stroke="transparent" strokeWidth={frame.width / 150}><title>Wall {i + 1}{w.type ? ` · ${w.type}` : ""}{w.excluded ? " · not a wall" : ""}</title></line></g>; })}
@@ -597,7 +601,25 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
     catch (failure) { if (!control.signal.aborted) setError(failure instanceof Error ? failure.message : "The schematic model could not be built."); }
     finally { if (abort.current === control) { setBusy(false); abort.current = null; } }
   }
-  function change(action: (m: SchematicModel) => SchematicModel) { if (pending) { try { setPending(action(pending)); setError(""); } catch (failure) { setError(failure instanceof Error ? failure.message : "The preview could not be corrected."); } return; } const message = run(m => { if (!m) throw new Error("Build and accept a schematic first."); return action(m); }); setError(message ?? ""); }
+  function change(action: (m: SchematicModel) => SchematicModel) {
+    if (pending) {
+      try { setPending(action(pending)); }
+      catch (failure) {
+        setError(failure instanceof Error ? failure.message : "The preview could not be corrected.");
+        return;
+      }
+      setError("");
+    } else {
+      const message = run(m => {
+        if (!m) throw new Error("Build and accept a schematic first.");
+        return action(m);
+      });
+      setError(message ?? "");
+      if (message) return;
+    }
+    // Room polygons are derived from the corrected drawing geometry and may have different indices.
+    setSelection(pick => pick?.kind === "floor" ? null : pick);
+  }
   return <div className="sm-studio"><PageHeader eyebrow={`${project.name} / Model studio`} title="Schematic model" description="Inspect the rooms, openings and levels read from your floor plans." actions={<><Button onClick={() => navigate("documents")}>Project files</Button>{busy ? <Button onClick={() => { abort.current?.abort(); setProgress("Build stopped. The saved model is retained."); }}>Stop building</Button> : <Button disabled={!ready || !documents.length} variant="primary" onClick={build}>{model || pending ? "Rebuild schematic model" : "Build a schematic model from the drawings"}</Button>}</>}/>
     <PreviewNote><strong>Schematic: not measured</strong> · Check the footprint, scale and heights. Room names are read by AI; check them.</PreviewNote>
     {(busy || progress) && <p role="status">{progress}</p>}{error && <p role="alert">{error}</p>}
@@ -642,14 +664,14 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
               if (e.target.checked) setShown(current.levels.map(item => item.id));
             }}/>Explode levels</label>}
           </div>
-          <small>Drag to orbit · Scroll to zoom · Select a wall, door or sports floor to inspect</small>
+          <small>Drag to orbit · Scroll to zoom · Select a wall, door or floor to inspect</small>
         </div>
         <aside className="sm-levels">
           <SchematicObjectInspector levels={current.levels} spaces={spacesByLevel}
             pick={activePick?.kind === "wall" ? null : activePick} canOpenPlan={item => documents.some(document => document.id === item.source.documentId)}
-            onPick={pick => {
+            onPick={(pick, isolateLevel) => {
               inspect(pick);
-              if (pick.kind === "sports-floor") {
+              if (isolateLevel) {
                 setShown([pick.levelId]); setCutaway(true); setExplode(false);
                 viewer.current?.scrollIntoView({ block: "nearest" });
               }

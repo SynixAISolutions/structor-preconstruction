@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { isSportsFloor } from "./schematic-scene";
 import { polygonArea, type Point, type SchematicLevel } from "../../lib/schematic-model";
-import { inside, type Room } from "../../lib/room-detection";
+import { inside, insideRoom, type Room } from "../../lib/room-detection";
 import { stairPieces } from "../../lib/stair-detection";
 import { layerColor, layerGap, layerSlabs, openedCenter, type WallLayer } from "../../lib/wall-assemblies";
 
@@ -23,16 +23,19 @@ export function alignSheetFrame(point: Point, fraction: Point): SheetFrame {
 export function sheetPoint(fraction: Point, frame: SheetFrame): Point {
   return fraction.map((f, i) => Math.round(Math.max(0, Math.min(1, f)) * (i ? frame.height : frame.width) * 10) / 10) as Point;
 }
+function edgesIntersect(a: Point, b: Point, c: Point, d: Point): boolean {
+  const cross = (p: Point, q: Point, r: Point) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+  const overlap = (axis: 0 | 1) => Math.max(Math.min(a[axis], b[axis]), Math.min(c[axis], d[axis])) <=
+    Math.min(Math.max(a[axis], b[axis]), Math.max(c[axis], d[axis]));
+  return overlap(0) && overlap(1) && cross(a, b, c) * cross(a, b, d) <= 0 && cross(c, d, a) * cross(c, d, b) <= 0;
+}
 export function footprintValid(points: Point[]): boolean {
   points = openOutline(points);
   if (points.length < 3 || points.some(p => !p.every(Number.isFinite)) || polygonArea(points) < 1) return false;
-  const cross = (a: Point, b: Point, c: Point) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
   for (let i = 0; i < points.length; i++) for (let j = i + 1; j < points.length; j++) {
     if (j === i + 1 || i === 0 && j === points.length - 1) continue;
     const a = points[i], b = points[(i + 1) % points.length], c = points[j], d = points[(j + 1) % points.length];
-    if (cross(a, b, c) * cross(a, b, d) <= 0 && cross(c, d, a) * cross(c, d, b) <= 0) {
-      if (Math.max(Math.min(a[0], b[0]), Math.min(c[0], d[0])) <= Math.min(Math.max(a[0], b[0]), Math.max(c[0], d[0])) && Math.max(Math.min(a[1], b[1]), Math.min(c[1], d[1])) <= Math.min(Math.max(a[1], b[1]), Math.max(c[1], d[1]))) return false;
-    }
+    if (edgesIntersect(a, b, c, d)) return false;
   }
   return true;
 }
@@ -227,7 +230,7 @@ export function schematicStairs(level: SchematicLevel, rise: number | null): { m
 }
 /**
  * A level's rooms (levelSpaces) as flat floors just above the slab: named rooms warm, unnamed spaces grey. A space open to the
- * level below has no floor; `openings` (a stair's well) are cut from the room they lie wholly inside.
+ * level below has no floor. Nested rooms and stair wells cut holes in their surrounding floors.
  */
 export function schematicRoomFloors(rooms: Room[], openings: Point[][] = []): THREE.Group | null {
   if (rooms.every(room => room.open)) return null;
@@ -242,12 +245,22 @@ export function schematicRoomFloors(rooms: Room[], openings: Point[][] = []): TH
       materials.set(color, material);
     }
     const shape = new THREE.Shape(room.outline.map(([x, y]) => new THREE.Vector2(x, y)));
-    for (const hole of openings) if (hole.every(p => inside(p, room.outline))) shape.holes.push(new THREE.Path(hole.map(([x, y]) => new THREE.Vector2(x, y))));
+    const roomHoles = room.holes ?? [];
+    const boundaries = [room.outline, ...roomHoles];
+    // Triangulation needs separate rings. Only cut a stair well wholly in the surrounding floor.
+    const stairWells = openings.filter(well => well.every(p => insideRoom(p, room)) &&
+      !roomHoles.some(hole => hole.some(p => inside(p, well))) &&
+      !boundaries.some(ring => ring.some((a, i) => well.some((c, j) =>
+        edgesIntersect(a, ring[(i + 1) % ring.length], c, well[(j + 1) % well.length]),
+      ))));
+    for (const hole of [...roomHoles, ...stairWells]) {
+      shape.holes.push(new THREE.Path(hole.map(([x, y]) => new THREE.Vector2(x, y))));
+    }
     const geometry = new THREE.ShapeGeometry(shape);
     geometry.rotateX(-Math.PI / 2);
     const floor = new THREE.Mesh(geometry, material);
     floor.position.y = .05;
-    if (sports) floor.userData.sportsFloor = index;
+    floor.userData.floorIndex = index;
     group.add(floor);
   }
   return group;

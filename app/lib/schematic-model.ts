@@ -13,7 +13,7 @@ import { floorOpenings } from "./floor-openings";
 import { mergeTags, placeTags, tagOvals, type PartitionType, type PlacedTag } from "./tag-placement";
 import type { Curve, Segment } from "./plan-vectors";
 import type { RegisterRow } from "./project-files";
-import { inside, levelRooms, type Room } from "./room-detection";
+import { insideRoom, levelRooms, roomLabelPoint, type Room } from "./room-detection";
 import { borrowArrows, groupFlights, planFlights, type Flight } from "./stair-detection";
 import { hexagonTags, planColumns, planGlazing, planPartitions, planRailings, planWalls } from "./wall-detection";
 
@@ -546,23 +546,12 @@ export function stairRise(model: SchematicModel, level: SchematicLevel): number 
  * given its floor back. Openings are points, as read from the plan's X; opening a space adds a point inside it, giving it
  * a floor removes every opening inside it, the plan's own included. Not for the lowest level, which has nothing below it.
  */
-export function setOpenToBelow(model: SchematicModel, levelId: string, space: { outline: Point[]; at: Point }, open: boolean): SchematicModel {
+export function setOpenToBelow(model: SchematicModel, levelId: string, space: Pick<Room, "outline" | "holes" | "at">, open: boolean): SchematicModel {
   return editLevel(model, levelId, l => {
     if (l.order === Math.min(...model.levels.map(m => m.order))) throw new Error("The lowest level has no level below it.");
-    const inSpace = (p: Point) => inside(p, space.outline), kept = (l.openings ?? []).filter(p => !inSpace(p));
-    return { ...l, openings: open ? [...kept, pointInside(space)] : kept };
+    const kept = (l.openings ?? []).filter(p => !insideRoom(p, space));
+    return { ...l, openings: open ? [...kept, roomLabelPoint(space, space.at)] : kept };
   });
-}
-
-/** A point inside a space: its tag or middle when that is inside, else the middle of the widest run across its middle height. */
-function pointInside(space: { outline: Point[]; at: Point }): Point {
-  if (inside(space.at, space.outline)) return space.at;
-  const ys = space.outline.map(p => p[1]), y = (Math.min(...ys) + Math.max(...ys)) / 2, xs: number[] = [];
-  space.outline.forEach((p, i) => { const q = space.outline[(i + 1) % space.outline.length]; if ((p[1] > y) !== (q[1] > y)) xs.push(p[0] + (y - p[1]) / (q[1] - p[1]) * (q[0] - p[0])); });
-  xs.sort((a, b) => a - b);
-  let best: Point = space.at, width = -1;
-  for (let i = 0; i + 1 < xs.length; i += 2) if (xs[i + 1] - xs[i] > width) { width = xs[i + 1] - xs[i]; best = [Math.round((xs[i] + xs[i + 1]) / 2 * 10) / 10, Math.round(y * 10) / 10]; }
-  return best;
 }
 
 /** The walls that count: everything read from the plan except what the estimator marked not a wall. */

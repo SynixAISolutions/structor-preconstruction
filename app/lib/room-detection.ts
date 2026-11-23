@@ -6,8 +6,8 @@
 
 import type { Point } from "./plan-vectors";
 
-/** `open`: a space with no floor of its own, open to the level below (lib/floor-openings). */
-export type Room = { outline: Point[]; area: number; name: string; number: string; at: Point; open?: boolean };
+/** `holes` enclose separate spaces. An `open` space has no floor of its own. */
+export type Room = { outline: Point[]; holes?: Point[][]; area: number; name: string; number: string; at: Point; open?: boolean };
 /** `kind` "railing": a guardrail closes a space, but a wall end never stretches out to reach one. */
 type Line = { a: Point; b: Point; kind?: string };
 
@@ -29,6 +29,11 @@ export function inside(p: Point, poly: Point[]): boolean {
     if ((yi > p[1]) !== (yj > p[1]) && p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi) hit = !hit;
   }
   return hit;
+}
+
+/** Whether p belongs to this room, excluding any enclosed rooms or openings. */
+export function insideRoom(p: Point, room: Pick<Room, "outline" | "holes">): boolean {
+  return inside(p, room.outline) && !room.holes?.some(hole => inside(p, hole));
 }
 
 /**
@@ -157,14 +162,70 @@ export function centroid(pts: Point[]): Point {
   return [c[0] / (6 * a), c[1] / (6 * a)];
 }
 
+/** Find a label position for an untagged room, including when its centroid lands in a hole. */
+export function roomLabelPoint(room: Pick<Room, "outline" | "holes">, preferred = centroid(room.outline)): Point {
+  if (insideRoom(preferred, room)) return preferred;
+  const rings = [room.outline, ...(room.holes ?? [])];
+  const heights = [...new Set(rings.flatMap(ring => ring.map(p => p[1])))].sort((a, b) => a - b);
+  const widestSpan = (y: number) => {
+    const crossings: number[] = [];
+    for (const ring of rings) {
+      ring.forEach(([x1, y1], j) => {
+        const [x2, y2] = ring[(j + 1) % ring.length];
+        if ((y1 > y) !== (y2 > y)) crossings.push(x1 + (x2 - x1) * (y - y1) / (y2 - y1));
+      });
+    }
+    crossings.sort((a, b) => a - b);
+    let point = preferred, width = 0;
+    for (let j = 0; j + 1 < crossings.length; j += 2) {
+      const span = crossings[j + 1] - crossings[j];
+      if (span > width) {
+        width = span;
+        point = [(crossings[j] + crossings[j + 1]) / 2, y];
+      }
+    }
+    return { point, width };
+  };
+  const middle = widestSpan((heights[0] + heights[heights.length - 1]) / 2);
+  if (middle.width && insideRoom(middle.point, room)) return middle.point;
+  let best = { point: preferred, width: 0 };
+  for (let i = 1; i < heights.length; i++) {
+    const span = widestSpan((heights[i - 1] + heights[i]) / 2);
+    if (span.width > best.width) best = span;
+  }
+  return best.point;
+}
+
 /**
  * The rooms of a level: the faces of its walls, glass and door openings (closed across), each named by the
  * room tag inside it. A face with no tag keeps an empty name; one with two tags takes the first. Spaces
  * whose walls leave gaps wider than the extension (open to below, an open corridor) are not rooms.
  */
 export function levelRooms(input: { walls: Line[]; doors: Line[]; glazing: Line[]; tags: { name: string; number: string; at: Point }[]; openings?: Point[] }): Room[] {
-  return faces([...input.walls, ...input.glazing, ...input.doors]).map(outline => {
-    const tag = input.tags.find(t => inside(t.at, outline)), r1 = (v: number) => Math.round(v * 10) / 10;
-    return { outline: outline.map(([x, y]) => [r1(x), r1(y)] as Point), area: Math.round(polygonArea(outline)), name: tag?.name ?? "", number: tag?.number ?? "", at: (tag?.at ?? centroid(outline)).map(r1) as Point, ...(input.openings?.some(p => inside(p, outline)) ? { open: true } : {}) };
+  const rooms = faces([...input.walls, ...input.glazing, ...input.doors]).map(outline => ({
+    outline, area: polygonArea(outline), vertices: new Set(outline), holes: [] as Point[][],
+  }));
+  const byArea = [...rooms].sort((a, b) => a.area - b.area);
+  // Disconnected loops can be nested. Each removes area from only its smallest containing face.
+  // A shared vertex means the faces meet at a wall and the inner loop is not a closed hole.
+  for (const room of rooms) {
+    const parent = byArea.find(candidate => candidate.area > room.area
+      && room.outline.every(p => !candidate.vertices.has(p) && inside(p, candidate.outline)));
+    if (parent) parent.holes.push(room.outline);
+  }
+  const roundPoint = ([x, y]: Point): Point => [Math.round(x * 10) / 10, Math.round(y * 10) / 10];
+  return rooms.map(room => {
+    const tag = input.tags.find(t => insideRoom(t.at, room));
+    const at = tag?.at ?? roomLabelPoint(room);
+    const roundedAt = roundPoint(at);
+    return {
+      outline: room.outline.map(roundPoint),
+      ...(room.holes.length ? { holes: room.holes.map(hole => hole.map(roundPoint)) } : {}),
+      area: Math.round(room.area - room.holes.reduce((area, hole) => area + polygonArea(hole), 0)),
+      name: tag?.name ?? "",
+      number: tag?.number ?? "",
+      at: insideRoom(roundedAt, room) ? roundedAt : at,
+      ...(input.openings?.some(p => insideRoom(p, room)) ? { open: true } : {}),
+    };
   });
 }

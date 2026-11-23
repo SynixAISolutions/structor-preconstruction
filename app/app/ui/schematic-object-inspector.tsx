@@ -5,16 +5,16 @@ import { isSportsFloor, type SchematicPick, type WallPick } from "./schematic-sc
 
 type ObjectPick = Exclude<SchematicPick, WallPick>;
 
-const keyFor = ({ levelId, index }: ObjectPick) => JSON.stringify([levelId, index]);
+const keyFor = ({ kind, levelId, index }: ObjectPick) => JSON.stringify([kind, levelId, index]);
 const doorLabel = (level: SchematicLevel, index: number) => "Door " + (level.doors?.[index]?.number || index + 1);
-const roomLabel = (room: Room) => [room.number, room.name].filter(Boolean).join(" ");
+const roomLabel = (room: Room, index: number) => [room.number, room.name].filter(Boolean).join(" ") || "Unnamed floor " + (index + 1);
 
 export function SchematicObjectInspector({ levels, spaces, pick, canOpenPlan, onPick, onClose, onPlan }: {
   levels: SchematicLevel[];
   spaces: ReadonlyMap<string, Room[]>;
   pick: ObjectPick | null;
   canOpenPlan: (level: SchematicLevel) => boolean;
-  onPick: (pick: ObjectPick) => void;
+  onPick: (pick: ObjectPick, isolateLevel?: boolean) => void;
   onClose: () => void;
   onPlan: (level: SchematicLevel, pick: ObjectPick) => void;
 }) {
@@ -22,14 +22,19 @@ export function SchematicObjectInspector({ levels, spaces, pick, canOpenPlan, on
     level,
     picks: (level.doors ?? []).flatMap((door, index) => door.kind === "door" ? [{ kind: "door" as const, levelId: level.id, index }] : []),
   })).filter(group => group.picks.length);
-  const sports = levels.flatMap(level => (spaces.get(level.id) ?? []).flatMap((room, index) =>
-    isSportsFloor(room) ? [{ room, level, pick: { kind: "sports-floor" as const, levelId: level.id, index } }] : [],
-  ));
-  if (!doors.length && !sports.length) return null;
+  const floors = levels.map(level => ({
+    level,
+    items: (spaces.get(level.id) ?? []).flatMap((room, index) =>
+      room.open ? [] : [{ room, pick: { kind: "floor" as const, levelId: level.id, index } }],
+    ),
+  })).filter(group => group.items.length);
+  const sports = floors.flatMap(group => group.items.filter(({ room }) => isSportsFloor(room)));
+  if (!doors.length && !floors.length) return null;
 
   const level = pick ? levels.find(item => item.id === pick.levelId) : undefined;
   const door = pick?.kind === "door" ? level?.doors?.[pick.index] : undefined;
-  const court = pick?.kind === "sports-floor" ? spaces.get(pick.levelId)?.[pick.index] : undefined;
+  const selectedRoom = pick?.kind === "floor" ? spaces.get(pick.levelId)?.[pick.index] : undefined;
+  const floor = selectedRoom?.open ? undefined : selectedRoom;
 
   return <Panel title="Object inspector" className="sm-inspector">
     <div className="sm-inspector-body">
@@ -45,26 +50,38 @@ export function SchematicObjectInspector({ levels, spaces, pick, canOpenPlan, on
           </optgroup>)}
         </select>
       </label>}
+      {floors.length > 0 && <label className="ui-field">Find a floor
+        <select value={floor && pick ? keyFor(pick) : ""} onChange={event => {
+          const item = floors.flatMap(group => group.items).find(({ pick }) => keyFor(pick) === event.target.value);
+          if (item) onPick(item.pick);
+          else if (pick?.kind === "floor") onClose();
+        }}>
+          <option value="">Choose a floor…</option>
+          {floors.map(group => <optgroup key={group.level.id} label={group.level.name}>
+            {group.items.map(({ room, pick }) => <option key={keyFor(pick)} value={keyFor(pick)}>{roomLabel(room, pick.index)}</option>)}
+          </optgroup>)}
+        </select>
+      </label>}
       {sports.length > 0 && <div className="sm-sports-shortcuts">
         {sports.map(item => <button key={keyFor(item.pick)} type="button" className="ui-btn secondary"
-          aria-pressed={pick?.kind === "sports-floor" && keyFor(pick) === keyFor(item.pick)} onClick={() => onPick(item.pick)}>
-          View {roomLabel(item.room)}
+          aria-pressed={pick?.kind === "floor" && keyFor(pick) === keyFor(item.pick)} onClick={() => onPick(item.pick, true)}>
+          View {roomLabel(item.room, item.pick.index)}
         </button>)}
       </div>}
-      {level && pick && (door || court) && <div className="sm-inspected" aria-live="polite">
+      {level && pick && (door || floor) && <div className="sm-inspected" aria-live="polite">
         <div className="sm-inspected-head">
-          <strong>{court ? roomLabel(court) : doorLabel(level, pick.index)}</strong>
+          <strong>{floor ? roomLabel(floor, pick.index) : doorLabel(level, pick.index)}</strong>
           <button type="button" className="sm-layers-close" aria-label="Clear object selection" onClick={onClose}>×</button>
         </div>
         <dl>
           <div><dt>Level</dt><dd>{level.name}</dd></div>
           {door && <div><dt>Opening</dt><dd>{door.width.toLocaleString(undefined, { maximumFractionDigits: 2 })} ft · {door.leaves === 2 ? "Pair" : "Single leaf"}</dd></div>}
-          {court && <div><dt>Detected floor area</dt><dd>{court.area.toLocaleString()} SF</dd></div>}
+          {floor && <div><dt>Detected room area</dt><dd>{floor.area.toLocaleString()} SF</dd></div>}
           <div><dt>Source</dt><dd>{level.source.sheet} · PDF page {level.source.page}</dd></div>
         </dl>
-        {court && <p>The surface follows the detected room boundary. Court markings and equipment require their own drawing evidence.</p>}
+        {floor && isSportsFloor(floor) && <p>Court markings and equipment require their own drawing evidence.</p>}
         {door && !door.number && <p>The swing was detected on the plan. No door tag was matched.</p>}
-        {canOpenPlan(level) && <Button onClick={() => onPlan(level, pick)}>{court ? "Open " + level.source.sheet : "Show door on plan"}</Button>}
+        {canOpenPlan(level) && <Button onClick={() => onPlan(level, pick)}>{floor ? "Open " + level.source.sheet : "Show door on plan"}</Button>}
       </div>}
     </div>
   </Panel>;

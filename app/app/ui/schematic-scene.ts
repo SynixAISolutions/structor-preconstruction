@@ -4,8 +4,8 @@ import type { Room } from "../../lib/room-detection";
 type LocatedPick = { levelId: string; index: number };
 export type WallPick = LocatedPick & { kind: "wall"; layer?: number };
 export type DoorPick = LocatedPick & { kind: "door" };
-export type SportsFloorPick = LocatedPick & { kind: "sports-floor" };
-export type SchematicPick = WallPick | DoorPick | SportsFloorPick;
+export type FloorPick = LocatedPick & { kind: "floor" };
+export type SchematicPick = WallPick | DoorPick | FloorPick;
 
 export const CUTAWAY_HEIGHT = 5;
 
@@ -17,7 +17,7 @@ export function isSportsFloor(room: Pick<Room, "name" | "open">): boolean {
 export function schematicObjectPick(hit: THREE.Intersection): SchematicPick | null {
   const data = hit.object.userData;
   if (typeof data.levelId !== "string") return null;
-  if (typeof data.sportsFloor === "number") return { kind: "sports-floor", levelId: data.levelId, index: data.sportsFloor };
+  if (typeof data.floorIndex === "number") return { kind: "floor", levelId: data.levelId, index: data.floorIndex };
   if (hit.instanceId === undefined || hit.instanceId === data.hidden) return null;
   const wall = data.walls?.[hit.instanceId];
   if (typeof wall === "number") return { kind: "wall", levelId: data.levelId, index: wall };
