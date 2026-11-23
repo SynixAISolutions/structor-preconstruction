@@ -13,7 +13,7 @@ import { addPage, DrawingFlipRuleError, type DrawingFlipState } from "./drawing-
 import { addPackage, type Procurement } from "./procurement";
 import { drawingRegister, specificationSections, type StoredDocument } from "./project-files";
 import { readStoredText, storedDocuments, uploadsSettleIn, useProjectDocuments } from "./project-files-client";
-import { sectionsByTrade, tradesToAdd } from "./project-scopes";
+import { readersBySection, sectionsByTrade, tradesToAdd } from "./project-scopes";
 import { applyBidPackagePlan } from "./bid-package-ai";
 import { planBidPackages } from "./bid-package-client";
 import { aiReader } from "./ai-reader-client";
@@ -25,7 +25,7 @@ import { AI_REQUESTS_AT_ONCE, aiTimes } from "./ai-pool";
 import { OCR_WORKERS, ocrWork } from "./sheet-ocr";
 import { blendPace, checkShare, FIRST_PACE, measurePace, secondsLeft, steadyLeft, tradesLeft, type Pace, type TradeLeft } from "./run-time-left";
 import { readTradeScope } from "./scope-reading";
-import { contextPack, planMemory, rememberedSections } from "./memory";
+import { planMemory, rememberedSections, tradeMemory } from "./memory";
 import { memoryForScan } from "./memory-client";
 import { readDraft, writeDraft } from "./use-local-draft";
 import { writeGeneralScope } from "./general-scope-client";
@@ -252,9 +252,10 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   // "Yes, under $2"), like Wyre reading a small set: two drawings and two specification sections. A larger set waits
   // for the estimator to pick trades in Write scopes.
   const reader = await aiReader().catch(() => null);
-  const remembered = rememberedSections(memory.entries, procurement.packages, projectId, specificationSections(documents).map(s => s.section)).byPackage;
-  const all = tradesToRead(procurement.packages, documents, remembered);
-  const assigned = sectionsByTrade(specificationSections(documents), procurement.packages, remembered);
+  const split = rememberedSections(memory.entries, procurement.packages, projectId, specificationSections(documents).map(s => s.section));
+  const all = tradesToRead(procurement.packages, documents, split.byPackage, split.partial);
+  const assigned = sectionsByTrade(specificationSections(documents), procurement.packages, split.byPackage, split.partial);
+  const readers = readersBySection(assigned, procurement.packages);
   const refPackages = procurement.packages.map(p => ({ id: p.id, name: p.name, code: p.code, sections: (assigned.get(p.id) ?? []).map(s => `${s.section} ${s.title}`) }));
   // The drawing search runs again only when sheets changed.
   const candidates = update ? onlyChanged(all, update) : all, search = !update || update.sheets.length > 0;
@@ -299,7 +300,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
       setTrade(pkg.id, { status: "reading", note: "" });
       try {
         const outcome = await readTradeScope({
-          pkg, sections, sheets, signal: controller.signal, memory: contextPack(memory.entries, { projectId, code: pkg.code, name: pkg.name }),
+          pkg, sections, sheets, signal: controller.signal, memory: tradeMemory(memory.entries, pkg, projectId, sections, readers, split.partial.get(pkg.id)),
           onProgress: p => {
             const left = ledger.get(pkg.id);
             if (left) left.counts = p.counts;

@@ -15,32 +15,49 @@ const digits = (code: string) => code.replace(/\D/g, "").padEnd(6, "0").slice(0,
 const AFFINITY: Record<string, string> = { "093": "096", "095": "092", "097": "092", "098": "092", "087": "081", "079": "071" };
 
 /**
- * Each section goes to the package the contractor's approved trade split gives it (`remembered`: lib/memory
- * rememberedSections, package id to sections), then to the package the AI put it in (TradePackage.sections,
- * lib/bid-package-ai). A section neither places goes to the trade of its CSI division. When several trades share a division: the trade
- * with the same level-2 code (10 14 signage), then a whole-division trade (10 00 00 specialties), then
- * the same CSI group (09 2x drywall), then the group's usual partner (AFFINITY), then the closest code.
+ * Each section goes to the packages the contractor's approved trade split gives it (`remembered`: lib/memory
+ * rememberedSections, package id to sections; a section several trades carry goes to each), else to the package the
+ * AI put it in (TradePackage.sections, lib/bid-package-ai), else to the trade of its CSI division. When several
+ * trades share a division: the trade with the same level-2 code (10 14 signage), then a whole-division trade
+ * (10 00 00 specialties), then the same CSI group (09 2x drywall), then the group's usual partner (AFFINITY), then the
+ * closest code. `partial` (package id to sections it carries only in part) adds readers: whoever carries the section
+ * still reads it.
  */
-export function sectionsByTrade<S extends StoredSection>(sections: S[], packages: Pick<TradePackage, "id" | "division" | "code" | "sections">[], remembered?: Map<string, string[]>): Map<string, S[]> {
+export function sectionsByTrade<S extends StoredSection>(sections: S[], packages: Pick<TradePackage, "id" | "division" | "code" | "sections">[], remembered?: Map<string, string[]>, partial?: Map<string, string[]>): Map<string, S[]> {
   const out = new Map<string, S[]>(packages.map(p => [p.id, []]));
-  const placed = new Map<string, string>();
-  for (const [id, list] of remembered ?? []) if (out.has(id)) for (const s of list) placed.set(s, id);
-  for (const p of packages) for (const s of p.sections ?? []) if (!placed.has(s)) placed.set(s, p.id);
+  const placed = new Map<string, string[]>(), inPart = new Map<string, string[]>();
+  const add = (map: Map<string, string[]>, section: string, id: string) => { if (out.has(id) && !map.get(section)?.includes(id)) map.set(section, [...(map.get(section) ?? []), id]); };
+  for (const [id, list] of remembered ?? []) for (const s of list) add(placed, s, id);
+  for (const p of packages) for (const s of p.sections ?? []) if (!placed.has(s)) placed.set(s, [p.id]);
+  for (const [id, list] of partial ?? []) for (const s of list) add(inPart, s, id);
   for (const section of sections) {
     const code = digits(section.section);
     if (code.startsWith("00") || code.startsWith("01")) continue;
-    const chosen = placed.get(section.section);
-    if (chosen) { out.get(chosen)!.push(section); continue; }
-    const candidates = packages.filter(p => digits(p.code).slice(0, 2) === code.slice(0, 2));
-    if (!candidates.length) continue;
-    const group = code.slice(0, 3);
-    const level2 = candidates.filter(p => digits(p.code).slice(0, 4) === code.slice(0, 4));
-    const whole = candidates.filter(p => digits(p.code).endsWith("0000"));
-    const inGroup = candidates.filter(p => digits(p.code).slice(0, 3) === group);
-    const byAffinity = candidates.filter(p => digits(p.code).slice(0, 3) === AFFINITY[group]);
-    const pool = level2.length ? level2 : whole.length ? whole : inGroup.length ? inGroup : byAffinity.length ? byAffinity : candidates;
-    const best = [...pool].sort((a, b) => Math.abs(Number(digits(a.code)) - Number(code)) - Math.abs(Number(digits(b.code)) - Number(code)))[0];
-    out.get(best.id)!.push(section);
+    const chosen = placed.get(section.section) ?? byDivision(code, packages);
+    for (const id of new Set([...chosen, ...(inPart.get(section.section) ?? [])])) out.get(id)!.push(section);
+  }
+  return out;
+}
+
+/** The trade of a section's CSI division (see sectionsByTrade), or none. */
+function byDivision(code: string, packages: Pick<TradePackage, "id" | "code">[]): string[] {
+  const candidates = packages.filter(p => digits(p.code).slice(0, 2) === code.slice(0, 2));
+  if (!candidates.length) return [];
+  const group = code.slice(0, 3);
+  const level2 = candidates.filter(p => digits(p.code).slice(0, 4) === code.slice(0, 4));
+  const whole = candidates.filter(p => digits(p.code).endsWith("0000"));
+  const inGroup = candidates.filter(p => digits(p.code).slice(0, 3) === group);
+  const byAffinity = candidates.filter(p => digits(p.code).slice(0, 3) === AFFINITY[group]);
+  const pool = level2.length ? level2 : whole.length ? whole : inGroup.length ? inGroup : byAffinity.length ? byAffinity : candidates;
+  return [[...pool].sort((a, b) => Math.abs(Number(digits(a.code)) - Number(code)) - Math.abs(Number(digits(b.code)) - Number(code)))[0].id];
+}
+
+/** Every package that reads each section (sectionsByTrade's result turned around), for telling a trade who shares it. */
+export function readersBySection<S extends StoredSection>(assigned: Map<string, S[]>, packages: Pick<TradePackage, "id" | "name">[]): Map<string, { id: string; name: string }[]> {
+  const out = new Map<string, { id: string; name: string }[]>();
+  for (const [id, list] of assigned) {
+    const pkg = packages.find(p => p.id === id);
+    if (pkg) for (const s of list) out.set(s.section, [...(out.get(s.section) ?? []), { id: pkg.id, name: pkg.name }]);
   }
   return out;
 }
