@@ -16,6 +16,7 @@ import { readPageTextBoxes, readStoredText, renderStoredPage } from "./project-f
 import { findInSheetImage } from "./sheet-ocr";
 import { checkImageQuotes, pinFindings, type TextBox } from "./text-anchor";
 import { NO_COUNTS, type TradeCounts } from "./run-time-left";
+import { checkScheduleTags, isFinishSchedule, type ScheduleSheet, type TagOwner } from "./finish-schedule";
 
 /** `counts` says how far the reading is in requests and sheets, for the automatic run's time left (lib/run-time-left). */
 export type TradeReadProgress = { note: string; done: number; total: number; counts: TradeCounts };
@@ -41,6 +42,14 @@ export async function readTradeScope(args: {
   signal: AbortSignal; onProgress: (progress: TradeReadProgress) => void; addFlipPages: (pages: PageInput[]) => string | null;
   /** The contractor's approved memory for this trade (lib/memory contextPack); empty reads as before. */
   memory?: string;
+  /**
+   * Who carries a section on this project (lib/project-scopes sectionOwners). With it, the trade's finish schedules
+   * are checked once both halves are read (lib/finish-schedule checkScheduleTags): its tags no line names get a line,
+   * and lines from the schedule for another trade's tags are left to that trade.
+   */
+  owners?: (section: string) => TagOwner[];
+  /** The trade's approved "doesn't carry" lines (lib/memory leftOut), so a finish tag for work it leaves out gets no line. */
+  leavesOut?: string[];
 }): Promise<ScopeRunResult> {
   const { pkg, sections: stored, sheets, signal, memory } = args;
   // Both halves report at once: "Reading part 3 of 46 · Reading drawing sheet 2 of 6".
@@ -84,6 +93,9 @@ export async function readTradeScope(args: {
     return outcome;
   }
 
+  // The finish schedules this trade read, for checkSchedules once both halves are in.
+  const schedules: { row: RegisterRow; text: string; aspects: Map<number, number> }[] = [];
+
   async function readSheets(): Promise<ScopeRunResult[]> {
     const runs: ScopeRunResult[] = [];
     let done = 0;
@@ -91,6 +103,7 @@ export async function readTradeScope(args: {
       if (signal.aborted) break;
       const doc = rows[0].doc, aspects = new Map<number, number>();
       const text = await readStoredText(doc, { first: Math.min(...rows.map(r => r.page)), last: Math.max(...rows.map(r => r.page)) });
+      for (const row of rows.filter(r => isFinishSchedule(r.title))) schedules.push({ row, text: text.find(p => p.page === row.page)?.text ?? "", aspects });
       const drawn = await extractDrawingScope({
         pkg, document: doc.name, pageCount: doc.pageCount, memory, signal, onProgress: d => { counts.sheetsRead = done + d; say("sheets", `Reading drawing sheet ${Math.min(done + d + 1, sheets.length)} of ${sheets.length}`); },
         pages: rows.map(r => ({ page: r.page, sheet: r.sheet, text: text.find(p => p.page === r.page)?.text ?? "" })),
@@ -130,8 +143,30 @@ export async function readTradeScope(args: {
     return runs;
   }
 
+  /** The finish schedule check (lib/finish-schedule), over every line the trade's reading wrote. */
+  async function checkSchedules(outcome: ScopeRunResult): Promise<void> {
+    const read: ScheduleSheet[] = schedules.filter(s => s.text.trim()).map(s => ({ document: s.row.doc.name, page: s.row.page, sheet: s.row.sheet, text: s.text }));
+    // A reading that failed outright stays failed: legend lines alone would make it look done.
+    if (!read.length || !args.owners || (outcome.input.error && !outcome.input.drafts.length)) return;
+    const checked = checkScheduleTags({ drafts: outcome.input.drafts, pkg, schedules: read, owners: args.owners, leavesOut: args.leavesOut });
+    outcome.dropped.push(...checked.dropped);
+    outcome.input = { ...outcome.input, drafts: checked.drafts };
+    if (!checked.added.length) return;
+    // Each added line is highlighted on its printed row, and its sheet goes on Drawing Flip.
+    const boxes = new Map<string, TextBox[]>();
+    await Promise.all(schedules.map(async s => { try { boxes.set(s.row.sheet, await readPageTextBoxes(s.row.doc, s.row.page)); } catch { /* no text layer: no highlight */ } }));
+    const added = pinFindings(checked.added, boxes, new Map(), false);
+    outcome.input = { ...outcome.input, drafts: [...checked.drafts, ...added] };
+    const tags = checked.added.map(d => d.kind === "scope" ? d.title.replace(/^Include (\S+).*$/, "$1") : "").filter(Boolean);
+    outcome.dropped.push({ what: "Finish legend", reason: `Added a line for ${tags.join(", ")}: the legend lists ${tags.length === 1 ? "it" : "them"} for this trade and no line named ${tags.length === 1 ? "it" : "them"}.` });
+    const highlighted = new Set(added.filter(d => d.kind === "region").map(d => (d as { sheet: string }).sheet));
+    const flipError = args.addFlipPages(schedules.filter(s => highlighted.has(s.row.sheet)).map(s => ({ sheet: s.row.sheet, title: s.row.title, discipline: s.row.discipline ?? "", revision: "", documentId: s.row.doc.id, documentName: s.row.doc.name, pageNumber: s.row.page, aspect: s.aspects.get(s.row.page) })));
+    if (flipError) outcome.dropped.push({ what: "Finish legend highlights", reason: flipError });
+  }
+
   const [specification, drawings] = await Promise.all([stored.length ? readSpecification() : null, sheets.length ? readSheets() : []]);
   const outcome = drawings.reduce<ScopeRunResult | null>((run, drawn) => run ? mergeRuns(run, drawn) : drawn, specification);
   if (!outcome) throw new Error("This trade has no specification sections or drawing sheets to read.");
+  if (!signal.aborted) await checkSchedules(outcome);
   return outcome;
 }

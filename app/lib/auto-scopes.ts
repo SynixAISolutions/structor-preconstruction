@@ -13,7 +13,7 @@ import { addPage, DrawingFlipRuleError, type DrawingFlipState } from "./drawing-
 import { addPackage, type Procurement } from "./procurement";
 import { drawingRegister, specificationSections, type StoredDocument } from "./project-files";
 import { readStoredText, storedDocuments, uploadsSettleIn, useProjectDocuments } from "./project-files-client";
-import { readersBySection, sectionsByTrade, sheetsByTrade, tradesToAdd } from "./project-scopes";
+import { readersBySection, sectionOwners, sectionsByTrade, sheetsByTrade, tradesToAdd } from "./project-scopes";
 import { applyBidPackagePlan } from "./bid-package-ai";
 import { planBidPackages } from "./bid-package-client";
 import { aiReader } from "./ai-reader-client";
@@ -259,6 +259,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   const handed = sheetsByTrade(drawingRegister(documents), procurement.packages, leaves).handed;
   const assigned = sectionsByTrade(specificationSections(documents), procurement.packages, split.byPackage, split.partial);
   const readers = readersBySection(assigned, procurement.packages);
+  const owners = sectionOwners(readers, procurement.packages, split.partial);
   const refPackages = procurement.packages.map(p => ({ id: p.id, name: p.name, code: p.code, sections: (assigned.get(p.id) ?? []).map(s => `${s.section} ${s.title}`) }));
   // The drawing search runs again only when sheets changed.
   const candidates = update ? onlyChanged(all, update) : all, search = !update || update.sheets.length > 0;
@@ -304,6 +305,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
       try {
         const outcome = await readTradeScope({
           pkg, sections, sheets, signal: controller.signal, memory: tradeMemory(memory.entries, pkg, projectId, sections, readers, split.partial.get(pkg.id), handed.get(pkg.id)),
+          owners, leavesOut: leaves(pkg),
           onProgress: p => {
             const left = ledger.get(pkg.id);
             if (left) left.counts = p.counts;

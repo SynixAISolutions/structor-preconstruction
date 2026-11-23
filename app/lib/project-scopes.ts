@@ -62,6 +62,25 @@ export function readersBySection<S extends StoredSection>(assigned: Map<string, 
   return out;
 }
 
+/**
+ * Who carries a section's work on this project, for a section that may not be in its manual (a finish legend's types,
+ * lib/finish-schedule): the packages that read a project section with the same number, else the same level-2 number
+ * (09 51 13 and 09 51 33), else the trade of its CSI division by sectionsByTrade's rule. Empty when no trade fits.
+ * `partial` (package id to the sections it reads only in part, lib/memory rememberedSections): such a reader counts
+ * only when nobody reads the section in full (Whittier: Doors reads 09 91 23 for its door finishes, Painting carries it).
+ */
+export function sectionOwners(readers: Map<string, { id: string; name: string }[]>, packages: Pick<TradePackage, "id" | "name" | "code">[], partial?: Map<string, string[]>): (section: string) => { id: string; name: string }[] {
+  return section => {
+    const code = digits(section);
+    for (const n of [6, 4]) {
+      const hit = [...readers].filter(([s]) => digits(s).slice(0, n) === code.slice(0, n)).flatMap(([s, list]) => list.map(o => ({ ...o, inPart: !!partial?.get(o.id)?.includes(s) })));
+      const full = hit.filter(o => !o.inPart);
+      if (hit.length) return [...new Map((full.length ? full : hit).map(({ id, name }) => [id, { id, name }])).values()];
+    }
+    return byDivision(code, packages).flatMap(id => packages.filter(p => p.id === id).map(p => ({ id: p.id, name: p.name })));
+  };
+}
+
 // Which drawing sheets carry a trade's scope (15 Oct: scopes come from all the project files, the
 // drawings as well as the specifications). Title keywords by CSI code, most telling first, capped
 // so a trade costs a handful of vision requests.
