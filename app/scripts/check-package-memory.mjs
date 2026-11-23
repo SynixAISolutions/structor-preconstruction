@@ -104,7 +104,7 @@ const demoRules = [
 assert.deepEqual(M.leftOut(demoRules, { code: "02 41 19", name: "Demolition" }, "p1"), ["Site Demo", "HAZ MAT remediation"], "A trade's own approved exclusions; not every-trade rules, not proposals");
 const siteRegister = [
   { sheet: "CIV0102", title: "Demolition plan", discipline: "Civil" },
-  { sheet: "ED1.1", title: "Electrical demolition plan", discipline: "Electrical" },
+  { sheet: "ED1.1", title: "ELECTRICAL DEMOLITION SITE PLAN", discipline: "Electrical" },
   { sheet: "AD1.1", title: "Level 1 demolition plan", discipline: "Architectural" },
   { sheet: "L0.1", title: "Site demolition plan", discipline: "Landscape" },
   { sheet: "C1.0", title: "Grading plan", discipline: "Civil" },
@@ -120,7 +120,7 @@ assert.deepEqual(sheetIds(P.sheetsByTrade(siteRegister, sitePackages).sheets), {
 const handedOff = P.sheetsByTrade(siteRegister, sitePackages, leaves);
 assert.deepEqual([sheetIds(handedOff.sheets), [...handedOff.handed]], [{ demolition: ["ED1.1", "AD1.1"], dewatering: ["C1.0"], earthwork: ["C1.0", "CIV0102", "L0.1"] },
   [["earthwork", [{ sheet: "CIV0102", title: "Demolition plan", work: "site demolition", from: "Demolition" }, { sheet: "L0.1", title: "Site demolition plan", work: "site demolition", from: "Demolition" }]]]],
-  "Demolition doesn't carry site demo: the civil and site demolition sheets go to Earthwork (preferred over Dewatering); building and MEP demolition stay");
+  "Demolition doesn't carry site demo: the civil and site demolition sheets go to Earthwork (preferred over Dewatering); building and MEP demolition stay, even an electrical \"site\" demolition plan (Jelleff's ED1.1)");
 assert.deepEqual(sheetIds(P.sheetsByTrade(siteRegister, sitePackages.filter(p => p.id === "demolition"), leaves).sheets).demolition, ["CIV0102", "ED1.1", "AD1.1", "L0.1"], "No earthwork trade on the project: the sheets stay, never unread");
 assert.deepEqual(sheetIds(P.sheetsByTrade(siteRegister, sitePackages, pkg => pkg.id === "demolition" ? ["HAZ MAT remediation"] : []).sheets).demolition, ["CIV0102", "ED1.1", "AD1.1", "L0.1"], "Other exclusions move nothing");
 const siteDocs = [{ id: "d", name: "Drawings.pdf", kind: "drawings", revision: 1, series: "drawings", sections: [], sheets: siteRegister.map((r, i) => ({ ...r, page: i + 1 })) }];
