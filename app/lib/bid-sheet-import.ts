@@ -4,6 +4,8 @@
 // leaves to others (C). Read through lib/scope-score readTradeTab, each tab becomes memory entries:
 //
 //   assignment  <trade> carries <section> <title>        one per listed section: the trade split
+//   rule        <trade> carries the parts of <section> … that apply to it   a section listed "as applicable": the
+//               trade carries only its part (Drywall installs the doors it lists), so it guides the AI, never routes
 //   rule        <trade> doesn't carry: <exclusion>.       one per exclusion
 //   example     <scope line>                              one per scope line: how the contractor words it
 //
@@ -85,8 +87,10 @@ export function bidSheetEntries(trade: SheetTrade, file: string, standard: strin
   const id = (kind: string, n: number | string) => `import:${tradeName(file).slice(0, 60)}:${trade.tab}:${kind}:${n}`;
   const source = { trade: label, file: file.slice(0, 120), tab: trade.tab };
   return [
-    ...trade.key.sections.map(section => ({ kind: "assignment" as const, origin: "import" as const, section, trades, source, events: [id("section", section)],
+    ...trade.key.sections.filter(s => !trade.key.partial.includes(s)).map(section => ({ kind: "assignment" as const, origin: "import" as const, section, trades, source, events: [id("section", section)],
       text: `${label} carries ${section}${trade.key.sectionTitles[section] ? ` ${trade.key.sectionTitles[section]}` : ""}.` })),
+    ...trade.key.partial.map(section => ({ kind: "rule" as const, origin: "import" as const, section, trades, source, events: [id("part", section)],
+      text: `${label} carries the parts of ${section}${trade.key.sectionTitles[section] ? ` ${trade.key.sectionTitles[section]}` : ""} that apply to it.` })),
     ...trade.key.exclusions.map((line, i) => ({ kind: "rule" as const, origin: "import" as const, trades, source, events: [id("exclusion", i)],
       text: `${label} doesn't carry: ${line.text.replace(/[.;]+$/, "")}.` })),
     ...trade.key.inclusions.map((line, i) => ({ kind: "example" as const, origin: "import" as const, trades, source, events: [id("line", i)],

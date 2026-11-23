@@ -89,10 +89,11 @@ assert.deepEqual(sheet.map(t => [t.tab, t.division, t.name, t.standard, t.bid, t
   "Trade tabs only; real bidders tell a bid tab from an untouched template; the template's placeholder section dropped");
 const imported = I.bidSheetEntries(sheet[0], "Jelleff Live Bid sheet.xlsx", "drywall");
 assert.deepEqual(imported.map(e => [e.kind, e.text]), [
-  ["assignment", "Drywall carries 06 16 00 Sheathing."], ["assignment", "Drywall carries 09 29 00 Gypsum Board."],
+  ["assignment", "Drywall carries 06 16 00 Sheathing."],
+  ["rule", "Drywall carries the parts of 09 29 00 Gypsum Board that apply to it."],
   ["rule", "Drywall doesn't carry: Fire stopping of penetrations."],
   ["example", "Furnish and install gypsum sheathing at exterior walls"], ["example", "Tape and finish all joints"],
-], "Sections as trade splits, exclusions as rules, scope lines as wording examples");
+], "Sections as trade splits; one listed \"as applicable to this Bid Package\" is only partly the trade's, so it guides the AI as a rule and never routes the section; exclusions as rules; scope lines as wording examples");
 assert.deepEqual(imported[0].trades, ["09 29 00", "drywall", "drywall and ceilings"], "Tagged by the Structor trade and by the sheet's own name");
 assert.deepEqual([imported[0].origin, imported[0].events, imported[0].source], ["import", ["import:jelleff live bid sheet xlsx:GWB:section:06 16 00"], { trade: "Drywall", file: "Jelleff Live Bid sheet.xlsx", tab: "GWB" }]);
 assert.deepEqual(I.bidSheetEntries(sheet[0], "Jelleff Live Bid sheet.xlsx", null)[0].trades, ["drywall and ceilings"], "Kept as its own trade when not matched");
@@ -117,13 +118,13 @@ await assert.rejects(pg.query("INSERT INTO memory_entries (id, kind, status, ori
 const store = S.postgresMemory(db);
 assert.deepEqual(await store.learn(imported, "Danial"), { added: 5, seenAgain: 0 }, "After the upgrade it takes trade splits");
 assert.deepEqual(await store.learn(imported, "Danial"), { added: 0, seenAgain: 0 }, "The same sheet again adds nothing");
-assert.equal((await store.search({ origin: ["import"], kind: ["assignment"] })).length, 2, "Found by where it came from and its kind");
+assert.equal((await store.search({ origin: ["import"], kind: ["assignment"] })).length, 1, "Found by where it came from and its kind");
 const all = await store.search({ status: ["proposed"] });
 assert.equal(await store.setStatus(all.map(e => e.id), "approved", "Marcel Khoury"), 5, "Approved at once");
 assert.deepEqual([await store.counts(), (await store.search({}))[0].history.map(h => h.action)], [{ proposed: 0, approved: 5, retired: 0 }, ["proposed", "approved"]]);
 assert.equal(await store.setStatus(all.map(e => e.id), "approved", "Marcel Khoury"), 0, "Nothing changes twice");
 await assert.rejects(store.setStatus(["x"], "bogus", "M"), /Choose proposed, approved or retired/);
 const live = M.rememberedSections(await store.search({ status: ["approved"], forProject: "p1" }), [{ id: "dw", name: "Drywall", code: "09 29 00" }], "p1", ["06 16 43", "09 29 00"]);
-assert.deepEqual([...live.byPackage], [["dw", ["06 16 43", "09 29 00"]]], "Straight from the table to the trades' sections");
+assert.deepEqual([...live.byPackage], [["dw", ["06 16 43"]]], "Straight from the table to the trades' sections: the partly carried 09 29 00 isn't routed");
 
 console.log("Trade split checked: which sections a remembered split covers, the split on a project's packages (by code or name, ambiguous claims left alone), which sections each trade reads, the scans' and the package plan's memory, a bid sheet read, matched and imported as proposals, what Section coverage teaches, and the table upgraded for trade splits with many approved at once.");

@@ -47,7 +47,7 @@ export function BidSheetImport({ onClose, onDone, notify }: { onClose: () => voi
         added += r.added;
         setProgress({ done: Math.min(entries.length, i + BATCH), total: entries.length });
       }
-      notify(added ? `${added} entr${added === 1 ? "y" : "ies"} imported for review${entries.length - added ? `; ${entries.length - added} were already in the memory` : ""}.` : "Everything in this sheet is already in the memory.");
+      notify(added ? `${added} entr${added === 1 ? "y" : "ies"} imported for review${entries.length - added ? `; ${entries.length - added} were already in the memory or repeated on the sheet` : ""}.` : "Everything in this sheet is already in the memory.");
       onDone();
     } catch (e) { setError(e instanceof Error ? e.message : "The import stopped."); setProgress(null); }
   }
