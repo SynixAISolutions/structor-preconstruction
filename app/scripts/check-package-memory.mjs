@@ -161,6 +161,18 @@ assert(p2Doors.startsWith("This contractor's memory: rules and examples its esti
 assert.deepEqual([M.leftOut(withHide, doorPkgs[0], "p2"), M.leftOut(withHide, doorPkgs[0], "p3")], [[], ["Glass lites in doors and borrowed lites/sidelites"]], "and the exclusion no longer moves sheets there");
 assert(M.MEMORY_PROMPT_RULE.includes("Where an entry for this project differs from the company-wide ones, follow this project's."), "The AI is told the project wins");
 
+// ── A trade reads the schedules that define its tags ──
+const finishRegister = [
+  ...Array.from({ length: 7 }, (_, i) => ({ sheet: `AC10${i}`, title: `REFLECTED CEILING PLAN - LEVEL 0${i}`, discipline: "Architectural" })),
+  { sheet: "A-012", title: "PARTITION TYPES", discipline: "Architectural" },
+  { sheet: "A-506", title: "INTERIOR FINISH SCHEDULES", discipline: "Architectural" },
+  { sheet: "A-601", title: "DOOR SCHEDULES", discipline: "Architectural" },
+];
+const ids2 = rows => rows.map(r => r.sheet);
+assert.deepEqual(ids2(P.sheetsForTrade(finishRegister, "09 29 00")), ["A-012", "AC100", "AC101", "AC102", "AC103", "AC104", "A-506"], "Drywall reads the finish schedule on top of its six sheets");
+assert.deepEqual(ids2(P.sheetsForTrade(finishRegister, { code: "09 29 00", sheets: ["A-012", "AC101"] })), ["A-012", "AC101", "A-506"], "also when the AI chose its sheets");
+assert.deepEqual(ids2(P.sheetsForTrade(finishRegister, "08 11 13")), ["A-601"], "Other trades are unchanged");
+
 // ── The contractor's standard lines, offered on a bid form ──
 const line = (id, text, files, extra = {}) => entry({ id, kind: "example", text, trades: drywallTags, detail: 'Under "Gypsum Board"', events: files.map((f, i) => `import:${f}:GWB:line:${i}`), ...extra });
 const lines = [
@@ -241,4 +253,4 @@ await assert.rejects(store.setStatus(["x"], "bogus", "M"), /Choose proposed, app
 const live = M.rememberedSections(await store.search({ status: ["approved"], forProject: "p1" }), [{ id: "dw", name: "Drywall", code: "09 29 00" }], "p1", ["06 16 43", "09 29 00"]);
 assert.deepEqual([...live.byPackage], [["dw", ["06 16 43"]]], "Straight from the table to the trades' sections: the partly carried 09 29 00 isn't routed");
 
-console.log("Trade split checked: which sections a remembered split covers, the split on a project's packages (by code or name; a section several trades carry goes to each, a part claim adds a reader), what each trade is told it shares, drawing sheets handed to the trade that carries the work, one project's own sheet and \"Not on this project\" over the company-wide entries, the contractor's standard lines offered on a bid form, which sections each trade reads, the scans' and the package plan's memory, a bid sheet read, matched and imported as proposals, what Section coverage teaches, and the table upgraded for trade splits with many approved at once.");
+console.log("Trade split checked: which sections a remembered split covers, the split on a project's packages (by code or name; a section several trades carry goes to each, a part claim adds a reader), what each trade is told it shares, drawing sheets handed to the trade that carries the work, the finish schedule read for drywall and ceilings, one project's own sheet and \"Not on this project\" over the company-wide entries, the contractor's standard lines offered on a bid form, which sections each trade reads, the scans' and the package plan's memory, a bid sheet read, matched and imported as proposals, what Section coverage teaches, and the table upgraded for trade splits with many approved at once.");
