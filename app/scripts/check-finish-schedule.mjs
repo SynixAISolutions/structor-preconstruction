@@ -81,6 +81,8 @@ assert.match(alone["WB-03"].text, /BASECO D24 4"H BASE$/);
 assert.deepEqual([...F.namedTags("Furnish and install ACP-1 to ACP-3 and AWP-1, AWP-2 & AWP-3; glass marker board F4.")].sort(), ["ACP-1", "ACP-2", "ACP-3", "AWP-1", "AWP-2", "AWP-3", "F-4"]);
 assert.deepEqual([...F.namedTags("AWP-1..3 at the library")].sort(), ["AWP-1", "AWP-2", "AWP-3"]);
 assert(F.namedTags("ACP-01 ceiling").has("ACP-1"), "ACP-01 and ACP-1 are one tag");
+assert.deepEqual([...F.namedTags("Furnish FWP-1, DMP-1 and AWP-1/2/3 panel types")].sort(), ["AWP-1", "AWP-2", "AWP-3", "DMP-1", "FWP-1"], "A slash list names each tag");
+assert.deepEqual([...F.namedTags("ACP-1/ACP-2 ceilings")].sort(), ["ACP-1", "ACP-2"]);
 assert(!F.namedTags("Level 5 finish, Type X board, 2x6 tile").size, "Lowercase words aren't tags");
 
 // ── Who carries a section on the project ──
@@ -138,5 +140,37 @@ assert(!leaves(["Corner guards by others"]).includes("CG-1") && !leaves(["Glass 
 assert(!leaves(["WDC-1 wood ceiling by the millworker"]).includes("WDC-1"), "\"Doesn't carry\" a tag: no line");
 assert.deepEqual(leaves(["Painting or prefinished items"], { id: "painting", name: "Painting" }), ["P-6"], "\"Painting or prefinished items\" is not \"doesn't carry paint\"");
 assert.deepEqual(F.checkScheduleTags({ drafts, pkg: { id: "drywall", name: "Drywall" }, schedules: [{ ...sheet, text: "NO LEGEND HERE" }], owners: ownersAll }), { drafts, added: [], dropped: [] }, "No legend: the reading as it was");
+const slashed = F.checkScheduleTags({ drafts: [scope("s1", "Furnish FWP-1, DMP-1 and AWP-1/2/3 panel types")], pkg: { id: "drywall", name: "Drywall" }, schedules: [sheet], owners: ownersAll });
+assert(!slashed.added.some(d => /AWP-1/.test(d.title)), "A tag named in a slash list gets no second line (Whittier run 4: AWP-1/2/3)");
+
+// ── Tags borrowed from another project's bid forms ──
+const memo = (o) => ({ id: o.id, kind: "example", status: "approved", origin: "import", projectId: null, trades: ["drywall"], section: null, text: "", detail: "", seen: 1, events: [], source: {}, history: [], version: 1, createdAt: "", createdBy: "", updatedAt: "", updatedBy: "", ...o });
+const memory = [
+  memo({ id: "m1", text: "Furnish & install sound absorbing panels, SAW-01 (Tectum) at locations indicated" }),
+  memo({ id: "m2", text: "Resilient flooring LVT-01 and wall base WB-01", detail: "Per NFPA 80 and detail D3; see ASTM C 645" }),
+  memo({ id: "m3", text: "Install grab bars GB-1", status: "proposed" }),
+  memo({ id: "m4", text: "Owner's ACP-7 ceiling", projectId: "other-project" }),
+  memo({ id: "m5", text: "Furnish WB-01 rubber base", projectId: "this-project", origin: "correction" }),
+];
+assert.deepEqual([...F.borrowedTags([...memory, memo({ id: "m6", text: "Own sheet line", projectId: "this-project" })], "this-project")], [], "A project's own imported sheet replaces the company-wide lines for its trades, so nothing is borrowed");
+assert.deepEqual([...F.borrowedTags(memory, "this-project")].sort(), ["LVT-1", "SAW-1"], "Hyphened tags of the company-wide entries the project reads, less its own (WB-01); not a standard, a detail, an unapproved entry or another project's entry");
+assert.deepEqual([...F.tagFamilies(["LVT-1 RUBBER TILE", "ACP-2 CEILING; NFPA 80"])].sort(), ["ACP", "LVT", "NFPA"]);
+
+const read = [{ document: "Set.pdf", page: 12, text: "AC111B REFLECTED CEILING PLAN ".repeat(10) + "ACP-1 ACP-2" }, { document: "Set.pdf", page: 13, text: "" }, { document: "Manual.pdf", page: 400, text: "PART 2 PRODUCTS ".repeat(20) }];
+const line = (key, title, page = 12, document = "Set.pdf", packageId = "drywall", detail = "") => ({ kind: "scope", key, packageId, title, detail, source: "AC111B", citations: [{ document, page, sheet: "AC111B", quote: "REFLECTED CEILING PLAN" }] });
+const borrowedDrafts = [
+  line("b1", "Install sound absorbing panels SAW-01 at indicated locations."),
+  { kind: "region", key: "b1-text-1", packageId: "drywall", label: "SAW-01", sheet: "AC111B", polygon: [{ x: 0, y: 0 }, { x: 0.1, y: 0 }, { x: 0.1, y: 0.1 }], confidence: 0.9, scopeKeys: ["b1"], citations: [] },
+  line("b2", "Furnish and install LVT-01 resilient flooring."),
+  line("b3", "Install sound absorbing panels SAW-01 on the scanned sheet.", 13),
+  line("b4", "Install fire-rated doors per NFPA 80.", 400, "Manual.pdf"),
+  line("b5", "Coordinate the ceiling layout.", 12, "Set.pdf", "drywall", "Match the SAW-01 tags."),
+  line("b6", "Install sound absorbing panels SAW-01.", 12, "Set.pdf", "painting"),
+];
+const cleaned = F.dropBorrowedTags({ drafts: borrowedDrafts, pkg: { id: "drywall", name: "Drywall" }, pages: read, printed: new Set(["LVT", "ACP"]), borrowed: F.borrowedTags(memory, "this-project") });
+assert.deepEqual(cleaned.drafts.map(d => d.key), ["b2", "b3", "b4", "b5", "b6"], "The SAW-01 line and its highlight go; LVT-01 stays (the project prints LVT tags), a scanned sheet's line isn't judged, a standard isn't a tag, a tag only in the detail stays, other trades' lines stay");
+assert.equal(cleaned.dropped.length, 1);
+assert.equal(cleaned.dropped[0].reason, "No SAW- tag is printed on this project's drawings or the pages Drywall read: SAW-01 comes from another project's bid form wording in the AI memory.");
+assert.deepEqual(F.dropBorrowedTags({ drafts: borrowedDrafts, pkg: { id: "drywall", name: "Drywall" }, pages: read, printed: new Set(["SAW", "LVT"]), borrowed: F.borrowedTags(memory, "this-project") }).drafts, borrowedDrafts, "A family the project prints anywhere (Project 1's own SAW-01) keeps the line");
 
 console.log("finish schedule checks passed");
