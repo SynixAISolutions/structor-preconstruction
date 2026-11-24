@@ -218,5 +218,18 @@ assert.equal(K.tradeLines([...approved, leadIn], dwPkg, "p1").find(l => l.text =
 // The AI reads the checklist with the rest of the trade's memory.
 const pack = M.contextPack(approved, { projectId: "p1", ...dwPkg });
 assert(pack.includes("- Drywall doesn't carry: Painting of gypsum board.") && pack.includes("- Blocking in drywall partitions for all wall-mounted items [by others]"), "Scans read its exclusions as rules and its lines as the trade's wording");
+// The contractor's bid forms come first, and the checklist gives way first: on Whittier Drywall (24 Nov) its 11 exclusions,
+// put ahead of the bid-form lines, cut the lines the scan saw from 14 to 2.
+const sheet = { trade: "Drywall", file: "company.xlsx", tab: "GWB" };
+const bidRule = { ...approved.find(e => e.kind === "rule"), id: "bf-rule", events: ["import:company xlsx:GWB:rule:0"], text: "Drywall doesn't carry: Penetration firestopping.", detail: "", source: sheet };
+const bidLine = { ...anExample, id: "bf-line", events: ["import:company xlsx:GWB:line:0"], text: "Furnish & install all gypsum sheathing at exterior stud wall locations", detail: "", source: sheet };
+const order = M.contextPack([...approved, bidRule, bidLine], { projectId: "p1", ...dwPkg }).split("\n");
+const at = text => order.indexOf(`- ${text}`);
+assert(at(bidRule.text) > 0 && at(bidRule.text) < at(bidLine.text) && at(bidLine.text) < at("Drywall doesn't carry: Painting of gypsum board.") && at("Drywall doesn't carry: Painting of gypsum board.") < at("Frames in masonry walls"),
+  "The bid forms' rules and lines, then the checklist's exclusions and lines");
+assert(order.includes("Lines on this contractor's standard scope checklist for Drywall:") && order.some(l => l.startsWith("What Drywall leaves to others on this contractor's standard scope checklist")), "Each under its own heading");
+const short = M.contextPack([...approved, bidRule, bidLine], { projectId: "p1", ...dwPkg }, 420);
+assert(short.includes(bidRule.text) && short.includes(bidLine.text) && !short.includes("Painting of gypsum board") && /more not shown/.test(short), "Over the limit, the checklist gives way before the bid forms");
+assert(M.planMemory([...approved, bidRule], "p1").split("\n").indexOf(`- ${bidRule.text}`) < M.planMemory([...approved, bidRule], "p1").split("\n").indexOf("- Drywall doesn't carry: Painting of gypsum board."), "Setting the packages reads the bid forms' exclusions first too");
 
-console.log("Scope checklists checked: file names, a trade's checklist read in order with its exclusions, a file of several trades, list levels from a .doc and a .docx matched to the text, MCN's layout (lead-ins and their items, nested lists, notes, the schedule left out, lines to fill in), the trade each is for (by division and by name), the memory proposals one adds (imported twice, nothing new), its lines checked on every scan of the trade (never another trade's or before approval), \"Not on this project\", a project's own bid sheet leaving it in place, and scans reading it.");
+console.log("Scope checklists checked: file names, a trade's checklist read in order with its exclusions, a file of several trades, list levels from a .doc and a .docx matched to the text, MCN's layout (lead-ins and their items, nested lists, notes, the schedule left out, lines to fill in), the trade each is for (by division and by name), the memory proposals one adds (imported twice, nothing new), its lines checked on every scan of the trade (never another trade's or before approval), \"Not on this project\", a project's own bid sheet leaving it in place, and scans reading it after the contractor's bid forms (giving way first).");
