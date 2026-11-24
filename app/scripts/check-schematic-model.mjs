@@ -6,6 +6,10 @@ const M = await import("../lib/schematic-model.ts");
 const { EXTRA_JOBS } = await import("../lib/ai-jobs-more.ts");
 const { compactFloorPlanFromText } = await import("../lib/floor-plan-label.ts");
 const { dimensionedWallLayers } = await import("../lib/wall-assemblies.ts");
+const { drawingLengthFeet } = await import("../lib/drawing-dimensions.ts");
+const { printedSectionDatums, resolveSectionDatums } = await import("../lib/section-datums.ts");
+const { doorScheduleSheets, matchDoorSizes, printedDoorSizes } = await import("../lib/door-schedule-dimensions.ts");
+const { glazingDetailSheets, glazingDetailSource, printedGlazingReferences } = await import("../lib/glazing-detail-references.ts");
 
 // Levels from plan titles; one architectural floor plan per level.
 assert.equal(M.levelOfTitle("LEVEL 01 - FIRST FLOOR PLAN"), 1);
@@ -81,6 +85,60 @@ assert.equal(full.warnings.length, 0);
 const none = M.levelHeights([1, 2], []);
 assert.deepEqual([...none.heights.values()], [14, 14]);
 assert.match(none.warnings[0], /2 floor-to-floor heights were not read/);
+assert.equal(drawingLengthFeet(`-2′-6 1/2″`), -(2 + 6.5 / 12), "The minus sign applies to the full imperial dimension");
+assert.equal(drawingLengthFeet("3048 mm"), 10);
+assert.equal(drawingLengthFeet("12"), null);
+assert.equal(drawingLengthFeet(`5'-2 1/0"`), null);
+const word = (str, x, y, w = .02, h = .006) => ({ str, x, y, w, h });
+const datumText = [
+  word("LEVEL 01", .7, .6), word(`249'-5 3/8"`, .7, .606),
+  word("LEVEL 01 - NEW ADDITION", .68, .632, .04), word(`248'-5 3/8"`, .69, .638),
+  word("LEVEL 02", .7, .52), word(`262'-5 3/8"`, .7, .526),
+  word("LEVEL 03 = 276.56'", .7, .46, .08),
+  word("PARAPET", .7, .34), word(`296'-0"`, .7, .346),
+  word("LEVEL 04", .12, .26), word(`111'-0"`, .58, .266),
+];
+const nativeDatums = printedSectionDatums(datumText);
+assert.deepEqual(nativeDatums.map(row => row.name), ["LEVEL 01", "LEVEL 01 - NEW ADDITION", "LEVEL 02", "LEVEL 03"]);
+const provenance = (quote, sheet = "A-301") => ({ documentId: "drawing-set", page: 5, sheet, quote });
+const resolved = resolveSectionDatums(nativeDatums.map(({ quote, ...datum }) => ({ ...datum, source: provenance(quote) })));
+assert.equal(resolved.markers.length, 2);
+assert.match(resolved.warnings[0], /Level 01 has different printed elevations/);
+const withSources = M.levelHeights([1, 2, 3], resolved.markers);
+assert.equal(withSources.vertical.get(1).basis, "estimated");
+assert.equal(withSources.vertical.get(2).basis, "printed");
+assert.equal(withSources.vertical.get(2).datum.quote, `262'-5 3/8"`);
+const missingMiddle = M.levelHeights([1, 2, 3], [{ name: "Level 01", elevation: 100 }, { name: "Level 03", elevation: 130 }]);
+assert.deepEqual([...missingMiddle.elevations.values()], [0, 15, 30], "A missing floor stays between known elevations");
+assert.deepEqual([...missingMiddle.heights.values()], [15, 15, 14]);
+assert.ok([...missingMiddle.vertical.values()].every(level => level.basis === "estimated"));
+
+const schedulePage = [
+  word("NUMBER", .1, .10),
+  word("HEIGHT", .33, .10, .015), word("WIDTH", .36, .10, .015), word("HEIGHT", .40, .10, .015),
+  word("TOTAL", .365, .089, .02),
+  word("D02", .100, .123, .010), word("A101", .112, .123, .010),
+  word(`7'-0"`, .33, .123, .009), word(`6'-0"`, .36, .123, .009), word(`8'-0"`, .40, .123, .009),
+];
+assert.deepEqual(printedDoorSizes(schedulePage), [{ number: "D02", width: 6, height: 8 }]);
+const doorSize = { number: "D02", width: 6, height: 8, source: provenance("D02", "A-601") };
+const door = { a: [0, 0], b: [6, 0], width: 6, thickness: .4, leaves: 2, kind: "door", hinges: [[0, 0], [6, 0]], openTo: [[0, 3], [6, 3]], number: "D02" };
+assert.deepEqual(matchDoorSizes([door], [doorSize]).doors[0].scheduledSize, doorSize);
+assert.deepEqual(matchDoorSizes([{ ...door, width: 5.6 }], [doorSize]).conflicts, ["D02"]);
+assert.deepEqual(matchDoorSizes([door], [doorSize, { ...doorSize, height: 7 }]).conflicts, ["D02"]);
+assert.deepEqual(matchDoorSizes([door], [doorSize], new Set()).conflicts, ["D02"]);
+const drawingRows = [
+  { title: "Door and frame schedules", discipline: "Architectural" },
+  { title: "Window types and storefront elevations", discipline: "Architectural" },
+  { title: "Door schedule", discipline: "Electrical" },
+];
+assert.deepEqual(doorScheduleSheets(drawingRows), [drawingRows[0]]);
+assert.deepEqual(glazingDetailSheets(drawingRows), [drawingRows[1]]);
+const glassSources = printedGlazingReferences([word("E1 STOREFRONT - SF-1A", .5, .4), word("SEE STOREFRONT - SF-1", .45, .52), word("SF-1A", .43, .6)])
+  .map(ref => ({ ...ref, source: provenance(ref.quote, "A-611B") }));
+assert.equal(glazingDetailSource("SF-1A", glassSources).sheet, "A-611B");
+assert.equal(glazingDetailSource("SF-1", glassSources), undefined);
+assert.equal(glazingDetailSource("SF-1A", [...glassSources, { ...glassSources[0], source: { ...glassSources[0].source, page: 8 } }]), undefined);
 
 // Corrections.
 const model = { levels: [{ id: "L1", name: "Level 01", order: 1, elevation: 0, height: 14, outline: [[0, 0], [10, 0], [10, 10]], rooms: [], source: { documentId: "d", sheet: "A1.1", page: 46 }, sizing: "" }, { id: "L2", name: "Level 02", order: 2, elevation: 14, height: 16, outline: [[0, 0], [10, 0], [10, 10]], rooms: [], source: { documentId: "d", sheet: "A1.2", page: 47 }, sizing: "" }], warnings: [], builtAt: "" };

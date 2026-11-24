@@ -11,6 +11,8 @@
 import { doorsFromSwings, swingArcs } from "./door-detection";
 import { floorOpenings } from "./floor-openings";
 import { compactFloorPlanTitle } from "./floor-plan-label";
+import type { SourcedDoorSize } from "./door-schedule-dimensions";
+import type { DimensionSource } from "./section-datums";
 import { mergeTags, placeTags, tagOvals, type PartitionType, type PlacedTag } from "./tag-placement";
 import type { Curve, Segment } from "./plan-vectors";
 import type { RegisterRow } from "./project-files";
@@ -24,6 +26,8 @@ export type SchematicLevel = {
   id: string; name: string; order: number;
   /** Feet above the lowest level, and floor-to-floor height. */
   elevation: number; height: number;
+  /** Which readings support this level and its height, when present. */
+  vertical?: LevelVertical;
   /** Footprint in feet, x right, y down as on the plan. */
   outline: Point[];
   rooms: SchematicRoom[];
@@ -62,7 +66,7 @@ export type SchematicLevel = {
  */
 export type SchematicStair = { flights: { a: Point; b: Point; width: number; risers: number; arrow: "a" | "b" | null }[]; excluded?: boolean };
 /** A run of glass from a to b, in feet; `type` from the plan's storefront/window tags (SF-10). */
-export type SchematicGlazing = { a: Point; b: Point; type?: string | null; excluded?: boolean };
+export type SchematicGlazing = { a: Point; b: Point; type?: string | null; excluded?: boolean; elevationDetail?: DimensionSource };
 /**
  * An operable partition from a to b, in feet, or a guardrail when `kind` is "railing". Kept apart from the walls: each is bought
  * and built as its own item, and has no wall type. Both divide the rooms either side.
@@ -77,7 +81,7 @@ export type SchematicWall = { a: Point; b: Point; thickness: number; type?: stri
  * is a toilet stall's door: toilet partitions, not the door schedule. `thickness` is the host wall's, for the
  * header above the opening.
  */
-export type SchematicDoor = { a: Point; b: Point; width: number; leaves: number; hinges: Point[]; openTo: Point[]; kind: "door" | "compartment"; thickness: number; number?: string | null; basis?: "tagged-gap" };
+export type SchematicDoor = { a: Point; b: Point; width: number; leaves: number; hinges: Point[]; openTo: Point[]; kind: "door" | "compartment"; thickness: number; number?: string | null; basis?: "tagged-gap"; scheduledSize?: SourcedDoorSize };
 
 /**
  * Tiles over a plan's area for reading its tags: about `paperPt` points square on the sheet (small enough
@@ -178,13 +182,14 @@ export function levelPlanSheets<T extends Pick<RegisterRow, "sheet" | "title" | 
   return [...out.entries()].sort((a, b) => a[0] - b[0]).map(([level, row]) => ({ level, row }));
 }
 
-/** The sheet most likely to show level elevations: building sections, then wall sections, then exterior elevations. */
+/** The current sheets likely to show level elevations, highest priority first. */
+export function heightSheets<T extends Pick<RegisterRow, "title" | "discipline">>(register: T[]): T[] {
+  const candidates = register.filter(row => row.discipline === "Architectural");
+  return [...new Set([/BUILDING SECTION/i, /WALL SECTION/i, /EXTERIOR ELEVATION/i].flatMap(title => candidates.filter(row => title.test(row.title))))];
+}
+
 export function heightSheet<T extends Pick<RegisterRow, "title" | "discipline">>(register: T[]): T | null {
-  for (const re of [/BUILDING SECTION/, /WALL SECTION/, /EXTERIOR ELEVATION/]) {
-    const row = register.find(r => r.discipline === "Architectural" && re.test(r.title.toUpperCase()));
-    if (row) return row;
-  }
-  return null;
+  return heightSheets(register)[0] ?? null;
 }
 
 /** The metric drawing ratios read as scales; other "1:n" (a time, 1:7) are not. */
@@ -369,48 +374,66 @@ export function cleanOutline(points: Point[]): { outline: Point[] | null; note: 
     : { outline: sorted, note: "The outline's points were read out of order and were re-ordered around the building's centre; check the shape." };
 }
 
-/**
- * Elevations and floor-to-floor heights by level number, from what was read off a section (levels
- * named "LEVEL 02", "ROOF"…). Missing heights use 14 ft and are listed in the warnings.
- */
-export function levelHeights(levels: number[], read: { name: string; elevation: number }[]): { elevations: Map<number, number>; heights: Map<number, number>; warnings: string[] } {
-  const byLevel = new Map<number, number>();
-  let roof: number | null = null;
+export type LevelVertical = { basis: "printed" | "image" | "estimated" | "adjusted"; datum?: DimensionSource; upper?: DimensionSource };
+
+/** A level marker read off a section. Image positions are normalized to the image the reading came from. */
+export type Marker = { name: string; elevation: number; at?: Point; source?: DimensionSource };
+const markerKey = (name: string): number | null => {
+  const compact = /^(?:LEVEL\s*)?L(\d{1,2})\b/i.exec(name);
+  if (compact) return Number(compact[1]);
+  return levelOfTitle(`${name} FLOOR`) ?? levelOfTitle(name) ?? (/\bROOF\b/i.test(name) ? Infinity : null);
+};
+
+/** Place known levels at their section datums and fill missing heights without overlapping adjacent levels. */
+export function levelHeights(levels: number[], read: Marker[]): { elevations: Map<number, number>; heights: Map<number, number>; vertical: Map<number, LevelVertical>; warnings: string[] } {
+  const byLevel = new Map<number, Marker>();
   for (const r of read) {
     if (!Number.isFinite(r.elevation)) continue;
-    if (/ROOF/i.test(r.name)) roof = roof === null ? r.elevation : Math.min(roof, r.elevation);
-    else { const n = levelOfTitle(`${r.name} FLOOR`) ?? levelOfTitle(r.name); if (n !== null && !byLevel.has(n)) byLevel.set(n, r.elevation); }
+    const key = /\bROOF\b/i.test(r.name) ? Infinity : markerKey(r.name);
+    if (key === null) continue;
+    const previous = byLevel.get(key);
+    if (!previous || (key === Infinity && previous.elevation > r.elevation)) byLevel.set(key, r);
   }
+  const elevations = new Map<number, number>(), heights = new Map<number, number>(), vertical = new Map<number, LevelVertical>();
   const warnings: string[] = [];
-  const known = [...byLevel.entries()].sort((a, b) => a[0] - b[0]);
-  // Every marker read, lowest first: the next one above a floor ends that floor's height.
-  const markers = [...known.map(([, e]) => e), ...(roof === null ? [] : [roof])].sort((a, b) => a - b);
-  let base = 0;
-  if (byLevel.has(levels[0])) base = byLevel.get(levels[0])!;
-  else if (known.length) {
-    const [n0, e0] = known[0];
-    base = e0 - 14 * Math.max(0, n0 - levels[0]);
-    warnings.push(`${levelName(levels[0])}'s elevation was not read; it is taken as 14 ft per level below ${levelName(n0)}.`);
+  if (!levels.length) return { elevations, heights, vertical, warnings };
+  const anchors: { index: number; marker: Marker }[] = [];
+  const keys = [...levels, ...[...byLevel.keys()].filter(key => key > levels.at(-1)!).sort((a, b) => a - b).slice(0, 1)];
+  for (const [index, key] of keys.entries()) {
+    const marker = byLevel.get(key), prior = anchors.at(-1);
+    if (!marker) continue;
+    const rise = prior ? (marker.elevation - prior.marker.elevation) / (index - prior.index) : 14;
+    if (rise < 6 || rise > 60) {
+      warnings.push(`${marker.name} has an elevation inconsistent with the adjacent levels. Review its source.`);
+      continue;
+    }
+    anchors.push({ index, marker });
   }
-  const elevations = new Map<number, number>(), heights = new Map<number, number>();
-  let assumed = 0, previous = base, previousHeight = 0;
-  levels.forEach((level, i) => {
-    const abs = byLevel.get(level) ?? (i === 0 ? base : previous + previousHeight);
-    const above = markers.find(m => m > abs + 0.5);
-    if (above === undefined) assumed++;
-    const height = Math.round((above === undefined ? 14 : above - abs) * 100) / 100;
-    elevations.set(level, Math.round((abs - base) * 100) / 100);
-    heights.set(level, height);
-    previous = abs; previousHeight = height;
-  });
-  if (assumed) warnings.push(`${assumed} floor-to-floor height${assumed === 1 ? " was" : "s were"} not read and use${assumed === 1 ? "s" : ""} 14 ft.`);
-  return { elevations, heights, warnings };
+  const at = new Map(anchors.map(anchor => [anchor.index, anchor.marker]));
+  const position = (i: number) => {
+    const exact = at.get(i);
+    if (exact) return exact.elevation;
+    const lower = anchors.findLast(anchor => anchor.index < i), upper = anchors.find(anchor => anchor.index > i);
+    if (lower && upper) {
+      const span = (upper.marker.elevation - lower.marker.elevation) / (upper.index - lower.index);
+      return lower.marker.elevation + (i - lower.index) * span;
+    }
+    const nearest = lower ?? upper;
+    return nearest ? nearest.marker.elevation + (i - nearest.index) * 14 : i * 14;
+  };
+  const base = position(0), rounded = (n: number) => Math.round(n * 1000) / 1000;
+  if (!at.has(0) && anchors.length) warnings.push(`${levelName(levels[0])}'s elevation was not read. The model uses an estimated base elevation.`);
+  let assumed = 0;
+  for (const [index, level] of levels.entries()) {
+    const here = at.get(index), next = at.get(index + 1);
+    if (!here || !next) assumed++;
+    elevations.set(level, rounded(position(index) - base));
+    heights.set(level, rounded(position(index + 1) - position(index)));
+    vertical.set(level, { basis: here && next ? here.source && next.source ? "printed" : "image" : "estimated", datum: here?.source, upper: next?.source });
+  }
+  if (assumed) warnings.push(`${assumed} floor-to-floor height${assumed === 1 ? " was" : "s were"} not read. Missing spans between datums are divided evenly; outside them each level uses 14 ft.`);
+  return { elevations, heights, vertical, warnings };
 }
-
-/** A level marker read off a section; `at` is where its elevation was read, 0–1 in the image it came from. */
-export type Marker = { name: string; elevation: number; at?: Point };
-/** The level a marker names ("LEVEL 03 - LOW ROOF" → 3); an unnumbered roof ("T.O. ROOF") sorts last. */
-const markerKey = (name: string): number | null => levelOfTitle(`${name} FLOOR`) ?? levelOfTitle(name) ?? (/ROOF/i.test(name) ? Infinity : null);
 
 /**
  * One elevation per level from several readings of the same section sheet (the client reads it in
@@ -503,7 +526,7 @@ export function editDoorNumber(model: SchematicModel, levelId: string, index: nu
   return editLevel(model, levelId, l => {
     if (!l.doors?.[index]) throw new Error("That door is no longer in the model.");
     const n = number.trim().toUpperCase().slice(0, 12);
-    return { ...l, doors: l.doors.map((d, i) => i === index ? { ...d, number: n || null } : d) };
+    return { ...l, doors: l.doors.map((d, i) => i === index && d.number !== (n || null) ? { ...d, number: n || null, scheduledSize: undefined } : d) };
   });
 }
 
@@ -512,7 +535,7 @@ export function editGlazing(model: SchematicModel, levelId: string, index: numbe
   return editLevel(model, levelId, l => {
     if (!l.glazing?.[index]) throw new Error("That glass is no longer in the model.");
     const t = change.type === undefined ? undefined : change.type.trim().toUpperCase().replace(/\s+/g, "").slice(0, 16);
-    return { ...l, glazing: l.glazing.map((g, i) => i !== index ? g : { ...g, ...(t !== undefined ? { type: t || null } : {}), ...(change.excluded !== undefined ? { excluded: change.excluded } : {}) }) };
+    return { ...l, glazing: l.glazing.map((g, i) => i !== index ? g : { ...g, ...(t !== undefined && g.type !== (t || null) ? { type: t || null, elevationDetail: undefined } : {}), ...(change.excluded !== undefined ? { excluded: change.excluded } : {}) }) };
   });
 }
 
@@ -580,7 +603,12 @@ export function setPartitionTypes(model: SchematicModel, partitionTypes: Partiti
 
 export function setLevelHeight(model: SchematicModel, levelId: string, height: number): SchematicModel {
   if (!(Number.isFinite(height) && height >= 6 && height <= 60)) throw new Error("Use a floor-to-floor height between 6 and 60 ft.");
-  const levels = model.levels.map(l => l.id === levelId ? { ...l, height } : l);
-  let elevation = levels[0]?.elevation ?? 0;
-  return { ...model, levels: levels.map((l, i) => { if (i > 0) elevation += levels[i - 1].height; return i === 0 ? l : { ...l, elevation: Math.round(elevation * 100) / 100 }; }) };
+  const index = model.levels.findIndex(level => level.id === levelId);
+  if (index < 0 || model.levels[index].height === height) return model;
+  const delta = height - model.levels[index].height;
+  return { ...model, levels: model.levels.map((level, i) => {
+    if (i < index) return level;
+    if (i === index) return { ...level, height, vertical: { basis: "adjusted", datum: level.vertical?.datum } };
+    return { ...level, elevation: Math.round((level.elevation + delta) * 1000) / 1000, vertical: { basis: "adjusted" } };
+  }) };
 }

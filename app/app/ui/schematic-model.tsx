@@ -14,6 +14,8 @@ import { useLocalDraft } from "../../lib/use-local-draft";
 import { alignSheetFrame, footprintValid, openOutline, printedSheetFrame, DEFAULT_DOOR_HEIGHT, wallLayerGroup, schematicColumns, schematicDoors, schematicGeometry, schematicGlazing, schematicPartitions, schematicRailings, schematicRoomFloors, schematicStairs, schematicWalls, sheetPoint, wallTotals, type SheetFrame } from "./schematic-geometry";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, PreviewNote, type ViewProps } from "./shared";
 import { SchematicObjectInspector } from "./schematic-object-inspector";
+import { SchematicHeightEvidence } from "./schematic-height-evidence";
+import type { DimensionSource } from "../../lib/section-datums";
 import { CUTAWAY_HEIGHT, isSportsFloor, schematicCameraFit, schematicObjectPick, type SchematicPick, type WallPick } from "./schematic-scene";
 import { StoredDocumentViewer } from "./project-file-viewer";
 import type { Room } from "../../lib/room-detection";
@@ -272,7 +274,7 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
         }
         scope.traverse(object => {
           const data = object.userData;
-          if (data.walls || data.doors || data.floorIndex !== undefined) current.pickables.push(object);
+          if (data.walls || data.doors || data.glazing || data.floorIndex !== undefined) current.pickables.push(object);
         });
         if (scope.children.length) current.group.add(scope);
       } catch (failure) {
@@ -305,9 +307,10 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
           edges.matrixAutoUpdate = false;
           current.highlight.add(edges);
         };
-        if (selection.kind === "door" && mesh instanceof THREE.InstancedMesh) {
-          (object.userData.doors as number[] | undefined)?.forEach((door, i) => {
-            if (door === selection.index) {
+        if ((selection.kind === "door" || selection.kind === "glazing") && mesh instanceof THREE.InstancedMesh) {
+          const indices = selection.kind === "door" ? object.userData.doors : object.userData.glazing;
+          (indices as number[] | undefined)?.forEach((index, i) => {
+            if (index === selection.index) {
               mesh.getMatrixAt(i, matrix);
               addOutline(new THREE.Matrix4().multiplyMatrices(mesh.matrixWorld, matrix));
             }
@@ -377,7 +380,7 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
 }
 
 type PlanPick = { kind: "wall" | "door" | "glazing" | "partition" | "column"; index: number };
-type PlanFocus = { levelId: string; kind: "wall" | "door"; index: number; at: number };
+type PlanFocus = { levelId: string; kind: "wall" | "door" | "glazing"; index: number; at: number };
 type Change = { type?: string; excluded?: boolean };
 /** The estimator's correction of the wall, door, glass, operable partition, guardrail or column picked on the plan. */
 function PickEditor({ level, pick, types, onWall, onDoor, onGlazing, onPartition, onColumn, onClose }: { level: SchematicLevel; pick: PlanPick; types: string[]; onWall: (change: Change) => void; onDoor: (number: string) => void; onGlazing: (change: Change) => void; onPartition: (excluded: boolean) => void; onColumn: (excluded: boolean) => void; onClose: () => void }) {
@@ -413,7 +416,7 @@ function OutlineSheet({ focus, onPickWall, level, spaces, doc, frameKey, frames,
   const [aligning, setAligning] = useState(false), [drag, setDrag] = useState<{ index: number; point: Point } | null>(null), [corner, setCorner] = useState(0);
   const [coordinates, setCoordinates] = useState<Point>(level.outline[0]), [zoom, setZoom] = useState(1), [showWalls, setShowWalls] = useState(true);
   const svg = useRef<SVGSVGElement>(null), scroller = useRef<HTMLDivElement>(null), image = useRef<HTMLImageElement>(null);
-  const focusedElement = focus && (focus.kind === "door" ? level.doors?.[focus.index] : level.walls?.[focus.index]);
+  const focusedElement = focus && (focus.kind === "door" ? level.doors?.[focus.index] : focus.kind === "glazing" ? level.glazing?.[focus.index] : level.walls?.[focus.index]);
   useEffect(() => {
     if (focus && focusedElement) { setPick({ kind: focus.kind, index: focus.index }); setShowWalls(true); setZoom(z => Math.max(z, 2)); }
   }, [focus?.at]);
@@ -543,7 +546,7 @@ function WallLayersCard({ level, index, layer, schedule, sheet, reading, onLayer
 export function SchematicModelStudio({ project, navigate, notify }: { project: Project } & Pick<ViewProps, "navigate" | "notify">) {
   const { model, run } = useSchematicModel(), { documents, ready } = useProjectDocuments();
   const [pending, setPending] = useState<SchematicModel | null>(null), [busy, setBusy] = useState(false), [progress, setProgress] = useState(""), [error, setError] = useState(""), [graphicsError, setGraphicsError] = useState("");
-  const [selected, setSelected] = useState(""), [shown, setShown] = useState<string[] | null>(null), [explode, setExplode] = useState(false), [pins, setPins] = useState(false), [walls, setWalls] = useState(true), [showOutlineEditor, setShowOutlineEditor] = useState(false), [source, setSource] = useState<{ documentId: string; sheet: string; page: number; label: string } | null>(null);
+  const [selected, setSelected] = useState(""), [shown, setShown] = useState<string[] | null>(null), [explode, setExplode] = useState(false), [pins, setPins] = useState(false), [walls, setWalls] = useState(true), [showOutlineEditor, setShowOutlineEditor] = useState(false), [source, setSource] = useState<{ documentId: string; sheet: string; page: number; label: string; quote?: string } | null>(null);
   const [cutaway, setCutaway] = useState(true), [outlinePreference, setOutlinePreference] = useState<boolean | null>(null);
   const [untaggedType, setUntaggedType] = useState("");
   const [height, setHeight] = useState("14"), [frames, setFrames] = useLocalDraft<Record<string, SheetFrame>>("schematic-sheet-frames", {});
@@ -584,6 +587,9 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
     setSelected(levelId);
     setShowOutlineEditor(true);
     setPlanFocus({ levelId, kind, index, at: Date.now() });
+  }
+  function openDimension(dimension: DimensionSource, label: string) {
+    setSource({ ...dimension, label });
   }
   async function readLayers() {
     const control = new AbortController(); layersAbort.current = control; setReadingLayers(true); setError("");
@@ -666,7 +672,7 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
               if (e.target.checked) setShown(current.levels.map(item => item.id));
             }}/>Explode levels</label>}
           </div>
-          <small>Drag to orbit · Scroll to zoom · Select a wall, door or floor to inspect</small>
+          <small>Drag to orbit · Scroll to zoom · Select an element to inspect</small>
         </div>
         <aside className="sm-levels">
           <SchematicObjectInspector levels={current.levels} spaces={spacesByLevel}
@@ -678,12 +684,21 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
                 viewer.current?.scrollIntoView({ block: "nearest" });
               }
             }}
-            onClose={() => setSelection(null)} onPlan={(item, pick) => {
-              if (pick.kind === "door") showOnPlan(item.id, "door", pick.index);
+            onClose={() => setSelection(null)} onDimension={openDimension} onPlan={(item, pick) => {
+              if (pick.kind === "door" || pick.kind === "glazing") showOnPlan(item.id, pick.kind, pick.index);
               else setSource({ ...item.source, label: item.name });
             }}/>
           <Panel title="Levels and sources" subtitle={current.levels.length + (current.levels.length === 1 ? " level" : " levels")} action={current.levels.length > 1 && visible.length < current.levels.length ? <Button onClick={() => setShown(current.levels.map(item => item.id))}>Show all</Button> : undefined}>{current.levels.map((l, i) => <article key={l.id} className={level?.id === l.id ? "active" : ""}><div className="sm-level-heading"><input type="checkbox" aria-label={"Show " + l.name} checked={visible.includes(l.id)} onChange={e => { setShown(e.target.checked ? [...visible, l.id] : visible.filter(id => id !== l.id)); if (!e.target.checked && selection?.levelId === l.id) setSelection(null); }}/><span aria-hidden="true" style={{ background: colors[i % colors.length] }}/><button type="button" onClick={() => { setSelected(l.id); setShown([l.id]); setExplode(false); setSelection(null); setPlanFocus(null); }}>{l.name}</button></div><p>Elevation {l.elevation} ft · Height {l.height} ft<br/>{Math.round(polygonArea(l.outline)).toLocaleString()} SF footprint · {l.rooms.length} rooms<br/>{(t => t ? `${t.count.toLocaleString()} walls · ${t.feet.toLocaleString()} ft of wall${t.doors === null ? "" : ` · ${t.doors} doors${t.compartments ? ` (+${t.compartments} toilet-stall doors)` : ""}`}${t.glassFeet === null ? "" : ` · ${t.glassFeet.toLocaleString()} ft of glass`}${t.partitionFeet ? ` · ${t.partitionFeet.toLocaleString()} ft of operable partition` : ""}${t.railingFeet ? ` · ${t.railingFeet.toLocaleString()} ft of guardrail` : ""}${t.columns ? ` · ${t.columns} columns` : ""}${t.stairs ? ` · ${t.stairs} ${t.stairs === 1 ? "stair" : "stairs"} up from the level below` : ""}` : "Rebuild to read walls from the plan's lines")(wallTotals(l))}</p><p>{l.sizing}</p><button className="sm-source-link" onClick={() => { setSelected(l.id); setSource({ ...l.source, label: l.name }); }}>{l.source.sheet} · PDF page {l.source.page}</button></article>)}</Panel>
-      {level && <Panel title={`${level.name} corrections`}><form onSubmit={e => { e.preventDefault(); change(m => setLevelHeight(m, level.id, Number(height))); }}><label className="ui-field">Floor-to-floor height · ft<input disabled={busy} type="number" min="6" max="60" step=".01" required value={height} onChange={e => setHeight(e.target.value)}/></label><Button disabled={busy} type="submit">Apply height</Button></form><p>Levels above move with this height. Verify AI-read heights against the section drawing.</p>{section && <Button onClick={() => setSource({ documentId: section.doc.id, sheet: section.sheet, page: section.page, label: "Height source" })}>Check heights on {section.sheet}</Button>}<button type="button" className="ui-btn secondary" aria-expanded={showOutlineEditor} onClick={() => setShowOutlineEditor(v => !v)}>{showOutlineEditor ? "Close outline editor" : "Edit outline on source sheet"}</button>{level.wallNote && <p>Walls: {level.wallNote} They are read from the drawing's own lines, not traced by hand; check them on the sheet. Wall quantities are not priced yet.</p>}
+      {level && <Panel title={`${level.name} corrections`}>
+        <SchematicHeightEvidence level={level} onOpen={openDimension}/>
+        <form onSubmit={event => { event.preventDefault(); change(m => setLevelHeight(m, level.id, Number(height))); }}>
+          <label className="ui-field">Floor-to-floor height · ft<input disabled={busy} type="number" min="6" max="60" step=".001" required value={height} onChange={event => setHeight(event.target.value)}/></label>
+          <Button disabled={busy} type="submit">Apply height</Button>
+        </form>
+        <p>Levels above move when you apply a new height.</p>
+        {section && !level.vertical?.datum && <Button onClick={() => setSource({ documentId: section.doc.id, sheet: section.sheet, page: section.page, label: "Height source" })}>Check heights on {section.sheet}</Button>}
+        <button type="button" className="ui-btn secondary" aria-expanded={showOutlineEditor} onClick={() => setShowOutlineEditor(v => !v)}>{showOutlineEditor ? "Close outline editor" : "Edit outline on source sheet"}</button>
+        {level.wallNote && <p>Walls: {level.wallNote} They are read from the drawing's own lines, not traced by hand; check them on the sheet. Wall quantities are not priced yet.</p>}
       {!!level.walls?.length && <details><summary>Wall length by type · {keptWalls(level).filter(w => w.type && !w.typeSet && !w.edited).length} walls typed from the plan's tags{level.walls.some(w => w.edited || w.excluded) ? ` · ${level.walls.filter(w => w.edited || w.excluded).length} corrected by you` : ""}</summary>
         <div className="sm-table-wrap"><table className="ui-table"><thead><tr><th>Type</th><th>What it is</th><th>Rough thickness</th><th>Rating</th><th>Walls</th><th>Length · ft</th><th>Face area · SF</th><th>Layers</th></tr></thead><tbody>{wallTypeTotals(keptWalls(level), level.height).map(t => {
           const row = t.type === "Untagged" ? null : scheduleRow(t.type, current.partitionTypes ?? []), wall = longestWallOfType(level, t.type);
@@ -696,6 +711,6 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
       {current.warnings.length > 0 && <Panel title="Sizing and reading warnings"><ul>{current.warnings.map((warning, i) => <li key={i}>{warning}</li>)}</ul></Panel>}
       {showOutlineEditor && level && <div ref={outlinePanel} className="sm-outline-panel"><Panel title={`${level.name} outline correction`} subtitle="Uses the original stored plan. Printed scale or your explicit alignment fixes the image-to-feet conversion.">{doc ? <OutlineSheet key={`${current.builtAt}:${level.id}`} focus={planFocus?.levelId === level.id ? planFocus : null} onPickWall={index => inspect({ kind: "wall", levelId: level.id, index })} level={level} spaces={spaces} doc={doc} frameKey={`${current.builtAt}:${level.id}`} frames={frames} saveFrame={(key, frame) => setFrames(values => ({ ...values, [key]: frame }))} editable={!busy} types={[...new Set([...current.levels.flatMap(l => (l.walls ?? []).map(w => w.type).filter((t): t is string => !!t)), ...(current.partitionTypes ?? []).map(t => t.tag)])].sort()} onEditWall={(index, edit) => change(m => editWall(m, level.id, index, edit))} onEditDoor={(index, number) => change(m => editDoorNumber(m, level.id, index, number))} onEditGlazing={(index, edit) => change(m => editGlazing(m, level.id, index, edit))} onEditPartition={(index, excluded) => change(m => editPartition(m, level.id, index, excluded))} onEditColumn={(index, excluded) => change(m => editColumn(m, level.id, index, excluded))} onMove={(index, point) => change(m => { const original = m.levels.find(l => l.id === level.id)!; const moved = moveOutlinePoint(m, level.id, index, point); return index === 0 && openOutline(original.outline).length !== original.outline.length ? moveOutlinePoint(moved, level.id, original.outline.length - 1, point) : moved; })}/> : <p role="alert">The original source document is unavailable. Restore it in Project files to correct this outline.</p>}</Panel></div>}
     </>}
-    {source && <Modal wide title={`${source.sheet} source drawing`} subtitle={`${source.label} · PDF page ${source.page}`} onClose={() => setSource(null)}>{sourceDoc ? <StoredDocumentViewer doc={sourceDoc} page={source.page} onPageChange={() => {}} range={{ first: source.page, last: source.page }}/> : <p role="alert">This source document is unavailable. Open Project files to restore it.</p>}</Modal>}
+    {source && <Modal wide title={`${source.sheet} source drawing`} subtitle={`${source.label} · PDF page ${source.page}`} onClose={() => setSource(null)}>{sourceDoc ? <StoredDocumentViewer doc={sourceDoc} page={source.page} onPageChange={() => {}} range={{ first: source.page, last: source.page }} highlight={source.quote}/> : <p role="alert">This source document is unavailable. Open Project files to restore it.</p>}</Modal>}
   </div>;
 }

@@ -121,20 +121,21 @@ export function schematicDoors(level: SchematicLevel, doorHeight = DEFAULT_DOOR_
   };
   const openings = doors.filter(({ door }) => door.basis === "tagged-gap");
   const swings = doors.filter(({ door }) => door.basis !== "tagged-gap");
-  const above = Math.max(level.height - doorHeight, 0);
-  if (above > 0 && swings.length) {
-    const headers = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#d8d1c4", roughness: .9 }), swings.length);
-    swings.forEach(({ door }, i) => headers.setMatrixAt(i, box(door.a, door.b, doorHeight, above, door.thickness)));
-    headers.userData = { levelId: level.id, doors: swings.map(({ index }) => index) };
+  const heights = swings.map(({ door, index }) => ({ door, index, height: Math.min(level.height, door.scheduledSize?.height ?? doorHeight) }));
+  const above = heights.filter(({ height }) => height < level.height);
+  if (above.length) {
+    const headers = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#d8d1c4", roughness: .9 }), above.length);
+    above.forEach(({ door, height }, i) => headers.setMatrixAt(i, box(door.a, door.b, height, level.height - height, door.thickness)));
+    headers.userData = { levelId: level.id, doors: above.map(({ index }) => index) };
     headers.instanceMatrix.needsUpdate = true; group.add(headers);
   }
-  const leaves = swings.flatMap(({ door, index }) => door.hinges.flatMap((hinge, i) => {
+  const leaves = heights.flatMap(({ door, index, height }) => door.hinges.flatMap((hinge, i) => {
     const open = door.openTo[i];
-    return open ? [{ hinge, open, index }] : [];
+    return open ? [{ hinge, open, index, height }] : [];
   }));
   if (leaves.length) {
     const panels = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#a16e46", roughness: .7 }), leaves.length);
-    leaves.forEach(({ hinge, open }, i) => panels.setMatrixAt(i, box(hinge, open, 0, doorHeight, .15)));
+    leaves.forEach(({ hinge, open, height }, i) => panels.setMatrixAt(i, box(hinge, open, 0, height, .15)));
     panels.userData = { levelId: level.id, doors: leaves.map(({ index }) => index) };
     panels.instanceMatrix.needsUpdate = true; group.add(panels);
   }
@@ -151,17 +152,18 @@ export function schematicDoors(level: SchematicLevel, doorHeight = DEFAULT_DOOR_
 export const GLASS_HEIGHT = 10;
 /** A level's glass (level.glazing) as one instanced mesh of thin translucent panels from the floor. */
 export function schematicGlazing(level: SchematicLevel): THREE.InstancedMesh | null {
-  const glass = (level.glazing ?? []).filter(g => !g.excluded);
+  const glass = (level.glazing ?? []).flatMap((run, index) => run.excluded ? [] : [{ run, index }]);
   if (!glass.length) return null;
   const height = Math.min(level.height, GLASS_HEIGHT), place = new THREE.Object3D();
   const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#7cc4e8", transparent: true, opacity: .45, roughness: .1 }), glass.length);
-  glass.forEach((g, i) => {
+  glass.forEach(({ run: g }, i) => {
     const dx = g.b[0] - g.a[0], dy = g.b[1] - g.a[1];
     place.position.set((g.a[0] + g.b[0]) / 2, height / 2, -(g.a[1] + g.b[1]) / 2);
     place.rotation.set(0, Math.atan2(dy, dx), 0);
     place.scale.set(Math.max(Math.hypot(dx, dy), .01), height, .15);
     place.updateMatrix(); mesh.setMatrixAt(i, place.matrix);
   });
+  mesh.userData = { levelId: level.id, glazing: glass.map(({ index }) => index) };
   mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingBox(); mesh.computeBoundingSphere();
   return mesh;
 }

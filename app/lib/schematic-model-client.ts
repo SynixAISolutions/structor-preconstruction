@@ -6,15 +6,18 @@
 import { useCallback, useRef } from "react";
 import { aiJob } from "./ai-more-client";
 import type { PartitionKeyRead, PartitionTypeRead, PlanReading, PlanTag } from "./ai-jobs-more";
+import { doorNumber, doorScheduleSheets, matchDoorSizes, printedDoorSizes, type SourcedDoorSize } from "./door-schedule-dimensions";
+import { glazingDetailSheets, glazingDetailSource, printedGlazingReferences, type GlazingDetailReference } from "./glazing-detail-references";
 import type { WallLayer } from "./wall-assemblies";
 import { mergePartitionTypes, scheduleRow, tagKey, type PartitionType } from "./tag-placement";
 import { drawingRegister, type StoredDocument } from "./project-files";
-import { openStoredPdf, readStoredText, renderStoredPage, renderStoredRegion, renderStoredTiles } from "./project-files-client";
+import { openStoredPdf, readPageTextBoxes, readStoredText, renderStoredPage, renderStoredRegion, renderStoredTiles } from "./project-files-client";
 import { pageTurn } from "./page-turns";
 import type { Project } from "./projects";
 import { vectorsFromOperators } from "./plan-vectors";
 import { addTaggedDoorOpenings, printedDoorTags } from "./tagged-door-openings";
-import { consensusMarkers, feetPerInch, heightSheet, levelHeights, levelName, contentTiles, levelColumns, levelDoors, levelGlazing, levelOpenings, levelPartitions, levelFlights, levelPlanSheets, levelTags, levelWalls, stairsArriving, type LevelFlights, partitionTypeSheet, tagTiles, toFeet, type Marker, type SchematicLevel, type SchematicModel, type SchematicRoom } from "./schematic-model";
+import { consensusMarkers, feetPerInch, heightSheets, levelHeights, levelName, contentTiles, levelColumns, levelDoors, levelGlazing, levelOpenings, levelPartitions, levelFlights, levelPlanSheets, levelTags, levelWalls, stairsArriving, type LevelFlights, partitionTypeSheet, tagTiles, toFeet, type Marker, type SchematicLevel, type SchematicModel, type SchematicRoom } from "./schematic-model";
+import { printedSectionDatums, resolveSectionDatums, type SourcedDatum } from "./section-datums";
 import { useLocalDraft } from "./use-local-draft";
 
 async function pageSize(doc: StoredDocument, page: number) {
@@ -53,15 +56,28 @@ export async function readLevelMarkers(doc: StoredDocument, page: number, sheet:
   return { markers: found.markers, read: readings.filter(r => r.length).length, warnings: [...(failed ? [`${failed} of ${tiles.length} parts of ${sheet} could not be read.`] : []), ...found.warnings] };
 }
 
-/** One AI image request per level (a second try if the outline is unusable) plus six small ones for the heights; progress is reported as text. */
+/** Build from the current drawings, preferring printed dimensions; use image readings for drawings without usable text. */
 export async function buildSchematicModel(args: { documents: StoredDocument[]; project: Project; onProgress?: (text: string) => void; signal?: AbortSignal }): Promise<SchematicModel> {
   const register = drawingRegister(args.documents);
   const plans = levelPlanSheets(register);
   if (!plans.length) throw new Error("No floor plan sheets were found. Upload the architectural drawings in Project files first.");
   const warnings: string[] = [];
-  let read: { name: string; elevation: number }[] = [];
-  const section = heightSheet(register);
-  if (section) {
+  const sections = heightSheets(register).slice(0, 3), section = sections[0];
+  const datums: SourcedDatum[] = [];
+  for (const row of sections) {
+    args.signal?.throwIfAborted();
+    args.onProgress?.(`Reading printed level elevations on ${row.sheet}…`);
+    const boxes = await pageTurn(() => readPageTextBoxes(row.doc, row.page), true).catch(() => []);
+    for (const { name, elevation, quote } of printedSectionDatums(boxes)) {
+      datums.push({ name, elevation, source: { documentId: row.doc.id, sheet: row.sheet, page: row.page, quote } });
+    }
+  }
+  let read: Marker[] = [];
+  if (datums.length) {
+    const found = resolveSectionDatums(datums);
+    read = found.markers;
+    warnings.push(...found.warnings);
+  } else if (section) {
     args.onProgress?.(`Reading the level elevations on ${section.sheet} (in six parts)…`);
     try {
       const found = await readLevelMarkers(section.doc, section.page, section.sheet, section.title, args.signal);
@@ -116,7 +132,7 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
     const found = await planVectorWalls(row.doc, row.page, row.sheet, sized.frame, reading.outline, !!scale, !borrowed && !!scale, args.signal, args.onProgress).catch(error => { if (args.signal?.aborted) throw error; return { walls: [], doors: [], glazing: [], partitions: [], columns: [], openings: [], flights: { arriving: [], rising: [] } as LevelFlights, rooms: [], note: "The sheet's lines could not be read for walls.", tagWarning: "" }; });
     if (!found.walls.length) warnings.push(`${row.sheet}: ${found.note}`);
     if (found.tagWarning) warnings.push(`${row.sheet}: ${found.tagWarning}`);
-    levels.push({ id: `L${level}`, name: levelName(level), order: level, elevation: heights.elevations.get(level) ?? 0, height: heights.heights.get(level) ?? 14, outline: sized.outline, rooms: found.rooms.length ? found.rooms : sized.rooms, source: { documentId: row.doc.id, sheet: row.sheet, page: row.page }, sizing: sized.sizing, frame: sized.frame, walls: found.walls, wallNote: found.note, doors: found.doors, glazing: found.glazing, partitions: found.partitions, columns: found.columns, openings: level === plansRead[0].level ? [] : found.openings });
+    levels.push({ id: `L${level}`, name: levelName(level), order: level, elevation: heights.elevations.get(level) ?? 0, height: heights.heights.get(level) ?? 14, vertical: heights.vertical.get(level), outline: sized.outline, rooms: found.rooms.length ? found.rooms : sized.rooms, source: { documentId: row.doc.id, sheet: row.sheet, page: row.page }, sizing: sized.sizing, frame: sized.frame, walls: found.walls, wallNote: found.note, doors: found.doors, glazing: found.glazing, partitions: found.partitions, columns: found.columns, openings: level === plansRead[0].level ? [] : found.openings });
     flightsOf.set(level, found.flights);
   }
   // Stairs arrive at a level from the one below; a stair its plan draws without an arrow takes its direction from the plan below.
@@ -124,6 +140,54 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
   for (const l of levels) {
     const below = [...flightsOf.keys()].filter(k => k < l.order).sort((p, q) => q - p)[0];
     l.stairs = l.order === lowest ? [] : stairsArriving(flightsOf.get(l.order) ?? { arriving: [], rising: [] }, below === undefined ? null : flightsOf.get(below) ?? null);
+  }
+  // A schedule supplies the door size independently of the plan. Match only doors on scaled plans.
+  const scaledLevels = new Set(plansRead.filter(plan => plan.scale && !plan.borrowed).map(plan => plan.level));
+  if (levels.some(level => scaledLevels.has(level.order) && level.doors?.some(door => door.kind === "door" && door.number))) {
+    const sizes: SourcedDoorSize[] = [];
+    for (const row of doorScheduleSheets(register)) {
+      args.signal?.throwIfAborted();
+      args.onProgress?.(`Matching scheduled door sizes on ${row.sheet}…`);
+      try {
+        const boxes = await pageTurn(() => readPageTextBoxes(row.doc, row.page), true);
+        for (const size of printedDoorSizes(boxes)) {
+          sizes.push({ ...size, source: { documentId: row.doc.id, sheet: row.sheet, page: row.page, quote: size.number } });
+        }
+      } catch (error) {
+        if (args.signal?.aborted) throw error;
+        warnings.push(`${row.sheet}: could not read the door schedule.`);
+      }
+    }
+    const numbers = levels.flatMap(level => (level.doors ?? []).flatMap(door => door.kind === "door" && door.number ? [doorNumber(door.number)] : []));
+    const uniqueMarks = new Set([...Map.groupBy(numbers, number => number)].filter(([, marks]) => marks.length === 1).map(([number]) => number));
+    const conflicts = new Set<string>();
+    for (const level of levels) {
+      if (!level.doors || !scaledLevels.has(level.order)) continue;
+      const matched = matchDoorSizes(level.doors, sizes, uniqueMarks);
+      level.doors = matched.doors;
+      for (const mark of matched.conflicts) conflicts.add(mark);
+    }
+    if (conflicts.size) {
+      const list = [...conflicts];
+      warnings.push(`Door sizes need review for ${list.slice(0, 15).join(", ")}${list.length > 15 ? ` and ${list.length - 15} more` : ""}. Check repeated marks and differences between the plans and schedules.`);
+    }
+  }
+  if (levels.some(level => level.glazing?.some(glass => glass.type))) {
+    const refs: GlazingDetailReference[] = [];
+    for (const row of glazingDetailSheets(register)) {
+      args.signal?.throwIfAborted();
+      args.onProgress?.(`Finding glazing elevation references on ${row.sheet}…`);
+      const boxes = await pageTurn(() => readPageTextBoxes(row.doc, row.page), true).catch(() => []);
+      for (const { tag, quote } of printedGlazingReferences(boxes)) {
+        refs.push({ tag, source: { documentId: row.doc.id, sheet: row.sheet, page: row.page, quote } });
+      }
+    }
+    for (const level of levels) {
+      level.glazing = level.glazing?.map(glass => {
+        const elevationDetail = glass.type ? glazingDetailSource(glass.type, refs) : undefined;
+        return elevationDetail ? { ...glass, elevationDetail } : glass;
+      });
+    }
   }
   // The partition type schedule, to describe the wall types and catch codes it doesn't list.
   const typeSheet = partitionTypeSheet(register);

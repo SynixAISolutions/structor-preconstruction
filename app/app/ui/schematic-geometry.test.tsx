@@ -193,6 +193,29 @@ test("both leaves of a double door resolve past a stall to the same source door"
   }
 });
 
+test("a matched door schedule sets its leaf and header height", () => {
+  const door = {
+    a: [10, 20] as Point, b: [13, 20] as Point, width: 3, leaves: 1, hinges: [[10, 20]] as Point[],
+    openTo: [[10, 23]] as Point[], kind: "door" as const, thickness: .4, number: "D02",
+    scheduledSize: { number: "D02", width: 3, height: 8, source: { documentId: "schedule", page: 1, sheet: "A601", quote: "D02" } },
+  };
+  const [header, leaf] = schematicDoors({ ...level, doors: [door] })!.children as THREE.InstancedMesh[];
+  const transform = new THREE.Matrix4();
+  leaf.getMatrixAt(0, transform);
+  assert.equal(new THREE.Vector3().setFromMatrixScale(transform).y, 8);
+  header.getMatrixAt(0, transform);
+  assert.equal(new THREE.Vector3().setFromMatrixPosition(transform).y, 11, "Header covers 8 ft to 14 ft");
+});
+
+test("a picked glazing run preserves its index when earlier runs are excluded", () => {
+  const run = { a: [10, 20] as Point, b: [15, 20] as Point };
+  const glass = schematicGlazing({ ...level, glazing: [{ ...run, excluded: true }, run] })!;
+  assert.equal(glass.count, 1);
+  const ray = new THREE.Raycaster(new THREE.Vector3(12, 4, -30), new THREE.Vector3(0, 0, 1));
+  const hits = ray.intersectObject(glass);
+  assert.deepEqual(schematicObjectPick(hits[0]), { kind: "glazing", levelId: level.id, index: 1 });
+});
+
 test("camera fit keeps a wide plan inside a narrow viewer", () => {
   const box = new THREE.Box3(new THREE.Vector3(0, 0, 0), new THREE.Vector3(248, 14, 108));
   const camera = new THREE.PerspectiveCamera(42, .75, .1, 1000);
