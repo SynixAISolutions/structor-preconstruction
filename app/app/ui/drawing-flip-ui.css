@@ -111,3 +111,10 @@
 .flip-region-layer g.selected polygon { stroke-dasharray:none; }
 .flip-region-layer .flip-region-tag rect { opacity:.92; }
 .flip-region-layer .flip-region-tag text { fill:#fff; font-family:Inter, Arial, sans-serif; font-weight:600; letter-spacing:.02em; }
+/* Trade lines from the read of every sheet (24 Nov): a light box in the trade's colour on the printed words, under the
+   reviewed highlights; clicking one shows that trade only. */
+.flip-line-layer rect { stroke-width:1; vector-effect:non-scaling-stroke; cursor:pointer; }
+.flip-line-layer rect:hover { stroke-width:2; }
+/* The sheet toolbar: the search keeps its width and "Only sheets with highlights" sits after the arrows, on one line. */
+.flip-toolbar .flip-sheet-search { min-width:190px; }
+.flip-toolbar .flip-only-marked { order:5; white-space:nowrap; flex:0 0 auto; }

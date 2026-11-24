@@ -54,7 +54,9 @@ import { editPackage } from "../../lib/procurement";
 import { loadProjects, sampleProjectRecords } from "../../lib/projects";
 import { getActiveProjectId } from "../../lib/project-scope";
 import { rememberPdf, useSourceFile } from "../../lib/pdf-session";
-import { renderStoredPage, useProjectDocuments } from "../../lib/project-files-client";
+import { readPageTextBoxes, renderStoredPage, useProjectDocuments } from "../../lib/project-files-client";
+import { findOnSheet, type Box } from "../../lib/text-anchor";
+import { useDrawingReferences } from "../../lib/use-drawing-references";
 import { locatePlan } from "../../lib/drawing-ai";
 import { locateScopes } from "../../lib/ai-more-client";
 import { drawingRegister, sheetKey, findSheet } from "../../lib/project-files";
@@ -136,7 +138,7 @@ export function TraceControls({ trace, number, onUndo, onFinish, onCancel, onRea
 export type MarkBox = { x: number; y: number; width: number; height: number };
 type BoxHandle = "move" | "nw" | "ne" | "sw" | "se";
 
-export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, expandable = true, fullPage = false, onFullPage, regionDetail, trace, traceActions, comparison, onClearComparison, focus, describe, navigation, markScope }: {
+export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, expandable = true, fullPage = false, onFullPage, regionDetail, trace, traceActions, comparison, onClearComparison, focus, describe, navigation, markScope, textMarks, onTextMark }: {
   page: DrawingPage;
   regions: CanvasRegion[];
   selectedId: string;
@@ -154,6 +156,12 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
   navigation?: { label: string; onPrev: () => void; onNext: () => void };
   /** Right-click "Add a scope line here": the rectangle being marked, and the box to fill in beside it. */
   markScope?: { box: MarkBox | null; onBox: (box: MarkBox | null) => void; form: ReactNode };
+  /**
+   * Each trade's printed lines on this sheet from the AI's read of every sheet (lib/sheet-reference-client), boxed on
+   * the sheet's text layer in the trade's colour; clicking one picks its trade.
+   */
+  textMarks?: { packageId: string; label: string; color: string; quotes: string[] }[];
+  onTextMark?: (packageId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [zoom, setZoom] = useState(100);
@@ -290,6 +298,18 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
     return () => { live = false; };
   }, [storedKey]);
   const storedReady = storedImage?.key === storedKey ? storedImage : null;
+  // Each trade's printed lines from the read of every sheet, found on this sheet's text layer (a scanned sheet shows none).
+  const marksKey = stored && textMarks?.length ? `${stored.doc.id}:${stored.pageNumber}:${textMarks.map(m => `${m.packageId}=${m.quotes.join("|")}`).join(",")}` : "";
+  const [lineMarks, setLineMarks] = useState<{ key: string; marks: (Box & { color: string; label: string; packageId: string; quote: string })[] }>({ key: "", marks: [] });
+  useEffect(() => {
+    if (!marksKey || !stored) return;
+    let live = true;
+    readPageTextBoxes(stored.doc, stored.pageNumber).then(
+      text => { if (live) setLineMarks({ key: marksKey, marks: (textMarks ?? []).flatMap(m => m.quotes.flatMap(quote => findOnSheet(text, quote).map(box => ({ ...box, color: m.color, label: m.label, packageId: m.packageId, quote })))) }); },
+      () => { if (live) setLineMarks({ key: marksKey, marks: [] }); });
+    return () => { live = false; };
+  }, [marksKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shownLines = marksKey && lineMarks.key === marksKey ? lineMarks.marks : [];
   useEffect(() => {
     const region = focus && regions.find(r => r.id === focus.regionId), el = panElement.current;
     if (!isExpanded || !region || !el) return;
@@ -326,6 +346,7 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
     onPointerUp={inBox ? markUp : undefined}
     onPointerLeave={() => setHoverPoint(null)}>
     <DrawingBackdrop page={displayPage} height={height}/>
+    {shownLines.length > 0 && <g className="flip-line-layer">{shownLines.map((m, i) => <rect key={i} x={m.x * 1000} y={m.y * height} width={m.width * 1000} height={m.height * height} fill={`${m.color}2a`} stroke={m.color} onClick={() => { if (clickAfterPan.current) { clickAfterPan.current = false; return; } onTextMark?.(m.packageId); }}><title>{`${m.label}: ${m.quote}`}</title></rect>)}</g>}
     <g className="flip-region-layer">{(() => { const unit = pxPerUnit(inBox, interactive); return regions.map(region => {
       const points = region.polygon.map(point => `${point.x * 1000},${point.y * height}`).join(" ");
       // The selected highlight's number is a small tag at its top-left corner, just outside it, about 15 px tall at any zoom
@@ -476,7 +497,24 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
   const [errors, setErrors] = useState<DrawingFlipErrors>({});
 
   const [showGuesses, setShowGuesses] = useState(false);
-  const marked = useMemo(() => new Set(state.regions.filter(r => showGuesses || onPrintedWords(r)).map(r => r.pageId)), [state.regions, showGuesses]);
+  // Each trade's printed lines on each sheet from the AI's read of every sheet (lib/use-drawing-references; Danial, 24 Nov:
+  // only the 102 sheets the scope scans read had highlights, while that read had found trades on 376 of Whittier's 424).
+  // Shown as lines the trade appears on, not as reviewed highlights.
+  const references = useDrawingReferences(procurement.packages);
+  const [showLines, setShowLines] = useState(true);
+  const linesByPage = useMemo(() => {
+    const out = new Map<string, Map<string, string[]>>();
+    if (!references.ready) return out;
+    for (const pkg of procurement.packages) for (const ref of references.referencesFor(pkg.id)) {
+      const key = `${ref.docId}:${ref.page}`, trades = out.get(key) ?? new Map<string, string[]>();
+      trades.set(pkg.id, [...new Set([...(trades.get(pkg.id) ?? []), ...ref.lines])]);
+      out.set(key, trades);
+    }
+    return out;
+  }, [references.ready, references.referencesFor, procurement.packages]);
+  const linesOn = (p: { documentId: string; pageNumber: number }) => linesByPage.get(`${p.documentId}:${p.pageNumber}`);
+  const lineCount = (p: { documentId: string; pageNumber: number }) => showLines ? [...(linesOn(p)?.values() ?? [])].reduce((n, lines) => n + lines.length, 0) : 0;
+  const marked = useMemo(() => new Set([...state.regions.filter(r => showGuesses || onPrintedWords(r)).map(r => r.pageId), ...(showLines ? state.pages.filter(p => linesOn(p)?.size).map(p => p.id) : [])]), [state.regions, state.pages, showGuesses, showLines, linesByPage]); // eslint-disable-line react-hooks/exhaustive-deps
   const flipPages = onlyMarked && marked.size ? state.pages.filter(p => marked.has(p.id)) : state.pages;
   const page = state.pages.find(item => item.id === pageId) ?? flipPages[0] ?? state.pages[0];
   const activePageId = page?.id ?? "";
@@ -494,8 +532,14 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
   const summary = flipSummary(state);
   const pageSummary = flipSummary(state, activePageId);
   const hasRegionFilters = Boolean(filters.query.trim() || filters.packageId || filters.status || filters.origin || filters.corrected || owner);
-  const legend = tradeLegend(state, procurement, activePageId);
+  const regionLegend = tradeLegend(state, procurement, activePageId);
   const colors = useMemo(() => new Map(procurement.packages.map((pkg, index) => [pkg.id, tradeColors[index % tradeColors.length]])), [procurement.packages]);
+  // This sheet's trades: their highlights and the lines the read of every sheet found for them here.
+  const pageLines = page && showLines ? linesOn(page) : undefined;
+  const legend = procurement.packages.filter(pkg => regionLegend.some(item => item.packageId === pkg.id) || pageLines?.has(pkg.id))
+    .map(pkg => ({ packageId: pkg.id, name: pkg.name, regions: (regionLegend.find(item => item.packageId === pkg.id)?.regions ?? 0) + (pageLines?.get(pkg.id)?.length ?? 0) }));
+  const textMarks = [...(pageLines ?? [])].filter(([id]) => (!filters.packageId || filters.packageId === id) && (!owner || procurement.packages.find(pkg => pkg.id === id)?.owner === owner))
+    .map(([id, lines]) => ({ packageId: id, label: procurement.packages.find(pkg => pkg.id === id)?.name ?? id, color: colors.get(id) ?? "#697b8c", quotes: lines }));
   const missing = unlocatedScopes(state, procurement);
   const correctionLog = corrections(state);
   const selectedPackage = selected ? procurement.packages.find(pkg => pkg.id === selected.packageId) : undefined;
@@ -595,7 +639,7 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
     <div className="flip-toolbar ui-panel">
       <label className="flip-sheet-select flip-sheet-search"><span>Search sheets</span><input type="search" value={sheetQuery} onChange={e=>setSheetQuery(e.target.value)} placeholder="Number or title"/></label>
       {marked.size > 0 && <label className="flip-corrected flip-only-marked"><input type="checkbox" checked={onlyMarked} onChange={event => { setOnlyMarked(event.target.checked); setRegionId(""); }}/>Only sheets with highlights ({marked.size})</label>}
-      <label className="flip-sheet-select"><span>Drawing sheet · {pickerPages.length} of {state.pages.length}</span><select value={activePageId} onChange={event=>{setPageId(event.target.value);setRegionId("");}}>{!pickerPages.some(p=>p.id===activePageId)&&<option value={activePageId}>{page.sheet} · Current sheet</option>}{disciplines.map(d=><optgroup key={d} label={`${d} (${pickerPages.filter(p=>(p.discipline||"Other")===d).length})`}>{pickerPages.filter(p=>(p.discipline||"Other")===d).map(p=><option key={p.id} value={p.id}>{p.sheet} · {p.title} · {state.regions.filter(r=>r.pageId===p.id).length} regions</option>)}</optgroup>)}</select>{!pickerPages.length&&<small role="status">No sheets match.</small>}</label>
+      <label className="flip-sheet-select"><span>Drawing sheet · {pickerPages.length} of {state.pages.length}</span><select value={activePageId} onChange={event=>{setPageId(event.target.value);setRegionId("");}}>{!pickerPages.some(p=>p.id===activePageId)&&<option value={activePageId}>{page.sheet} · Current sheet</option>}{disciplines.map(d=><optgroup key={d} label={`${d} (${pickerPages.filter(p=>(p.discipline||"Other")===d).length})`}>{pickerPages.filter(p=>(p.discipline||"Other")===d).map(p=><option key={p.id} value={p.id}>{p.sheet} · {p.title} · {state.regions.filter(r=>r.pageId===p.id).length+lineCount(p)} highlights</option>)}</optgroup>)}</select>{!pickerPages.length&&<small role="status">No sheets match.</small>}</label>
       <div className="flip-page-nav"><button aria-label="Previous drawing" onClick={() => movePage(pageIndex - 1)}><ArrowLeft size={16}/></button><span>{pageIndex + 1} / {flipPages.length}</span><button aria-label="Next drawing" onClick={() => movePage(pageIndex + 1)}><ArrowRight size={16}/></button></div>
       <div className="flip-page-meta"><strong>{page.discipline} · Revision {page.revision || "—"}</strong><span>{page.documentName} · PDF page {page.pageNumber}</span></div>
       <Badge tone={pageSummary.pendingReview ? "orange" : "green"}>{pageSummary.pendingReview ? `${pageSummary.pendingReview} to review` : !pageSummary.regions ? "No regions" : "Page reviewed"}</Badge>
@@ -610,7 +654,7 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
           <select aria-label="Filter by review status" value={filters.status} onChange={event => setFilters({ ...filters, status: event.target.value as Filters["status"] })}><option value="">All review states</option><option value="pending-review">Awaiting review</option><option value="approved">Approved</option></select>
           <select aria-label="Filter by origin" value={filters.origin} onChange={event => setFilters({ ...filters, origin: event.target.value as Filters["origin"] })}><option value="">All origins</option><option value="ai">Structor AI</option><option value="estimator">Estimator</option></select>
           <div className="flip-filter-options">
-            <label className="flip-corrected"><input type="checkbox" checked={filters.corrected} onChange={event => setFilters({ ...filters, corrected: event.target.checked })}/>Corrections</label>{guesses > 0 && <label className="flip-corrected" title="AI outlines read from the drawing picture, not pinned to printed words. Hidden by default: highlights sit on the words."><input type="checkbox" checked={showGuesses} onChange={event => setShowGuesses(event.target.checked)}/>Show AI area guesses ({guesses})</label>}
+            <label className="flip-corrected" title="The printed lines the AI's read of every sheet found for each trade, boxed on the sheet in the trade's colour. Click one to show that trade only."><input type="checkbox" checked={showLines} onChange={event => setShowLines(event.target.checked)}/>Trade lines from every sheet{references.ai ? "" : " (by section numbers)"}</label><label className="flip-corrected"><input type="checkbox" checked={filters.corrected} onChange={event => setFilters({ ...filters, corrected: event.target.checked })}/>Corrections</label>{guesses > 0 && <label className="flip-corrected" title="AI outlines read from the drawing picture, not pinned to printed words. Hidden by default: highlights sit on the words."><input type="checkbox" checked={showGuesses} onChange={event => setShowGuesses(event.target.checked)}/>Show AI area guesses ({guesses})</label>}
           </div>
         </div>
         <div className="flip-viewer-toolbar">
@@ -618,14 +662,14 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
           <Button onClick={() => setFullPage(true)}><Maximize2 size={15}/>Open full page</Button>
         </div>
         <div className="flip-drawing">
-          {!visible.length && <div className="flip-empty-note" role="status">
+          {!visible.length && !textMarks.length && <div className="flip-empty-note" role="status">
             {pageSummary.regions && hasRegionFilters
               ? <>No highlights match these filters. <button onClick={() => { setFilters({ query: "", packageId: "", status: "", origin: "", corrected: false }); setOwner(""); }}>Clear filters</button></>
               : guesses > 0 && !showGuesses
                 ? "AI area guesses are hidden."
                 : "No highlights yet. Review AI scope proposals or use Mark region to add one."}
           </div>}
-          <DrawingCanvas expandable={false} page={page} regions={visible} selectedId={selected?.id ?? ""} colors={colors} onSelect={id=>{setRegionId(id);setMode("regions");}} navigation={{ label: `${page.sheet} · ${pageIndex + 1} / ${flipPages.length}`, onPrev: () => movePage(pageIndex - 1), onNext: () => movePage(pageIndex + 1) }} markScope={{ box: markBox, onBox: setMarkBox, form: markForm }} fullPage={fullPage} onFullPage={setFullPage} regionDetail={fullDetail} trace={trace} traceActions={traceActions} comparison={comparedEvent && selected ? { regionId: selected.id, from: comparedEvent.from } : null} focus={focus} describe={describe} onClearComparison={() => setComparison(null)}/>
+          <DrawingCanvas expandable={false} page={page} regions={visible} selectedId={selected?.id ?? ""} colors={colors} onSelect={id=>{setRegionId(id);setMode("regions");}} navigation={{ label: `${page.sheet} · ${pageIndex + 1} / ${flipPages.length}`, onPrev: () => movePage(pageIndex - 1), onNext: () => movePage(pageIndex + 1) }} markScope={{ box: markBox, onBox: setMarkBox, form: markForm }} textMarks={textMarks} onTextMark={id => setFilters(current => ({ ...current, packageId: current.packageId === id ? "" : id }))} fullPage={fullPage} onFullPage={setFullPage} regionDetail={fullDetail} trace={trace} traceActions={traceActions} comparison={comparedEvent && selected ? { regionId: selected.id, from: comparedEvent.from } : null} focus={focus} describe={describe} onClearComparison={() => setComparison(null)}/>
         </div>
         <div className="flip-region-strip">{visible.map(region => <button key={region.id} className={selected?.id === region.id ? "selected" : ""} onClick={() => setRegionId(region.id)}><i style={{ background: colors.get(region.packageId) }}/><span><strong>{region.number} · {region.label}</strong><small>{procurement.packages.find(pkg => pkg.id === region.packageId)?.name} · {region.status === "pending-review" ? "Awaiting contractor" : "Approved"}</small></span><ChevronRight size={15}/></button>)}</div>
       </section>
