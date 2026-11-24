@@ -230,44 +230,16 @@ export function leftOut(entries: MemoryEntry[], target: { code: string; name: st
     .flatMap(e => { const m = e.text.match(/\bdoesn['’]t carry:?\s*(.+?)\.?$/i); return m ? [m[1]] : []; });
 }
 
-// ── The contractor's standard lines ─────────────────────────────────────────
-// Marcel reuses his bid-form lines from job to job (41 of Whittier's 69 Drywall lines are on Jelleff's sheet too), and
-// many aren't in any drawing or specification: LEED requirements, R-values, keying, finish coordination. The AI writes
-// only what the documents show, so these are offered on the bid form instead, for an estimator to add.
+// ── Whether a bid form already has a line ───────────────────────────────────
+// Every scan checks the contractor's lines against the project (lib/memory-check): Danial, 24 Nov, a line goes on a bid
+// form only where the project's documents support it, so nothing offers memory lines for adding by hand.
 
-/** `title`: the line as a bid-form item; a sub-bullet ("- Louvers") carries its heading, so it reads alone. */
-export type StandardLine = { text: string; title: string; group: string; sheets: string[] };
-/** The bid forms an imported line was on: the file named in each of its import events. */
-export const sheetsOf = (entry: Pick<MemoryEntry, "events" | "source">): string[] =>
-  [...new Set(entry.events.filter(e => e.startsWith("import:")).map(e => e.split(":")[1]).filter(Boolean))];
 /** A line's meaningful words, for telling whether a bid form already has it (lineCovered) or a page mentions it (lib/memory-check). */
 export const lineWords = (s: string) => new Set(s.toLowerCase().replace(/&/g, " and ").split(/[^a-z0-9]+/).filter(w => w.length > 2 && !["and", "the", "for", "all", "with", "per", "include", "provide", "furnish", "install"].includes(w)));
 /** Whether a bid form already has a line: most of its words (80%) are in one of the form's items (`existing`: their titles and details). */
 export function lineCovered(text: string, existing: string[]): boolean {
   const w = [...lineWords(text)];
   return !w.length || existing.some(item => { const have = lineWords(item); return w.filter(x => have.has(x)).length / w.length >= 0.8; });
-}
-
-/**
- * The lines this contractor's imported bid forms give a trade, for one project's bid form: the project's overrides
- * applied (projectMemory), each line once with every sheet it was on, most-repeated first, leaving out a line the form
- * already has (`existing`: its items' titles and details; most of a line's words already in one item).
- */
-export function standardLines(entries: MemoryEntry[], target: { code: string; name: string }, projectId: string, existing: string[]): StandardLine[] {
-  const covered = (text: string) => lineCovered(text, existing);
-  const byText = new Map<string, StandardLine>();
-  for (const e of projectMemory(entries, projectId)) {
-    if (e.kind !== "example" || e.origin !== "import" || !e.trades.length || !entryApplies(e, { projectId, ...target })) continue;
-    // A scope checklist's line is offered with its checklist, in order (lib/scope-checklist tradeChecklists).
-    if (e.events.some(x => x.startsWith("checklist:"))) continue;
-    const key = e.text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-    const group = e.detail.match(/^Under "(.+)"$/)?.[1] ?? "";
-    const bullet = /^[-•*]\s+/.test(e.text) && group;
-    const line = byText.get(key) ?? { text: e.text, title: bullet ? `${group.replace(/[:.]\s*$/, "")}: ${e.text.replace(/^[-•*]\s+/, "")}` : e.text, group, sheets: [] };
-    line.sheets = [...new Set([...line.sheets, ...sheetsOf(e)])];
-    byText.set(key, line);
-  }
-  return [...byText.values()].filter(l => !covered(l.text)).sort((a, b) => b.sheets.length - a.sheets.length);
 }
 
 /** The longest note on shared sections a trade's scan carries, so it and the memory stay within MEMORY_REQUEST_CHARS. */

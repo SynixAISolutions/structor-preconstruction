@@ -11,6 +11,7 @@ const M = await import("../lib/memory.ts");
 const S = await import("../lib/memory-store.ts");
 const I = await import("../lib/bid-sheet-import.ts");
 const W = await import("../lib/word-levels.ts");
+const K = await import("../lib/memory-check.ts");
 const { PGlite } = await import("@electric-sql/pglite");
 
 // ── File names ──
@@ -186,28 +187,23 @@ assert.equal((await store.search({ status: ["proposed"] })).length, 7, "Proposed
 await store.setStatus((await store.search({})).map(e => e.id), "approved", "Marcel Khoury");
 const approved = await store.search({ status: ["approved"] });
 
-// ── On a trade's bid form ──
+// ── Every scan checks the checklist's lines against the project (lib/memory-check) ──
 const dwPkg = { code: "09 29 00", name: "Drywall" };
-const offered = C.tradeChecklists(approved, dwPkg, "p1", []);
-assert.deepEqual(offered.map(c => [c.name, c.file, c.lines.map(l => [l.title, l.excluded])]), [["09A Drywall and ACT", "09A - Drywall and ACT.doc", [
-  ["Layout of all partitions from the column grid", false],
-  ["Blocking in drywall partitions for all wall-mounted items [by others]", false],
-  ["Receive, unload and install hollow metal frames in drywall partitions, excluding only the following:", false],
-  ["Frames in masonry walls", false],
-  ["Excluded: Fire-rated access panels in masonry", true],
-  ["Excluded: Painting of gypsum board", true],
-  ["Excluded: Acoustical insulation in exterior walls", true],
-]]], "The whole checklist in its own order, its lines first, then its exclusions as they go on the form");
-assert.deepEqual(C.tradeChecklists(approved, dwPkg, "p1", ["Layout of all partitions from column grid lines", "Excluded: Painting of gypsum board"])[0].lines.map(l => l.text),
-  ["Blocking in drywall partitions for all wall-mounted items [by others]", "Receive, unload and install hollow metal frames in drywall partitions, excluding only the following:", "Frames in masonry walls", "Fire-rated access panels in masonry", "Acoustical insulation in exterior walls"],
-  "A line the form already has isn't offered again");
-assert.deepEqual([C.tradeChecklists(approved, { code: "09 91 23", name: "Painting & wall coverings" }, "p1", []).length, C.tradeChecklists(entries.map((e, i) => ({ ...e, id: `x${i}`, status: "proposed", projectId: null, seen: 1, history: [], version: 1, createdAt: "", createdBy: "", updatedAt: "", updatedBy: "", section: null, detail: "" })), dwPkg, "p1", []).length],
+const checked = K.tradeLines(approved, dwPkg, "p1");
+assert.deepEqual(checked.map(l => l.text).sort(), [
+  "Blocking in drywall partitions for all wall-mounted items [by others]",
+  "Frames in masonry walls",
+  "Layout of all partitions from the column grid",
+  "Receive, unload and install hollow metal frames in drywall partitions, excluding only the following:",
+], "Its lines are looked for on every scan of the trade; its exclusions stay rules");
+assert.deepEqual([K.tradeLines(approved, { code: "09 91 23", name: "Painting & wall coverings" }, "p1").length,
+  K.tradeLines(entries.map((e, i) => ({ ...e, id: `x${i}`, status: "proposed", projectId: null, seen: 1, history: [], version: 1, createdAt: "", createdBy: "", updatedAt: "", updatedBy: "", section: null, detail: "" })), dwPkg, "p1").length],
   [0, 0], "Not another trade's; not before it's approved");
-assert.deepEqual(C.tradeChecklists(approved, { code: "09 21 16", name: "Drywall and ACT" }, "p1", [])[0].lines.length, 7, "Found by the checklist's own name too");
+assert.equal(K.tradeLines(approved, { code: "09 21 16", name: "Drywall and ACT" }, "p1").length, 4, "Found by the checklist's own name too");
 const notHere = { ...approved.find(e => e.text === "Frames in masonry walls"), id: "nh", kind: "decision", projectId: "p1", origin: "estimator", events: [], text: "Not on this project: Frames in masonry walls" };
 notHere.source = { overrides: approved.find(e => e.text === "Frames in masonry walls").id };
-assert(!C.tradeChecklists([...approved, notHere], dwPkg, "p1", [])[0].lines.some(l => l.text === "Frames in masonry walls"), "\"Not on this project\" hides a line there");
-assert(C.tradeChecklists([...approved, notHere], dwPkg, "p2", [])[0].lines.some(l => l.text === "Frames in masonry walls"), "and only there");
+assert(!K.tradeLines([...approved, notHere], dwPkg, "p1").some(l => l.text === "Frames in masonry walls") && K.tradeLines([...approved, notHere], dwPkg, "p2").some(l => l.text === "Frames in masonry walls"),
+  "\"Not on this project\" leaves a line out there, and only there");
 
 // A project's own bid sheet replaces the company-wide sheet lines for the trade, never its checklist.
 const anExample = approved.find(e => e.kind === "example");
@@ -215,24 +211,12 @@ const own = { ...anExample, id: "own", projectId: "p1", events: ["import:p1 xlsx
 const sheetLine = { ...anExample, id: "sheet", events: ["import:company xlsx:GWB:line:0"], text: "Company sheet line", source: { trade: "Drywall", file: "company.xlsx", tab: "GWB" } };
 const read = M.projectMemory([...approved, own, sheetLine], "p1").map(e => e.id);
 assert(read.includes("own") && !read.includes("sheet") && approved.every(e => read.includes(e.id)), "Every project carries the checklist");
-assert.equal(C.tradeChecklists([...approved, own], dwPkg, "p1", [])[0].lines.length, 7);
-
-// Offered once: the checklist's lines aren't standard lines from bid forms as well.
-assert.deepEqual(M.standardLines([...approved, sheetLine], dwPkg, "p2", []).map(l => l.text), ["Company sheet line"], "Standard lines from bid forms leave the checklist to its own section");
-// A line also on a bid sheet (the same wording and trade tags) keeps the sheet's source and gains the checklist's mark.
-const both = { ...sheetLine, id: "both", text: "Layout of all partitions from the column grid", events: ["import:company xlsx:GWB:line:3", "checklist:09a drywall and act doc:09A:includes:1"] };
-const mixed = C.tradeChecklists([both, ...approved.filter(e => e.text !== both.text)], dwPkg, "p1", []);
-assert.deepEqual([mixed[0].name, mixed[0].lines[0].text], ["09A Drywall and ACT", "Layout of all partitions from the column grid"], "named by the checklist's own entries, in its place");
-
-// A lead-in's items, and a line with blanks to fill in, reach the bid form as they are.
+// A lead-in keeps its items when it is checked.
 const leadIn = { ...anExample, id: "lead", text: "Receiving of materials furnished by others, including the following:", detail: "Toilet accessories; Access panels.", events: ["checklist:09a drywall and act doc:09A:includes:30"] };
-const blank = { ...anExample, id: "blank", text: "Use of the hoist for 00 weeks.", detail: "", events: ["checklist:09a drywall and act doc:09A:includes:31"] };
-const formLines = C.tradeChecklists([...approved, leadIn, blank], dwPkg, "p1", [])[0].lines;
-assert.deepEqual(formLines.slice(4, 6).map(l => [l.title, l.detail, l.fillIn]), [["Receiving of materials furnished by others, including the following:", "Toilet accessories; Access panels.", false], ["Use of the hoist for 00 weeks.", "", true]],
-  "In the checklist's order, after its other lines; the items as the line's detail; the blank marked to fill in");
+assert.equal(K.tradeLines([...approved, leadIn], dwPkg, "p1").find(l => l.text === leadIn.text)?.detail, "Toilet accessories; Access panels.", "A lead-in is checked with its items");
 
 // The AI reads the checklist with the rest of the trade's memory.
 const pack = M.contextPack(approved, { projectId: "p1", ...dwPkg });
 assert(pack.includes("- Drywall doesn't carry: Painting of gypsum board.") && pack.includes("- Blocking in drywall partitions for all wall-mounted items [by others]"), "Scans read its exclusions as rules and its lines as the trade's wording");
 
-console.log("Scope checklists checked: file names, a trade's checklist read in order with its exclusions, a file of several trades, list levels from a .doc and a .docx matched to the text, MCN's layout (lead-ins and their items, nested lists, notes, the schedule left out, lines to fill in), the trade each is for (by division and by name), the memory proposals one adds (imported twice, nothing new), the whole checklist offered in order on the trade's bid form less what it has, never another trade's or before approval, \"Not on this project\", a project's own bid sheet leaving it in place, standard lines leaving it to its section, and scans reading it.");
+console.log("Scope checklists checked: file names, a trade's checklist read in order with its exclusions, a file of several trades, list levels from a .doc and a .docx matched to the text, MCN's layout (lead-ins and their items, nested lists, notes, the schedule left out, lines to fill in), the trade each is for (by division and by name), the memory proposals one adds (imported twice, nothing new), its lines checked on every scan of the trade (never another trade's or before approval), \"Not on this project\", a project's own bid sheet leaving it in place, and scans reading it.");

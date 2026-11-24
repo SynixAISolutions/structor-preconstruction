@@ -9,8 +9,8 @@ import { Badge, Button, Modal } from "./shared";
 
 // Import the contractor's scope checklists into the AI memory (lib/scope-checklist): one Word file per trade, each
 // line it carries as the trade's wording and each exclusion as a "doesn't carry" rule, as proposals to approve. Once
-// approved, every trade's bid form also offers its whole checklist (Your standard lines). The server reads each file's
-// text (app/api/checklist-text); only the entries go to the memory.
+// approved, every scan of that trade checks each line against the project's pages and writes it where they call for it
+// (lib/memory-check). The server reads each file's text (app/api/checklist-text); only the entries go to the memory.
 
 const BATCH = 200;
 type Choice = { on: boolean; standard: string };
@@ -49,7 +49,7 @@ export function ChecklistImport({ onClose, onDone, notify }: { onClose: () => vo
   const lines = entries.filter(e => e.kind === "example").length;
   const fillIn = chosen.reduce((n, list) => n + list.lines.filter(l => l.fillIn).length, 0);
   const set = (key: string, change: Partial<Choice>) => setChoices(c => ({ ...c, [key]: { ...c[key], ...change } }));
-  // Two checklists with the same code (a draft and a final copy) would both reach the trade's bid form.
+  // Two checklists with the same code (a draft and a final copy) would both be checked on every scan of the trade.
   const repeated = useMemo(() => {
     const seen = new Map<string, number>();
     for (const list of chosen) seen.set(list.code || list.name, (seen.get(list.code || list.name) ?? 0) + 1);
@@ -71,7 +71,7 @@ export function ChecklistImport({ onClose, onDone, notify }: { onClose: () => vo
   }
 
   const busy = !!progress || !!reading;
-  return <Modal title="Import scope checklists" subtitle="Each trade's checklist, the lines it always carries and its exclusions, becomes proposals: approve them before scans read them and bid forms offer them." wide onClose={() => { if (!busy) onClose(); }}>
+  return <Modal title="Import scope checklists" subtitle="Each trade's checklist, the lines it always carries and its exclusions, becomes proposals: approve them, and every scan of the trade checks each line against the project's pages." wide onClose={() => { if (!busy) onClose(); }}>
     <div className="memory-import">
       <label className="memory-import-file"><FileText size={18}/><span>{lists ? `${plural(lists.length, "checklist")} read` : "Choose the trade checklists (.doc or .docx, several at once)"}</span>
         <input type="file" multiple accept=".doc,.docx" disabled={busy} onChange={e => { const files = [...(e.target.files ?? [])]; if (files.length) void read(files); }}/></label>
@@ -104,8 +104,8 @@ export function ChecklistImport({ onClose, onDone, notify }: { onClose: () => vo
             </div>;
           })}
         </div>
-        {repeated.length > 0 && <p className="memory-error" role="alert">More than one checklist is ticked for {repeated.join(", ")}: untick the older copy, or its trade's bid form will offer both.</p>}
-        <p className="memory-confirm"><strong>{plural(chosen.length, "checklist")}:</strong> {plural(lines, "line")} as the trades' wording and {plural(entries.length - lines, "exclusion")}, as proposals. {fillIn > 0 && `${plural(fillIn, "line has", "lines have")} blanks or a condition to fill in per project; bid forms offer them unticked. `}Importing the same checklist again adds nothing new.</p>
+        {repeated.length > 0 && <p className="memory-error" role="alert">More than one checklist is ticked for {repeated.join(", ")}: untick the older copy, or every scan of the trade checks both.</p>}
+        <p className="memory-confirm"><strong>{plural(chosen.length, "checklist")}:</strong> {plural(lines, "line")} as the trades' wording and {plural(entries.length - lines, "exclusion")}, as proposals. {fillIn > 0 && `${plural(fillIn, "line has", "lines have")} blanks or a condition to fill in per project; a scan writes them only with the project's values. `}Importing the same checklist again adds nothing new.</p>
       </>}
       {progress && <p className="proc-ai-progress" role="status">Importing {progress.done} of {progress.total}…</p>}
       {error && <p role="alert" className="memory-error">{error}</p>}

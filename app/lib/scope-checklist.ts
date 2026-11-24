@@ -5,9 +5,9 @@
 // Partitions to 10M Visual Display Boards): what the trade always carries (layout, blocking for wall-mounted items, the
 // items it receives and installs) and what it never does ("Exclusions:"). Each checklist goes to the AI memory, the
 // company's knowledge (Danial, 24 Nov: "we should give it to our AI as memory"): its lines as the trade's wording, its
-// exclusions as "doesn't carry" rules, so every scan reads them. And because Marcel wants the language on every trade
-// every time, not only when the AI copies it, the whole checklist is offered in its own order on each trade's bid form
-// (lib/memory standardLines' screen). Pure; the server reads the Word file (app/api/checklist-text).
+// exclusions as "doesn't carry" rules. Every scan checks each of a trade's lines against the project's pages and writes
+// it where they support it (lib/memory-check): a line goes on a bid form only where the project's documents call for it
+// (Danial, 24 Nov). Pure; the server reads the Word file (app/api/checklist-text).
 //
 // The lines are kept as printed and in order, read the way MCN's 69 checklists are laid out:
 //   - a lead-in ("Receiving … of materials furnished by others including the following:") keeps its sub-items as one
@@ -18,11 +18,11 @@
 //   - an editor's note on a line of its own ("[LIST ITEMS EXCLUDED IN ITEM NO. 2]") is left out, and the lines under one
 //     ("[Use this item only if …]") are conditional;
 //   - a line with blanks or a condition ("within ___ weeks", "[AS APPLICABLE]", "FOR PROJECTS WITH … ADD:") is marked
-//     to fill in, so it isn't added to a bid form without an estimator settling it.
+//     to fill in: the scan writes it only with this project's value from its pages (lib/memory-check).
 // Without levels (a pasted text, a file with no lists) every line stands alone, as printed.
 
 import { matchStandardTrade, matchTradeByName } from "./bid-sheet-import";
-import { entryApplies, lineCovered, MEMORY_LIMITS, projectMemory, tradeName, tradeTags, type MemoryEntry, type MemoryInput } from "./memory";
+import { MEMORY_LIMITS, tradeName, tradeTags, type MemoryEntry, type MemoryInput } from "./memory";
 import { STANDARD_TRADES } from "./procurement";
 import type { LeveledLine } from "./word-levels";
 
@@ -69,7 +69,7 @@ const FILL_IN = /\[|_{3,}|\bx{3,}\b|(?<![\d$.,:/])0{2,}(?![\d:,/])|\$\s?0+\.0+|\
  * "($ .00)", "Description……". A written amount ("FIFTY DOLLARS ($50.00)") is a real figure, not a blank.
  */
 const PLACEHOLDER = /\bEXAMPLE\b|\bX{2,}\b|\d0XX\b|\bAMOUNT IN WORDS\b|\bDESCRIPTION\b|\$\s*\.00\b|…{2,}|\.{4,}/;
-/** Whether a line has blanks or a condition an estimator settles for the project before it goes on a bid form. */
+/** Whether a line has blanks or a condition the project has to settle ("within ___ weeks", "[AS APPLICABLE]"). */
 export const needsFilling = (text: string) => FILL_IN.test(text) || PLACEHOLDER.test(text);
 /** A list's lead-in short enough to stand before each of its items ("INSPECTIONS", "Site concrete Work as follows:"). */
 const LABEL_CHARS = 60;
@@ -223,42 +223,5 @@ export function checklistEntries(list: Checklist, standard: string | null): Memo
       text: `${label} doesn't carry: ${line.text.replace(/\.+$/, "")}${/:$/.test(line.text) ? "" : "."}`.slice(0, 500) });
 }
 
-/** Whether an entry came from a scope checklist (it may also be on bid forms, when the wording is the same). */
+/** Whether an entry came from a scope checklist (a bid sheet line with the same wording carries both marks). */
 export const isChecklistEntry = (e: Pick<MemoryEntry, "events">) => e.events.some(x => EVENT.test(x));
-
-/**
- * One line of a trade's checklist on a bid form: `title` as it goes on the form ("Excluded: …" for an exclusion),
- * `detail` its sub-items, `fillIn` when it has blanks or a condition to settle on this project first.
- */
-export type ChecklistFormLine = { text: string; title: string; detail: string; excluded: boolean; fillIn: boolean };
-/** A checklist as a trade's bid form offers it: which one ("09A Drywall and ACT"), from which file, its lines in order. */
-export type TradeChecklist = { name: string; file: string; lines: ChecklistFormLine[] };
-
-/**
- * The scope checklists a trade's bid form offers on one project (the project's overrides applied, lib/memory
- * projectMemory): each checklist with its lines in the printed order, what the trade carries first, then its
- * exclusions; a line the form already has (`existing`: its items' titles and details, the same test as standard lines)
- * is left out, and so is a checklist with nothing left.
- */
-export function tradeChecklists(entries: MemoryEntry[], target: { code: string; name: string }, projectId: string, existing: string[]): TradeChecklist[] {
-  const lists = new Map<string, { name: string; file: string; lines: (ChecklistFormLine & { section: ChecklistSection; order: number })[] }>();
-  for (const e of projectMemory(entries, projectId)) {
-    if (!isChecklistEntry(e) || !entryApplies(e, { projectId, ...target })) continue;
-    const marks = e.events.map(x => x.match(EVENT)).filter((m): m is RegExpMatchArray => !!m);
-    const first = marks.sort((a, b) => Number(a[4]) - Number(b[4]))[0];
-    const key = `${first[1]}:${first[2]}`;
-    const excluded = first[3] === "excludes";
-    const text = excluded ? e.text.replace(/^.*? doesn't carry: /, "").replace(/\.$/, "") : e.text;
-    const list = lists.get(key) ?? { name: first[2], file: first[1], lines: [] };
-    // A line also on a bid sheet keeps that sheet's source; the checklist's own entries name it.
-    if (e.source.checklist) Object.assign(list, { name: String(e.source.checklist), file: String(e.source.file ?? list.file) });
-    if (!list.lines.some(l => l.text === text && l.excluded === excluded))
-      list.lines.push({ text, title: excluded ? `Excluded: ${text}` : text, detail: e.detail, excluded, fillIn: needsFilling(`${text} ${e.detail}`), section: first[3] as ChecklistSection, order: Number(first[4]) });
-    lists.set(key, list);
-  }
-  return [...lists.values()].map(list => ({
-    name: list.name, file: list.file,
-    lines: list.lines.filter(l => !lineCovered(l.title, existing)).sort((a, b) => (a.section === b.section ? 0 : a.section === "includes" ? -1 : 1) || a.order - b.order)
-      .map(({ text, title, detail, excluded, fillIn }) => ({ text, title, detail, excluded, fillIn })),
-  })).filter(list => list.lines.length).sort((a, b) => a.name.localeCompare(b.name));
-}
