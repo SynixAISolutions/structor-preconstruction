@@ -5,6 +5,7 @@
 import type { DraftInput } from "./extraction";
 import type { ConsolidatedLine, TitleBlock } from "./ai-jobs-more";
 import { AI_REQUESTS_AT_ONCE, inAiPool, timed } from "./ai-pool";
+import type { LineCheckRequest, LineFound } from "./memory-check";
 
 export const aiJob = <T>(job: string, input: unknown, signal?: AbortSignal): Promise<T & { model: string }> => timed(job, async () => {
   const response = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job, input }), signal });
@@ -52,6 +53,36 @@ export async function consolidateScope(trade: string, drafts: DraftInput[], sign
     }
   }));
   return { drafts: [...results.flat(), ...others], merged: scopes.length, dropped: scopes.length - used };
+}
+
+/**
+ * Looks for the contractor's lines on this project's pages (lib/memory-check): each request in a slot of the tab's
+ * shared pool. Resolves to every answer that came back, the screened-out quotes, and how many requests failed.
+ */
+export async function checkMemoryLines(trade: { name: string; code: string }, requests: LineCheckRequest[], signal?: AbortSignal, onProgress?: (done: number, total: number) => void): Promise<{ answers: { request: LineCheckRequest; found: LineFound[] }[]; dropped: { what: string; reason: string }[]; failed: number }> {
+  const answers: { request: LineCheckRequest; found: LineFound[] }[] = [], dropped: { what: string; reason: string }[] = [];
+  let next = 0, done = 0, failed = 0;
+  onProgress?.(0, requests.length);
+  await Promise.all(Array.from({ length: Math.min(AI_REQUESTS_AT_ONCE, requests.length) }, async () => {
+    while (next < requests.length && !signal?.aborted) {
+      const request = requests[next++];
+      try {
+        const result = await inAiPool(() => aiJob<{ found: LineFound[]; dropped: { what: string; reason: string }[] }>("memory-check", {
+          trade: trade.name, code: trade.code, document: request.document,
+          pages: request.pages.map(p => ({ page: p.page, text: p.text, where: p.where })), lines: request.lines, existing: request.existing,
+        }, signal));
+        answers.push({ request, found: result.found });
+        dropped.push(...result.dropped);
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        failed++;
+      }
+      onProgress?.(++done, requests.length);
+    }
+  }));
+  // In page order, so a line found on two pages cites the first.
+  answers.sort((a, b) => requests.indexOf(a.request) - requests.indexOf(b.request));
+  return { answers, dropped, failed };
 }
 
 /** Reads one sheet's title block (a JPEG crop of its right-hand strip). */

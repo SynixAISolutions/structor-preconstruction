@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import type { MemoryChange, MemoryEntry, MemoryInput, MemoryKind, MemoryOrigin, MemoryStatus } from "./memory";
 import type { MemoryCounts } from "./memory-store";
+import type { LeveledLine } from "./word-levels";
 
 /** Who changes the memory, until accounts exist (the name the app shows). */
 export const MEMORY_ACTOR = "Marcel Khoury";
@@ -37,6 +38,16 @@ export const addMemory = (entry: MemoryInput) => call<{ entry: MemoryEntry; crea
 export const changeMemory = (entry: Pick<MemoryEntry, "id" | "version">, change: MemoryChange) =>
   call<{ entry: MemoryEntry }>("/api/memory", { method: "PATCH", body: JSON.stringify({ id: entry.id, version: entry.version, change }) }).then(r => r.entry);
 export const learnMemory = (learn: MemoryInput[]) => call<{ added: number; seenAgain: number }>("/api/memory", { method: "POST", body: JSON.stringify({ learn }) });
+/**
+ * A Word scope checklist's lines, each with its list level (lib/scope-checklist, lib/word-levels), read on the server: a
+ * browser can't read the old .doc format.
+ */
+export async function checklistText(file: File): Promise<LeveledLine[]> {
+  const response = await fetch("/api/checklist-text", { method: "POST", body: file, cache: "no-store", headers: { "content-type": "application/octet-stream" } });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || !Array.isArray(body?.lines)) throw new Error(body?.error ?? `The file couldn't be read (${response.status}).`);
+  return body.lines;
+}
 /** Approves or retires many entries at once; resolves to how many changed. */
 export const setMemoryStatus = (ids: string[], to: MemoryStatus) => call<{ changed: number }>("/api/memory", { method: "POST", body: JSON.stringify({ status: { ids, to } }) }).then(r => r.changed);
 

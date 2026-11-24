@@ -48,9 +48,16 @@ const SAY: [RegExp, string][] = [
   [/\bdfh\b/g, "doors frames hardware"], [/\balum\b/g, "aluminum"], [/\bglass\b/g, "glazing"], [/\bgwb\b/g, "drywall"], [/\bhvac\b/g, "mechanical"],
   [/\blv\b/g, "low voltage"], [/\bfp\b/g, "fire protection"], [/\belev\b/g, "elevators"], [/\bff and e\b|\bffe\b/g, "furnishings"], [/\bpools?\b/g, "special construction"],
   [/\bcarpet\b|\bresilient\b|\brubber\b/g, "flooring"], [/\bpaint\b/g, "painting"], [/\bwet\b/g, "wet utilities"], [/\bdry\b/g, "dry utilities"], [/\bsite furn\w*\b/g, "landscaping"],
+  // A fire alarm is electronic safety (28 31 00), not the sprinklers of Fire protection.
+  [/\bfire alarms?\b/g, "electronic safety security"],
+  // MCN's scope checklists' trade names (lib/scope-checklist): "07E Caulking", "08C Window Systems", "17B IT Systems",
+  // "02F Curbs, Gutters and Walks", "02D Site Utilities" (storm, sanitary and water), "10F Fire Extinguishers".
+  [/\bcaulking\b/g, "joint sealants"], [/\bwindow systems?\b|\bwindows\b/g, "aluminum glazing"], [/\bit systems?\b/g, "low voltage"],
+  [/\bcurbs? (?:and )?gutters?\b/g, "site concrete"], [/\bsite utilities\b/g, "wet utilities"], [/\bfire extinguishers?\b/g, "specialties"],
 ];
 const said = (name: string) => SAY.reduce((s, [re, to]) => s.replace(re, to), tradeName(name));
-const words = (s: string) => new Set(s.split(" ").filter(w => w.length > 2 && !["and", "the", "site", "work"].includes(w)));
+// "Protection" and "wall" alone don't name a trade: "OH Protection" isn't Fire protection, "Acoustical Wall Panels" isn't painting.
+const words = (s: string) => new Set(s.split(" ").filter(w => w.length > 2 && !["and", "the", "site", "work", "protection", "wall", "walls"].includes(w)));
 
 /**
  * The standard trade a sheet's trade is: in the same CSI division, the one whose name shares the most words with it; the
@@ -71,6 +78,18 @@ export function matchStandardTrade(division: string, name: string): string | nul
     return [...tied].sort((a, b) => first(a.t) - first(b.t))[0].t.id;
   }
   return pool.length === 1 ? pool[0].id : null;
+}
+
+/**
+ * The standard trade a trade name names, in any division: the one whose name shares the most words with it, when one
+ * shares more than every other. For names filed under another numbering (MasterFormat 1995's "15D - Mechanical" or
+ * "16A - Electrical", lib/scope-checklist). `pool`: the trades to choose from. Null when no word decides.
+ */
+export function matchTradeByName(name: string, pool: readonly StandardTrade[] = STANDARD_TRADES): string | null {
+  if (!pool.length) return null;
+  const mine = words(said(name));
+  const scored = pool.map(t => ({ t, score: [...words(tradeName(t.name))].filter(w => mine.has(w)).length })).sort((a, b) => b.score - a.score);
+  return scored[0].score > 0 && scored[0].score > (scored[1]?.score ?? 0) ? scored[0].t.id : null;
 }
 
 /** The workbook's trade tabs (those with a Section 3 holding sections, scope lines or exclusions), each matched. */

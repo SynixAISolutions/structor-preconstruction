@@ -58,7 +58,9 @@ const fail = (message: string): never => { throw new MemoryRuleError(message); }
 
 const PROJECT = /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/;
 const SECTION = /^\d{2} \d{2} \d{2}(?:\.\d{1,2})?$/;
-export const MEMORY_LIMITS = { text: 500, detail: 1000, trades: 12, tag: 80, events: 200, sourceValue: 300 };
+// A detail holds up to 2,000 characters: a scope checklist's lead-in keeps all its sub-items there (16A Electrical's temporary
+// work lists 17, about 1,600 characters; lib/scope-checklist).
+export const MEMORY_LIMITS = { text: 500, detail: 2000, trades: 12, tag: 80, events: 200, sourceValue: 300 };
 
 /** A trade name as memory stores and matches it: "Doors, frames & hardware" → "doors frames and hardware". */
 export const tradeName = (name: string) => name.toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
@@ -109,33 +111,46 @@ export function entryApplies(entry: Pick<MemoryEntry, "status" | "projectId" | "
 /** The text of a "Not on this project" decision for an entry. */
 export const notHereText = (entry: Pick<MemoryEntry, "text">) => `Not on this project: ${entry.text}`.slice(0, MEMORY_LIMITS.text);
 
+/** An entry imported from a scope checklist (lib/scope-checklist), not from a bid form or a review. */
+export const fromChecklist = (e: Pick<MemoryEntry, "events">) => e.events.some(x => x.startsWith("checklist:"));
+
 /** The approved entries a project reads, with its overrides applied. Every reader of the memory starts here. */
 export function projectMemory(entries: MemoryEntry[], projectId: string): MemoryEntry[] {
   const live = entries.filter(e => e.status === "approved" && (!e.projectId || e.projectId === projectId));
   const own = live.filter(e => e.projectId === projectId);
   const hidden = new Set(own.map(e => e.source.overrides).filter(Boolean));
   const ownSheetTrades = new Set(own.filter(e => e.origin === "import").flatMap(e => e.trades.map(t => t.toLowerCase())));
-  const replaced = (e: MemoryEntry) => !e.projectId && e.origin === "import" && e.trades.some(t => ownSheetTrades.has(t.toLowerCase()));
+  // A scope checklist (lib/scope-checklist) is the language every project carries, so a project's own sheet doesn't replace it.
+  const replaced = (e: MemoryEntry) => !e.projectId && e.origin === "import" && !fromChecklist(e) && e.trades.some(t => ownSheetTrades.has(t.toLowerCase()));
   return live.filter(e => !hidden.has(e.id) && !replaced(e));
 }
 
 export const PACK_CHARS = 6_000;
 const byWeight = (a: MemoryEntry, b: MemoryEntry) => b.seen - a.seen || a.text.localeCompare(b.text);
+/** The contractor's bid forms and reviews before its scope checklists, then most-confirmed first. */
+const bidFormsFirst = (a: MemoryEntry, b: MemoryEntry) => Number(fromChecklist(a)) - Number(fromChecklist(b)) || byWeight(a, b);
 
 /**
  * What the AI reads before a trade's scan: the approved entries that apply, most specific first (this project's
  * decisions, this trade's rules, rules for every trade, then wording examples), each list most-confirmed first, within
- * `maxChars` (examples give way first). Empty when nothing applies, so a scan without memory reads exactly as before.
+ * `maxChars` (examples give way first). The scope checklists come last: every scan already checks each of their lines
+ * against the pages (lib/memory-check), and they are the older, general wording, so they never push the contractor's
+ * current bid forms out of the pack (Whittier Drywall, 24 Nov: their 11 exclusions put first cut the bid-form lines
+ * shown from 14 to 2, and the scan found 44 of Marcel's 69 lines against 48 to 52 before). Empty when nothing applies,
+ * so a scan without memory reads exactly as before.
  */
 export function contextPack(entries: MemoryEntry[], target: { projectId: string; code: string; name: string }, maxChars = PACK_CHARS): string {
   const apply = projectMemory(entries, target.projectId).filter(e => entryApplies(e, target));
+  const bidForms = apply.filter(e => !fromChecklist(e)), checklist = apply.filter(fromChecklist);
   const groups: [string, MemoryEntry[]][] = [
-    ["Decisions on this project", apply.filter(e => e.kind === "decision").sort(byWeight)],
-    [`Specification sections ${target.name} carries on this contractor's bid forms`, apply.filter(e => e.kind === "assignment").sort((a, b) => (a.section ?? "").localeCompare(b.section ?? ""))],
-    [`Rules for ${target.name}`, apply.filter(e => e.kind === "rule" && e.trades.length).sort(byWeight)],
-    ["Rules for every trade", apply.filter(e => e.kind === "rule" && !e.trades.length).sort(byWeight)],
-    [`Lines this contractor's bid forms give ${target.name} (scope it carries, in its words; a specific line here wins over a general exclusion of the same work)`, apply.filter(e => e.kind === "example" && e.origin === "import").sort(byWeight)],
-    [`How ${target.name} lines are worded on this contractor's bid forms`, apply.filter(e => e.kind === "example" && e.origin !== "import").sort(byWeight)],
+    ["Decisions on this project", bidForms.filter(e => e.kind === "decision").sort(byWeight)],
+    [`Specification sections ${target.name} carries on this contractor's bid forms`, bidForms.filter(e => e.kind === "assignment").sort((a, b) => (a.section ?? "").localeCompare(b.section ?? ""))],
+    [`Rules for ${target.name}`, bidForms.filter(e => e.kind === "rule" && e.trades.length).sort(byWeight)],
+    ["Rules for every trade", bidForms.filter(e => e.kind === "rule" && !e.trades.length).sort(byWeight)],
+    [`Lines this contractor's bid forms give ${target.name} (scope it carries, in its words; a specific line here wins over a general exclusion of the same work)`, bidForms.filter(e => e.kind === "example" && e.origin === "import").sort(byWeight)],
+    [`How ${target.name} lines are worded on this contractor's bid forms`, bidForms.filter(e => e.kind === "example" && e.origin !== "import").sort(byWeight)],
+    [`What ${target.name} leaves to others on this contractor's standard scope checklist (its bid forms above win)`, checklist.filter(e => e.kind === "rule").sort(byWeight)],
+    [`Lines on this contractor's standard scope checklist for ${target.name}`, checklist.filter(e => e.kind !== "rule").sort(byWeight)],
   ];
   const head = "This contractor's memory: rules and examples its estimators approved on earlier projects and reviews.";
   const lines: string[] = [head];
@@ -227,37 +242,16 @@ export function leftOut(entries: MemoryEntry[], target: { code: string; name: st
     .flatMap(e => { const m = e.text.match(/\bdoesn['’]t carry:?\s*(.+?)\.?$/i); return m ? [m[1]] : []; });
 }
 
-// ── The contractor's standard lines ─────────────────────────────────────────
-// Marcel reuses his bid-form lines from job to job (41 of Whittier's 69 Drywall lines are on Jelleff's sheet too), and
-// many aren't in any drawing or specification: LEED requirements, R-values, keying, finish coordination. The AI writes
-// only what the documents show, so these are offered on the bid form instead, for an estimator to add.
+// ── Whether a bid form already has a line ───────────────────────────────────
+// Every scan checks the contractor's lines against the project (lib/memory-check): Danial, 24 Nov, a line goes on a bid
+// form only where the project's documents support it, so nothing offers memory lines for adding by hand.
 
-/** `title`: the line as a bid-form item; a sub-bullet ("- Louvers") carries its heading, so it reads alone. */
-export type StandardLine = { text: string; title: string; group: string; sheets: string[] };
-/** The bid forms an imported line was on: the file named in each of its import events. */
-export const sheetsOf = (entry: Pick<MemoryEntry, "events" | "source">): string[] =>
-  [...new Set(entry.events.filter(e => e.startsWith("import:")).map(e => e.split(":")[1]).filter(Boolean))];
-const lineWords = (s: string) => new Set(s.toLowerCase().replace(/&/g, " and ").split(/[^a-z0-9]+/).filter(w => w.length > 2 && !["and", "the", "for", "all", "with", "per", "include", "provide", "furnish", "install"].includes(w)));
-
-/**
- * The lines this contractor's imported bid forms give a trade, for one project's bid form: the project's overrides
- * applied (projectMemory), each line once with every sheet it was on, most-repeated first, leaving out a line the form
- * already has (`existing`: its items' titles and details; most of a line's words already in one item).
- */
-export function standardLines(entries: MemoryEntry[], target: { code: string; name: string }, projectId: string, existing: string[]): StandardLine[] {
-  const have = existing.map(lineWords);
-  const covered = (text: string) => { const w = [...lineWords(text)]; return !w.length || have.some(h => w.filter(x => h.has(x)).length / w.length >= 0.8); };
-  const byText = new Map<string, StandardLine>();
-  for (const e of projectMemory(entries, projectId)) {
-    if (e.kind !== "example" || e.origin !== "import" || !e.trades.length || !entryApplies(e, { projectId, ...target })) continue;
-    const key = e.text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-    const group = e.detail.match(/^Under "(.+)"$/)?.[1] ?? "";
-    const bullet = /^[-•*]\s+/.test(e.text) && group;
-    const line = byText.get(key) ?? { text: e.text, title: bullet ? `${group.replace(/[:.]\s*$/, "")}: ${e.text.replace(/^[-•*]\s+/, "")}` : e.text, group, sheets: [] };
-    line.sheets = [...new Set([...line.sheets, ...sheetsOf(e)])];
-    byText.set(key, line);
-  }
-  return [...byText.values()].filter(l => !covered(l.text)).sort((a, b) => b.sheets.length - a.sheets.length);
+/** A line's meaningful words, for telling whether a bid form already has it (lineCovered) or a page mentions it (lib/memory-check). */
+export const lineWords = (s: string) => new Set(s.toLowerCase().replace(/&/g, " and ").split(/[^a-z0-9]+/).filter(w => w.length > 2 && !["and", "the", "for", "all", "with", "per", "include", "provide", "furnish", "install"].includes(w)));
+/** Whether a bid form already has a line: most of its words (80%) are in one of the form's items (`existing`: their titles and details). */
+export function lineCovered(text: string, existing: string[]): boolean {
+  const w = [...lineWords(text)];
+  return !w.length || existing.some(item => { const have = lineWords(item); return w.filter(x => have.has(x)).length / w.length >= 0.8; });
 }
 
 /** The longest note on shared sections a trade's scan carries, so it and the memory stay within MEMORY_REQUEST_CHARS. */
@@ -306,7 +300,7 @@ export function planMemory(entries: MemoryEntry[], projectId: string, maxChars =
   if (byTrade.size) lines.push("Trades this contractor buys, with the specification sections each carries (its own bid forms; follow this split over the general rules):",
     ...[...byTrade].sort((a, b) => a[0].localeCompare(b[0])).map(([trade, sections]) => `- ${trade}: ${[...new Set(sections)].sort().join(", ")}`));
   const rules = live.filter(e => e.kind === "rule" && e.trades.length);
-  if (rules.length) lines.push("What trades carry or leave to others:", ...rules.sort(byWeight).map(e => `- ${e.text}`));
+  if (rules.length) lines.push("What trades carry or leave to others:", ...rules.sort(bidFormsFirst).map(e => `- ${e.text}`));
   let out = lines.join("\n");
   if (out.length > maxChars) out = `${out.slice(0, maxChars - 40).replace(/\n[^\n]*$/, "")}\n(more not shown: over the length limit)`;
   return out;
