@@ -311,6 +311,13 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
   const svgPoints = (points: Point[]) => points.map(point => `${point.x * 1000},${point.y * height}`).join(" ");
   // The marked rectangle's corner handles stay about 12 px on screen at any zoom.
   const handle = 12 / Math.max(0.05, (boxRef.current?.clientWidth ?? 700) * boxZoom / 100 / 1000);
+  // The form opens on the side of the sheet away from the rectangle, so it never covers it (as laid out last).
+  const formOnLeft = (() => {
+    const b = markScope?.box, sheet = boxRef.current?.querySelector("svg")?.getBoundingClientRect(), wrap = wrapRef.current?.getBoundingClientRect();
+    return !!(b && sheet && wrap) && sheet.left + (b.x + b.width / 2) * sheet.width > wrap.left + wrap.width / 2;
+  })();
+  /** Screen pixels per drawing unit (the sheet is 1000 wide) in the drawing box, the full view, or a fixed sheet. */
+  const pxPerUnit = (inBox: boolean, full: boolean) => Math.max(0.05, ((inBox ? boxRef.current : full ? panElement.current : null)?.clientWidth ?? 700) * (inBox ? boxZoom : full ? zoom : 100) / 100 / 1000);
   const drawing = (interactive = false, inBox = false) => sourceNeeded || <svg viewBox={`0 0 1000 ${height}`} role="img" aria-label={`${page.sheet} with ${regions.length} trade regions`}
     className={interactive && trace ? "flip-tracing" : inBox && drawingBox ? "flip-drawing-box" : undefined}
     onClick={interactive && trace ? event => { const point = pointerToPage(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect()); if (point) { traceActions?.onPoint(point); panElement.current?.focus({ preventScroll: true }); } } : undefined}
@@ -319,19 +326,22 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
     onPointerUp={inBox ? markUp : undefined}
     onPointerLeave={() => setHoverPoint(null)}>
     <DrawingBackdrop page={displayPage} height={height}/>
-    <g className="flip-region-layer">{regions.map(region => {
+    <g className="flip-region-layer">{(() => { const unit = pxPerUnit(inBox, interactive); return regions.map(region => {
       const points = region.polygon.map(point => `${point.x * 1000},${point.y * height}`).join(" ");
-      // The number sits above the selected highlight only: on a sheet of dozens (Whittier A-506, 24) a badge on each one
-      // covered the printed words the highlights mark. The rest show their number on hover and in the list below.
-      const box = bounds(region.polygon);
-      const centerX = (box.x + box.width / 2) * 1000, badgeY = Math.max(16, box.y * height - 18);
+      // The selected highlight's number is a small tag at its top-left corner, just outside it, about 15 px tall at any zoom
+      // (Danial, 24 Nov: a 32-unit circle on the box's middle grew with the zoom and covered the title it marked). The rest
+      // show their number on hover and in the list below.
+      const box = bounds(region.polygon), tag = region.number.replace("R-", "");
+      const tagH = 15 / unit, tagW = (tag.length * 6.4 + 10) / unit, gap = 3 / unit;
+      const tagX = Math.min(1000 - tagW, box.x * 1000), above = box.y * height - tagH - gap;
+      const tagY = above >= 0 ? above : (box.y + box.height) * height + gap;
       const color = colors.get(region.packageId) ?? "#697b8c";
       return <g key={region.id} role={interactive && trace ? undefined : "button"} tabIndex={interactive && trace ? undefined : 0} aria-label={`${region.number}: ${region.label}`} className={`${selectedId === region.id ? "selected" : ""} ${region.status === "pending-review" ? "pending" : ""} ${region.anchor === "image" ? "approximate" : ""} ${trace?.regionId === region.id ? "trace-original" : ""}`} onClick={() => { if (clickAfterPan.current) { clickAfterPan.current = false; return; } if (!(interactive && trace)) onSelect(region.id); }} onKeyDown={event => { if (!(interactive && trace) && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onSelect(region.id); } }}>
         <title>{describe ? describe(region) : `${region.number}: ${region.label}`}</title>
         <polygon points={points} fill={`${color}30`} stroke={color}/>
-        {selectedId === region.id && <><circle cx={centerX} cy={badgeY} r="16" fill={color}/><text x={centerX} y={badgeY + 4}>{region.number.replace("R-", "")}</text></>}
+        {selectedId === region.id && <g className="flip-region-tag"><rect x={tagX} y={tagY} width={tagW} height={tagH} rx={tagH / 2} fill={color}/><text x={tagX + tagW / 2} y={tagY + tagH / 2} dominantBaseline="central" style={{ fontSize: `${9.5 / unit}px` }}>{tag}</text></g>}
       </g>;
-    })}</g>
+    }); })()}</g>
     {!trace && comparison && <polygon className="flip-previous-outline" points={svgPoints(comparison.from)} aria-label="Previous outline"/>}
     {interactive && trace && <g className="flip-trace-overlay" aria-label="New outline">
       {trace.points.length >= 3 && <polygon points={svgPoints(trace.points)}/>}
@@ -381,7 +391,7 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
         <button role="menuitem" autoFocus onClick={() => startMark(menu.point)}><Plus size={14}/>Add a scope line here</button>
         <button role="menuitem" onClick={() => setMenu(null)}>Cancel</button>
       </div>}
-      {markScope?.box && <div className="flip-mark-form">{markScope.form}</div>}
+      {markScope?.box && <div className={`flip-mark-form ${formOnLeft ? "on-left" : ""}`}>{markScope.form}</div>}
     </div>
     {isExpanded && <Modal title={`${page.sheet} · ${page.title}`} subtitle={trace ? "Redraw outline · Trace the work on the sheet." : "Scroll to zoom where you point, drag or use arrow keys to pan, double-click to zoom in. Select a region to see its scope items. Esc closes."} fullScreen onClose={() => { if (trace) traceActions?.onCancel(); else expand(false); }}>
       <div className="flip-full-content" onKeyDownCapture={event => {

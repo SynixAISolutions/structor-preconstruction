@@ -100,3 +100,14 @@
 .flip-mark-card small { color:#6b7c89; font-size:11px; }
 .flip-mark-card .flip-form-actions { display:flex; justify-content:flex-end; gap:6px; }
 @media (max-width:700px) { .flip-mark-form { right:8px; left:8px; width:auto; } .flip-box-hint { display:none; } }
+/* The form opens away from the rectangle; the zoom sits top-right, clear of the floating feedback button. */
+.flip-box-zoom { top:16px; bottom:auto; }
+.flip-mark-form { top:56px; }
+.flip-mark-form.on-left { right:auto; left:64px; }
+/* Highlight outlines stay a thin line at any zoom (24 Nov: they thickened with the zoom); the number tag is a small pill. */
+.flip-region-layer polygon { stroke-width:1.5; vector-effect:non-scaling-stroke; }
+.flip-region-layer g.pending polygon { stroke-dasharray:5 3; }
+.flip-region-layer g:hover polygon, .flip-region-layer g:focus polygon, .flip-region-layer g.selected polygon { stroke-width:2.5; filter:none; }
+.flip-region-layer g.selected polygon { stroke-dasharray:none; }
+.flip-region-layer .flip-region-tag rect { opacity:.92; }
+.flip-region-layer .flip-region-tag text { fill:#fff; font-family:Inter, Arial, sans-serif; font-weight:600; letter-spacing:.02em; }
