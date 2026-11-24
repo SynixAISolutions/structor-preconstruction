@@ -72,7 +72,8 @@ const input = job.parse({ trade: "Drywall", code: "09 29 00", document: "Manual.
 assert.throws(() => job.parse({ trade: "Drywall", document: "x", pages: [], lines: lines }), /Send 1 to 5 pages/);
 assert.throws(() => job.parse({ trade: "Drywall", document: "x", pages: pages.slice(0, 1), lines: [] }), /Send 1 to 40 lines/);
 const [system, user] = job.messages(input);
-assert(system.content.includes("Never write a line, a value or a product the pages don't support") && system.content.includes("a line already on the bid form covers the same work")
+assert(system.content.includes("Which trade carries the work comes from the contractor's line, not from the pages") && system.content.includes("a line setting a requirement")
+  && system.content.includes("Never write a line, a value or a product the pages don't support") && system.content.includes("a line already on the bid form covers the same work")
   && user.content.includes("L2. Comply with specified R-values") && user.content.includes("[[page 441]] 09 29 00") && user.content.includes("Already on this bid form from these pages (don't write this work again):\n- Tape and finish gypsum board joints to Level 4"),
   "The AI is told to write only what the pages support and the bid form doesn't have, and gets the lines, the pages and what the form has");
 const screened = job.screen({ found: [
