@@ -75,7 +75,7 @@ import { GeneralScopes } from "./general-scopes";
 import { ScopeExportButton } from "./scope-export";
 import { QuantityChip, ScopeQuantityPanel } from "./scope-quantity";
 import { AiScopeWriter } from "./ai-scope-writer";
-import { StandardLinesButton, sheetLabel } from "./standard-lines";
+import { StandardLinesButton } from "./standard-lines";
 import { ProposalWorkspace } from "./proposal-review";
 import { useLocalDraft } from "../../lib/use-local-draft";
 import { conversations, initialBidders, type Bidder } from "../../lib/data/commercial";
@@ -223,7 +223,7 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
         <div className="general-scope-tabs trade-ask-toolbar">
           <Tabs tabs={["General scope", "Detailed scope"]} value={packageView} onChange={setPackageView}/>
           <AskAboutTrade trade={activePackage.name} code={activePackage.code}/>
-          {packageView === "Detailed scope" && <StandardLinesButton projectId={projectId} pkg={activePackage} form={form} onAdd={lines => runAndNotify(run, current => lines.reduce((next, line) => addScope(next, { packageId: activePackage.id, title: line.title, detail: line.title === line.text ? line.group : "", source: `Your bid forms: ${line.sheets.map(sheetLabel).join(", ") || "imported"}`, origin: "estimator" }, CURRENT_USER), current), notify, `${lines.length} standard line${lines.length === 1 ? "" : "s"} added for review.`)}/>}
+          {packageView === "Detailed scope" && <StandardLinesButton projectId={projectId} pkg={activePackage} form={form} onAdd={lines => runAndNotify(run, current => lines.reduce((next, line) => addScope(next, { packageId: activePackage.id, ...line, origin: "estimator" }, CURRENT_USER), current), notify, `${lines.length} standard line${lines.length === 1 ? "" : "s"} added for review.`)}/>}
         </div>
         {packageView === "General scope" ? <GeneralScopePanel key={activePackage.id} projectId={projectId} state={state} pkg={activePackage} run={run} by={CURRENT_USER} notify={notify}/> : <>
         <div className="ui-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search this bid form…"/><Button onClick={approveAll}><CheckCheck size={15}/>Approve visible form</Button></div>

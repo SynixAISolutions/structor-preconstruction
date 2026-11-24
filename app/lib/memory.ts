@@ -58,7 +58,9 @@ const fail = (message: string): never => { throw new MemoryRuleError(message); }
 
 const PROJECT = /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/;
 const SECTION = /^\d{2} \d{2} \d{2}(?:\.\d{1,2})?$/;
-export const MEMORY_LIMITS = { text: 500, detail: 1000, trades: 12, tag: 80, events: 200, sourceValue: 300 };
+// A detail holds up to 2,000 characters: a scope checklist's lead-in keeps all its sub-items there (16A Electrical's temporary
+// work lists 17, about 1,600 characters; lib/scope-checklist).
+export const MEMORY_LIMITS = { text: 500, detail: 2000, trades: 12, tag: 80, events: 200, sourceValue: 300 };
 
 /** A trade name as memory stores and matches it: "Doors, frames & hardware" → "doors frames and hardware". */
 export const tradeName = (name: string) => name.toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
@@ -115,7 +117,8 @@ export function projectMemory(entries: MemoryEntry[], projectId: string): Memory
   const own = live.filter(e => e.projectId === projectId);
   const hidden = new Set(own.map(e => e.source.overrides).filter(Boolean));
   const ownSheetTrades = new Set(own.filter(e => e.origin === "import").flatMap(e => e.trades.map(t => t.toLowerCase())));
-  const replaced = (e: MemoryEntry) => !e.projectId && e.origin === "import" && e.trades.some(t => ownSheetTrades.has(t.toLowerCase()));
+  // A scope checklist (lib/scope-checklist) is the language every project carries, so a project's own sheet doesn't replace it.
+  const replaced = (e: MemoryEntry) => !e.projectId && e.origin === "import" && !e.events.some(x => x.startsWith("checklist:")) && e.trades.some(t => ownSheetTrades.has(t.toLowerCase()));
   return live.filter(e => !hidden.has(e.id) && !replaced(e));
 }
 
@@ -237,7 +240,13 @@ export type StandardLine = { text: string; title: string; group: string; sheets:
 /** The bid forms an imported line was on: the file named in each of its import events. */
 export const sheetsOf = (entry: Pick<MemoryEntry, "events" | "source">): string[] =>
   [...new Set(entry.events.filter(e => e.startsWith("import:")).map(e => e.split(":")[1]).filter(Boolean))];
-const lineWords = (s: string) => new Set(s.toLowerCase().replace(/&/g, " and ").split(/[^a-z0-9]+/).filter(w => w.length > 2 && !["and", "the", "for", "all", "with", "per", "include", "provide", "furnish", "install"].includes(w)));
+/** A line's meaningful words, for telling whether a bid form already has it (lineCovered) or a page mentions it (lib/memory-check). */
+export const lineWords = (s: string) => new Set(s.toLowerCase().replace(/&/g, " and ").split(/[^a-z0-9]+/).filter(w => w.length > 2 && !["and", "the", "for", "all", "with", "per", "include", "provide", "furnish", "install"].includes(w)));
+/** Whether a bid form already has a line: most of its words (80%) are in one of the form's items (`existing`: their titles and details). */
+export function lineCovered(text: string, existing: string[]): boolean {
+  const w = [...lineWords(text)];
+  return !w.length || existing.some(item => { const have = lineWords(item); return w.filter(x => have.has(x)).length / w.length >= 0.8; });
+}
 
 /**
  * The lines this contractor's imported bid forms give a trade, for one project's bid form: the project's overrides
@@ -245,11 +254,12 @@ const lineWords = (s: string) => new Set(s.toLowerCase().replace(/&/g, " and ").
  * already has (`existing`: its items' titles and details; most of a line's words already in one item).
  */
 export function standardLines(entries: MemoryEntry[], target: { code: string; name: string }, projectId: string, existing: string[]): StandardLine[] {
-  const have = existing.map(lineWords);
-  const covered = (text: string) => { const w = [...lineWords(text)]; return !w.length || have.some(h => w.filter(x => h.has(x)).length / w.length >= 0.8); };
+  const covered = (text: string) => lineCovered(text, existing);
   const byText = new Map<string, StandardLine>();
   for (const e of projectMemory(entries, projectId)) {
     if (e.kind !== "example" || e.origin !== "import" || !e.trades.length || !entryApplies(e, { projectId, ...target })) continue;
+    // A scope checklist's line is offered with its checklist, in order (lib/scope-checklist tradeChecklists).
+    if (e.events.some(x => x.startsWith("checklist:"))) continue;
     const key = e.text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
     const group = e.detail.match(/^Under "(.+)"$/)?.[1] ?? "";
     const bullet = /^[-•*]\s+/.test(e.text) && group;
