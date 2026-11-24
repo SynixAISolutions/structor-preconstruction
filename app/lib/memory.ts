@@ -111,6 +111,9 @@ export function entryApplies(entry: Pick<MemoryEntry, "status" | "projectId" | "
 /** The text of a "Not on this project" decision for an entry. */
 export const notHereText = (entry: Pick<MemoryEntry, "text">) => `Not on this project: ${entry.text}`.slice(0, MEMORY_LIMITS.text);
 
+/** An entry imported from a scope checklist (lib/scope-checklist), not from a bid form or a review. */
+export const fromChecklist = (e: Pick<MemoryEntry, "events">) => e.events.some(x => x.startsWith("checklist:"));
+
 /** The approved entries a project reads, with its overrides applied. Every reader of the memory starts here. */
 export function projectMemory(entries: MemoryEntry[], projectId: string): MemoryEntry[] {
   const live = entries.filter(e => e.status === "approved" && (!e.projectId || e.projectId === projectId));
@@ -118,27 +121,36 @@ export function projectMemory(entries: MemoryEntry[], projectId: string): Memory
   const hidden = new Set(own.map(e => e.source.overrides).filter(Boolean));
   const ownSheetTrades = new Set(own.filter(e => e.origin === "import").flatMap(e => e.trades.map(t => t.toLowerCase())));
   // A scope checklist (lib/scope-checklist) is the language every project carries, so a project's own sheet doesn't replace it.
-  const replaced = (e: MemoryEntry) => !e.projectId && e.origin === "import" && !e.events.some(x => x.startsWith("checklist:")) && e.trades.some(t => ownSheetTrades.has(t.toLowerCase()));
+  const replaced = (e: MemoryEntry) => !e.projectId && e.origin === "import" && !fromChecklist(e) && e.trades.some(t => ownSheetTrades.has(t.toLowerCase()));
   return live.filter(e => !hidden.has(e.id) && !replaced(e));
 }
 
 export const PACK_CHARS = 6_000;
 const byWeight = (a: MemoryEntry, b: MemoryEntry) => b.seen - a.seen || a.text.localeCompare(b.text);
+/** The contractor's bid forms and reviews before its scope checklists, then most-confirmed first. */
+const bidFormsFirst = (a: MemoryEntry, b: MemoryEntry) => Number(fromChecklist(a)) - Number(fromChecklist(b)) || byWeight(a, b);
 
 /**
  * What the AI reads before a trade's scan: the approved entries that apply, most specific first (this project's
  * decisions, this trade's rules, rules for every trade, then wording examples), each list most-confirmed first, within
- * `maxChars` (examples give way first). Empty when nothing applies, so a scan without memory reads exactly as before.
+ * `maxChars` (examples give way first). The scope checklists come last: every scan already checks each of their lines
+ * against the pages (lib/memory-check), and they are the older, general wording, so they never push the contractor's
+ * current bid forms out of the pack (Whittier Drywall, 24 Nov: their 11 exclusions put first cut the bid-form lines
+ * shown from 14 to 2, and the scan found 44 of Marcel's 69 lines against 48 to 52 before). Empty when nothing applies,
+ * so a scan without memory reads exactly as before.
  */
 export function contextPack(entries: MemoryEntry[], target: { projectId: string; code: string; name: string }, maxChars = PACK_CHARS): string {
   const apply = projectMemory(entries, target.projectId).filter(e => entryApplies(e, target));
+  const bidForms = apply.filter(e => !fromChecklist(e)), checklist = apply.filter(fromChecklist);
   const groups: [string, MemoryEntry[]][] = [
-    ["Decisions on this project", apply.filter(e => e.kind === "decision").sort(byWeight)],
-    [`Specification sections ${target.name} carries on this contractor's bid forms`, apply.filter(e => e.kind === "assignment").sort((a, b) => (a.section ?? "").localeCompare(b.section ?? ""))],
-    [`Rules for ${target.name}`, apply.filter(e => e.kind === "rule" && e.trades.length).sort(byWeight)],
-    ["Rules for every trade", apply.filter(e => e.kind === "rule" && !e.trades.length).sort(byWeight)],
-    [`Lines this contractor's bid forms give ${target.name} (scope it carries, in its words; a specific line here wins over a general exclusion of the same work)`, apply.filter(e => e.kind === "example" && e.origin === "import").sort(byWeight)],
-    [`How ${target.name} lines are worded on this contractor's bid forms`, apply.filter(e => e.kind === "example" && e.origin !== "import").sort(byWeight)],
+    ["Decisions on this project", bidForms.filter(e => e.kind === "decision").sort(byWeight)],
+    [`Specification sections ${target.name} carries on this contractor's bid forms`, bidForms.filter(e => e.kind === "assignment").sort((a, b) => (a.section ?? "").localeCompare(b.section ?? ""))],
+    [`Rules for ${target.name}`, bidForms.filter(e => e.kind === "rule" && e.trades.length).sort(byWeight)],
+    ["Rules for every trade", bidForms.filter(e => e.kind === "rule" && !e.trades.length).sort(byWeight)],
+    [`Lines this contractor's bid forms give ${target.name} (scope it carries, in its words; a specific line here wins over a general exclusion of the same work)`, bidForms.filter(e => e.kind === "example" && e.origin === "import").sort(byWeight)],
+    [`How ${target.name} lines are worded on this contractor's bid forms`, bidForms.filter(e => e.kind === "example" && e.origin !== "import").sort(byWeight)],
+    [`What ${target.name} leaves to others on this contractor's standard scope checklist (its bid forms above win)`, checklist.filter(e => e.kind === "rule").sort(byWeight)],
+    [`Lines on this contractor's standard scope checklist for ${target.name}`, checklist.filter(e => e.kind !== "rule").sort(byWeight)],
   ];
   const head = "This contractor's memory: rules and examples its estimators approved on earlier projects and reviews.";
   const lines: string[] = [head];
@@ -288,7 +300,7 @@ export function planMemory(entries: MemoryEntry[], projectId: string, maxChars =
   if (byTrade.size) lines.push("Trades this contractor buys, with the specification sections each carries (its own bid forms; follow this split over the general rules):",
     ...[...byTrade].sort((a, b) => a[0].localeCompare(b[0])).map(([trade, sections]) => `- ${trade}: ${[...new Set(sections)].sort().join(", ")}`));
   const rules = live.filter(e => e.kind === "rule" && e.trades.length);
-  if (rules.length) lines.push("What trades carry or leave to others:", ...rules.sort(byWeight).map(e => `- ${e.text}`));
+  if (rules.length) lines.push("What trades carry or leave to others:", ...rules.sort(bidFormsFirst).map(e => `- ${e.text}`));
   let out = lines.join("\n");
   if (out.length > maxChars) out = `${out.slice(0, maxChars - 40).replace(/\n[^\n]*$/, "")}\n(more not shown: over the length limit)`;
   return out;
