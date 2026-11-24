@@ -1,5 +1,5 @@
 import { acceptDraft, ExtractionRuleError, type Draft, type ExtractionRun, type ExtractionState, type RegionDraft, type ReviewRecords } from "./extraction";
-import { linkScope } from "./drawing-flip";
+import { approveRegion, linkScope } from "./drawing-flip";
 import { addScope, applyScopeToAllTrades, approveScope, combinePackages, type Procurement } from "./procurement";
 
 export type GeneralScope = { id: string; title: string; detail: string; source: string };
@@ -37,7 +37,8 @@ export function regionsForScope(extraction: ExtractionState, scopeId: string): R
 
 /**
  * Approves a bid-form line and places its highlights on Drawing Flip, linked to it (Danial, 28 Oct: an approved line's
- * "Drawing region" proposals stayed behind in the list). A highlight whose sheet isn't on Drawing Flip stays for review.
+ * "Drawing region" proposals stayed behind in the list), approving the ones already there. A highlight whose sheet isn't
+ * on Drawing Flip stays for review.
  */
 export function approveWithRegions(records: ReviewRecords, scopeId: string, by: string, at = new Date().toISOString()): ReviewRecords {
   let next: ReviewRecords = { ...records, procurement: records.procurement.scopes.find(s => s.id === scopeId)?.status === "approved" ? records.procurement : approveScope(records.procurement, scopeId, by, at) };
@@ -49,6 +50,8 @@ export function approveWithRegions(records: ReviewRecords, scopeId: string, by: 
       if (regionId && !next.flip.regions.find(r => r.id === regionId)?.scopeIds.includes(scopeId)) next = { ...next, flip: linkScope(next.flip, next.procurement, regionId, scopeId, by, at) };
     } catch (error) { if (!(error instanceof ExtractionRuleError)) throw error; }
   }
+  // Highlights already on Drawing Flip for this line (lib/extraction placeHighlights) are approved with it.
+  for (const region of next.flip.regions) if (region.status === "pending-review" && region.scopeIds.includes(scopeId)) next = { ...next, flip: approveRegion(next.flip, region.id, by, at) };
   return next;
 }
 

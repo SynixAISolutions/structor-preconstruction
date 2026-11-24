@@ -65,6 +65,27 @@ assert.throws(()=>S.addGeneralScopes({...review.procurement,packages:[]},general
   const kept = S.approveWithRegions(noSheet, line.id, "Marcel Khoury");
   assert.equal(kept.procurement.scopes.find(s => s.id === line.id).status, "approved");
   assert.equal(S.inlineDrafts(kept.extraction.drafts, "drywall").filter(d => d.runId === run).length, 2);
+
+  // Danial, 24 Nov: the highlights go on Drawing Flip without waiting for each line's approval (Whittier: 837 drawn, 47 shown).
+  const shown = E.placeHighlights({ ...base, extraction: added.extraction, procurement: added.procurement }, run, "2026-10-28T10:06:00.000Z");
+  assert.deepEqual([shown.placed, shown.noPage], [2, 0]);
+  const onFlip = shown.extraction.drafts.filter(d => d.runId === run && d.kind === "region").map(d => shown.flip.regions.find(r => r.id === d.acceptedId));
+  assert.ok(onFlip.every(r => r && r.status === "pending-review" && r.origin === "ai" && r.packageId === "drywall" && r.scopeIds.includes(line.id)), "Each is a Structor proposal in its trade, awaiting review, linked to its line");
+  assert.ok(onFlip.every(r => r.evidence.includes("LOCKERS / CHANGE")), "It carries the words it was drawn on");
+  assert.equal(S.inlineDrafts(shown.extraction.drafts, "drywall").filter(d => d.runId === run && d.kind === "region").length, 0, "It now lives on Drawing Flip, not in the list");
+  assert.equal(E.placeHighlights(shown, run).placed, 0, "Placing again adds nothing");
+  const lineApproved = S.approveWithRegions(shown, line.id, "Marcel Khoury", "2026-10-28T11:00:00.000Z");
+  assert.ok(onFlip.every(r => lineApproved.flip.regions.find(x => x.id === r.id).status === "approved") && lineApproved.flip.regions.length === shown.flip.regions.length, "Approving the line approves its highlights there, adding none");
+  const missing = E.placeHighlights(noSheet, run);
+  assert.deepEqual([missing.placed, missing.noPage], [0, 2], "A highlight on a sheet Drawing Flip doesn't have stays waiting");
+  // A line accepted after its highlight was placed is linked to it then.
+  const pendingRun = E.recordRun(base.extraction, base.procurement, { ...input, startedAt: "2026-10-29T10:00:00.000Z", finishedAt: "2026-10-29T10:05:00.000Z" });
+  const later = E.placeHighlights({ ...base, extraction: pendingRun }, pendingRun.runs.at(-1).id);
+  const scopeDraft = later.extraction.drafts.find(d => d.runId === pendingRun.runs.at(-1).id && d.kind === "scope");
+  const regionDraft = later.extraction.drafts.find(d => d.runId === pendingRun.runs.at(-1).id && d.kind === "region" && d.scopeDraftIds.includes(scopeDraft.id));
+  assert.deepEqual(later.flip.regions.find(r => r.id === regionDraft.acceptedId).scopeIds, [], "Its line isn't in the bid form yet");
+  const acceptedLater = E.acceptDraft(later, scopeDraft.id, "Marcel Khoury");
+  assert.deepEqual(acceptedLater.flip.regions.find(r => r.id === regionDraft.acceptedId).scopeIds, [acceptedLater.extraction.drafts.find(d => d.id === scopeDraft.id).acceptedId], "Accepting the line links it to the highlight already placed");
 }
 // Combining trades moves what the AI found for the trade removed: its waiting findings, the runs that read it, its highlights.
 {
@@ -91,4 +112,4 @@ assert.throws(()=>S.addGeneralScopes({...review.procurement,packages:[]},general
   assert.equal(S.newestRun(drafts, runs), "new");
   assert.equal(S.newestRun([d("s1", "sample")], runs), null, "The illustrative sample is never new");
 }
-console.log('Meeting scope checks passed: inline accept/move/reject/delete, approving a line places its highlights, audit, drawing unlinking, all-trade requirements and idempotency, combining trades.');
+console.log('Meeting scope checks passed: inline accept/move/reject/delete, approving a line places its highlights, the AI highlights placed on Drawing Flip before approval, audit, drawing unlinking, all-trade requirements and idempotency, combining trades.');

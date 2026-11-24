@@ -8,7 +8,7 @@
 // replace it), and reloads from inside the app ask with our own (askToLeave).
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { addRunToBidForms, recordRun, type ExtractionState } from "./extraction";
+import { addRunToBidForms, placeHighlights, recordRun, type ExtractionState } from "./extraction";
 import { addPage, DrawingFlipRuleError, type DrawingFlipState } from "./drawing-flip";
 import { addPackage, type Procurement } from "./procurement";
 import { drawingRegister, specificationSections, type StoredDocument } from "./project-files";
@@ -331,9 +331,13 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
         const input = { ...outcome.input, notes: { failures: outcome.failures.map(f => `${f.section} · pages ${f.pages}: ${f.error}`), screening: outcome.dropped.map(d => `${d.what}: ${d.reason}`) } };
         // Read the latest copies now: the team may have changed the bid forms while the AI read.
         const extraction = recordRun(readDraft<ExtractionState>(projectId, "extraction", sampleExtraction), readDraft<Procurement>(projectId, "procurement", sampleProcurement), input);
-        const added = addRunToBidForms({ extraction, procurement: readDraft<Procurement>(projectId, "procurement", sampleProcurement) }, extraction.runs.at(-1)!.id);
-        writeDraft(projectId, "extraction", added.extraction);
+        const runId = extraction.runs.at(-1)!.id;
+        const added = addRunToBidForms({ extraction, procurement: readDraft<Procurement>(projectId, "procurement", sampleProcurement) }, runId);
+        // Its highlights go on Drawing Flip in the trade's colour, awaiting review there, linked to the lines just added.
+        const shown = placeHighlights({ ...added, flip: readDraft<DrawingFlipState>(projectId, "drawing-flip", sampleDrawingFlip) }, runId);
+        writeDraft(projectId, "extraction", shown.extraction);
         writeDraft(projectId, "procurement", added.procurement);
+        if (shown.placed) writeDraft(projectId, "drawing-flip", shown.flip);
         const failed = !!outcome.input.error && !outcome.input.drafts.length;
         const notes = [outcome.failures.length ? `${outcome.failures.length} request(s) failed.` : "", added.held ? `${added.held} held back: the words they quote aren't printed on the sheet.` : ""].filter(Boolean).join(" ");
         setTrade(pkg.id, { status: failed ? "failed" : "done", added: added.added, note: outcome.input.error ?? notes }, { added: run.added + added.added, duplicates: run.duplicates + added.duplicates });

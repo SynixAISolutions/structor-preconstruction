@@ -68,3 +68,6 @@
 .flip-owner-select { max-width:100%; padding:4px 8px; border:1px solid var(--line); border-radius:6px; background:var(--paper); color:var(--ink); font:inherit; }
 .flip-approximate-note { color:#9a5b12; }
 .flip-pan { overscroll-behavior:contain; }
+/* "Only sheets with highlights" sits in the sheet toolbar, at the toolbar text size (24 Nov). */
+.flip-toolbar .flip-only-marked { font-size:11px; color:#425466; align-self:center; }
+.flip-place-panel .ui-button { margin-top:4px; }

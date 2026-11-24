@@ -2,7 +2,7 @@
 
 import { useCallback, useRef } from "react";
 import { sampleExtraction } from "./data/extraction";
-import { acceptDraft, ExtractionRuleError, type ExtractionState } from "./extraction";
+import { acceptDraft, ExtractionRuleError, placeHighlights, type ExtractionState } from "./extraction";
 import { useDrawingFlip } from "./use-drawing-flip";
 import { useLocalDraft } from "./use-local-draft";
 import { useProcurement } from "./use-procurement";
@@ -78,6 +78,17 @@ export function useExtraction() {
     }
   }, [setExtraction, runProcurement, runFlip]);
 
+  /** Puts every highlight the AI drew that is still waiting on Drawing Flip, awaiting review there (lib/extraction placeHighlights). */
+  const placeAllHighlights = useCallback((): { placed: number; noPage: number } => {
+    const next = placeHighlights(latest.current);
+    if (next.placed) {
+      latest.current = { extraction: next.extraction, procurement: next.procurement, flip: next.flip };
+      setExtraction(next.extraction);
+      runFlip(() => next.flip);
+    }
+    return { placed: next.placed, noPage: next.noPage };
+  }, [setExtraction, runFlip]);
+
   /** Combines one trade into another in the bid forms, the AI's waiting findings, Drawing Flip and the AI's drawing references (lib/scope-review combineTrades). */
   const combine = useCallback((fromId: string, toId: string, by: string): string | null => {
     try {
@@ -94,5 +105,5 @@ export function useExtraction() {
     }
   }, [setExtraction, runProcurement, runFlip]);
 
-  return { extraction, procurement, runProcurement, flip, runFlip, run, accept, removeScope, approveScopeItem, combine };
+  return { extraction, procurement, runProcurement, flip, runFlip, run, accept, removeScope, approveScopeItem, combine, placeAllHighlights };
 }

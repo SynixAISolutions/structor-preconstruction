@@ -48,8 +48,8 @@ import {
   type RegionOrigin,
   type RegionStatus, onPrintedWords } from "../../lib/drawing-flip";
 import { displayDate } from "../../lib/format";
-import { useDrawingFlip } from "../../lib/use-drawing-flip";
-import { useProcurement } from "../../lib/use-procurement";
+import { useExtraction } from "../../lib/use-extraction";
+import type { useProcurement } from "../../lib/use-procurement";
 import { editPackage } from "../../lib/procurement";
 import { loadProjects, sampleProjectRecords } from "../../lib/projects";
 import { getActiveProjectId } from "../../lib/project-scope";
@@ -297,9 +297,13 @@ function RegionEditor({ packages, errors, onClose, onSave }: { packages: ReturnT
 }
 
 export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProps) {
-  const { state, run } = useDrawingFlip();
-  const { state: procurement, run: runProcurement } = useProcurement();
+  // One copy of the records: placing the AI's highlights writes the review findings and Drawing Flip together.
+  const { flip: state, runFlip: run, procurement, runProcurement, extraction, placeAllHighlights } = useExtraction();
   const { documents } = useProjectDocuments();
+  /** Flip through the sheets that carry highlights only (Marcel, 18 Nov: each trade's scope highlighted per page, Next and Previous). */
+  const [onlyMarked, setOnlyMarked] = useState(true);
+  /** Highlights the AI drew while reading that aren't on Drawing Flip yet (lib/extraction placeHighlights). */
+  const waiting = useMemo(() => extraction.drafts.filter(d => d.kind === "region" && d.status === "pending-review" && !d.removed).length, [extraction.drafts]);
   const [fullPage,setFullPage] = useState(false);
   const [trace, setTrace] = useState<Trace | null>(null);
   const [comparison, setComparison] = useState<{ regionId: string; event: Extract<FlipRegion["history"][number], { kind: "redrawn" }> } | null>(null);
@@ -328,9 +332,11 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
   const [regionEditor, setRegionEditor] = useState(false);
   const [errors, setErrors] = useState<DrawingFlipErrors>({});
 
-  const page = state.pages.find(item => item.id === pageId) ?? state.pages[0];
-  const activePageId = page?.id ?? "";
   const [showGuesses, setShowGuesses] = useState(false);
+  const marked = useMemo(() => new Set(state.regions.filter(r => showGuesses || onPrintedWords(r)).map(r => r.pageId)), [state.regions, showGuesses]);
+  const flipPages = onlyMarked && marked.size ? state.pages.filter(p => marked.has(p.id)) : state.pages;
+  const page = state.pages.find(item => item.id === pageId) ?? flipPages[0] ?? state.pages[0];
+  const activePageId = page?.id ?? "";
   const guesses = state.regions.filter(r => r.pageId === activePageId && !onPrintedWords(r)).length;
   const visible = useMemo(() => filterRegions(state, procurement, {
     pageId: activePageId,
@@ -341,7 +347,7 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
     corrected: filters.corrected || undefined,
   }).filter(region => (showGuesses || onPrintedWords(region)) && (!owner || procurement.packages.find(pkg => pkg.id === region.packageId)?.owner === owner)), [state, procurement, activePageId, filters, owner, showGuesses]);
   const selected = visible.find(item => item.id === regionId) ?? visible[0] ?? null;
-  const pageIndex = Math.max(0, state.pages.findIndex(item => item.id === activePageId));
+  const pageIndex = Math.max(0, flipPages.findIndex(item => item.id === activePageId));
   const summary = flipSummary(state);
   const pageSummary = flipSummary(state, activePageId);
   const hasRegionFilters = Boolean(filters.query.trim() || filters.packageId || filters.status || filters.origin || filters.corrected || owner);
@@ -408,22 +414,29 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
       setResult(found);setProgress(`${found.regions.length} regions found · Awaiting review${abort.current.signal.aborted?" · Stopped":""}`);
     }catch(error){setProgress(error instanceof Error?error.message:"Finding scopes failed. Try again.");}finally{setLocating(false);}
   }
-  function movePage(next: number) { const target = state.pages[(next + state.pages.length) % state.pages.length]; if (target) { setPageId(target.id); setRegionId(""); } }
+  function movePage(next: number) { const target = flipPages[(next + flipPages.length) % flipPages.length]; if (target) { setPageId(target.id); setRegionId(""); } }
+  function placeHighlights() {
+    const { placed, noPage } = placeAllHighlights();
+    if (placed) { setOnlyMarked(true); setPageId(""); setRegionId(""); }
+    notify(placed ? `${placed} highlight${placed === 1 ? "" : "s"} placed on the drawings, each in its trade's colour, awaiting your review.${noPage ? ` ${noPage} are on sheets not stored in Project files.` : ""}` : noPage ? `The ${noPage} waiting highlights are on sheets not stored in Project files.` : "No highlights are waiting.");
+  }
 
   if (!state.pages.length) return <div className="flip-view"><PageHeader eyebrow={`${projectName} / Scope coordination`} title="Drawing Flip" description="Flip through drawing pages, assign every marked region to a trade, and connect it to the bid scope." actions={<Button variant="primary" onClick={() => setPageEditor(true)}><FilePlus2 size={16}/>Add drawing page</Button>}/><Panel><Empty title="No drawing pages in this project" description="Add the first sheet, then mark estimator regions or import Structor proposals for contractor review." action={<Button variant="primary" onClick={() => setPageEditor(true)}>Add first page</Button>}/></Panel><PreviewNote>Drawing Flip stores page references and normalized regions with the project. It does not extract drawings in the demo.</PreviewNote>{pageEditor && <PageEditor errors={errors} onClose={() => { setPageEditor(false); setErrors({}); }} onSave={draft => { if (act(current => addPage(current, { ...draft, pageNumber: Number(draft.pageNumber) }), "Drawing page added.")) setPageEditor(false); }}/>}</div>;
 
-  const pickerPages=state.pages.filter(p=>`${p.sheet} ${p.title}`.toLowerCase().includes(sheetQuery.toLowerCase()));
+  const pickerPages=flipPages.filter(p=>`${p.sheet} ${p.title}`.toLowerCase().includes(sheetQuery.toLowerCase()));
   const disciplines=[...new Set(pickerPages.map(p=>p.discipline||"Other"))];
   const fullDetail=selected?<><h3>{selected.number} · {selected.label}</h3><p>{selectedPackage?.name}</p><p>Confidence: {selected.confidence===null?"Estimator reviewed":`${Math.round(selected.confidence*100)}% · Verify on sheet`}</p><p>{selected.evidence}</p><RedrawOutlineButton onClick={startRedraw}/><h4>Linked scope items</h4>{linkedScopes.length?linkedScopes.map(s=><article key={s.id}><strong>{s.title}</strong><p>{s.detail}</p><small>{s.source}</small></article>):<p>No scope items linked.</p>}{selected.status==="pending-review"&&<Button onClick={()=>act(s=>approveRegion(s,selected.id,CURRENT_USER),"Region approved.")}>Approve trade assignment</Button>}<Button onClick={()=>{setFullPage(false);setMode("regions");}}>Review assignment & notes</Button>{history}</>:<p>Select a region to see its scope items.</p>;
   return <div className="flip-view">
     <PageHeader eyebrow={`${projectName} / Scope coordination`} title="Drawing Flip" description="Review every trade region on the drawings, correct Structor's assignments, and confirm where each scope item lives." actions={<><Button onClick={() => navigate("scopes")}><ListFilter size={16}/>Scopes & bid forms</Button><Button onClick={() => setPageEditor(true)}><FilePlus2 size={16}/>Add page</Button><Button variant="primary" onClick={() => setRegionEditor(true)}><Plus size={16}/>Mark region</Button></>}/>
+    {waiting > 0 && <Panel className="flip-place-panel" title={`${waiting} highlight${waiting === 1 ? "" : "s"} from the AI's scope readings ${waiting === 1 ? "isn't" : "aren't"} on the drawings yet`} subtitle="Each one marks the printed words a bid-form line was read from, in its trade's colour, linked to that line. They go on as Structor proposals for you to approve or correct here."><Button variant="primary" onClick={placeHighlights}><LocateFixed size={16}/>Show them on the drawings</Button></Panel>}
     <Stats items={[{ label: "Drawing pages", value: state.pages.length, detail: `${summary.regions} mapped regions` }, { label: "Approved regions", value: summary.approved, detail: `${summary.corrected} trade correction${summary.corrected === 1 ? "" : "s"} retained`, tone: "green" }, { label: "Awaiting review", value: summary.pendingReview, detail: "Contractor decision required", tone: summary.pendingReview ? "orange" : "green" }, { label: "Unlocated scope", value: missing.length, detail: "Items without a drawing region", tone: missing.length ? "orange" : "green" }]}/>
 
     <Panel className="flip-find-panel" title="Find scope on drawings" subtitle="Choose a trade. Marks are AI proposals; check their confidence and position on the original sheet."><div className="flip-ai-controls"><label className="ui-field">Trade<select value={locateTrade} disabled={locating} onChange={e=>{setLocateTrade(e.target.value);setResult(null);setProgress("");}}><option value="">Choose trade…</option>{procurement.packages.map(p=><option key={p.id} value={p.id}>{p.name} · {missing.filter(s=>s.packageId===p.id||s.allTrades).length} unlocated</option>)}</select></label><Button variant="primary" disabled={locating||!locateTrade||!missing.some(s=>s.packageId===locateTrade||s.allTrades)} onClick={()=>void findOnDrawings()}>Find on drawings</Button>{locating&&<Button onClick={()=>abort.current?.abort()}>Stop reading</Button>}</div>{progress&&<p role="status">{progress}</p>}{result&&<div className="flip-ai-results">{!result.regions.length&&<p>No usable marks found. Check the sheet yourself.</p>}{result.regions.map((r,i)=><p key={i}>{state.pages.find(p=>p.id===r.pageId)?.sheet} · {r.label} · {Math.round((r.confidence??0)*100)}% · Awaiting review</p>)}{result.dropped.map((d,i)=><p key={`d-${i}`}>Not marked: {d.what} · {d.reason}</p>)}{result.failures.map((f,i)=><p role="alert" key={`f-${i}`}>{f.sheet}: {f.error}</p>)}</div>}</Panel>
     <div className="flip-toolbar ui-panel">
       <label className="flip-sheet-select flip-sheet-search"><span>Search sheets</span><input type="search" value={sheetQuery} onChange={e=>setSheetQuery(e.target.value)} placeholder="Number or title"/></label>
+      {marked.size > 0 && <label className="flip-corrected flip-only-marked"><input type="checkbox" checked={onlyMarked} onChange={event => { setOnlyMarked(event.target.checked); setRegionId(""); }}/>Only sheets with highlights ({marked.size})</label>}
       <label className="flip-sheet-select"><span>Drawing sheet · {pickerPages.length} of {state.pages.length}</span><select value={activePageId} onChange={event=>{setPageId(event.target.value);setRegionId("");}}>{!pickerPages.some(p=>p.id===activePageId)&&<option value={activePageId}>{page.sheet} · Current sheet</option>}{disciplines.map(d=><optgroup key={d} label={`${d} (${pickerPages.filter(p=>(p.discipline||"Other")===d).length})`}>{pickerPages.filter(p=>(p.discipline||"Other")===d).map(p=><option key={p.id} value={p.id}>{p.sheet} · {p.title} · {state.regions.filter(r=>r.pageId===p.id).length} regions</option>)}</optgroup>)}</select>{!pickerPages.length&&<small role="status">No sheets match.</small>}</label>
-      <div className="flip-page-nav"><button aria-label="Previous drawing" onClick={() => movePage(pageIndex - 1)}><ArrowLeft size={16}/></button><span>{pageIndex + 1} / {state.pages.length}</span><button aria-label="Next drawing" onClick={() => movePage(pageIndex + 1)}><ArrowRight size={16}/></button></div>
+      <div className="flip-page-nav"><button aria-label="Previous drawing" onClick={() => movePage(pageIndex - 1)}><ArrowLeft size={16}/></button><span>{pageIndex + 1} / {flipPages.length}</span><button aria-label="Next drawing" onClick={() => movePage(pageIndex + 1)}><ArrowRight size={16}/></button></div>
       <div className="flip-page-meta"><strong>{page.discipline} · Revision {page.revision || "—"}</strong><span>{page.documentName} · PDF page {page.pageNumber}</span></div>
       <Badge tone={pageSummary.pendingReview ? "orange" : "green"}>{pageSummary.pendingReview ? `${pageSummary.pendingReview} to review` : !pageSummary.regions ? "No regions" : "Page reviewed"}</Badge>
     </div>
