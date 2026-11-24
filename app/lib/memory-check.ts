@@ -11,8 +11,12 @@
 import { entryApplies, lineCovered, lineWords, projectMemory, type MemoryEntry } from "./memory";
 import type { DraftInput } from "./extraction";
 
-/** One of the trade's lines from memory: its id for the answer, its wording, and its detail (a lead-in's items). */
-export type MemoryLine = { id: string; text: string; detail: string };
+/**
+ * One of the trade's lines from memory: its id for the answer, its wording, and its detail (a lead-in's items).
+ * `focus`: what the line is about, when that is narrower than its wording: a bullet's own item ("Toilet accessories"
+ * under "Receive, Unload, Catalogue, Store and Install Only"), which decides the pages it is looked for on.
+ */
+export type MemoryLine = { id: string; text: string; detail: string; focus?: string };
 /** A page the trade's reading read: its file, page, text, and where it is ("09 29 00", or the sheet "A-501"). */
 export type CheckPage = { document: string; page: number; text: string; where: string; sheet: string | null };
 /** One AI request: some pages of one file, the lines that point at them, and what the bid form already has for them. */
@@ -27,10 +31,25 @@ export const CHECK_LIMITS = { pages: 5, chars: 50_000, pageChars: 15_000, lines:
 const GENERIC = new Set(["work", "contract", "documents", "document", "required", "requirements", "indicated", "shown", "specified", "subcontractor",
   "subcontractors", "contractor", "contractors", "project", "including", "include", "includes", "accordance", "materials", "material", "items", "item",
   "complete", "provided", "providing", "installation", "installed", "following", "other", "others", "trade", "trades", "shall", "this", "that", "from",
-  "are", "any", "where", "such", "each", "within", "under", "into", "only", "per", "not", "under", "related", "applicable", "necessary", "drawings", "specifications"]);
+  "are", "any", "where", "such", "each", "within", "under", "into", "only", "per", "not", "related", "applicable", "necessary", "drawings", "specifications",
+  "but", "limited", "also"]);
 /** "R-values" is one word, not "r" and "values" (and "r" is too short to count). */
 const joinTerms = (s: string) => s.replace(/\br\s*-?\s*values?\b/gi, "rvalue");
-const keyWords = (s: string) => new Set([...lineWords(joinTerms(s))].filter(w => !GENERIC.has(w)));
+/** One form for singular and plural: "markerboards" is "markerboard", "accessories" is "accessory". */
+const singular = (w: string) => w.length > 4 && w.endsWith("ies") ? `${w.slice(0, -3)}y` : w.length > 3 && w.endsWith("s") && !/(ss|us|is)$/.test(w) ? w.slice(0, -1) : w;
+const keyWords = (s: string) => new Set([...lineWords(joinTerms(s))].filter(w => !GENERIC.has(w)).map(singular));
+/** How often each key word is on a page: a page about wood doors says "wood door" many times, a door hardware page once. */
+const wordCounts = (s: string) => {
+  const counts = new Map<string, number>();
+  for (const w of joinTerms(s).toLowerCase().replace(/&/g, " and ").split(/[^a-z0-9]+/)) {
+    if (w.length <= 2 || GENERIC.has(w)) continue;
+    const x = singular(w);
+    counts.set(x, (counts.get(x) ?? 0) + 1);
+  }
+  return counts;
+};
+/** How much a heading's words count next to the item's own, when ranking a bullet's pages. */
+const CONTEXT_WEIGHT = 0.3;
 
 /**
  * The lines the contractor's memory gives a trade on a project (its overrides applied, lib/memory projectMemory): the
@@ -54,7 +73,7 @@ export function tradeLines(entries: MemoryEntry[], target: { code: string; name:
     if (!bullet) kept.push(text);
     // A checklist lead-in's items are the line; a bid sheet line's heading is context.
     const detail = group ? (bullet ? "" : `On the bid form under "${group}"`) : e.detail.slice(0, 600);
-    out.push({ id: `L${out.length + 1}`, text, detail });
+    out.push({ id: `L${out.length + 1}`, text, detail, ...(bullet && group ? { focus: e.text.replace(/^[-•*]\s+/, "") } : {}) });
   }
   return out;
 }
@@ -71,7 +90,8 @@ const EXISTING_PER_REQUEST = 40;
  * this project's pages calls for them.
  */
 export function planLineCheck(lines: MemoryLine[], pages: CheckPage[], existing: ExistingLine[]): { requests: LineCheckRequest[]; checked: number; covered: number; unplaced: MemoryLine[] } {
-  const words = pages.map(p => keyWords(p.text));
+  const counts = pages.map(p => wordCounts(p.text));
+  const words = counts.map(c => new Set(c.keys()));
   // A word on few pages says more than one on most ("parapet" over "gypsum"): each shared word counts by its rarity.
   const df = new Map<string, number>();
   for (const w of words) for (const x of w) df.set(x, (df.get(x) ?? 0) + 1);
@@ -82,11 +102,17 @@ export function planLineCheck(lines: MemoryLine[], pages: CheckPage[], existing:
   let covered = 0;
   for (const line of lines) {
     if (lineCovered(line.text, written)) { covered++; continue; }
-    const mine = [...keyWords(`${line.text} ${line.detail}`)];
+    // What the line is about decides the pages; a bullet's heading only helps rank them ("Toilet accessories", not
+    // "receive, unload, catalogue, store", which every installed product's pages share).
+    const mine = [...keyWords(line.focus ?? `${line.text} ${line.detail}`)];
+    const context = line.focus ? [...keyWords(`${line.text} ${line.detail}`)].filter(x => !mine.includes(x)) : [];
     if (!mine.length) { unplaced.push(line); continue; }
     const need = mine.length <= 2 ? mine.length : Math.min(5, Math.max(2, Math.ceil(mine.length * 0.4)));
-    const best = words.map((w, i) => { const shared = mine.filter(x => w.has(x)); return { i, count: shared.length, score: shared.reduce((n, x) => n + weight(x), 0) }; })
-      .filter(s => s.count >= need).sort((a, b) => b.score - a.score || a.i - b.i).slice(0, CHECK_LIMITS.pagesPerLine);
+    const best = words.map((w, i) => {
+      const shared = mine.filter(x => w.has(x));
+      const score = shared.reduce((n, x) => n + weight(x) * (1 + Math.log(counts[i].get(x) ?? 1)), 0) + CONTEXT_WEIGHT * context.filter(x => w.has(x)).reduce((n, x) => n + weight(x), 0);
+      return { i, count: shared.length, score };
+    }).filter(s => s.count >= need).sort((a, b) => b.score - a.score || a.i - b.i).slice(0, CHECK_LIMITS.pagesPerLine);
     if (!best.length) { unplaced.push(line); continue; }
     for (const { i } of best) placed.set(i, [...(placed.get(i) ?? []), line]);
   }

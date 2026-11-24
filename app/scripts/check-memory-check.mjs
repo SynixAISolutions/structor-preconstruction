@@ -57,6 +57,24 @@ assert.deepEqual(plan.requests.map(r => [r.document, r.pages.map(p => p.page), r
 const ranked = K.planLineCheck([{ id: "R", text: "Comply with specified R-values at gypsum board partitions", detail: "" }],
   [page("M.pdf", 1, "gypsum board partitions gypsum board", "09 29 00"), page("M.pdf", 2, "gypsum board partitions", "09 29 00"), page("M.pdf", 3, "gypsum board partitions", "09 29 00"), page("M.pdf", 9, "Insulation R-value R-13 in partitions", "07 21 00")], []);
 assert.deepEqual(ranked.requests.flatMap(r => r.pages.map(p => p.page)), [1, 9], "Pages ranked by their rarer shared words");
+// A bullet is looked for by its own item: the heading's words ("receive, unload, catalogue, store") are on every
+// installed product's pages, so they only break ties. Plurals count as one word; a page about the item says it often.
+const R = 'Under "Receive, Unload, Catalogue, Store, and Install Only the following items"';
+const bullets = K.tradeLines([entry({ text: "- Toilet accessories", detail: R }), entry({ text: "- Markerboards, tackboards", detail: R }), entry({ text: "- Wood doors", detail: R })], dw, "p1");
+assert.deepEqual(bullets.map(l => [l.text, l.focus]), [
+  ["Receive, Unload, Catalogue, Store, and Install Only the following items: Toilet accessories", "Toilet accessories"],
+  ["Receive, Unload, Catalogue, Store, and Install Only the following items: Markerboards, tackboards", "Markerboards, tackboards"],
+  ["Receive, Unload, Catalogue, Store, and Install Only the following items: Wood doors", "Wood doors"],
+], "A bullet reads with its heading and is looked for by its item");
+const product = [
+  page("M.pdf", 700, "Door hardware: receive, unload, catalogue and store hardware; wood door and hollow metal door hardware sets.", "08 71 00"),
+  page("M.pdf", 719, "FLUSH WOOD DOORS. Wood doors, five-ply. Factory-finished wood doors. Install wood doors per WDMA.", "08 14 16"),
+  page("M.pdf", 1049, "VISUAL DISPLAY UNITS. Porcelain-enamel markerboard; vinyl-fabric tackboard.", "10 11 00"),
+  page("M.pdf", 1089, "TOILET ACCESSORIES. Grab bars, mirrors and toilet accessories; install accessories plumb and level.", "10 28 00"),
+];
+const pagesOf = focus => K.planLineCheck(bullets.filter(l => l.focus === focus), product, []).requests.flatMap(r => r.pages.map(p => p.page));
+assert.deepEqual([pagesOf("Toilet accessories"), pagesOf("Markerboards, tackboards"), pagesOf("Wood doors")], [[1089], [1049], [700, 719]],
+  "Each item on its own pages (markerboards on the markerboard page), not only on the hardware page that shares the heading's words");
 const none = K.planLineCheck([{ id: "L9", text: "Provide seismic bracing for ceiling grids.", detail: "" }], pages, []);
 assert.deepEqual([none.requests.length, none.unplaced.map(l => l.id)], [0, ["L9"]], "A line no page mentions costs no AI request: nothing on this project calls for it");
 // Five pages a request at most, 40 lines at most.
