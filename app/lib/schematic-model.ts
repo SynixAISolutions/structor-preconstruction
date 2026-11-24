@@ -21,7 +21,10 @@ import { borrowArrows, groupFlights, planFlights, type Flight } from "./stair-de
 import { hexagonTags, planColumns, planGlazing, planPartitions, planRailings, planWalls } from "./wall-detection";
 
 export type Point = [number, number];
-export type SchematicRoom = { name: string; number: string; at: Point };
+export type PlanSource = { documentId: string; sheet: string; page: number };
+export type SchematicPlanArea = { source: PlanSource; frame: Frame; offset: Point; outline?: Point[] };
+type SourcedPlanElement = { planArea?: number };
+export type SchematicRoom = SourcedPlanElement & { name: string; number: string; at: Point };
 export type SchematicLevel = {
   id: string; name: string; order: number;
   /** Feet above the lowest level, and floor-to-floor height. */
@@ -31,7 +34,10 @@ export type SchematicLevel = {
   /** Footprint in feet, x right, y down as on the plan. */
   outline: Point[];
   rooms: SchematicRoom[];
-  source: { documentId: string; sheet: string; page: number };
+  source: PlanSource;
+  /** Area sheets joined in the level's shared coordinates. Area 0 uses the primary outline. */
+  planAreas?: SchematicPlanArea[];
+  unplacedPlans?: PlanSource[];
   /** How the size was found: the printed scale, or the building area. */
   sizing: string;
   /**
@@ -66,22 +72,22 @@ export type SchematicLevel = {
  */
 export type SchematicStair = { flights: { a: Point; b: Point; width: number; risers: number; arrow: "a" | "b" | null }[]; excluded?: boolean };
 /** A run of glass from a to b, in feet; `type` from the plan's storefront/window tags (SF-10). */
-export type SchematicGlazing = { a: Point; b: Point; type?: string | null; excluded?: boolean; elevationDetail?: DimensionSource };
+export type SchematicGlazing = SourcedPlanElement & { a: Point; b: Point; type?: string | null; excluded?: boolean; elevationDetail?: DimensionSource };
 /**
  * An operable partition from a to b, in feet, or a guardrail when `kind` is "railing". Kept apart from the walls: each is bought
  * and built as its own item, and has no wall type. Both divide the rooms either side.
  */
-export type SchematicPartition = { a: Point; b: Point; thickness: number; kind?: "railing"; excluded?: boolean };
+export type SchematicPartition = SourcedPlanElement & { a: Point; b: Point; thickness: number; kind?: "railing"; excluded?: boolean };
 /** A column at `at`, in feet, with its sides and the angle of `width` in radians. */
-export type SchematicColumn = { at: Point; width: number; depth: number; angle: number; excluded?: boolean };
+export type SchematicColumn = SourcedPlanElement & { at: Point; width: number; depth: number; angle: number; excluded?: boolean };
 /** A wall centerline from a to b with its thickness, in feet; `type` is its partition type from the plan's tags. */
-export type SchematicWall = { a: Point; b: Point; thickness: number; type?: string | null; /** The type was set by the estimator for untagged walls, not read from a tag. */ typeSet?: boolean; /** Corrected by the estimator on this wall. */ edited?: boolean; /** Marked by the estimator as not a wall (kept so it can be restored). */ excluded?: boolean };
+export type SchematicWall = SourcedPlanElement & { a: Point; b: Point; thickness: number; type?: string | null; /** The type was set by the estimator for untagged walls, not read from a tag. */ typeSet?: boolean; /** Corrected by the estimator on this wall. */ edited?: boolean; /** Marked by the estimator as not a wall (kept so it can be restored). */ excluded?: boolean };
 /**
  * A door opening from a to b, its leaves' hinges and where each leaf swings open to, in feet. "compartment"
  * is a toilet stall's door: toilet partitions, not the door schedule. `thickness` is the host wall's, for the
  * header above the opening.
  */
-export type SchematicDoor = { a: Point; b: Point; width: number; leaves: number; hinges: Point[]; openTo: Point[]; kind: "door" | "compartment"; thickness: number; number?: string | null; basis?: "tagged-gap"; scheduledSize?: SourcedDoorSize };
+export type SchematicDoor = SourcedPlanElement & { a: Point; b: Point; width: number; leaves: number; hinges: Point[]; openTo: Point[]; kind: "door" | "compartment"; thickness: number; number?: string | null; basis?: "tagged-gap"; scheduledSize?: SourcedDoorSize };
 
 /**
  * Tiles over a plan's area for reading its tags: about `paperPt` points square on the sheet (small enough
@@ -168,18 +174,43 @@ export function levelOfTitle(title: string): number | null {
   return word === undefined ? null : ORDINALS[word];
 }
 
-/** One architectural floor plan per level, lowest first (the first such sheet in the set wins). */
-export function levelPlanSheets<T extends Pick<RegisterRow, "sheet" | "title" | "discipline">>(register: T[]): { level: number; row: T }[] {
-  const out = new Map<number, T>();
+/** Multiple area sheets form a single floor. An overview is only used when no detail plan is listed. */
+export function levelPlanSheets<T extends Pick<RegisterRow, "sheet" | "title" | "discipline">>(register: T[]): { level: number; row: T; areas?: T[] }[] {
+  const byLevel = new Map<number, T[]>();
   for (const row of register) {
-    const t = row.title.toUpperCase();
-    const compact = compactFloorPlanTitle(t);
+    const title = row.title.toUpperCase();
+    const compact = compactFloorPlanTitle(title);
     const architectural = row.discipline === "Architectural" || (row.discipline === "Landscape" && compact?.sheet === row.sheet.toUpperCase());
-    if (!architectural || (!compact && !/FLOOR PLAN|LEVEL\s*0?\d+\s*-?\s*PLAN/.test(t)) || NOT_A_FLOOR_PLAN.test(t)) continue;
-    const level = levelOfTitle(t);
-    if (level !== null && !out.has(level)) out.set(level, row);
+    if (!architectural || (!compact && !/FLOOR PLAN|AREA PLAN|LEVEL\s*0?\d+\s*-?\s*PLAN/.test(title)) || NOT_A_FLOOR_PLAN.test(title)) continue;
+    const level = levelOfTitle(title);
+    if (level === null) continue;
+    const rows = byLevel.get(level);
+    if (rows) rows.push(row);
+    else byLevel.set(level, [row]);
   }
-  return [...out.entries()].sort((a, b) => a[0] - b[0]).map(([level, row]) => ({ level, row }));
+  return [...byLevel.entries()].sort((a, b) => a[0] - b[0]).map(([level, rows]) => {
+    const parts = new Map<string, T>();
+    for (const row of rows) {
+      const part = floorPlanArea(row.title);
+      if (part && !parts.has(part)) parts.set(part, row);
+    }
+    const detail = rows.find(row => !floorPlanArea(row.title) && !/\bOVERALL\b/i.test(row.title));
+    if (detail) return { level, row: detail };
+    const [row, ...areas] = [...parts.values()];
+    return areas.length ? { level, row, areas } : { level, row: row ?? rows[0] };
+  });
+}
+
+export function floorPlanArea(title: string): string | null {
+  return /\b(?:AREA|PART)\s+([A-Z]|\d{1,2}|[A-Z]\d{1,2})(?=\s|[-–—]|$)/i.exec(title)?.[1].toUpperCase() ?? null;
+}
+
+export function levelFootprints(level: SchematicLevel): Point[][] {
+  return [level.outline, ...(level.planAreas ?? []).flatMap(area => area.outline ? [area.outline] : [])];
+}
+
+export function planSource(level: SchematicLevel, area = 0): PlanSource {
+  return level.planAreas?.[area]?.source ?? level.source;
 }
 
 /** The current sheets likely to show level elevations, highest priority first. */
@@ -218,6 +249,28 @@ export function feetPerInch(text: string): number | null {
 }
 
 export const polygonArea = (pts: Point[]) => Math.abs(pts.reduce((s, [x, y], i) => { const [nx, ny] = pts[(i + 1) % pts.length]; return s + x * ny - nx * y; }, 0)) / 2;
+
+export function openOutline(points: Point[]): Point[] {
+  const first = points[0], last = points.at(-1);
+  return points.length > 3 && first[0] === last![0] && first[1] === last![1] ? points.slice(0, -1) : points;
+}
+
+export function edgesIntersect(a: Point, b: Point, c: Point, d: Point): boolean {
+  const cross = (p: Point, q: Point, r: Point) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+  const overlap = (axis: 0 | 1) => Math.max(Math.min(a[axis], b[axis]), Math.min(c[axis], d[axis])) <=
+    Math.min(Math.max(a[axis], b[axis]), Math.max(c[axis], d[axis]));
+  return overlap(0) && overlap(1) && cross(a, b, c) * cross(a, b, d) <= 0 && cross(c, d, a) * cross(c, d, b) <= 0;
+}
+export function footprintValid(points: Point[]): boolean {
+  points = openOutline(points);
+  if (points.length < 3 || points.some(p => !p.every(Number.isFinite)) || polygonArea(points) < 1) return false;
+  for (let i = 0; i < points.length; i++) for (let j = i + 1; j < points.length; j++) {
+    if (j === i + 1 || i === 0 && j === points.length - 1) continue;
+    const a = points[i], b = points[(i + 1) % points.length], c = points[j], d = points[(j + 1) % points.length];
+    if (edgesIntersect(a, b, c, d)) return false;
+  }
+  return true;
+}
 
 /**
  * A level's outline and rooms in feet, from 0–1 image positions. With a scale the page size gives
@@ -489,8 +542,17 @@ export function consensusMarkers(readings: Marker[][], weights: number[] = []): 
 export function levelName(level: number): string { return level === 0 ? "Basement" : `Level ${String(level).padStart(2, "0")}`; }
 
 /** Moves one outline point (a correction); the result keeps every other value. */
-export function moveOutlinePoint(model: SchematicModel, levelId: string, index: number, to: Point): SchematicModel {
-  return { ...model, levels: model.levels.map(l => l.id !== levelId || !l.outline[index] || !to.every(Number.isFinite) ? l : { ...l, outline: l.outline.map((p, i) => i === index ? to : p) }) };
+export function moveOutlinePoint(model: SchematicModel, levelId: string, index: number, to: Point, areaIndex = 0): SchematicModel {
+  if (!to.every(Number.isFinite)) return model;
+  return { ...model, levels: model.levels.map(level => {
+    if (level.id !== levelId) return level;
+    const area = level.planAreas?.[areaIndex];
+    const outline = areaIndex ? area?.outline : level.outline;
+    if (!outline?.[index]) return level;
+    const moved = outline.map((point, i) => i === index ? to : point);
+    if (!areaIndex) return { ...level, outline: moved };
+    return { ...level, planAreas: level.planAreas?.map((area, i) => i === areaIndex ? { ...area, outline: moved } : area) };
+  }) };
 }
 
 /** Sets a level's floor-to-floor height and moves the levels above it. */

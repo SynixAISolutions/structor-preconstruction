@@ -11,7 +11,7 @@ const { printedSectionDatums, resolveSectionDatums } = await import("../lib/sect
 const { doorScheduleSheets, matchDoorSizes, printedDoorSizes } = await import("../lib/door-schedule-dimensions.ts");
 const { glazingDetailSheets, glazingDetailSource, printedGlazingReferences } = await import("../lib/glazing-detail-references.ts");
 
-// Levels from plan titles; one architectural floor plan per level.
+// Levels from architectural plan titles.
 assert.equal(M.levelOfTitle("LEVEL 01 - FIRST FLOOR PLAN"), 1);
 assert.equal(M.levelOfTitle("SECOND FLOOR PLAN"), 2);
 assert.equal(M.levelOfTitle("3RD FLOOR PLAN"), 3);
@@ -23,7 +23,7 @@ const reg = [
   ["M101", "LEVEL 01 - HVAC PLAN", "Mechanical"], ["A1.1B", "LEVEL 01 - FIRST FLOOR PLAN - PART B", "Architectural"],
   ["A4.1", "EXTERIOR ELEVATIONS", "Architectural"], ["A5.1", "BUILDING SECTIONS", "Architectural"],
 ].map(([sheet, title, discipline]) => ({ sheet, title, discipline }));
-assert.deepEqual(M.levelPlanSheets(reg).map(p => [p.level, p.row.sheet]), [[1, "A1.1"], [2, "A1.2"]], "Enlarged, RCP, finish, MEP and roof plans are not floor plans; the first plan per level wins");
+assert.deepEqual(M.levelPlanSheets(reg).map(p => [p.level, p.row.sheet]), [[1, "A1.1"], [2, "A1.2"]], "Enlarged, RCP, finish, MEP and roof plans are not floor plans; a complete plan covers a level with only one area supplement");
 assert.deepEqual(compactFloorPlanFromText("Scale 1:50 @ A3\nFloor plan L0\nSheet 1 of 4"), { sheet: "L0", level: 0, title: "Floor plan L0" });
 assert.equal(compactFloorPlanFromText("See floor plan L0\nFloor plan LP"), null);
 assert.equal(compactFloorPlanFromText("Floor plan L0\nFloor plan L1"), null, "Several views do not identify a single floor plan");
@@ -33,6 +33,61 @@ assert.deepEqual(M.levelPlanSheets([
   { sheet: "L2", title: "Landscape plan", discipline: "Landscape" },
   { sheet: "L3", title: "Floor plan L4", discipline: "Landscape" },
 ]).map(p => [p.level, p.row.sheet]), [[0, "L0"], [1, "L1"]]);
+const { alignPlanDrawings, planRegistration } = await import("../lib/schematic-plan-alignment.ts");
+const { assembleFloorPlans } = await import("../lib/schematic-plan-areas.ts");
+const areaRows = [
+  { sheet: "A-100", title: "FLOOR PLAN - OVERALL - LEVEL 01", discipline: "Architectural" },
+  { sheet: "A-111A", title: "AREA PLAN - LEVEL 01 - AREA A", discipline: "Architectural" },
+  { sheet: "A-111B", title: "FLOOR PLAN - LEVEL 01 - AREA B", discipline: "Architectural" },
+  { sheet: "A-112A", title: "FLOOR PLAN - LEVEL 02 - AREA A", discipline: "Architectural" },
+  { sheet: "A-112B", title: "FLOOR PLAN - LEVEL 02 - AREA B", discipline: "Architectural" },
+];
+assert.deepEqual(M.levelPlanSheets(areaRows).map(({ level, row, areas }) => [level, row.sheet, ...(areas ?? []).map(area => area.sheet)]),
+  [[1, "A-111A", "A-111B"], [2, "A-112A", "A-112B"]], "Two area plans take priority over the overview and belong to one level");
+
+const line = (a, b, width = .72) => ({ a, b, width, color: "#000000" });
+const overlap = Array.from({ length: 12 }, (_, i) => [
+  line([188, 42 + i * 13], [210 + i * 2, 42 + i * 13]),
+  line([200 + i * 5, 31 + i * 11], [200 + i * 5, 56 + i * 13]),
+]).flat();
+const dashes = Array.from({ length: 14 }, (_, i) => line([225, 24 + i * 25], [225, 40 + i * 25], .9));
+const mark = { text: "MATCHLINE", a: [235, 100], b: [235, 60], height: 9 };
+const shift = ([x, y]) => [x - 180, y + 36];
+const left = planRegistration([...dashes, ...overlap], [mark], 8);
+const right = planRegistration([...dashes, ...overlap].map(s => ({ ...s, a: shift(s.a), b: shift(s.b) })),
+  [{ ...mark, a: shift(mark.a), b: shift(mark.b) }], 8);
+const joined = alignPlanDrawings(left, right);
+assert.ok(joined?.matches >= 10);
+assert.ok(Math.abs(joined.offset[0] - 20) < .001 && Math.abs(joined.offset[1] + 4) < .001,
+  "Scale and two-axis position are established by shared vectors");
+assert.equal(alignPlanDrawings(left, { ...right, strokes: [] }), null, "A matchline alone cannot prove the along-line position");
+const makeArea = (area, registration, outline, walls, rooms = []) => ({
+  area, registration, flights: { arriving: [], rising: [] },
+  level: { id: "L1", name: "Level 01", order: 1, elevation: 0, height: 14, outline, walls, rooms,
+    source: { sheet: "A-111" + area, documentId: "d", page: area === "A" ? 1 : 2 },
+    frame: { widthFeet: 60, heightFeet: 60 }, sizing: "Printed scale, 8 ft per inch" },
+});
+const A = makeArea("A", left, [[0, 0], [26, 0], [26, 44], [0, 44]],
+  [{ a: [17, 25], b: [28, 25], thickness: .5 }]);
+const D = makeArea("B", right, [[4, 4], [32, 4], [32, 48], [4, 48]],
+  [{ a: [4, 29], b: [28, 29], thickness: .5 }], [{ name: "GYM", number: "102", at: [15, 20] }]);
+const assembled = assembleFloorPlans([A, D]);
+assert.equal(assembled.level.planAreas.length, 2);
+assert.equal(M.planSource(assembled.level, assembled.level.walls[1].planArea).sheet, "A-111B");
+assert.ok(Math.abs(assembled.level.walls[0].b[0] - 25) < .00001 && Math.abs(assembled.level.walls[1].a[0] - 25) < .00001,
+  "Both walls meet at the same drawn matchline");
+assert.ok(Math.abs(assembled.level.rooms[0].at[0] - 35) < .001);
+assert.ok(Math.abs(assembled.level.rooms[0].at[1] - 16) < .001, "Room tags move with the source plan");
+assert.ok(Math.abs(M.levelFootprints(assembled.level).reduce((n, ring) => n + M.polygonArea(ring), 0) - 52 * 44) < .001,
+  "Each source contributes only the footprint on its side of the matchline");
+const moved = M.moveOutlinePoint({ levels: [assembled.level], warnings: [], builtAt: "" }, "L1", 0, [25, 2], 1).levels[0];
+assert.deepEqual(moved.planAreas[1].outline[0], [25, 2]);
+assert.deepEqual(moved.outline, assembled.level.outline, "Only the selected area's outline is corrected");
+const unresolved = assembleFloorPlans([A, { ...D, registration: null }]);
+assert.deepEqual(unresolved.level.walls, A.level.walls, "Unproven positioning leaves the primary plan untouched");
+assert.equal(unresolved.level.unplacedPlans[0].sheet, "A-111B");
+assert.match(unresolved.warnings[0], /needs plan alignment/);
+
 assert.equal(M.heightSheet(reg).sheet, "A5.1", "Building sections before exterior elevations");
 assert.equal(M.heightSheet(reg.filter(r => r.sheet !== "A5.1")).sheet, "A4.1");
 assert.equal(M.heightSheet([]), null);

@@ -1,15 +1,13 @@
 import * as THREE from "three";
 import { isSportsFloor } from "./schematic-scene";
-import { polygonArea, type Point, type SchematicLevel } from "../../lib/schematic-model";
+import { edgesIntersect, footprintValid, openOutline, polygonArea, type Point, type SchematicLevel } from "../../lib/schematic-model";
 import { inside, insideRoom, type Room } from "../../lib/room-detection";
 import { stairPieces } from "../../lib/stair-detection";
 import { layerColor, layerGap, layerSlabs, openedCenter, type WallLayer } from "../../lib/wall-assemblies";
 
+export { footprintValid, openOutline } from "../../lib/schematic-model";
+
 export type SheetFrame = { width: number; height: number };
-export function openOutline(points: Point[]): Point[] {
-  const first = points[0], last = points.at(-1);
-  return points.length > 3 && first[0] === last![0] && first[1] === last![1] ? points.slice(0, -1) : points;
-}
 export function printedSheetFrame(sizing: string, widthIn: number, heightIn: number): SheetFrame | null {
   const scale = Number(sizing.match(/^Printed scale, ([\d.]+) ft per inch$/)?.[1]);
   return scale > 0 && widthIn > 0 && heightIn > 0 ? { width: widthIn * scale, height: heightIn * scale } : null;
@@ -22,22 +20,6 @@ export function alignSheetFrame(point: Point, fraction: Point): SheetFrame {
 }
 export function sheetPoint(fraction: Point, frame: SheetFrame): Point {
   return fraction.map((f, i) => Math.round(Math.max(0, Math.min(1, f)) * (i ? frame.height : frame.width) * 10) / 10) as Point;
-}
-function edgesIntersect(a: Point, b: Point, c: Point, d: Point): boolean {
-  const cross = (p: Point, q: Point, r: Point) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
-  const overlap = (axis: 0 | 1) => Math.max(Math.min(a[axis], b[axis]), Math.min(c[axis], d[axis])) <=
-    Math.min(Math.max(a[axis], b[axis]), Math.max(c[axis], d[axis]));
-  return overlap(0) && overlap(1) && cross(a, b, c) * cross(a, b, d) <= 0 && cross(c, d, a) * cross(c, d, b) <= 0;
-}
-export function footprintValid(points: Point[]): boolean {
-  points = openOutline(points);
-  if (points.length < 3 || points.some(p => !p.every(Number.isFinite)) || polygonArea(points) < 1) return false;
-  for (let i = 0; i < points.length; i++) for (let j = i + 1; j < points.length; j++) {
-    if (j === i + 1 || i === 0 && j === points.length - 1) continue;
-    const a = points[i], b = points[(i + 1) % points.length], c = points[j], d = points[(j + 1) % points.length];
-    if (edgesIntersect(a, b, c, d)) return false;
-  }
-  return true;
 }
 export function schematicShape(level: SchematicLevel) {
   if (!footprintValid(level.outline)) throw new Error(`${level.name}: correct the outline's crossing edges or collapsed footprint before viewing it in 3D.`);

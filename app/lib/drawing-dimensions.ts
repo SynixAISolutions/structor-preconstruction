@@ -17,3 +17,24 @@ export function drawingLengthFeet(raw: string): number | null {
   const inches = text.endsWith('"') && !/\/\s*0+\s*"$/.test(text) ? parseInches(text) : null;
   return inches === null ? null : inches / 12;
 }
+
+export type DrawingTextRun = { text: string; a: [number, number]; b: [number, number]; height: number };
+type PdfTextItem = { str?: string; transform?: number[]; width?: number; height?: number };
+type PdfViewport = { convertToViewportPoint: (x: number, y: number) => number[] };
+
+/** Preserve the baseline direction, including vertical notes and dimensions. The viewport is at scale 1. */
+export function drawingTextRuns(items: readonly (PdfTextItem | { type: string })[], viewport: PdfViewport): DrawingTextRun[] {
+  const runs: DrawingTextRun[] = [];
+  for (const item of items) {
+    if (!("str" in item)) continue;
+    const text = item.str?.trim();
+    if (!text || !item.transform || !item.width) continue;
+    const [x, y, c, d, left, bottom] = item.transform;
+    const length = Math.hypot(x, y);
+    if (!length) continue;
+    const a = viewport.convertToViewportPoint(left, bottom) as DrawingTextRun["a"];
+    const b = viewport.convertToViewportPoint(left + x * item.width / length, bottom + y * item.width / length) as DrawingTextRun["b"];
+    runs.push({ text, a, b, height: item.height || Math.hypot(c, d) });
+  }
+  return runs;
+}

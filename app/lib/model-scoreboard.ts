@@ -6,6 +6,7 @@
 //   - rooms: each room's tag in a closed space of its own (a shared or open space means a wall or door is missing)
 // Pure; scripts/score-model.mjs runs it on a real PDF. It never changes the model.
 
+import { drawingLengthFeet, type DrawingTextRun } from "./drawing-dimensions";
 import type { Point, Segment } from "./plan-vectors";
 import { faces, inside } from "./room-detection";
 
@@ -100,6 +101,33 @@ export function parseDimension(text: string): number | null {
   return inches !== null && inches < 12 ? inches / 12 : null;
 }
 
+/** Match a printed value to the ticks by its location and orientation. The measured length is never a matching input. */
+export function dimensionLabels(spans: DimensionSpan[], text: DrawingTextRun[]): string[] {
+  const labels = text.filter(run => (drawingLengthFeet(run.text) ?? 0) > 0);
+  const reads = spans.map((span, index) => {
+    const [a, b] = span.a[0] > span.b[0] + .01 || Math.abs(span.a[0] - span.b[0]) <= .01 && span.a[1] < span.b[1]
+      ? [span.b, span.a] : [span.a, span.b];
+    const length = dist(a, b), ux = (b[0] - a[0]) / length, uy = (b[1] - a[1]) / length;
+    const matches = labels.flatMap(label => {
+      const x = (label.a[0] + label.b[0] - a[0] - b[0]) / 2, y = (label.a[1] + label.b[1] - a[1] - b[1]) / 2;
+      const along = x * ux + y * uy, across = y * ux - x * uy;
+      if (Math.abs(along) > Math.min(9, Math.max(3, label.height * .85)) || across < -1.4 * label.height || across > .25 * label.height) return [];
+      const dx = label.b[0] - label.a[0], dy = label.b[1] - label.a[1];
+      if ((dx * ux + dy * uy) / dist(label.a, label.b) < .98) return [];
+      return [{ label, distance: Math.abs(along) + Math.abs(across) / 3, index }];
+    }).sort((a, b) => a.distance - b.distance);
+    const best = matches[0], conflict = matches.find(match => match.label.text !== best?.label.text);
+    return best && (!conflict || conflict.distance - best.distance > .6) ? [best] : [];
+  }).flat();
+  const printed = spans.map(() => "");
+  for (const choices of Map.groupBy(reads, read => read.label).values()) {
+    choices.sort((a, b) => a.distance - b.distance);
+    const [best, next] = choices;
+    if (!next || next.distance - best.distance > .6) printed[best.index] = best.label.text;
+  }
+  return printed;
+}
+
 export type DimensionScore = {
   spans: number; read: number; agree: number; medianDiffInches: number | null;
   /** Readings more than half an inch from the measured length: a misread number, or a real difference to look at. */
@@ -109,7 +137,7 @@ export type DimensionScore = {
 export function scoreDimensions(spans: DimensionSpan[], printed: string[]): DimensionScore {
   const diffs: number[] = [], disagree: DimensionScore["disagree"] = [];
   spans.forEach((span, i) => {
-    const printedFeet = parseDimension(printed[i] ?? "");
+    const printedFeet = drawingLengthFeet(printed[i] ?? "") ?? parseDimension(printed[i] ?? "");
     if (printedFeet === null) return;
     const diffInches = Math.abs(printedFeet - span.feet) * 12;
     diffs.push(diffInches);
@@ -433,7 +461,7 @@ export function scoreRoomShapes(zones: { room: string; name?: string; points: Po
 
 export type LevelScore = {
   sheet: string; walls: { count: number; feet: number }; wallWeight: number | null;
-  dimensions: DimensionScore; faces: FaceScore; lines: LineScore; doors: DoorScore | null; rooms: RoomScore | null;
+  dimensions: DimensionScore; printedSources?: { pdf: number; ocr: number }; faces: FaceScore; lines: LineScore; doors: DoorScore | null; rooms: RoomScore | null;
   wallFlags: WallFlagScore; glass: GlassScore;
   /** Operable partitions and guardrails read. No key: nothing lists them, so a person checks them on the overlay. */
   partitions: { a: Point; b: Point; kind?: "railing" }[];
@@ -454,8 +482,9 @@ export function scoreboardReport(levels: LevelScore[], title = "Drawings to 3D s
   const line = (cells: string[]) => `| ${cells.join(" | ")} |`;
   const out = [`# ${title}`, "", line(["Check", ...levels.map(l => l.sheet)]), line(["---", ...levels.map(() => "---")])];
   const row = (name: string, cell: (l: LevelScore) => string) => out.push(line([name, ...levels.map(cell)]));
-  row("Printed values OCR read that match the measured length (within 1/2 in)", l => pct(l.dimensions.agree, l.dimensions.read));
-  row("Dimensions found / values OCR could read", l => `${l.dimensions.spans} / ${l.dimensions.read}`);
+  row("Printed values matching the measured length (within 1/2 in)", l => pct(l.dimensions.agree, l.dimensions.read));
+  row("Dimension spans / values read", l => `${l.dimensions.spans} / ${l.dimensions.read}`);
+  if (levels.some(level => level.printedSources)) row("Values read from PDF text / OCR", l => l.printedSources ? `${l.printedSources.pdf} / ${l.printedSources.ocr}` : "—");
   row("Dimensioned wall faces in the model (within 2 in)", l => pct(l.faces.found, l.faces.total));
   row("Lines in the wall weight on a wall's face", l => (l.lines.feet ? `${l.lines.onWalls} of ${l.lines.feet} ft (${Math.round((100 * l.lines.onWalls) / l.lines.feet)}%)` : "none to check"));
   row("Scheduled doors found", l => (l.doors ? pct(l.doors.found, l.doors.checked) : "no schedule key"));
@@ -476,7 +505,7 @@ export function scoreboardReport(levels: LevelScore[], title = "Drawings to 3D s
   row("Stairs read, risers per flight shown (no key: check by eye)", l => l.stairs?.length ? `${l.stairs.length} (${l.stairs.map(s => s.flights.map(f => f.risers).join(" + ")).join("; ")})` : "0");
   out.push(
     "",
-    "A value that disagrees is usually OCR misreading a stray line as a digit: look at its picture in the sheet's strips folder before believing it.",
+    "Printed values are matched by location. Check disagreements on the source sheet or in its OCR strips before treating them as geometry errors.",
     "A flagged wall is one to look at, not one known to be wrong: nothing on a drawing lists the walls, so false walls have no key.",
     "Rooms closed only counts rooms with a position in the key, and says nothing about a room's shape. Room outlines come from the ceiling plans, so a room with no ceiling drawn has no outline to compare.",
     "Glass tags only say glass is near. Not scored yet: how much glass is missing between tags, wall types, level heights. Roofs and structure aren't read yet; stairs are read, with no key to score them against.",
