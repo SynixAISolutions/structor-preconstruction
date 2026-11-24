@@ -69,7 +69,7 @@ export async function checkMemoryLines(trade: { name: string; code: string }, re
       try {
         const result = await inAiPool(() => aiJob<{ found: LineFound[]; dropped: { what: string; reason: string }[] }>("memory-check", {
           trade: trade.name, code: trade.code, document: request.document,
-          pages: request.pages.map(p => ({ page: p.page, text: p.text, where: p.where })), lines: request.lines,
+          pages: request.pages.map(p => ({ page: p.page, text: p.text, where: p.where })), lines: request.lines, existing: request.existing,
         }, signal));
         answers.push({ request, found: result.found });
         dropped.push(...result.dropped);

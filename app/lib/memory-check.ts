@@ -15,8 +15,8 @@ import type { DraftInput } from "./extraction";
 export type MemoryLine = { id: string; text: string; detail: string };
 /** A page the trade's reading read: its file, page, text, and where it is ("09 29 00", or the sheet "A-501"). */
 export type CheckPage = { document: string; page: number; text: string; where: string; sheet: string | null };
-/** One AI request: some pages of one file and the lines that point at them. */
-export type LineCheckRequest = { document: string; pages: CheckPage[]; lines: MemoryLine[] };
+/** One AI request: some pages of one file, the lines that point at them, and what the bid form already has for them. */
+export type LineCheckRequest = { document: string; pages: CheckPage[]; lines: MemoryLine[]; existing: string[] };
 /** The AI's answer for one line: the line as it applies to this project, and the words on the page it relies on. */
 export type LineFound = { line: string; title: string; detail: string; page: number; quote: string };
 
@@ -28,43 +28,65 @@ const GENERIC = new Set(["work", "contract", "documents", "document", "required"
   "subcontractors", "contractor", "contractors", "project", "including", "include", "includes", "accordance", "materials", "material", "items", "item",
   "complete", "provided", "providing", "installation", "installed", "following", "other", "others", "trade", "trades", "shall", "this", "that", "from",
   "are", "any", "where", "such", "each", "within", "under", "into", "only", "per", "not", "under", "related", "applicable", "necessary", "drawings", "specifications"]);
-const keyWords = (s: string) => new Set([...lineWords(s)].filter(w => !GENERIC.has(w)));
+/** "R-values" is one word, not "r" and "values" (and "r" is too short to count). */
+const joinTerms = (s: string) => s.replace(/\br\s*-?\s*values?\b/gi, "rvalue");
+const keyWords = (s: string) => new Set([...lineWords(joinTerms(s))].filter(w => !GENERIC.has(w)));
 
 /**
  * The lines the contractor's memory gives a trade on a project (its overrides applied, lib/memory projectMemory): the
- * scope lines its bid forms and scope checklists carry, each once. Exclusions aren't lines to look for: they stay rules.
+ * scope lines its bid forms and scope checklists carry, each once. A bullet under a bid sheet heading reads with it
+ * ("- At wall corner guards" under "Wood or sheet metal in-wall blocking, including…" is blocking at corner guards);
+ * another line keeps its heading as context. A line most of whose words another line already has (two bid forms
+ * wording the same thing) is left to that one. Exclusions aren't lines to look for: they stay rules.
  */
 export function tradeLines(entries: MemoryEntry[], target: { code: string; name: string }, projectId: string): MemoryLine[] {
-  const seen = new Set<string>(), out: MemoryLine[] = [];
+  const seen = new Set<string>(), kept: string[] = [], out: MemoryLine[] = [];
   for (const e of projectMemory(entries, projectId)) {
     if (e.kind !== "example" || e.origin !== "import" || !e.trades.length || !entryApplies(e, { projectId, ...target })) continue;
-    const key = e.text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const group = e.detail.match(/^Under "(.+)"$/)?.[1]?.replace(/[:.]\s*$/, "") ?? "";
+    const bullet = /^[-•*]\s+/.test(e.text);
+    const text = bullet && group ? `${group}: ${e.text.replace(/^[-•*]\s+/, "")}` : e.text.replace(/^[-•*]\s+/, "");
+    const key = text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
     if (!key || seen.has(key)) continue;
     seen.add(key);
-    // A bid sheet line's group ("Under "Gypsum Board"") is context, a checklist lead-in's items are the line.
-    out.push({ id: `L${out.length + 1}`, text: e.text, detail: /^Under "/.test(e.detail) ? "" : e.detail.slice(0, 600) });
+    // Bullets share their heading's words, so only whole lines are compared for near-repeats.
+    if (!bullet && lineCovered(text, kept)) continue;
+    if (!bullet) kept.push(text);
+    // A checklist lead-in's items are the line; a bid sheet line's heading is context.
+    const detail = group ? (bullet ? "" : `On the bid form under "${group}"`) : e.detail.slice(0, 600);
+    out.push({ id: `L${out.length + 1}`, text, detail });
   }
   return out;
 }
 
+/** A line the reading already wrote: its words, where it came from ("09 29 00 · §3.6", a sheet) and the pages it cites. */
+export type ExistingLine = { text: string; source: string; cites: string[] };
+/** The lines already on the bid form shown with each request, so the AI doesn't write the same work again. */
+const EXISTING_PER_REQUEST = 40;
+
 /**
- * Which lines to check and where: each line the reading didn't already write (`existing`: its lines' titles and
- * details) goes with the pages that share most of its words, at most two; then each file's pages, in order, are sent a
- * few at a time with the lines pointing at them. `unplaced`: lines no page shares enough words with, so nothing on
+ * Which lines to check and where: each line the reading didn't already write (`existing`: its lines) goes with the
+ * pages that share most of its rarer words, at most two; then each file's pages, in order, are sent a few at a time
+ * with the lines pointing at them and the lines the bid form already has for those pages. `unplaced`: lines no page shares enough words with, so nothing on
  * this project's pages calls for them.
  */
-export function planLineCheck(lines: MemoryLine[], pages: CheckPage[], existing: string[]): { requests: LineCheckRequest[]; checked: number; covered: number; unplaced: MemoryLine[] } {
+export function planLineCheck(lines: MemoryLine[], pages: CheckPage[], existing: ExistingLine[]): { requests: LineCheckRequest[]; checked: number; covered: number; unplaced: MemoryLine[] } {
   const words = pages.map(p => keyWords(p.text));
+  // A word on few pages says more than one on most ("parapet" over "gypsum"): each shared word counts by its rarity.
+  const df = new Map<string, number>();
+  for (const w of words) for (const x of w) df.set(x, (df.get(x) ?? 0) + 1);
+  const weight = (x: string) => Math.log((pages.length + 1) / ((df.get(x) ?? 0) + 1)) + 0.1;
+  const written = existing.map(e => e.text);
   const placed = new Map<number, MemoryLine[]>();
   const unplaced: MemoryLine[] = [];
   let covered = 0;
   for (const line of lines) {
-    if (lineCovered(line.text, existing)) { covered++; continue; }
+    if (lineCovered(line.text, written)) { covered++; continue; }
     const mine = [...keyWords(`${line.text} ${line.detail}`)];
     if (!mine.length) { unplaced.push(line); continue; }
     const need = mine.length <= 2 ? mine.length : Math.min(5, Math.max(2, Math.ceil(mine.length * 0.4)));
-    const best = words.map((w, i) => ({ i, score: mine.filter(x => w.has(x)).length })).filter(s => s.score >= need)
-      .sort((a, b) => b.score - a.score || a.i - b.i).slice(0, CHECK_LIMITS.pagesPerLine);
+    const best = words.map((w, i) => { const shared = mine.filter(x => w.has(x)); return { i, count: shared.length, score: shared.reduce((n, x) => n + weight(x), 0) }; })
+      .filter(s => s.count >= need).sort((a, b) => b.score - a.score || a.i - b.i).slice(0, CHECK_LIMITS.pagesPerLine);
     if (!best.length) { unplaced.push(line); continue; }
     for (const { i } of best) placed.set(i, [...(placed.get(i) ?? []), line]);
   }
@@ -76,7 +98,10 @@ export function planLineCheck(lines: MemoryLine[], pages: CheckPage[], existing:
     const chunk = group.map(i => ({ ...pages[i], text: pages[i].text.slice(0, CHECK_LIMITS.pageChars) }));
     const ids = new Set<string>(), mine: MemoryLine[] = [];
     for (const i of group) for (const l of placed.get(i)!) if (!ids.has(l.id)) { ids.add(l.id); mine.push(l); }
-    for (let n = 0; n < mine.length; n += CHECK_LIMITS.lines) requests.push({ document: chunk[0].document, pages: chunk, lines: mine.slice(n, n + CHECK_LIMITS.lines) });
+    // What the bid form already has from these pages, or from their sections or sheets.
+    const cites = new Set(chunk.map(p => `${p.document}#${p.page}`)), wheres = chunk.map(p => p.where).filter(Boolean);
+    const have = [...new Set(existing.filter(e => e.cites.some(c => cites.has(c)) || wheres.some(w => e.source === w || e.source.startsWith(`${w} `))).map(e => e.text.slice(0, 200)))].slice(0, EXISTING_PER_REQUEST);
+    for (let n = 0; n < mine.length; n += CHECK_LIMITS.lines) requests.push({ document: chunk[0].document, pages: chunk, lines: mine.slice(n, n + CHECK_LIMITS.lines), existing: have });
     group = []; chars = 0;
   };
   for (const i of order) {
@@ -92,8 +117,8 @@ export function planLineCheck(lines: MemoryLine[], pages: CheckPage[], existing:
  * The lines found, as the reading's drafts: each line once (its first answer), none the reading already has or another
  * found line repeats, citing its page. `source`: where the page is, and that the line came from the contractor's memory.
  */
-export function lineCheckDrafts(answers: { request: LineCheckRequest; found: LineFound[] }[], packageId: string, existing: string[]): DraftInput[] {
-  const done = new Set<string>(), have = [...existing], out: DraftInput[] = [];
+export function lineCheckDrafts(answers: { request: LineCheckRequest; found: LineFound[] }[], packageId: string, existing: ExistingLine[]): DraftInput[] {
+  const done = new Set<string>(), have = existing.map(e => e.text), out: DraftInput[] = [];
   for (const { request, found } of answers) for (const f of found) {
     if (done.has(f.line)) continue;
     const page = request.pages.find(p => p.page === f.page);

@@ -17,7 +17,7 @@ import { findInSheetImage } from "./sheet-ocr";
 import { checkImageQuotes, pinFindings, type TextBox } from "./text-anchor";
 import { NO_COUNTS, type TradeCounts } from "./run-time-left";
 import { checkScheduleTags, dropBorrowedTags, isFinishSchedule, type ReadPage, type ScheduleSheet, type TagOwner } from "./finish-schedule";
-import { lineCheckDrafts, planLineCheck, type CheckPage, type MemoryLine } from "./memory-check";
+import { lineCheckDrafts, planLineCheck, type CheckPage, type ExistingLine, type MemoryLine } from "./memory-check";
 
 /** `counts` says how far the reading is in requests and sheets, for the automatic run's time left (lib/run-time-left). */
 export type TradeReadProgress = { note: string; done: number; total: number; counts: TradeCounts };
@@ -209,7 +209,7 @@ export async function readTradeScope(args: {
   async function checkLines(outcome: ScopeRunResult): Promise<void> {
     const lines = args.memoryLines ?? [];
     if (!lines.length || (outcome.input.error && !outcome.input.drafts.length)) return;
-    const existing = outcome.input.drafts.flatMap(d => d.kind === "scope" ? [`${d.title} ${d.detail}`] : []);
+    const existing: ExistingLine[] = outcome.input.drafts.flatMap(d => d.kind === "scope" ? [{ text: `${d.title} ${d.detail}`, source: d.source, cites: d.citations.map(c => `${c.document}#${c.page}`) }] : []);
     const plan = planLineCheck(lines, checkPages, existing);
     let found = 0, failed = 0;
     if (plan.requests.length) {
