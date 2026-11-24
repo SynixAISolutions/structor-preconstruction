@@ -87,6 +87,21 @@ assert.throws(()=>S.addGeneralScopes({...review.procurement,packages:[]},general
   const acceptedLater = E.acceptDraft(later, scopeDraft.id, "Marcel Khoury");
   assert.deepEqual(acceptedLater.flip.regions.find(r => r.id === regionDraft.acceptedId).scopeIds, [acceptedLater.extraction.drafts.find(d => d.id === scopeDraft.id).acceptedId], "Accepting the line links it to the highlight already placed");
 }
+// A line marked on a sheet (Danial, 24 Nov: right-click, highlight a rectangle, choose the trade).
+{
+  const records = { procurement: structuredClone(sampleProcurement), flip: structuredClone(sampleDrawingFlip) };
+  const page = records.flip.pages[0], pkg = records.procurement.packages.find(p => p.id === "drywall");
+  const box = [{ x: 0.2, y: 0.3 }, { x: 0.35, y: 0.3 }, { x: 0.35, y: 0.4 }, { x: 0.2, y: 0.4 }];
+  const added = S.addScopeOnSheet(records, { pageId: page.id, polygon: box, packageId: pkg.id, title: "  Provide gypsum board soffit at the lobby  ", detail: "Per detail 4" }, "Marcel Khoury", "2026-11-24T12:00:00.000Z");
+  const line = added.procurement.scopes.find(s => s.id === added.scopeId), mark = added.flip.regions.find(r => r.id === added.regionId);
+  assert.deepEqual([line.packageId, line.title, line.detail, line.source, line.origin, line.status], ["drywall", "Provide gypsum board soffit at the lobby", "Per detail 4", `${page.sheet} · marked on the drawing`, "estimator", "approved"], "The line goes in the trade's bid form, approved by who wrote it, sourced to the sheet");
+  assert.deepEqual([mark.pageId, mark.packageId, mark.scopeIds, mark.origin, mark.status, mark.label], [page.id, "drywall", [added.scopeId], "estimator", "approved", line.title], "Its highlight is on the sheet in that trade, linked to it");
+  assert.deepEqual(mark.polygon, box);
+  assert.ok(bidForm(added.procurement, "drywall").some(s => s.id === added.scopeId));
+  assert.throws(() => S.addScopeOnSheet(records, { pageId: page.id, polygon: box, packageId: pkg.id, title: "  " }, "Marcel Khoury"), /Write the scope line/);
+  assert.throws(() => S.addScopeOnSheet(records, { pageId: "no-such-page", polygon: box, packageId: pkg.id, title: "x" }, "Marcel Khoury"), /Choose the drawing sheet/);
+  assert.equal(records.procurement.scopes.length, sampleProcurement.scopes.length, "Nothing changes when it fails");
+}
 // Combining trades moves what the AI found for the trade removed: its waiting findings, the runs that read it, its highlights.
 {
   const open = { ...sampleProcurement, invitations: [], packages: sampleProcurement.packages.map(p => ({ ...p, published: undefined })) };

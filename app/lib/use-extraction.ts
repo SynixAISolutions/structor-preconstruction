@@ -3,10 +3,11 @@
 import { useCallback, useRef } from "react";
 import { sampleExtraction } from "./data/extraction";
 import { acceptDraft, ExtractionRuleError, placeHighlights, type ExtractionState } from "./extraction";
+import { DrawingFlipRuleError } from "./drawing-flip";
 import { useDrawingFlip } from "./use-drawing-flip";
 import { useLocalDraft } from "./use-local-draft";
 import { useProcurement } from "./use-procurement";
-import { removeReviewedScope, approveWithRegions, combineTrades } from "./scope-review";
+import { removeReviewedScope, approveWithRegions, combineTrades, addScopeOnSheet } from "./scope-review";
 import { combineAiReferences } from "./sheet-reference-client";
 import { getActiveProjectId } from "./project-scope";
 
@@ -89,6 +90,22 @@ export function useExtraction() {
     return { placed: next.placed, noPage: next.noPage };
   }, [setExtraction, runFlip]);
 
+  /** A bid-form line marked on a sheet, with its highlight (lib/scope-review addScopeOnSheet). Null when saved, else why not. */
+  const addScopeOnDrawing = useCallback((input: Parameters<typeof addScopeOnSheet>[1], by: string): string | null => {
+    try {
+      const next = addScopeOnSheet(latest.current, input, by);
+      latest.current = { ...latest.current, procurement: next.procurement, flip: next.flip };
+      runProcurement(() => next.procurement);
+      runFlip(() => next.flip);
+      return null;
+    } catch (error) {
+      if (error instanceof ExtractionRuleError) return error.message;
+      if (error instanceof DrawingFlipRuleError) return Object.values(error.errors)[0] ?? "The highlight could not be added.";
+      if (error instanceof Error && error.name === "ProcurementRuleError") return error.message;
+      throw error;
+    }
+  }, [runProcurement, runFlip]);
+
   /** Combines one trade into another in the bid forms, the AI's waiting findings, Drawing Flip and the AI's drawing references (lib/scope-review combineTrades). */
   const combine = useCallback((fromId: string, toId: string, by: string): string | null => {
     try {
@@ -105,5 +122,5 @@ export function useExtraction() {
     }
   }, [setExtraction, runProcurement, runFlip]);
 
-  return { extraction, procurement, runProcurement, flip, runFlip, run, accept, removeScope, approveScopeItem, combine, placeAllHighlights };
+  return { extraction, procurement, runProcurement, flip, runFlip, run, accept, removeScope, approveScopeItem, combine, placeAllHighlights, addScopeOnDrawing };
 }

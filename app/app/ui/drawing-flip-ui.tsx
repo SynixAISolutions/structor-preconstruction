@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -132,7 +132,11 @@ export function TraceControls({ trace, number, onUndo, onFinish, onCancel, onRea
   </section>;
 }
 
-export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, expandable = true, fullPage = false, onFullPage, regionDetail, trace, traceActions, comparison, onClearComparison, focus, describe }: {
+/** A rectangle being marked on a sheet, 0-1 from its top-left corner. */
+export type MarkBox = { x: number; y: number; width: number; height: number };
+type BoxHandle = "move" | "nw" | "ne" | "sw" | "se";
+
+export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, expandable = true, fullPage = false, onFullPage, regionDetail, trace, traceActions, comparison, onClearComparison, focus, describe, navigation, markScope }: {
   page: DrawingPage;
   regions: CanvasRegion[];
   selectedId: string;
@@ -146,6 +150,10 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
   focus?: { regionId: string; n: number } | null;
   /** The hover text for a region: number, label, trade and owner. */
   describe?: (region: CanvasRegion) => string;
+  /** Previous and Next on the sheet itself, with where it is in the set ("A-506 · 46 / 102"). */
+  navigation?: { label: string; onPrev: () => void; onNext: () => void };
+  /** Right-click "Add a scope line here": the rectangle being marked, and the box to fill in beside it. */
+  markScope?: { box: MarkBox | null; onBox: (box: MarkBox | null) => void; form: ReactNode };
 }) {
   const [expanded, setExpanded] = useState(false);
   const [zoom, setZoom] = useState(100);
@@ -179,6 +187,85 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
     return () => el.removeEventListener("wheel", wheel);
   }); // eslint-disable-line react-hooks/exhaustive-deps
   function expand(open:boolean){if(onFullPage)onFullPage(open);else setExpanded(open);}
+
+  // ── The drawing box on the page (Danial, 24 Nov): the wheel zooms where you point, left-drag moves the sheet, right-click
+  // marks a new scope line with a rectangle you can move and resize, and Previous/Next sit on the sheet. The full view keeps
+  // its own zoom.
+  const boxNav = !!navigation || !!markScope;
+  const boxRef = useRef<HTMLDivElement>(null), wrapRef = useRef<HTMLDivElement>(null);
+  const [boxZoom, setBoxZoom] = useState(100);
+  const boxZoomRef = useRef(boxZoom); boxZoomRef.current = boxZoom;
+  const boxKeep = useRef<{ fx: number; fy: number; px: number; py: number } | null>(null);
+  const [boxLaid, setBoxLaid] = useState(0);
+  const boxPan = useRef<{ x: number; y: number; left: number; top: number; moved: boolean } | null>(null);
+  const clickAfterPan = useRef(false);
+  const [menu, setMenu] = useState<{ left: number; top: number; point: Point } | null>(null);
+  /** After "Add a scope line here": the next drag draws the rectangle instead of moving the sheet. */
+  const [drawingBox, setDrawingBox] = useState(false);
+  const boxDrag = useRef<{ kind: BoxHandle | "new"; start: Point; box: MarkBox } | null>(null);
+  function boxZoomAt(next: number, clientX?: number, clientY?: number) {
+    const el = boxRef.current, value = Math.min(MAX_ZOOM, Math.max(100, Math.round(next)));
+    if (el) {
+      const rect = el.getBoundingClientRect(), px = (clientX ?? rect.left + rect.width / 2) - rect.left, py = (clientY ?? rect.top + rect.height / 2) - rect.top;
+      boxKeep.current = { fx: (el.scrollLeft + px) / el.scrollWidth, fy: (el.scrollTop + py) / el.scrollHeight, px, py };
+    }
+    setBoxZoom(value); setBoxLaid(n => n + 1);
+  }
+  useLayoutEffect(() => {
+    const el = boxRef.current, k = boxKeep.current;
+    if (!el || !k) return;
+    el.scrollLeft = k.fx * el.scrollWidth - k.px; el.scrollTop = k.fy * el.scrollHeight - k.py; boxKeep.current = null;
+  }, [boxZoom, boxLaid]);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el || !boxNav) return;
+    const wheel = (e: WheelEvent) => { e.preventDefault(); setMenu(null); boxZoomAt(boxZoomRef.current * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX, e.clientY); };
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => el.removeEventListener("wheel", wheel);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+  // A new sheet opens fitted, with nothing half-marked on it.
+  useEffect(() => { setBoxZoom(100); setMenu(null); setDrawingBox(false); boxDrag.current = null; markScope?.onBox(null); }, [page.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Where a pointer is on the sheet, 0-1, held to the sheet's edges. */
+  const sheetPoint = (e: { clientX: number; clientY: number }, sheet: Element): Point => {
+    const r = sheet.getBoundingClientRect();
+    return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) };
+  };
+  /** A starting rectangle where the menu was opened, to drag out a new one or move and resize this one. */
+  function startMark(point: Point) {
+    setMenu(null);
+    const width = 0.12, height = 0.06;
+    markScope?.onBox({ x: Math.min(1 - width, Math.max(0, point.x - width / 2)), y: Math.min(1 - height, Math.max(0, point.y - height / 2)), width, height });
+    setDrawingBox(true);
+  }
+  function cancelMark() { setMenu(null); setDrawingBox(false); boxDrag.current = null; markScope?.onBox(null); }
+  function markDown(e: ReactPointerEvent<SVGSVGElement>) {
+    if (!markScope || e.button !== 0) return;
+    const handle = (e.target as Element).closest("[data-handle]")?.getAttribute("data-handle") as BoxHandle | null;
+    if (!handle && !drawingBox) return;
+    e.stopPropagation();
+    const start = sheetPoint(e, e.currentTarget);
+    boxDrag.current = { kind: handle ?? "new", start, box: handle && markScope.box ? markScope.box : { x: start.x, y: start.y, width: 0, height: 0 } };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+  function markMove(e: ReactPointerEvent<SVGSVGElement>) {
+    const d = boxDrag.current;
+    if (!d || !markScope) return;
+    const p = sheetPoint(e, e.currentTarget), b = d.box, dx = p.x - d.start.x, dy = p.y - d.start.y;
+    if (d.kind === "new") { markScope.onBox({ x: Math.min(d.start.x, p.x), y: Math.min(d.start.y, p.y), width: Math.abs(dx), height: Math.abs(dy) }); return; }
+    if (d.kind === "move") { markScope.onBox({ ...b, x: Math.min(1 - b.width, Math.max(0, b.x + dx)), y: Math.min(1 - b.height, Math.max(0, b.y + dy)) }); return; }
+    const left = d.kind.includes("w") ? b.x + dx : b.x, right = d.kind.includes("e") ? b.x + b.width + dx : b.x + b.width;
+    const top = d.kind.includes("n") ? b.y + dy : b.y, bottom = d.kind.includes("s") ? b.y + b.height + dy : b.y + b.height;
+    markScope.onBox({ x: Math.max(0, Math.min(left, right)), y: Math.max(0, Math.min(top, bottom)), width: Math.min(1, Math.abs(right - left)), height: Math.min(1, Math.abs(bottom - top)) });
+  }
+  function markUp(e: ReactPointerEvent<SVGSVGElement>) {
+    const d = boxDrag.current;
+    boxDrag.current = null;
+    if (!d || !markScope) return;
+    setDrawingBox(false);
+    // A click without a drag keeps a rectangle there that can be seen and grabbed.
+    const p = sheetPoint(e, e.currentTarget);
+    if (d.kind === "new" && (Math.abs(p.x - d.start.x) < 0.01 || Math.abs(p.y - d.start.y) < 0.008)) markScope.onBox({ x: Math.min(0.88, Math.max(0, d.start.x - 0.06)), y: Math.min(0.94, Math.max(0, d.start.y - 0.03)), width: 0.12, height: 0.06 });
+  }
   useEffect(() => { pan.current = null; setHoverPoint(null); panElement.current?.focus({ preventScroll: true }); }, [trace?.regionId]);
 
   const file = useSourceFile(page.documentName);
@@ -222,22 +309,27 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
   const displayPage = image ? { ...page, image } : page;
   const height = 1000 / (storedReady?.aspect ?? page.aspect);
   const svgPoints = (points: Point[]) => points.map(point => `${point.x * 1000},${point.y * height}`).join(" ");
-  const drawing = (interactive = false) => sourceNeeded || <svg viewBox={`0 0 1000 ${height}`} role="img" aria-label={`${page.sheet} with ${regions.length} trade regions`}
-    className={interactive && trace ? "flip-tracing" : undefined}
+  // The marked rectangle's corner handles stay about 12 px on screen at any zoom.
+  const handle = 12 / Math.max(0.05, (boxRef.current?.clientWidth ?? 700) * boxZoom / 100 / 1000);
+  const drawing = (interactive = false, inBox = false) => sourceNeeded || <svg viewBox={`0 0 1000 ${height}`} role="img" aria-label={`${page.sheet} with ${regions.length} trade regions`}
+    className={interactive && trace ? "flip-tracing" : inBox && drawingBox ? "flip-drawing-box" : undefined}
     onClick={interactive && trace ? event => { const point = pointerToPage(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect()); if (point) { traceActions?.onPoint(point); panElement.current?.focus({ preventScroll: true }); } } : undefined}
-    onPointerMove={interactive && trace ? event => setHoverPoint(pointerToPage(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect())) : undefined}
+    onPointerDown={inBox ? markDown : undefined}
+    onPointerMove={inBox ? markMove : interactive && trace ? event => setHoverPoint(pointerToPage(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect())) : undefined}
+    onPointerUp={inBox ? markUp : undefined}
     onPointerLeave={() => setHoverPoint(null)}>
     <DrawingBackdrop page={displayPage} height={height}/>
     <g className="flip-region-layer">{regions.map(region => {
       const points = region.polygon.map(point => `${point.x * 1000},${point.y * height}`).join(" ");
-      const centerX = region.polygon.reduce((sum, point) => sum + point.x, 0) / region.polygon.length * 1000;
-      const centerY = region.polygon.reduce((sum, point) => sum + point.y, 0) / region.polygon.length * height;
+      // The number sits above the selected highlight only: on a sheet of dozens (Whittier A-506, 24) a badge on each one
+      // covered the printed words the highlights mark. The rest show their number on hover and in the list below.
+      const box = bounds(region.polygon);
+      const centerX = (box.x + box.width / 2) * 1000, badgeY = Math.max(16, box.y * height - 18);
       const color = colors.get(region.packageId) ?? "#697b8c";
-      return <g key={region.id} role={interactive && trace ? undefined : "button"} tabIndex={interactive && trace ? undefined : 0} aria-label={`${region.number}: ${region.label}`} className={`${selectedId === region.id ? "selected" : ""} ${region.status === "pending-review" ? "pending" : ""} ${region.anchor === "image" ? "approximate" : ""} ${trace?.regionId === region.id ? "trace-original" : ""}`} onClick={() => { if (!(interactive && trace)) onSelect(region.id); }} onKeyDown={event => { if (!(interactive && trace) && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onSelect(region.id); } }}>
+      return <g key={region.id} role={interactive && trace ? undefined : "button"} tabIndex={interactive && trace ? undefined : 0} aria-label={`${region.number}: ${region.label}`} className={`${selectedId === region.id ? "selected" : ""} ${region.status === "pending-review" ? "pending" : ""} ${region.anchor === "image" ? "approximate" : ""} ${trace?.regionId === region.id ? "trace-original" : ""}`} onClick={() => { if (clickAfterPan.current) { clickAfterPan.current = false; return; } if (!(interactive && trace)) onSelect(region.id); }} onKeyDown={event => { if (!(interactive && trace) && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onSelect(region.id); } }}>
         <title>{describe ? describe(region) : `${region.number}: ${region.label}`}</title>
         <polygon points={points} fill={`${color}30`} stroke={color}/>
-        <circle cx={centerX} cy={centerY} r="16" fill={color}/>
-        <text x={centerX} y={centerY + 4}>{region.number.replace("R-", "")}</text>
+        {selectedId === region.id && <><circle cx={centerX} cy={badgeY} r="16" fill={color}/><text x={centerX} y={badgeY + 4}>{region.number.replace("R-", "")}</text></>}
       </g>;
     })}</g>
     {!trace && comparison && <polygon className="flip-previous-outline" points={svgPoints(comparison.from)} aria-label="Previous outline"/>}
@@ -246,12 +338,50 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
       <polyline points={svgPoints([...trace.points, ...(hoverPoint ? [hoverPoint] : [])])}/>
       {trace.points.map((point, i) => <circle key={i} cx={point.x * 1000} cy={point.y * height} r="4"/>)}
     </g>}
+    {inBox && markScope?.box && (() => {
+      const b = markScope.box, x = b.x * 1000, y = b.y * height, w = b.width * 1000, h = b.height * height;
+      const corners: [BoxHandle, number, number][] = [["nw", x, y], ["ne", x + w, y], ["sw", x, y + h], ["se", x + w, y + h]];
+      return <g className="flip-new-box" aria-label="New scope line's area">
+        <rect data-handle="move" x={x} y={y} width={w} height={h}/>
+        {corners.map(([k, hx, hy]) => <rect key={k} data-handle={k} className={`flip-box-handle ${k}`} x={hx - handle / 2} y={hy - handle / 2} width={handle} height={handle}/>)}
+      </g>;
+    })()}
   </svg>;
   return <>
-    <div className="flip-canvas-wrap">
-      <div className="flip-sheet">{drawing()}</div>
+    <div ref={wrapRef} className="flip-canvas-wrap" onKeyDown={event => { if (event.key === "Escape" && (menu || markScope?.box)) { event.stopPropagation(); cancelMark(); } }}>
+      {boxNav
+        ? <div ref={boxRef} className={`flip-sheet flip-box-pan ${drawingBox ? "is-drawing" : ""}`} style={{ aspectRatio: `${storedReady?.aspect ?? page.aspect}` }} tabIndex={0} role="region"
+            aria-label={`${page.sheet}: scroll to zoom, drag to move the sheet${markScope ? ", right-click to add a scope line" : ""}`}
+            onPointerDown={e => { clickAfterPan.current = false; if (e.button !== 0 || drawingBox || (e.target as Element).closest("[data-handle], .flip-context-menu")) return; setMenu(null); boxPan.current = { x: e.clientX, y: e.clientY, left: e.currentTarget.scrollLeft, top: e.currentTarget.scrollTop, moved: false }; }}
+            onPointerMove={e => { const p = boxPan.current; if (!p) return; if (!p.moved) { if (Math.hypot(e.clientX - p.x, e.clientY - p.y) < 4) return; p.moved = true; e.currentTarget.setPointerCapture(e.pointerId); } e.currentTarget.scrollLeft = p.left + p.x - e.clientX; e.currentTarget.scrollTop = p.top + p.y - e.clientY; }}
+            onPointerUp={() => { if (boxPan.current?.moved) clickAfterPan.current = true; boxPan.current = null; }}
+            onPointerCancel={() => { boxPan.current = null; }}
+            onDoubleClick={e => { if ((e.target as Element).closest('[role="button"], [data-handle]')) return; boxZoomAt(boxZoom * 2, e.clientX, e.clientY); }}
+            onContextMenu={e => {
+              if (!markScope) return;
+              e.preventDefault();
+              const sheet = e.currentTarget.querySelector("svg"), wrap = wrapRef.current?.getBoundingClientRect();
+              if (!sheet || !wrap) return;
+              setMenu({ left: e.clientX - wrap.left, top: e.clientY - wrap.top, point: sheetPoint(e, sheet) });
+            }}>
+            <div className="flip-zoom-sheet" style={{ width: `${boxZoom}%` }}>{drawing(false, true)}</div>
+          </div>
+        : <div className="flip-sheet">{drawing()}</div>}
       {expandable && <button className="flip-expand" onClick={() => expand(true)} aria-label="Expand drawing"><Maximize2 size={16}/></button>}
       {!image && <span className="flip-image-state"><PencilRuler size={13}/>Diagram preview</span>}
+      {navigation && <>
+        <button className="flip-sheet-step prev" aria-label="Previous drawing" title="Previous drawing" onClick={navigation.onPrev}><ArrowLeft size={18}/></button>
+        <button className="flip-sheet-step next" aria-label="Next drawing" title="Next drawing" onClick={navigation.onNext}><ArrowRight size={18}/></button>
+        <span className="flip-sheet-label">{navigation.label}</span>
+      </>}
+      {boxNav && <div className="flip-box-zoom" role="group" aria-label="Sheet zoom"><button aria-label="Zoom out" onClick={() => boxZoomAt(boxZoom / 1.25)}>−</button><output>{boxZoom}%</output><button aria-label="Zoom in" onClick={() => boxZoomAt(boxZoom * 1.25)}>+</button><button onClick={() => boxZoomAt(100)}>Fit</button></div>}
+      {markScope && !markScope.box && !menu && <span className="flip-box-hint">Scroll to zoom · drag to move · right-click to add a scope line</span>}
+      {drawingBox && <span className="flip-box-hint is-active" role="status">Drag over the area for the new line, or move and resize the box · Esc cancels</span>}
+      {menu && <div className="flip-context-menu" role="menu" style={{ left: menu.left, top: menu.top }}>
+        <button role="menuitem" autoFocus onClick={() => startMark(menu.point)}><Plus size={14}/>Add a scope line here</button>
+        <button role="menuitem" onClick={() => setMenu(null)}>Cancel</button>
+      </div>}
+      {markScope?.box && <div className="flip-mark-form">{markScope.form}</div>}
     </div>
     {isExpanded && <Modal title={`${page.sheet} · ${page.title}`} subtitle={trace ? "Redraw outline · Trace the work on the sheet." : "Scroll to zoom where you point, drag or use arrow keys to pan, double-click to zoom in. Select a region to see its scope items. Esc closes."} fullScreen onClose={() => { if (trace) traceActions?.onCancel(); else expand(false); }}>
       <div className="flip-full-content" onKeyDownCapture={event => {
@@ -298,7 +428,10 @@ function RegionEditor({ packages, errors, onClose, onSave }: { packages: ReturnT
 
 export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProps) {
   // One copy of the records: placing the AI's highlights writes the review findings and Drawing Flip together.
-  const { flip: state, runFlip: run, procurement, runProcurement, extraction, placeAllHighlights } = useExtraction();
+  const { flip: state, runFlip: run, procurement, runProcurement, extraction, placeAllHighlights, addScopeOnDrawing } = useExtraction();
+  /** A scope line being marked on the sheet: its rectangle, and what goes in the bid form (Danial, 24 Nov). */
+  const [markBox, setMarkBox] = useState<MarkBox | null>(null);
+  const [markDraft, setMarkDraft] = useState({ packageId: "", title: "", detail: "" });
   const { documents } = useProjectDocuments();
   /** Flip through the sheets that carry highlights only (Marcel, 18 Nov: each trade's scope highlighted per page, Next and Previous). */
   const [onlyMarked, setOnlyMarked] = useState(true);
@@ -415,6 +548,15 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
     }catch(error){setProgress(error instanceof Error?error.message:"Finding scopes failed. Try again.");}finally{setLocating(false);}
   }
   function movePage(next: number) { const target = flipPages[(next + flipPages.length) % flipPages.length]; if (target) { setPageId(target.id); setRegionId(""); } }
+  function saveMark() {
+    if (!markBox || !page) return;
+    if (markBox.width < 0.005 || markBox.height < 0.005) { notify("Drag the box over the area first: it is too small to see."); return; }
+    const issue = addScopeOnDrawing({ pageId: page.id, polygon: rectangle(markBox.x, markBox.y, markBox.width, markBox.height), packageId: markDraft.packageId, title: markDraft.title, detail: markDraft.detail }, CURRENT_USER);
+    if (issue) { notify(issue); return; }
+    notify(`Added to ${procurement.packages.find(p => p.id === markDraft.packageId)?.name ?? "the trade"}'s bid form, highlighted on ${page.sheet}.`);
+    // The trade stays chosen for the next line marked on the sheet.
+    setMarkBox(null); setMarkDraft(draft => ({ ...draft, title: "", detail: "" }));
+  }
   function placeHighlights() {
     const { placed, noPage } = placeAllHighlights();
     if (placed) { setOnlyMarked(true); setPageId(""); setRegionId(""); }
@@ -425,6 +567,14 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
 
   const pickerPages=flipPages.filter(p=>`${p.sheet} ${p.title}`.toLowerCase().includes(sheetQuery.toLowerCase()));
   const disciplines=[...new Set(pickerPages.map(p=>p.discipline||"Other"))];
+  const markForm = <form className="flip-mark-card" onSubmit={event => { event.preventDefault(); saveMark(); }}>
+    <strong>New scope line on {page.sheet}</strong>
+    <small>Drag the box or its corners to fit the area it covers.</small>
+    <label className="ui-field">Trade / bid package<select required value={markDraft.packageId} onChange={event => setMarkDraft({ ...markDraft, packageId: event.target.value })}><option value="">Choose the trade…</option>{procurement.packages.map(pkg => <option key={pkg.id} value={pkg.id}>{pkg.code} · {pkg.name}</option>)}</select></label>
+    <label className="ui-field">Scope line<textarea required rows={2} value={markDraft.title} onChange={event => setMarkDraft({ ...markDraft, title: event.target.value })} placeholder="Provide gypsum board soffit at the lobby"/></label>
+    <label className="ui-field">Detail (optional)<input value={markDraft.detail} onChange={event => setMarkDraft({ ...markDraft, detail: event.target.value })} placeholder="Per detail 4 on this sheet"/></label>
+    <div className="flip-form-actions"><Button onClick={() => setMarkBox(null)}>Cancel</Button><Button type="submit" variant="primary" disabled={!markDraft.packageId || !markDraft.title.trim()}><Plus size={15}/>Add to bid form</Button></div>
+  </form>;
   const fullDetail=selected?<><h3>{selected.number} · {selected.label}</h3><p>{selectedPackage?.name}</p><p>Confidence: {selected.confidence===null?"Estimator reviewed":`${Math.round(selected.confidence*100)}% · Verify on sheet`}</p><p>{selected.evidence}</p><RedrawOutlineButton onClick={startRedraw}/><h4>Linked scope items</h4>{linkedScopes.length?linkedScopes.map(s=><article key={s.id}><strong>{s.title}</strong><p>{s.detail}</p><small>{s.source}</small></article>):<p>No scope items linked.</p>}{selected.status==="pending-review"&&<Button onClick={()=>act(s=>approveRegion(s,selected.id,CURRENT_USER),"Region approved.")}>Approve trade assignment</Button>}<Button onClick={()=>{setFullPage(false);setMode("regions");}}>Review assignment & notes</Button>{history}</>:<p>Select a region to see its scope items.</p>;
   return <div className="flip-view">
     <PageHeader eyebrow={`${projectName} / Scope coordination`} title="Drawing Flip" description="Review every trade region on the drawings, correct Structor's assignments, and confirm where each scope item lives." actions={<><Button onClick={() => navigate("scopes")}><ListFilter size={16}/>Scopes & bid forms</Button><Button onClick={() => setPageEditor(true)}><FilePlus2 size={16}/>Add page</Button><Button variant="primary" onClick={() => setRegionEditor(true)}><Plus size={16}/>Mark region</Button></>}/>
@@ -465,7 +615,7 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
                 ? "AI area guesses are hidden."
                 : "No highlights yet. Review AI scope proposals or use Mark region to add one."}
           </div>}
-          <DrawingCanvas expandable={false} page={page} regions={visible} selectedId={selected?.id ?? ""} colors={colors} onSelect={id=>{setRegionId(id);setMode("regions");}} fullPage={fullPage} onFullPage={setFullPage} regionDetail={fullDetail} trace={trace} traceActions={traceActions} comparison={comparedEvent && selected ? { regionId: selected.id, from: comparedEvent.from } : null} focus={focus} describe={describe} onClearComparison={() => setComparison(null)}/>
+          <DrawingCanvas expandable={false} page={page} regions={visible} selectedId={selected?.id ?? ""} colors={colors} onSelect={id=>{setRegionId(id);setMode("regions");}} navigation={{ label: `${page.sheet} · ${pageIndex + 1} / ${flipPages.length}`, onPrev: () => movePage(pageIndex - 1), onNext: () => movePage(pageIndex + 1) }} markScope={{ box: markBox, onBox: setMarkBox, form: markForm }} fullPage={fullPage} onFullPage={setFullPage} regionDetail={fullDetail} trace={trace} traceActions={traceActions} comparison={comparedEvent && selected ? { regionId: selected.id, from: comparedEvent.from } : null} focus={focus} describe={describe} onClearComparison={() => setComparison(null)}/>
         </div>
         <div className="flip-region-strip">{visible.map(region => <button key={region.id} className={selected?.id === region.id ? "selected" : ""} onClick={() => setRegionId(region.id)}><i style={{ background: colors.get(region.packageId) }}/><span><strong>{region.number} · {region.label}</strong><small>{procurement.packages.find(pkg => pkg.id === region.packageId)?.name} · {region.status === "pending-review" ? "Awaiting contractor" : "Approved"}</small></span><ChevronRight size={15}/></button>)}</div>
       </section>
