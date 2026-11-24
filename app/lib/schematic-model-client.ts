@@ -13,6 +13,7 @@ import { openStoredPdf, readStoredText, renderStoredPage, renderStoredRegion, re
 import { pageTurn } from "./page-turns";
 import type { Project } from "./projects";
 import { vectorsFromOperators } from "./plan-vectors";
+import { addTaggedDoorOpenings, printedDoorTags } from "./tagged-door-openings";
 import { consensusMarkers, feetPerInch, heightSheet, levelHeights, levelName, contentTiles, levelColumns, levelDoors, levelGlazing, levelOpenings, levelPartitions, levelFlights, levelPlanSheets, levelTags, levelWalls, stairsArriving, type LevelFlights, partitionTypeSheet, tagTiles, toFeet, type Marker, type SchematicLevel, type SchematicModel, type SchematicRoom } from "./schematic-model";
 import { useLocalDraft } from "./use-local-draft";
 
@@ -112,7 +113,7 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
     if (borrowed) { sized.sizing += ` (from ${borrowed}; this sheet's scale wasn't read)`; warnings.push(`${row.sheet}: no printed scale was read; ${borrowed}'s scale is used (same set and sheet size).`); }
     else if (!scale) warnings.push(`${row.sheet}: no printed scale was read; ${sized.sizing.toLowerCase()}.`);
     args.onProgress?.(`Finding the walls on ${row.sheet}…`);
-    const found = await planVectorWalls(row.doc, row.page, row.sheet, sized.frame, reading.outline, !!scale, args.signal, args.onProgress).catch(error => { if (args.signal?.aborted) throw error; return { walls: [], doors: [], glazing: [], partitions: [], columns: [], openings: [], flights: { arriving: [], rising: [] } as LevelFlights, rooms: [], note: "The sheet's lines could not be read for walls.", tagWarning: "" }; });
+    const found = await planVectorWalls(row.doc, row.page, row.sheet, sized.frame, reading.outline, !!scale, !borrowed && !!scale, args.signal, args.onProgress).catch(error => { if (args.signal?.aborted) throw error; return { walls: [], doors: [], glazing: [], partitions: [], columns: [], openings: [], flights: { arriving: [], rising: [] } as LevelFlights, rooms: [], note: "The sheet's lines could not be read for walls.", tagWarning: "" }; });
     if (!found.walls.length) warnings.push(`${row.sheet}: ${found.note}`);
     if (found.tagWarning) warnings.push(`${row.sheet}: ${found.tagWarning}`);
     levels.push({ id: `L${level}`, name: levelName(level), order: level, elevation: heights.elevations.get(level) ?? 0, height: heights.heights.get(level) ?? 14, outline: sized.outline, rooms: found.rooms.length ? found.rooms : sized.rooms, source: { documentId: row.doc.id, sheet: row.sheet, page: row.page }, sizing: sized.sizing, frame: sized.frame, walls: found.walls, wallNote: found.note, doors: found.doors, glazing: found.glazing, partitions: found.partitions, columns: found.columns, openings: level === plansRead[0].level ? [] : found.openings });
@@ -178,12 +179,12 @@ async function readPartitionTypes(doc: StoredDocument, pageNumber: number, sheet
  * level's frame; then their door numbers and wall types from the tags the AI reads on small tiles of the
  * plan (3 at a time), placed through the plan's own tag ovals and leaders (lib/tag-placement).
  */
-async function planVectorWalls(doc: StoredDocument, pageNumber: number, sheetName: string, frame: { widthFeet: number; heightFeet: number }, outline: [number, number][], printedScale: boolean, signal?: AbortSignal, onProgress?: (text: string) => void) {
+async function planVectorWalls(doc: StoredDocument, pageNumber: number, sheetName: string, frame: { widthFeet: number; heightFeet: number }, outline: [number, number][], scaled: boolean, printedScale: boolean, signal?: AbortSignal, onProgress?: (text: string) => void) {
   const [pdfjs, pdf] = await Promise.all([import("pdfjs-dist"), openStoredPdf(doc)]);
   const page = await pdf.getPage(pageNumber);
   const viewport = page.getViewport({ scale: 1 }), sheet = { widthPt: viewport.width, heightPt: viewport.height };
   const { segments, curves, fills } = vectorsFromOperators(await pageTurn(() => page.getOperatorList(), true), pdfjs.OPS as unknown as Record<string, number>, viewport.transform);
-  const walls = levelWalls(segments, sheet, frame, outline, printedScale);
+  const walls = levelWalls(segments, sheet, frame, outline, scaled);
   const doors = levelDoors(segments, curves, sheet, frame, outline, walls.walls);
   const glazing = levelGlazing(segments, sheet, frame, outline, walls.weight, walls.walls, doors);
   const partitions = levelPartitions(segments, sheet, frame, outline, walls.weight, walls.walls, glazing);
@@ -201,9 +202,12 @@ async function planVectorWalls(doc: StoredDocument, pageNumber: number, sheetNam
     }));
   }
   const tagged = levelTags(read, segments, curves, sheet, frame, walls.walls, doors, glazing);
+  const printed = printedScale ? await pageTurn((): Promise<{ items: Parameters<typeof printedDoorTags>[0] }> => page.getTextContent(), true).catch(() => null) : null;
+  signal?.throwIfAborted();
+  const verifiedDoors = printed ? addTaggedDoorOpenings(tagged.doors, tagged.walls, printedDoorTags(printed.items, viewport, frame)) : tagged.doors;
   // Room tags read on the tiles are sharper than the whole-sheet reading's; the level keeps those when there are any.
   const rooms: SchematicRoom[] = tagged.tags.filter(t => t.kind === "room").map(t => ({ name: t.name ?? "", number: t.text, at: t.at }));
-  return { note: walls.note, walls: tagged.walls, doors: tagged.doors, glazing: tagged.glazing, partitions, columns, openings, flights, rooms, tagWarning: failed ? `${failed} of ${tiles.length} parts of the plan could not be read for door and wall tags; some doors and walls have no number or type.` : "" };
+  return { note: walls.note, walls: tagged.walls, doors: verifiedDoors, glazing: tagged.glazing, partitions, columns, openings, flights, rooms, tagWarning: failed ? `${failed} of ${tiles.length} parts of the plan could not be read for door and wall tags; some doors and walls have no number or type.` : "" };
 }
 
 /** The open project's schematic model under "schematic-model"; `run` applies a correction (moveOutlinePoint, setLevelHeight) or a rebuild and returns null or the error. */

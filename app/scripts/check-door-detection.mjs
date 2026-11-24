@@ -89,4 +89,22 @@ const levelWalls = S.levelWalls(planSegs, sheet, frame, [], true).walls;
 const levelDoors = S.levelDoors(planSegs, [], sheet, frame, [], levelWalls);
 assert.deepEqual(levelDoors.map(d => [d.a, d.b, d.width, d.leaves, d.kind, d.thickness]), [[[10, 0], [13, 0], 3, 1, "door", 0.4]]);
 
-console.log("Door detection checked: swings drawn as short lines or true curves, the leaf marks the open side, openings along their walls, pairs split at their meeting point, toilet-stall doors, symbols, half circles and wavy lines refused, repeats, the level's frame.");
+const { printedDoorTags, addTaggedDoorOpenings } = await import("../lib/tagged-door-openings.ts");
+const textFrame = { widthFeet: 100, heightFeet: 100 };
+const textViewport = { width: 100, height: 100, convertToViewportPoint: (x, y) => [y, x] };
+const label = { str: "D-12A", width: 2, height: 2, transform: [0, 1, -1, 0, 20, 10] };
+assert.deepEqual(printedDoorTags([label, { ...label, str: "12" }, { ...label, str: "SEE D12" }], textViewport, textFrame), [
+  { number: "D-12A", at: [11, 19] },
+], "A rotated PDF text tag is located from both of its text axes");
+const tags = [{ number: "D1", at: [11.5, 0.2] }];
+const [gap] = addTaggedDoorOpenings([], walls, tags);
+assert.deepEqual(gap, { a: [10, 0], b: [13, 0], width: 3, thickness: .4, kind: "door", number: "D1", leaves: 0, hinges: [], openTo: [], basis: "tagged-gap" });
+assert.deepEqual(addTaggedDoorOpenings(levelDoors, walls, tags), levelDoors, "The same opening already has a swing");
+assert.equal(addTaggedDoorOpenings([], [...walls, wall([9, 0], [14, 0])], tags).length, 0, "A tag over a continuous wall cannot identify an opening");
+assert.equal(addTaggedDoorOpenings([], walls, [{ number: "D1", at: [10.1, 0] }]).length, 0, "Require the tag near the gap's midpoint");
+assert.equal(addTaggedDoorOpenings([], walls, [...tags, { number: "D1", at: [30, 2] }]).length, 0, "An ambiguous tag number is skipped");
+assert.equal(addTaggedDoorOpenings([], walls, [...tags, { ...tags[0], number: "D2" }]).length, 0, "Conflicting tags on the same gap are skipped");
+const skew = [wall([0, 0], [10, 10]), wall([12, 12], [20, 20])];
+assert.equal(addTaggedDoorOpenings([], skew, [{ number: "D1", at: [11, 11] }])[0].width, 2.83, "Skewed walls work in plan coordinates");
+
+console.log("Door detection checked: printed tags in aligned wall gaps, swings drawn as short lines or true curves, leaf directions, pairs, toilet-stall doors, symbols and repeats refused, and the level's frame.");

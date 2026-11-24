@@ -4,6 +4,8 @@ import { register } from "node:module";
 register("./ts-resolver.mjs", import.meta.url);
 const M = await import("../lib/schematic-model.ts");
 const { EXTRA_JOBS } = await import("../lib/ai-jobs-more.ts");
+const { compactFloorPlanFromText } = await import("../lib/floor-plan-label.ts");
+const { dimensionedWallLayers } = await import("../lib/wall-assemblies.ts");
 
 // Levels from plan titles; one architectural floor plan per level.
 assert.equal(M.levelOfTitle("LEVEL 01 - FIRST FLOOR PLAN"), 1);
@@ -18,9 +20,23 @@ const reg = [
   ["A4.1", "EXTERIOR ELEVATIONS", "Architectural"], ["A5.1", "BUILDING SECTIONS", "Architectural"],
 ].map(([sheet, title, discipline]) => ({ sheet, title, discipline }));
 assert.deepEqual(M.levelPlanSheets(reg).map(p => [p.level, p.row.sheet]), [[1, "A1.1"], [2, "A1.2"]], "Enlarged, RCP, finish, MEP and roof plans are not floor plans; the first plan per level wins");
+assert.deepEqual(compactFloorPlanFromText("Scale 1:50 @ A3\nFloor plan L0\nSheet 1 of 4"), { sheet: "L0", level: 0, title: "Floor plan L0" });
+assert.equal(compactFloorPlanFromText("See floor plan L0\nFloor plan LP"), null);
+assert.equal(compactFloorPlanFromText("Floor plan L0\nFloor plan L1"), null, "Several views do not identify a single floor plan");
+assert.deepEqual(M.levelPlanSheets([
+  { sheet: "L0", title: "Floor plan L0", discipline: "Landscape" },
+  { sheet: "L1", title: "L1 Floor Plan", discipline: "Landscape" },
+  { sheet: "L2", title: "Landscape plan", discipline: "Landscape" },
+  { sheet: "L3", title: "Floor plan L4", discipline: "Landscape" },
+]).map(p => [p.level, p.row.sheet]), [[0, "L0"], [1, "L1"]]);
 assert.equal(M.heightSheet(reg).sheet, "A5.1", "Building sections before exterior elevations");
 assert.equal(M.heightSheet(reg.filter(r => r.sheet !== "A5.1")).sheet, "A4.1");
 assert.equal(M.heightSheet([]), null);
+const wallLayers = [{ material: "Studs", inches: 3.625 }, { material: "Gypsum board", inches: .625 }];
+assert.deepEqual(dimensionedWallLayers(wallLayers, '4 1/4"', 4.25 / 12), wallLayers);
+assert.deepEqual(dimensionedWallLayers(wallLayers, '4 1/4"', .6), [], "Reject a type inconsistent with the plan width");
+assert.deepEqual(dimensionedWallLayers(wallLayers, '5"', 5 / 12), [], "Reject an assembly that does not add up");
+assert.deepEqual(dimensionedWallLayers([...wallLayers, { material: "Insulation", inches: null }], '4 1/4"', 4.25 / 12), [], "Never assign an unspecified layer a 3D thickness");
 
 // Scale and sizing.
 assert.equal(M.feetPerInch(`SCALE: 1/8" = 1'-0"`), 8);

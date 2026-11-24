@@ -15,6 +15,7 @@ import { inAiPool } from "./ai-pool";
 import { useActiveProject } from "./project-scope";
 import { pageTextBoxes, type TextBox } from "./text-anchor";
 import { paintPage } from "./pdf-paint";
+import { compactFloorPlanFromText, compactFloorPlanTitle } from "./floor-plan-label";
 import { eachPageInRuns, freeCanvas, openLocalPdf, PAGES_PER_OPEN, pdfDecoders, readersFor } from "./local-pdf";
 import { pageTurn } from "./page-turns";
 import { keepPageImage, keepPageWords, keptPageImage, keptPageWords, pageImageKey, pageWordsKey } from "./page-image-cache";
@@ -163,7 +164,13 @@ async function readPages(file: File, kind: StoredDocument["kind"], onPage: (done
       const content = await page.getTextContent();
       const items = content.items.filter((item): item is typeof item & TextItem => "str" in item);
       pages[i - 1] = { page: i, text: items.map(item => item.str + ("hasEOL" in item && item.hasEOL ? "\n" : "")).join("") };
-      if (kind === "drawings") { const view = page.getViewport({ scale: 1 }); sheets[i - 1] = { page: i, sheet: sheetFromItems(items, view.width, view.height), title: "", date: "" }; }
+      if (kind === "drawings") {
+        const view = page.getViewport({ scale: 1 });
+        const printed = sheetFromItems(items, view.width, view.height);
+        const plan = compactFloorPlanFromText(pages[i - 1].text);
+        const sheet = plan && !/^A[-.]?\d/.test(printed) ? plan.sheet : printed;
+        sheets[i - 1] = { page: i, sheet, title: plan?.title ?? "", date: "" };
+      }
       page.cleanup();
       onPage(++done, total);
     });
@@ -276,7 +283,11 @@ async function readTitleBlocks(file: File, sheets: StoredSheet[], onProgress: (d
               return jpeg;
             }, true);
             const read = await readTitleBlock(image);
-            if (read.sheet) Object.assign(sheet, { sheet: read.sheet, title: read.title, date: read.date });
+            const plan = compactFloorPlanTitle(sheet.title);
+            if (plan) {
+              // The compact title can sit outside the strip the title-block reader sees.
+              if (read.date) sheet.date = read.date;
+            } else if (read.sheet) Object.assign(sheet, { sheet: read.sheet, title: read.title, date: read.date });
           } catch { /* keep what the text layer gave; the sheet can be named in List of drawings */ }
           onProgress(++done, out.length);
         }

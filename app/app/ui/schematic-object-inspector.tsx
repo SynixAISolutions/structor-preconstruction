@@ -75,11 +75,13 @@ export function SchematicObjectInspector({ levels, spaces, pick, canOpenPlan, on
         </div>
         <dl>
           <div><dt>Level</dt><dd>{level.name}</dd></div>
-          {door && <div><dt>Opening</dt><dd>{door.width.toLocaleString(undefined, { maximumFractionDigits: 2 })} ft · {door.leaves === 2 ? "Pair" : "Single leaf"}</dd></div>}
+          {door && <div><dt>Opening</dt><dd>{door.width.toLocaleString(undefined, { maximumFractionDigits: 2 })} ft{door.basis !== "tagged-gap" && (door.leaves === 2 ? " · Pair" : " · Single leaf")}</dd></div>}
           {floor && <div><dt>Detected room area</dt><dd>{floor.area.toLocaleString()} SF</dd></div>}
           <div><dt>Source</dt><dd>{level.source.sheet} · PDF page {level.source.page}</dd></div>
         </dl>
+        {floor && <p>Area follows the detected room boundary. Slab and finish layers are unverified.</p>}
         {floor && isSportsFloor(floor) && <p>Court markings and equipment require their own drawing evidence.</p>}
+        {door?.basis === "tagged-gap" && <p>A printed door tag matches this gap in the wall. Door height and swing are unverified.</p>}
         {door && !door.number && <p>The swing was detected on the plan. No door tag was matched.</p>}
         {canOpenPlan(level) && <Button onClick={() => onPlan(level, pick)}>{floor ? "Open " + level.source.sheet : "Show door on plan"}</Button>}
       </div>}

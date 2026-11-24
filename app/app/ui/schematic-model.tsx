@@ -6,7 +6,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { buildSchematicModel, readWallLayers, useSchematicModel } from "../../lib/schematic-model-client";
 import { editColumn, editDoorNumber, editGlazing, editPartition, editStair, editWall, heightSheet, keptWalls, levelSpaces, longestWallOfType, moveOutlinePoint, partitionTypeSheet, polygonArea, setLevelHeight, setOpenToBelow, setPartitionTypes, setUntaggedWallType, stairRise, type Point, type SchematicLevel, type SchematicModel } from "../../lib/schematic-model";
 import { glazingTotals, scheduleRow, wallTypeTotals, type PartitionType } from "../../lib/tag-placement";
-import { inchesLabel, layerColor, layersFit, layerSlabs, openedCenter, parseInches } from "../../lib/wall-assemblies";
+import { dimensionedWallLayers, inchesLabel, layerColor, layersFit, layerSlabs, openedCenter, parseInches } from "../../lib/wall-assemblies";
 import { openStoredPdf, renderStoredPage, useProjectDocuments } from "../../lib/project-files-client";
 import { drawingRegister, type StoredDocument } from "../../lib/project-files";
 import type { Project } from "../../lib/projects";
@@ -41,8 +41,6 @@ function roomLabel(text: string) {
   return new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false }));
 }
 const NO_TYPES: PartitionType[] = [];
-/** A wall's layers, when the partition type sheet's reading gave its type some. */
-const wallLayersOf = (level: SchematicLevel, index: number, schedule: PartitionType[]) => { const type = level.walls?.[index]?.type; return (type && scheduleRow(type, schedule)?.layers) || []; };
 /** Where a level sits in the view: its elevation, or spread apart when the levels are exploded. */
 const levelBase = (model: SchematicModel, level: SchematicLevel, explode: boolean) => level.elevation + (explode ? model.levels.indexOf(level) * 15 : 0);
 const ease = (t: number) => t < .5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
@@ -331,7 +329,9 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
     current.invalidate();
     const level = pick ? model.levels.find(l => l.id === pick.levelId) : undefined, wall = level && pick ? level.walls?.[pick.index] : undefined;
     if (!pick || !level || !wall || wall.excluded || !walls || !visible.includes(level.id)) { shown.current = ""; return; }
-    const layers = wallLayersOf(level, pick.index, schedule), opened = wallLayerGroup(level, pick.index, layers);
+    const row = wall.type ? scheduleRow(wall.type, schedule) : null;
+    const layers = row?.layers ? dimensionedWallLayers(row.layers, row.thickness, wall.thickness) : [];
+    const opened = wallLayerGroup(level, pick.index, layers);
     if (!opened) return;
     opened.position.y += levelBase(model, level, explode);
     opened.userData.pick = { kind: "wall", levelId: level.id, index: pick.index } satisfies WallPick;
@@ -397,7 +397,7 @@ function PickEditor({ level, pick, types, onWall, onDoor, onGlazing, onPartition
   return <form className="sm-pick" aria-label={wall ? `Wall ${pick.index + 1}` : glass ? `Glass ${pick.index + 1}` : `Door ${door?.number ?? pick.index + 1}`} onSubmit={e => { e.preventDefault(); if (wall) onWall({ type: value }); else if (glass) onGlazing({ type: value }); else onDoor(value); }}>
     {wall ? <p><strong>Wall {pick.index + 1}</strong> · {length} ft · {Math.round(wall.thickness * 12 * 10) / 10}" thick · {wall.excluded ? "marked not a wall" : wall.type ? `${wall.type} ${wall.edited ? "(set by you)" : wall.typeSet ? "(set for untagged walls)" : "(from the plan's tag)"}` : "no type"}</p>
       : glass ? <p><strong>Glass {pick.index + 1}</strong> · {length} ft · {glass.excluded ? "marked not glass" : glass.type ?? "no storefront or window type"}</p>
-      : <p><strong>Door{door?.number ? ` ${door.number}` : ""}</strong> · {door?.leaves === 2 ? "pair" : "single"} · {door?.width} ft wide</p>}
+      : <p><strong>Door{door?.number ? ` ${door.number}` : ""}</strong> · {door?.basis === "tagged-gap" ? "tagged opening" : door?.leaves === 2 ? "pair" : "single"} · {door?.width} ft wide</p>}
     <label className="ui-field">{wall ? "Wall type" : glass ? "Storefront or window type" : "Door number"}<input autoFocus maxLength={16} value={value} onChange={e => setValue(e.target.value)} list={wall ? "sm-wall-types" : undefined}/></label>
     {wall && <datalist id="sm-wall-types">{types.map(t => <option key={t} value={t}/>)}</datalist>}
     <Button type="submit" variant="primary">{wall ? "Save wall type" : glass ? "Save glass type" : "Save door number"}</Button>
@@ -514,6 +514,7 @@ function WallLayersCard({ level, index, layer, schedule, sheet, reading, onLayer
   if (!wall) return null;
   const length = Math.round(Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1]) * 10) / 10, row = wall.type ? scheduleRow(wall.type, schedule) : null;
   const layers = row?.layers ?? [], slabs = layerSlabs(layers, wall.thickness), fit = row ? layersFit(layers, row.thickness) : "unknown";
+  const hasLayerGeometry = !!row && dimensionedWallLayers(layers, row.thickness, wall.thickness).length > 0;
   const total = slabs.filter(s => !s.inside).reduce((sum, s) => sum + (s.inches ?? 0), 0), measured = Math.round(wall.thickness * 12 * 10) / 10;
   // A wall much thicker or thinner on the plan than its type: likely the wrong type (or a tag read onto the wrong wall).
   const printed = row ? parseInches(row.thickness) : null, mismatch = printed !== null && Math.abs(measured - printed) > Math.max(1.5, printed * .3);
@@ -526,7 +527,8 @@ function WallLayersCard({ level, index, layer, schedule, sheet, reading, onLayer
     {row && <p>{[row.description, row.thickness && `${row.thickness} on the schedule`, row.rating && `Rating ${row.rating}`].filter(Boolean).join(" · ")}</p>}
     {mismatch && <p className="sm-layers-warn">On the plan this wall measures {measured}", but {wall.type} is {row!.thickness}: check its type on the plan.</p>}
     {layers.length ? <>
-      <ol className="sm-layer-list">{slabs.map((s, i) => <li key={i}><button type="button" aria-pressed={layer === i} onClick={() => onLayer(i)}><span className="sm-swatch" style={{ background: layerColor(s.material) }}/><span>{i + 1}. {s.material}</span><span>{s.inches !== null ? inchesLabel(s.inches) : s.inside ? "in the stud cavity" : "not given"}</span></button></li>)}</ol>
+      <ol className="sm-layer-list">{slabs.map((s, i) => <li key={i}><button type="button" disabled={!hasLayerGeometry} aria-pressed={layer === i} onClick={() => onLayer(i)}><span className="sm-swatch" style={{ background: layerColor(s.material) }}/><span>{i + 1}. {s.material}</span><span>{s.inches !== null ? inchesLabel(s.inches) : s.inside ? "in the stud cavity" : "not given"}</span></button></li>)}</ol>
+      {!hasLayerGeometry && <p>3D layers require a thickness for each layer and agreement with the wall on the plan.</p>}
       <p className={fit === "off" ? "sm-layers-warn" : undefined}>{fit === "fits" ? `The layers add up to ${inchesLabel(total)}, the schedule's ${row!.thickness}.` : fit === "off" ? `The layers add up to ${inchesLabel(total)}, but the schedule prints ${row!.thickness}: check ${wall.type} on ${sheet ?? "the partition type sheet"}.` : "Not every thickness is given, so the layers can't be checked against the schedule."}</p>
       <p>Listed from the side the tag is on. Worked out by AI from {sheet ?? "the partition type sheet"}'s legend and typical sections; check them on the sheet.</p>
     </> : <p>{why}</p>}

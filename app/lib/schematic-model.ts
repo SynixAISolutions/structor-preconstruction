@@ -10,6 +10,7 @@
 
 import { doorsFromSwings, swingArcs } from "./door-detection";
 import { floorOpenings } from "./floor-openings";
+import { compactFloorPlanTitle } from "./floor-plan-label";
 import { mergeTags, placeTags, tagOvals, type PartitionType, type PlacedTag } from "./tag-placement";
 import type { Curve, Segment } from "./plan-vectors";
 import type { RegisterRow } from "./project-files";
@@ -42,7 +43,7 @@ export type SchematicLevel = {
   walls?: SchematicWall[];
   /** How the walls were found, or why there are none. */
   wallNote?: string;
-  /** Doors read from the plan's swings (levelDoors), in the same feet. Missing on models built before 21 Oct. */
+  /** Swings and tagged openings read from the plan, in the same feet. Missing on models built before 21 Oct. */
   doors?: SchematicDoor[];
   /** Glass read from the plan's panes (levelGlazing). Missing on models built before 21 Oct. */
   glazing?: SchematicGlazing[];
@@ -76,7 +77,7 @@ export type SchematicWall = { a: Point; b: Point; thickness: number; type?: stri
  * is a toilet stall's door: toilet partitions, not the door schedule. `thickness` is the host wall's, for the
  * header above the opening.
  */
-export type SchematicDoor = { a: Point; b: Point; width: number; leaves: number; hinges: Point[]; openTo: Point[]; kind: "door" | "compartment"; thickness: number; number?: string | null };
+export type SchematicDoor = { a: Point; b: Point; width: number; leaves: number; hinges: Point[]; openTo: Point[]; kind: "door" | "compartment"; thickness: number; number?: string | null; basis?: "tagged-gap" };
 
 /**
  * Tiles over a plan's area for reading its tags: about `paperPt` points square on the sheet (small enough
@@ -154,6 +155,8 @@ const NOT_A_FLOOR_PLAN = /ENLARGED|REFLECTED|CEILING|FINISH|FF&E|COORDINATION|DE
 
 /** The level a plan title names: "LEVEL 01 - FIRST FLOOR PLAN" → 1; "SECOND FLOOR PLAN" → 2; null when none. */
 export function levelOfTitle(title: string): number | null {
+  const compact = compactFloorPlanTitle(title);
+  if (compact) return compact.level;
   const t = title.toUpperCase();
   const n = t.match(/\bLEVEL\s*0?(\d{1,2})\b/)?.[1] ?? t.match(/\b(\d{1,2})(?:ST|ND|RD|TH)\s+FLOOR\b/)?.[1];
   if (n !== undefined) return Number(n);
@@ -166,7 +169,9 @@ export function levelPlanSheets<T extends Pick<RegisterRow, "sheet" | "title" | 
   const out = new Map<number, T>();
   for (const row of register) {
     const t = row.title.toUpperCase();
-    if (row.discipline !== "Architectural" || !/FLOOR PLAN|LEVEL\s*0?\d+\s*-?\s*PLAN/.test(t) || NOT_A_FLOOR_PLAN.test(t)) continue;
+    const compact = compactFloorPlanTitle(t);
+    const architectural = row.discipline === "Architectural" || (row.discipline === "Landscape" && compact?.sheet === row.sheet.toUpperCase());
+    if (!architectural || (!compact && !/FLOOR PLAN|LEVEL\s*0?\d+\s*-?\s*PLAN/.test(t)) || NOT_A_FLOOR_PLAN.test(t)) continue;
     const level = levelOfTitle(t);
     if (level !== null && !out.has(level)) out.set(level, row);
   }
