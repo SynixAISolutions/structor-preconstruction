@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { BrainCircuit, Check, CheckCheck, Eye, EyeOff, FileSpreadsheet, Pencil, Plus, RotateCcw, X } from "lucide-react";
+import { BrainCircuit, Check, CheckCheck, Eye, EyeOff, FileSpreadsheet, FileText, Pencil, Plus, RotateCcw, X } from "lucide-react";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, SearchBox, Stats, Tabs, type ViewProps } from "./shared";
 import { contextPack, notHereText, planMemory, tradeTags, type MemoryEntry, type MemoryKind, type MemoryOrigin, type MemoryStatus } from "../../lib/memory";
 import { addMemory, changeMemory, fetchMemory, memoryCounts, memoryForScan, setMemoryStatus } from "../../lib/memory-client";
+import { ChecklistImport } from "./checklist-import";
 import { BidSheetImport } from "./memory-import";
 import type { MemoryCounts } from "../../lib/memory-store";
 import { readDraft } from "../../lib/use-local-draft";
@@ -33,6 +34,7 @@ export function MemoryView({ projects, notify }: ViewProps & { projects: Project
   const [kind, setKind] = useState<MemoryKind | "">("");
   const [origin, setOrigin] = useState<MemoryOrigin | "">("");
   const [importing, setImporting] = useState(false);
+  const [importingChecklists, setImportingChecklists] = useState(false);
   const [approvingAll, setApprovingAll] = useState(false);
   const [entries, setEntries] = useState<MemoryEntry[]>([]);
   const [counts, setCounts] = useState<MemoryCounts | null>(null);
@@ -69,7 +71,7 @@ export function MemoryView({ projects, notify }: ViewProps & { projects: Project
 
   return <div className="cm-view memory-view">
     <PageHeader eyebrow="WORKSPACE" title="AI memory" description="What Structor's AI has learned about how you split and word your scopes. Corrections made while reviewing scopes arrive here as proposals; only entries in use are read when the AI reads drawings and specifications."
-      actions={<><Button disabled={!packages.length} onClick={() => setPreviewing(true)}><Eye size={15}/>What the AI reads</Button><Button onClick={() => setImporting(true)}><FileSpreadsheet size={15}/>Import a bid sheet</Button><Button variant="primary" onClick={() => setAdding(true)}><Plus size={15}/>Add to memory</Button></>}/>
+      actions={<><Button disabled={!packages.length} onClick={() => setPreviewing(true)}><Eye size={15}/>What the AI reads</Button><Button onClick={() => setImporting(true)}><FileSpreadsheet size={15}/>Import a bid sheet</Button><Button onClick={() => setImportingChecklists(true)}><FileText size={15}/>Import scope checklists</Button><Button variant="primary" onClick={() => setAdding(true)}><Plus size={15}/>Add to memory</Button></>}/>
     <Stats items={[
       { label: "To review", value: counts?.proposed ?? "–", detail: "Learned or imported, not used yet", tone: counts?.proposed ? "orange" : "" },
       { label: "In use", value: counts?.approved ?? "–", detail: "Read by every scan they apply to", tone: "green" },
@@ -89,13 +91,13 @@ export function MemoryView({ projects, notify }: ViewProps & { projects: Project
       </div>
       {state.error ? <Empty title="The AI memory isn't available" description={state.error}/>
         : !entries.length && !state.loading ? <Empty title={search ? "Nothing matches that search" : status === "proposed" ? "Nothing waiting for review" : status === "approved" ? "Nothing in use yet" : "Nothing retired"}
-          description={status === "proposed" ? "Moving a line to another trade, rejecting an AI proposal as the wrong trade or not required, rewording one, assigning a section to a trade in Section coverage, or importing a bid sheet adds proposals here." : "Approve proposals, add what the AI should know, or import a bid sheet."}/>
+          description={status === "proposed" ? "Moving a line to another trade, rejecting an AI proposal as the wrong trade or not required, rewording one, assigning a section to a trade in Section coverage, or importing a bid sheet or scope checklists adds proposals here." : "Approve proposals, add what the AI should know, or import a bid sheet or scope checklists."}/>
         : <div className="memory-list" aria-busy={state.loading}>{entries.map(entry => <article key={entry.id} className="memory-entry">
           <div className="memory-entry-copy">
             <span className="memory-entry-meta"><Badge tone={KIND_TONE[entry.kind]}>{KIND_LABEL[entry.kind]}</Badge>{entry.seen > 1 && <Badge tone="orange">Seen {entry.seen} times</Badge>}<small>{projectName(entry.projectId)}{entry.trades.length ? ` · ${entry.trades.join(" · ")}` : " · Every trade"}{entry.section ? ` · ${entry.section}` : ""}</small></span>
             <strong>{entry.text}</strong>
             {entry.detail && <p>{entry.detail}</p>}
-            <small>{ORIGIN_LABEL[entry.origin]}{entry.source.from && entry.source.to ? ` (moved from ${entry.source.from} to ${entry.source.to})` : entry.source.reason ? ` (${entry.source.reason})` : entry.source.file ? ` from ${entry.source.file}, tab ${entry.source.tab}` : ""} · {entry.updatedBy || entry.createdBy} · {displayDate(entry.updatedAt.slice(0, 10))}</small>
+            <small>{ORIGIN_LABEL[entry.origin]}{entry.source.from && entry.source.to ? ` (moved from ${entry.source.from} to ${entry.source.to})` : entry.source.reason ? ` (${entry.source.reason})` : entry.source.checklist ? ` from the scope checklist ${entry.source.checklist}` : entry.source.file ? ` from ${entry.source.file}, tab ${entry.source.tab}` : ""} · {entry.updatedBy || entry.createdBy} · {displayDate(entry.updatedAt.slice(0, 10))}</small>
           </div>
           <div className="memory-entry-actions">
             {entry.status === "proposed" && <Button variant="primary" onClick={() => void change(entry, { status: "approved" }, "In use: scans read it from now on.")}><Check size={14}/>Approve</Button>}
@@ -116,6 +118,7 @@ export function MemoryView({ projects, notify }: ViewProps & { projects: Project
       return message;
     }}/>}
     {previewing && projectId && <MemoryPreview projectId={projectId} packages={packages} onClose={() => setPreviewing(false)}/>}
+    {importingChecklists && <ChecklistImport onClose={() => setImportingChecklists(false)} notify={notify} onDone={() => { setImportingChecklists(false); setTab("To review"); setOrigin("import"); void load(); }}/>}
     {importing && <BidSheetImport projectId={projectId} projectName={projectId ? projectName(projectId) : ""} onClose={() => setImporting(false)} notify={notify} onDone={() => { setImporting(false); setTab("To review"); setOrigin("import"); void load(); }}/>}
     {approvingAll && <Modal title={`Approve ${entries.length} entries?`} subtitle="Every scan they apply to reads them from now on. Retire any one later to stop it." onClose={() => setApprovingAll(false)}>
       <div className="memory-form">

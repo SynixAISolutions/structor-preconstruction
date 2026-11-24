@@ -41,6 +41,14 @@
 .memory-import-row > span:nth-child(2) { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
 .memory-import-row small { color: #8b979e; font-size: 11px; }
 .memory-import-row select { min-width: 0; padding: 6px 8px; border: 1px solid #dde3e0; border-radius: 6px; background: #fff; font: inherit; font-size: 12px; }
+.memory-import-item { border-top: 1px solid #edf0ee; }
+.memory-import-toggle { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 1px solid #dde3e0; border-radius: 6px; background: #fff; color: #5f6f78; cursor: pointer; }
+.memory-import-toggle:hover { background: #f6f8f7; }
+.memory-import-lines { padding: 6px 16px 12px 50px; border-top: 1px dashed #edf0ee; background: #fafbf8; font-size: 12px; color: #465767; }
+.memory-import-lines ol { margin: 4px 0 8px; padding-left: 20px; display: grid; gap: 3px; }
+.memory-import-lines ol ul { margin: 2px 0 0; padding-left: 18px; list-style: circle; color: #5f6f78; }
+.memory-import-lines strong { display: block; margin-top: 4px; color: #8d3f32; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+div.memory-error ul { margin: 4px 0 0; padding-left: 18px; }
 @media (max-width: 760px) { .memory-import-row { grid-template-columns: 28px 1fr; } .memory-import-row > :nth-child(n+3) { grid-column: 2; } .memory-import-row.head { display: none; } }
 
 /* Import scope: every project or only the open one */
@@ -48,11 +56,3 @@
 .memory-import-scope legend { padding: 0 4px; font-weight: 600; font-size: 0.85rem; }
 .memory-import-scope label { display: flex; gap: 8px; align-items: flex-start; font-size: 0.9rem; }
 
-/* Standard lines from the contractor's bid forms (standard-lines.tsx) */
-.standard-lines section { margin-bottom: 14px; }
-.standard-lines h3 { display: flex; gap: 8px; align-items: center; font-size: 0.95rem; margin: 0 0 6px; }
-.standard-lines ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 46vh; overflow-y: auto; }
-.standard-lines label { display: flex; gap: 10px; align-items: flex-start; padding: 6px 4px; border-radius: 6px; cursor: pointer; }
-.standard-lines label:hover { background: var(--surface-2, #f5f5f5); }
-.standard-lines label span { display: grid; gap: 2px; }
-.standard-lines small { color: var(--muted, #6b6b6b); }

@@ -16,6 +16,7 @@ import { leftOut, planMemory, rememberedSections, tradeMemory, type MemoryEntry 
 import { borrowedTags, tagFamilies } from "../../lib/finish-schedule";
 import { loadSheetTexts } from "../../lib/sheet-reference-client";
 import { memoryForScan, useScanMemory } from "../../lib/memory-client";
+import { tradeLines } from "../../lib/memory-check";
 import { readTradeScope } from "../../lib/scope-reading";
 import { getActiveProjectId, useActiveProject } from "../../lib/project-scope";
 import type { useExtraction } from "../../lib/use-extraction";
@@ -103,7 +104,7 @@ export function AiScopeWriter({ review, notify, onOpenFiles, onReview }: { revie
     update(id, { status: "reading" });
     const outcome = await readTradeScope({
       pkg, sections: assigned.get(id) ?? [], sheets: sheetsFor(id), signal, memory: tradeMemory(memory, pkg, projectId, assigned.get(id) ?? [], readers, split.partial.get(id), withDrawings ? sheetSplit.handed.get(id) : []),
-      owners, leavesOut: leftOut(memory, pkg, projectId), ...tags,
+      owners, leavesOut: leftOut(memory, pkg, projectId), ...tags, memoryLines: tradeLines(memory, pkg, projectId),
       onProgress: p => update(id, { status: "reading", done: p.done, total: p.total, note: p.note }),
       addFlipPages: pages => { const errors = latest.current.runFlip(current => pages.reduce((state, page) => state.pages.some(x => x.sheet === page.sheet) ? state : addPage(state, page), current)); return errors ? Object.values(errors)[0] ?? "A sheet could not be added to Drawing Flip." : null; },
     });

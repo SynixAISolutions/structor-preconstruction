@@ -28,6 +28,7 @@ import { readTradeScope } from "./scope-reading";
 import { leftOut, planMemory, rememberedSections, tradeMemory } from "./memory";
 import { borrowedTags, tagFamilies } from "./finish-schedule";
 import { memoryForScan } from "./memory-client";
+import { tradeLines } from "./memory-check";
 import { readDraft, writeDraft } from "./use-local-draft";
 import { writeGeneralScope } from "./general-scope-client";
 import { DRAFT_CHANGED, sharedReady, useSharedStatus } from "./shared-sync";
@@ -311,7 +312,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
       try {
         const outcome = await readTradeScope({
           pkg, sections, sheets, signal: controller.signal, memory: tradeMemory(memory.entries, pkg, projectId, sections, readers, split.partial.get(pkg.id), handed.get(pkg.id)),
-          owners, leavesOut: leaves(pkg), borrowed, printed,
+          owners, leavesOut: leaves(pkg), borrowed, printed, memoryLines: tradeLines(memory.entries, pkg, projectId),
           onProgress: p => {
             const left = ledger.get(pkg.id);
             if (left) left.counts = p.counts;

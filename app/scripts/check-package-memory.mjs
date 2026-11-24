@@ -173,7 +173,7 @@ assert.deepEqual(ids2(P.sheetsForTrade(finishRegister, "09 29 00")), ["A-012", "
 assert.deepEqual(ids2(P.sheetsForTrade(finishRegister, { code: "09 29 00", sheets: ["A-012", "AC101"] })), ["A-012", "AC101", "A-506"], "also when the AI chose its sheets");
 assert.deepEqual(ids2(P.sheetsForTrade(finishRegister, "08 11 13")), ["A-601"], "Other trades are unchanged");
 
-// ── The contractor's standard lines, offered on a bid form ──
+// ── The contractor's imported lines, as a trade's scan reads them ──
 const line = (id, text, files, extra = {}) => entry({ id, kind: "example", text, trades: drywallTags, detail: 'Under "Gypsum Board"', events: files.map((f, i) => `import:${f}:GWB:line:${i}`), ...extra });
 const lines = [
   line("l1", "Comply with specified R-values", ["jelleff xlsx", "whittier xlsx"]),
@@ -183,12 +183,6 @@ const lines = [
   line("l5", "Provide keying for all locks", ["jelleff xlsx"], { trades: doorTags }),
   line("l6", "- Louvers", ["jelleff xlsx"], { detail: 'Under "Receive, Unload, Store and Install Only the following items"' }),
 ];
-assert.deepEqual(M.sheetsOf(lines[0]), ["jelleff xlsx", "whittier xlsx"], "The bid forms a line was on, from its import events");
-const offered = M.standardLines(lines, { code: "09 29 00", name: "Drywall" }, "p9", ["Tape and finish gypsum board joints, spackle and sand to Level 4 for assemblies scheduled to receive a finish"]);
-assert.deepEqual(offered.map(l => [l.title, l.group, l.sheets.length]), [["Comply with specified R-values", "Gypsum Board", 2], ["Demolish the 1926 wing", "Gypsum Board", 1], ["Receive, Unload, Store and Install Only the following items: Louvers", "Receive, Unload, Store and Install Only the following items", 1]],
-  "Imported lines for the trade, most-repeated first; not a line the form already has, not a correction's wording, not another trade's");
-assert.deepEqual(M.standardLines([...lines, entry({ id: "x", kind: "example", projectId: "p9", text: "Own sheet line", trades: drywallTags, events: ["import:p9 xlsx:GWB:line:0"] })], { code: "09 29 00", name: "Drywall" }, "p9", []).map(l => l.text), ["Own sheet line"],
-  "A project's own sheet replaces the company-wide lines there too");
 const dwPack = M.contextPack(lines, { projectId: "p9", code: "09 29 00", name: "Drywall" });
 assert(dwPack.includes("Lines this contractor's bid forms give Drywall (scope it carries, in its words; a specific line here wins over a general exclusion of the same work):\n") && dwPack.includes("\n- Comply with specified R-values") && dwPack.indexOf("\n- Comply with specified R-values") < dwPack.indexOf("How Drywall lines are worded") && dwPack.includes("How Drywall lines are worded on this contractor's bid forms:\n- Include rated duct enclosure assemblies"),
   "The AI reads imported lines as scope the trade carries, apart from wording learned from corrections");
@@ -253,4 +247,4 @@ await assert.rejects(store.setStatus(["x"], "bogus", "M"), /Choose proposed, app
 const live = M.rememberedSections(await store.search({ status: ["approved"], forProject: "p1" }), [{ id: "dw", name: "Drywall", code: "09 29 00" }], "p1", ["06 16 43", "09 29 00"]);
 assert.deepEqual([...live.byPackage], [["dw", ["06 16 43"]]], "Straight from the table to the trades' sections: the partly carried 09 29 00 isn't routed");
 
-console.log("Trade split checked: which sections a remembered split covers, the split on a project's packages (by code or name; a section several trades carry goes to each, a part claim adds a reader), what each trade is told it shares, drawing sheets handed to the trade that carries the work, the finish schedule read for drywall and ceilings, one project's own sheet and \"Not on this project\" over the company-wide entries, the contractor's standard lines offered on a bid form, which sections each trade reads, the scans' and the package plan's memory, a bid sheet read, matched and imported as proposals, what Section coverage teaches, and the table upgraded for trade splits with many approved at once.");
+console.log("Trade split checked: which sections a remembered split covers, the split on a project's packages (by code or name; a section several trades carry goes to each, a part claim adds a reader), what each trade is told it shares, drawing sheets handed to the trade that carries the work, the finish schedule read for drywall and ceilings, one project's own sheet and \"Not on this project\" over the company-wide entries, which sections each trade reads, the scans' and the package plan's memory, a bid sheet read, matched and imported as proposals, what Section coverage teaches, and the table upgraded for trade splits with many approved at once.");
