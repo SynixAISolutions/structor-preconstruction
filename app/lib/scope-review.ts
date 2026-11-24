@@ -1,5 +1,5 @@
 import { acceptDraft, ExtractionRuleError, type Draft, type ExtractionRun, type ExtractionState, type RegionDraft, type ReviewRecords } from "./extraction";
-import { linkScope } from "./drawing-flip";
+import { addRegion, approveRegion, linkScope, type Point } from "./drawing-flip";
 import { addScope, applyScopeToAllTrades, approveScope, combinePackages, type Procurement } from "./procurement";
 
 export type GeneralScope = { id: string; title: string; detail: string; source: string };
@@ -37,7 +37,8 @@ export function regionsForScope(extraction: ExtractionState, scopeId: string): R
 
 /**
  * Approves a bid-form line and places its highlights on Drawing Flip, linked to it (Danial, 28 Oct: an approved line's
- * "Drawing region" proposals stayed behind in the list). A highlight whose sheet isn't on Drawing Flip stays for review.
+ * "Drawing region" proposals stayed behind in the list), approving the ones already there. A highlight whose sheet isn't
+ * on Drawing Flip stays for review.
  */
 export function approveWithRegions(records: ReviewRecords, scopeId: string, by: string, at = new Date().toISOString()): ReviewRecords {
   let next: ReviewRecords = { ...records, procurement: records.procurement.scopes.find(s => s.id === scopeId)?.status === "approved" ? records.procurement : approveScope(records.procurement, scopeId, by, at) };
@@ -49,6 +50,8 @@ export function approveWithRegions(records: ReviewRecords, scopeId: string, by: 
       if (regionId && !next.flip.regions.find(r => r.id === regionId)?.scopeIds.includes(scopeId)) next = { ...next, flip: linkScope(next.flip, next.procurement, regionId, scopeId, by, at) };
     } catch (error) { if (!(error instanceof ExtractionRuleError)) throw error; }
   }
+  // Highlights already on Drawing Flip for this line (lib/extraction placeHighlights) are approved with it.
+  for (const region of next.flip.regions) if (region.status === "pending-review" && region.scopeIds.includes(scopeId)) next = { ...next, flip: approveRegion(next.flip, region.id, by, at) };
   return next;
 }
 
@@ -68,6 +71,24 @@ export function combineTrades(records: ReviewRecords, fromId: string, toId: stri
     },
     flip: { ...records.flip, regions: records.flip.regions.map(r => r.packageId === fromId ? { ...r, packageId: toId } : r) },
   };
+}
+
+/**
+ * A bid-form line an estimator marks on a sheet (Danial, 24 Nov: right-click the drawing, highlight an area with a
+ * rectangle, choose the trade, and it goes into that trade's scopes). The line goes in the trade's bid form approved by
+ * whoever wrote it, with the sheet as its source, and its highlight goes on Drawing Flip in that trade, linked to it.
+ */
+export function addScopeOnSheet(records: Pick<ReviewRecords, "procurement" | "flip">, input: { pageId: string; polygon: Point[]; packageId: string; title: string; detail?: string }, by: string, at = new Date().toISOString()): Pick<ReviewRecords, "procurement" | "flip"> & { scopeId: string; regionId: string } {
+  if (!by.trim()) throw new ExtractionRuleError("Say who added the line.");
+  const page = records.flip.pages.find(p => p.id === input.pageId);
+  if (!page) throw new ExtractionRuleError("Choose the drawing sheet.");
+  const title = input.title.trim();
+  if (!title) throw new ExtractionRuleError("Write the scope line.");
+  let procurement = addScope(records.procurement, { packageId: input.packageId, title, detail: input.detail, source: `${page.sheet} · marked on the drawing`, origin: "estimator" }, by, at);
+  const scopeId = procurement.scopes.at(-1)!.id;
+  procurement = approveScope(procurement, scopeId, by, at);
+  const flip = addRegion(records.flip, procurement, { pageId: page.id, label: title, polygon: input.polygon, packageId: input.packageId, scopeIds: [scopeId], origin: "estimator" }, by, at);
+  return { procurement, flip, scopeId, regionId: flip.regions.at(-1)!.id };
 }
 
 export function removeReviewedScope(records: ReviewRecords, scopeId: string, by: string, at = new Date().toISOString()): ReviewRecords {

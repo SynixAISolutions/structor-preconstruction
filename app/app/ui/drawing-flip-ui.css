@@ -68,3 +68,46 @@
 .flip-owner-select { max-width:100%; padding:4px 8px; border:1px solid var(--line); border-radius:6px; background:var(--paper); color:var(--ink); font:inherit; }
 .flip-approximate-note { color:#9a5b12; }
 .flip-pan { overscroll-behavior:contain; }
+/* "Only sheets with highlights" sits in the sheet toolbar, at the toolbar text size (24 Nov). */
+.flip-toolbar .flip-only-marked { font-size:11px; color:#425466; align-self:center; }
+.flip-place-panel .ui-button { margin-top:4px; }
+/* The drawing box (24 Nov): wheel zoom, drag to move, right-click to mark a scope line, Previous/Next on the sheet. */
+.flip-box-pan { cursor:grab; user-select:none; touch-action:none; overscroll-behavior:contain; }
+.flip-box-pan:active { cursor:grabbing; }
+.flip-box-pan:focus-visible { outline:2px solid #267b62; outline-offset:2px; }
+.flip-box-pan.is-drawing, .flip-box-pan .flip-drawing-box { cursor:crosshair; }
+.flip-new-box rect[data-handle="move"] { fill:rgb(38 123 98 / .16); stroke:#267b62; stroke-width:2.5; stroke-dasharray:8 5; cursor:move; vector-effect:non-scaling-stroke; }
+.flip-new-box .flip-box-handle { fill:#fff; stroke:#267b62; stroke-width:2; vector-effect:non-scaling-stroke; }
+.flip-new-box .flip-box-handle.nw, .flip-new-box .flip-box-handle.se { cursor:nwse-resize; }
+.flip-new-box .flip-box-handle.ne, .flip-new-box .flip-box-handle.sw { cursor:nesw-resize; }
+.flip-sheet-step { position:absolute; top:50%; z-index:3; display:grid; place-items:center; width:38px; height:38px; margin-top:-19px; border:1px solid #d5dde2; border-radius:50%; background:rgb(255 255 255 / .94); color:#33495a; box-shadow:0 4px 12px rgb(32 50 63 / .18); cursor:pointer; }
+.flip-sheet-step:hover { background:#fff; color:#1d2f3c; }
+.flip-sheet-step.prev { left:16px; }
+.flip-sheet-step.next { right:16px; }
+.flip-sheet-label, .flip-box-zoom, .flip-box-hint { position:absolute; z-index:3; border-radius:999px; background:rgb(255 255 255 / .94); box-shadow:0 2px 8px rgb(32 50 63 / .14); color:#33495a; font-size:11px; }
+.flip-sheet-label { top:16px; left:16px; padding:5px 11px; font-weight:600; }
+.flip-box-zoom { right:16px; bottom:16px; display:flex; align-items:center; gap:2px; padding:3px; }
+.flip-box-zoom button { min-width:28px; height:26px; border:0; border-radius:999px; background:transparent; color:#33495a; font-size:13px; cursor:pointer; }
+.flip-box-zoom button:hover { background:#eef2f4; }
+.flip-box-zoom output { min-width:42px; text-align:center; font-variant-numeric:tabular-nums; }
+.flip-box-hint { left:50%; bottom:16px; transform:translateX(-50%); padding:5px 11px; color:#5d6f7d; white-space:nowrap; pointer-events:none; }
+.flip-box-hint.is-active { background:#267b62; color:#fff; }
+.flip-context-menu { position:absolute; z-index:5; min-width:190px; padding:4px; border:1px solid #d5dde2; border-radius:8px; background:#fff; box-shadow:0 10px 24px rgb(32 50 63 / .2); }
+.flip-context-menu button { display:flex; align-items:center; gap:8px; width:100%; padding:8px 10px; border:0; border-radius:6px; background:transparent; color:#1d2f3c; font-size:12px; text-align:left; cursor:pointer; }
+.flip-context-menu button:hover, .flip-context-menu button:focus-visible { background:#eef6f2; outline:none; }
+.flip-mark-form { position:absolute; top:16px; right:64px; z-index:4; width:min(300px, calc(100% - 128px)); }
+.flip-mark-card { display:grid; gap:8px; padding:12px; border:1px solid #d5dde2; border-radius:10px; background:#fff; box-shadow:0 12px 28px rgb(32 50 63 / .22); }
+.flip-mark-card small { color:#6b7c89; font-size:11px; }
+.flip-mark-card .flip-form-actions { display:flex; justify-content:flex-end; gap:6px; }
+@media (max-width:700px) { .flip-mark-form { right:8px; left:8px; width:auto; } .flip-box-hint { display:none; } }
+/* The form opens away from the rectangle; the zoom sits top-right, clear of the floating feedback button. */
+.flip-box-zoom { top:16px; bottom:auto; }
+.flip-mark-form { top:56px; }
+.flip-mark-form.on-left { right:auto; left:64px; }
+/* Highlight outlines stay a thin line at any zoom (24 Nov: they thickened with the zoom); the number tag is a small pill. */
+.flip-region-layer polygon { stroke-width:1.5; vector-effect:non-scaling-stroke; }
+.flip-region-layer g.pending polygon { stroke-dasharray:5 3; }
+.flip-region-layer g:hover polygon, .flip-region-layer g:focus polygon, .flip-region-layer g.selected polygon { stroke-width:2.5; filter:none; }
+.flip-region-layer g.selected polygon { stroke-dasharray:none; }
+.flip-region-layer .flip-region-tag rect { opacity:.92; }
+.flip-region-layer .flip-region-tag text { fill:#fff; font-family:Inter, Arial, sans-serif; font-weight:600; letter-spacing:.02em; }

@@ -16,7 +16,7 @@ import { readPageTextBoxes, readStoredText, renderStoredPage } from "./project-f
 import { findInSheetImage } from "./sheet-ocr";
 import { checkImageQuotes, pinFindings, type TextBox } from "./text-anchor";
 import { NO_COUNTS, type TradeCounts } from "./run-time-left";
-import { checkScheduleTags, dropBorrowedTags, isFinishSchedule, type ReadPage, type ScheduleSheet, type TagOwner } from "./finish-schedule";
+import { checkScheduleTags, dropBorrowedTags, isFinishSchedule, leaveOthersItems, type ReadPage, type ScheduleSheet, type TagOwner } from "./finish-schedule";
 import { lineCheckDrafts, planLineCheck, type CheckPage, type ExistingLine, type MemoryLine } from "./memory-check";
 
 /** `counts` says how far the reading is in requests and sheets, for the automatic run's time left (lib/run-time-left). */
@@ -211,23 +211,26 @@ export async function readTradeScope(args: {
     if (!lines.length || (outcome.input.error && !outcome.input.drafts.length)) return;
     const existing: ExistingLine[] = outcome.input.drafts.flatMap(d => d.kind === "scope" ? [{ text: `${d.title} ${d.detail}`, source: d.source, cites: d.citations.map(c => `${c.document}#${c.page}`) }] : []);
     const plan = planLineCheck(lines, checkPages, existing);
-    let found = 0, failed = 0;
+    let found = 0, failed = 0, leftToOthers = 0;
     if (plan.requests.length) {
       say("specification", "Checking your bid-form lines on this project…");
       try {
         const checked = await checkMemoryLines(pkg, plan.requests, signal, (done, total) => say("specification", `Checking your bid-form lines on this project: ${Math.min(done + 1, total)} of ${total}`));
-        const added = lineCheckDrafts(checked.answers, pkg.id, existing);
-        found = added.length; failed = checked.failed;
+        const answered = lineCheckDrafts(checked.answers, pkg.id, existing);
+        // An item another trade carries here (toilet partitions on Whittier) is left to it (lib/finish-schedule).
+        const others = args.owners ? leaveOthersItems({ drafts: answered, pkg, reads: stored.map(s => s.section), owners: args.owners }) : { drafts: answered, dropped: [] };
+        const added = others.drafts;
+        found = added.length; failed = checked.failed; leftToOthers = others.dropped.length;
         outcome.input = { ...outcome.input, drafts: [...outcome.input.drafts, ...added] };
-        outcome.dropped.push(...checked.dropped);
+        outcome.dropped.push(...checked.dropped, ...others.dropped);
       } catch (error) {
         if (signal.aborted) return;
         outcome.dropped.push({ what: "Your bid-form lines", reason: `Not checked on this project (${error instanceof Error ? error.message : "AI error"}).` });
         return;
       } finally { say("specification", ""); }
     }
-    const notFound = lines.length - plan.covered - found;
-    outcome.dropped.push({ what: "Your bid-form lines", reason: `${lines.length} lines from your bid forms and scope checklists checked against the pages read: ${plan.covered} already written, ${found} found and added with their quotes, ${notFound} not called for on these pages${plan.unplaced.length ? ` (${plan.unplaced.length} of them on no page at all)` : ""}${failed ? `; ${failed} check request(s) failed` : ""}.` });
+    const notFound = lines.length - plan.covered - found - leftToOthers;
+    outcome.dropped.push({ what: "Your bid-form lines", reason: `${lines.length} lines from your bid forms and scope checklists checked against the pages read: ${plan.covered} already written, ${found} found and added with their quotes, ${leftToOthers ? `${leftToOthers} left to the trade that carries the item on this project, ` : ""}${notFound} not called for on these pages${plan.unplaced.length ? ` (${plan.unplaced.length} of them on no page at all)` : ""}${failed ? `; ${failed} check request(s) failed` : ""}.` });
   }
 
   const [specification, drawings] = await Promise.all([stored.length ? readSpecification() : null, sheets.length ? readSheets() : []]);

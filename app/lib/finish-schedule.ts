@@ -249,3 +249,61 @@ export function checkScheduleTags(args: { drafts: DraftInput[]; pkg: TagOwner; s
   }
   return { drafts: kept, added, dropped };
 }
+
+// ── Another trade's item on a line from the memory (Whittier runs 9-12: "Receive, unload, catalogue, store and install
+// toilet partitions TP-1") ──
+// Project 1's bid sheet gives Drywall "Toilet Accessories & Partitions" to receive and install; Whittier buys toilet
+// partitions (10 21 13) whole from Specialties, while Drywall still installs the toilet accessories (it reads 10 28 00 for
+// its part). The memory check (lib/memory-check) writes the contractor's wording from other projects wherever a page
+// shows the item, so before such a line goes on the bid form, the items it installs are matched to their usual
+// sections: when the trade reads none of them on this project and another trade carries them, the line is left to that
+// trade. Work at an item stays (blocking at toilet accessories, a recess for a cabinet): the item is where the work is.
+
+/**
+ * Items a bid-form line can install, to their usual sections: toilet accessories and fire extinguisher cabinets, then
+ * the finish types. Most specific first: each match uses up its words, so "fire extinguisher cabinets" isn't casework.
+ */
+const ITEM_TYPES: [RegExp, string][] = [
+  [/\bTOILET ACCESSOR(?:Y|IES)\b|\bGRAB BARS?\b/, "10 28 00"],
+  [/\bFIRE[- ](?:EXTINGUISHER|PROTECTION) CABINETS?\b|\bFIRE EXTINGUISHERS?\b/, "10 44 13"],
+  ...FINISH_TYPES.filter((t): t is [RegExp, string] => t[1] !== null),
+];
+/** Work done at an item, not the item itself. */
+const WORK_AT = /\b(BLOCKING|BACKING|GROUNDS?|NAILERS?|REINFORC\w*|FRAMING|RECESS\w*|OPENINGS?|CUT-?OUTS?|COORDINAT\w*|PREPAR\w*|SUPPORTS?|ANCHORAGE|LAYOUT)\b/;
+
+/** The items a line names, each with its usual section (toilet partitions: 10 21 13). */
+export function lineItems(text: string): { words: string; section: string }[] {
+  let upper = text.toUpperCase();
+  const out: { words: string; section: string }[] = [];
+  for (const [re, section] of ITEM_TYPES) {
+    const m = re.exec(upper);
+    if (!m) continue;
+    if (!out.some(o => o.section === section)) out.push({ words: m[0].toLowerCase(), section });
+    upper = `${upper.slice(0, m.index)}${" ".repeat(m[0].length)}${upper.slice(m.index + m[0].length)}`;
+  }
+  return out;
+}
+
+/**
+ * Lines installing an item whose sections this trade reads none of (`reads`: the section numbers it reads, in full or
+ * in part), when another trade carries them on this project (`owners`, lib/project-scopes sectionOwners): left to that
+ * trade with a note. A section counts as read at its level-2 number (10 28 00 covers 10 28 13). A line naming nothing
+ * the table knows, or naming one item the trade reads, stays.
+ */
+export function leaveOthersItems(args: { drafts: DraftInput[]; pkg: TagOwner; reads: string[]; owners: (section: string) => TagOwner[] }): { drafts: DraftInput[]; dropped: Dropped[] } {
+  const level2 = (s: string) => s.replace(/\D/g, "").slice(0, 4);
+  const read = new Set(args.reads.map(level2));
+  const dropped: Dropped[] = [];
+  const drafts = args.drafts.filter(d => {
+    if (d.kind !== "scope" || d.packageId !== args.pkg.id || WORK_AT.test(d.title.toUpperCase())) return true;
+    const items = lineItems(d.title);
+    if (!items.length || items.some(i => read.has(level2(i.section)))) return true;
+    const owners = items.map(i => args.owners(i.section).filter(o => o.id !== args.pkg.id));
+    if (owners.some(list => !list.length)) return true;
+    const names = [...new Set(owners.flat().map(o => o.name))].join(" or ");
+    const what = items.map(i => `${i.words[0].toUpperCase()}${i.words.slice(1)} (${i.section})`).join(", ");
+    dropped.push({ what: d.title, reason: `${what}: carried by ${names} on this project, and ${args.pkg.name} doesn't read ${items.length === 1 ? "that section" : "those sections"}, so this line from your bid forms is left to ${names}.` });
+    return false;
+  });
+  return { drafts, dropped };
+}

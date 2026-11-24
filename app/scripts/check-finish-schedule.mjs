@@ -173,4 +173,25 @@ assert.equal(cleaned.dropped.length, 1);
 assert.equal(cleaned.dropped[0].reason, "No SAW- tag is printed on this project's drawings or the pages Drywall read: SAW-01 comes from another project's bid form wording in the AI memory.");
 assert.deepEqual(F.dropBorrowedTags({ drafts: borrowedDrafts, pkg: { id: "drywall", name: "Drywall" }, pages: read, printed: new Set(["SAW", "LVT"]), borrowed: F.borrowedTags(memory, "this-project") }).drafts, borrowedDrafts, "A family the project prints anywhere (Project 1's own SAW-01) keeps the line");
 
+// ── A memory-check line installing another trade's item (Whittier runs 9-12: toilet partitions TP-1 on Drywall) ──
+assert.deepEqual(F.lineItems("Receive and install toilet partitions TP-1 in restrooms."), [{ words: "toilet partitions", section: "10 21 13" }]);
+assert.deepEqual(F.lineItems("Receive, unload and install toilet accessories and partitions").map(i => i.section), ["10 28 00"], "\"Accessories and partitions\" names the accessories; the partitions aren't read from it alone");
+const memLine = (key, title) => ({ kind: "scope", key, packageId: "drywall", title, detail: "", source: "A-506 · your bid forms", citations: [{ document: "Vol 1.pdf", page: 232, quote: "TP-1 TOILET PARTITIONS RESTROOMS" }] });
+const whittier = section => ({ "10 21 13": [{ id: "specialties", name: "Specialties" }], "10 28 00": [{ id: "specialties", name: "Specialties" }], "10 11 00": [{ id: "specialties", name: "Specialties" }] })[section] ?? [];
+const memLines = [
+  memLine("m1", "Receive, unload, catalogue, store and install toilet partitions TP-1 in restrooms."),
+  memLine("m2", "Receive, unload, catalogue, store, and install toilet accessories."),
+  memLine("m3", "Provide in-wall blocking at toilet partitions."),
+  memLine("m4", "Receive, unload, catalogue, store and install markerboards and tackboards."),
+  memLine("m5", "Receive, unload, catalogue, store and install hollow metal doors."),
+  memLine("m7", "Receive, unload, catalogue, store, and install fire extinguisher cabinets."),
+  { ...memLine("m6", "Install toilet partitions."), packageId: "specialties" },
+];
+assert.deepEqual(F.lineItems("Install fire extinguisher cabinets and wall cabinets").map(i => i.section), ["10 44 13", "06 41 00"], "Fire extinguisher cabinets aren't casework; other cabinets still are");
+const left = F.leaveOthersItems({ drafts: memLines, pkg: { id: "drywall", name: "Drywall" }, reads: ["09 29 00", "10 28 13", "10 11 00", "10 26 00", "10 44 13"], owners: whittier });
+assert.deepEqual(left.drafts.map(d => d.key), ["m2", "m3", "m4", "m5", "m7", "m6"], "Only the line installing an item Drywall reads no section of goes; work at it, items it reads in part, and other trades' lines stay");
+assert.equal(left.dropped[0].reason, "Toilet partitions (10 21 13): carried by Specialties on this project, and Drywall doesn't read that section, so this line from your bid forms is left to Specialties.");
+assert.equal(F.leaveOthersItems({ drafts: memLines, pkg: { id: "drywall", name: "Drywall" }, reads: ["09 29 00"], owners: () => [] }).drafts.length, memLines.length, "Nobody known to carry it here: the line stays");
+assert.equal(F.leaveOthersItems({ drafts: memLines, pkg: { id: "drywall", name: "Drywall" }, reads: ["09 29 00", "10 28 13", "10 11 00", "10 21 13"], owners: whittier }).dropped.length, 0, "A trade that reads the item's section keeps the line (Project 1 if its split gave Drywall the partitions)");
+
 console.log("finish schedule checks passed");
