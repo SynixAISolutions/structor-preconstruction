@@ -115,6 +115,31 @@ export const notHereText = (entry: Pick<MemoryEntry, "text">) => `Not on this pr
 export const fromChecklist = (e: Pick<MemoryEntry, "events">) => e.events.some(x => x.startsWith("checklist:"));
 
 /** The approved entries a project reads, with its overrides applied. Every reader of the memory starts here. */
+/**
+ * Imported bid sheets a project leaves out of its scans (Danial, 25 Nov: a new project is tested on MCN's own documents
+ * for it, whose bid sheet is already in the memory, so scans would read their own answers). A sheet is the one its
+ * events name: "import:<sheet>:<tab>:<kind>:<n>" (lib/bid-sheet-import). Pure; lib/memory-client applies them to every scan.
+ */
+const eventSheet = (event: string): string | null => /^import:([^:]+):/.exec(event)?.[1] ?? null;
+/** The sheets the entries came from, with how many entries each gave, most first. */
+export function bidSheets(entries: Pick<MemoryEntry, "events">[]): { sheet: string; entries: number }[] {
+  const counts = new Map<string, number>();
+  for (const entry of entries) for (const sheet of new Set((entry.events ?? []).map(eventSheet).filter((s): s is string => !!s))) counts.set(sheet, (counts.get(sheet) ?? 0) + 1);
+  return [...counts].map(([sheet, n]) => ({ sheet, entries: n })).sort((a, b) => b.entries - a.entries || a.sheet.localeCompare(b.sheet));
+}
+/**
+ * The entries without those that came only from left-out sheets. One also given by another sheet, learned from a
+ * correction or added by an estimator stays: the rest of the memory supports it without the sheet.
+ */
+export function leaveOutSheets(entries: MemoryEntry[], sheets: string[]): MemoryEntry[] {
+  if (!sheets.length) return entries;
+  const out = new Set(sheets);
+  return entries.filter(entry => {
+    const from = (entry.events ?? []).map(eventSheet);
+    return entry.origin !== "import" || !from.length || from.some(sheet => sheet === null || !out.has(sheet));
+  });
+}
+
 export function projectMemory(entries: MemoryEntry[], projectId: string): MemoryEntry[] {
   const live = entries.filter(e => e.status === "approved" && (!e.projectId || e.projectId === projectId));
   const own = live.filter(e => e.projectId === projectId);
