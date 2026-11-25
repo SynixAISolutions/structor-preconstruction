@@ -14,6 +14,8 @@ import { inAiPool, timed } from "./ai-pool";
 import { drawingRegister, SCANNED_PAGE_TEXT, type StoredDocument } from "./project-files";
 import { readStoredText } from "./project-files-client";
 import { readDraft, writeDraft } from "./use-local-draft";
+import { memoryForScan } from "./memory-client";
+import { planMemory } from "./memory";
 
 export const AI_REFERENCES_KEY = "drawing-references-ai";
 /** One AI pass over a project's sheets. `key` names the sheets it read; `packages` the packages it looked for. */
@@ -61,7 +63,10 @@ export async function findReferencesWithAi(projectId: string, key: string, sheet
   const found = new Map<string, DrawingReference[]>(packages.map(p => [p.id, []]));
   const failed: string[] = [];
   let model = "", unreadSheets = 0, inARow = 0;
-  const input = { packages: packages.map(p => ({ id: p.id, name: p.name, code: p.code, sections: p.sections })) };
+  // The contractor's own trade split guides which trade each note goes to (lib/memory planMemory); read without it if
+  // the memory can't be reached, as before it existed.
+  const split = await memoryForScan(projectId).then(m => m.error ? "" : planMemory(m.entries, projectId)).catch(() => "");
+  const input = { packages: packages.map(p => ({ id: p.id, name: p.name, code: p.code, sections: p.sections })), ...(split ? { split } : {}) };
   await Promise.all(Array.from({ length: Math.min(PARALLEL_REFERENCES, queue.length) }, async () => {
     for (let batch = queue.shift(); batch && !signal.aborted; batch = queue.shift()) {
       try {

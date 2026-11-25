@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -48,13 +48,15 @@ import {
   type RegionOrigin,
   type RegionStatus, onPrintedWords } from "../../lib/drawing-flip";
 import { displayDate } from "../../lib/format";
-import { useDrawingFlip } from "../../lib/use-drawing-flip";
-import { useProcurement } from "../../lib/use-procurement";
+import { useExtraction } from "../../lib/use-extraction";
+import type { useProcurement } from "../../lib/use-procurement";
 import { editPackage } from "../../lib/procurement";
 import { loadProjects, sampleProjectRecords } from "../../lib/projects";
 import { getActiveProjectId } from "../../lib/project-scope";
 import { rememberPdf, useSourceFile } from "../../lib/pdf-session";
-import { renderStoredPage, useProjectDocuments } from "../../lib/project-files-client";
+import { readPageTextBoxes, renderStoredPage, useProjectDocuments } from "../../lib/project-files-client";
+import { findOnSheet, type Box } from "../../lib/text-anchor";
+import { useDrawingReferences } from "../../lib/use-drawing-references";
 import { locatePlan } from "../../lib/drawing-ai";
 import { locateScopes } from "../../lib/ai-more-client";
 import { drawingRegister, sheetKey, findSheet } from "../../lib/project-files";
@@ -132,7 +134,11 @@ export function TraceControls({ trace, number, onUndo, onFinish, onCancel, onRea
   </section>;
 }
 
-export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, expandable = true, fullPage = false, onFullPage, regionDetail, trace, traceActions, comparison, onClearComparison, focus, describe }: {
+/** A rectangle being marked on a sheet, 0-1 from its top-left corner. */
+export type MarkBox = { x: number; y: number; width: number; height: number };
+type BoxHandle = "move" | "nw" | "ne" | "sw" | "se";
+
+export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, expandable = true, fullPage = false, onFullPage, regionDetail, trace, traceActions, comparison, onClearComparison, focus, describe, navigation, markScope, textMarks, onTextMark }: {
   page: DrawingPage;
   regions: CanvasRegion[];
   selectedId: string;
@@ -146,6 +152,16 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
   focus?: { regionId: string; n: number } | null;
   /** The hover text for a region: number, label, trade and owner. */
   describe?: (region: CanvasRegion) => string;
+  /** Previous and Next on the sheet itself, with where it is in the set ("A-506 · 46 / 102"). */
+  navigation?: { label: string; onPrev: () => void; onNext: () => void };
+  /** Right-click "Add a scope line here": the rectangle being marked, and the box to fill in beside it. */
+  markScope?: { box: MarkBox | null; onBox: (box: MarkBox | null) => void; form: ReactNode };
+  /**
+   * Each trade's printed lines on this sheet from the AI's read of every sheet (lib/sheet-reference-client), boxed on
+   * the sheet's text layer in the trade's colour; clicking one picks its trade.
+   */
+  textMarks?: { packageId: string; label: string; color: string; quotes: string[] }[];
+  onTextMark?: (packageId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [zoom, setZoom] = useState(100);
@@ -179,6 +195,85 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
     return () => el.removeEventListener("wheel", wheel);
   }); // eslint-disable-line react-hooks/exhaustive-deps
   function expand(open:boolean){if(onFullPage)onFullPage(open);else setExpanded(open);}
+
+  // ── The drawing box on the page (Danial, 24 Nov): the wheel zooms where you point, left-drag moves the sheet, right-click
+  // marks a new scope line with a rectangle you can move and resize, and Previous/Next sit on the sheet. The full view keeps
+  // its own zoom.
+  const boxNav = !!navigation || !!markScope;
+  const boxRef = useRef<HTMLDivElement>(null), wrapRef = useRef<HTMLDivElement>(null);
+  const [boxZoom, setBoxZoom] = useState(100);
+  const boxZoomRef = useRef(boxZoom); boxZoomRef.current = boxZoom;
+  const boxKeep = useRef<{ fx: number; fy: number; px: number; py: number } | null>(null);
+  const [boxLaid, setBoxLaid] = useState(0);
+  const boxPan = useRef<{ x: number; y: number; left: number; top: number; moved: boolean } | null>(null);
+  const clickAfterPan = useRef(false);
+  const [menu, setMenu] = useState<{ left: number; top: number; point: Point } | null>(null);
+  /** After "Add a scope line here": the next drag draws the rectangle instead of moving the sheet. */
+  const [drawingBox, setDrawingBox] = useState(false);
+  const boxDrag = useRef<{ kind: BoxHandle | "new"; start: Point; box: MarkBox } | null>(null);
+  function boxZoomAt(next: number, clientX?: number, clientY?: number) {
+    const el = boxRef.current, value = Math.min(MAX_ZOOM, Math.max(100, Math.round(next)));
+    if (el) {
+      const rect = el.getBoundingClientRect(), px = (clientX ?? rect.left + rect.width / 2) - rect.left, py = (clientY ?? rect.top + rect.height / 2) - rect.top;
+      boxKeep.current = { fx: (el.scrollLeft + px) / el.scrollWidth, fy: (el.scrollTop + py) / el.scrollHeight, px, py };
+    }
+    setBoxZoom(value); setBoxLaid(n => n + 1);
+  }
+  useLayoutEffect(() => {
+    const el = boxRef.current, k = boxKeep.current;
+    if (!el || !k) return;
+    el.scrollLeft = k.fx * el.scrollWidth - k.px; el.scrollTop = k.fy * el.scrollHeight - k.py; boxKeep.current = null;
+  }, [boxZoom, boxLaid]);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el || !boxNav) return;
+    const wheel = (e: WheelEvent) => { e.preventDefault(); setMenu(null); boxZoomAt(boxZoomRef.current * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX, e.clientY); };
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => el.removeEventListener("wheel", wheel);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+  // A new sheet opens fitted, with nothing half-marked on it.
+  useEffect(() => { setBoxZoom(100); setMenu(null); setDrawingBox(false); boxDrag.current = null; markScope?.onBox(null); }, [page.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Where a pointer is on the sheet, 0-1, held to the sheet's edges. */
+  const sheetPoint = (e: { clientX: number; clientY: number }, sheet: Element): Point => {
+    const r = sheet.getBoundingClientRect();
+    return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) };
+  };
+  /** A starting rectangle where the menu was opened, to drag out a new one or move and resize this one. */
+  function startMark(point: Point) {
+    setMenu(null);
+    const width = 0.12, height = 0.06;
+    markScope?.onBox({ x: Math.min(1 - width, Math.max(0, point.x - width / 2)), y: Math.min(1 - height, Math.max(0, point.y - height / 2)), width, height });
+    setDrawingBox(true);
+  }
+  function cancelMark() { setMenu(null); setDrawingBox(false); boxDrag.current = null; markScope?.onBox(null); }
+  function markDown(e: ReactPointerEvent<SVGSVGElement>) {
+    if (!markScope || e.button !== 0) return;
+    const handle = (e.target as Element).closest("[data-handle]")?.getAttribute("data-handle") as BoxHandle | null;
+    if (!handle && !drawingBox) return;
+    e.stopPropagation();
+    const start = sheetPoint(e, e.currentTarget);
+    boxDrag.current = { kind: handle ?? "new", start, box: handle && markScope.box ? markScope.box : { x: start.x, y: start.y, width: 0, height: 0 } };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+  function markMove(e: ReactPointerEvent<SVGSVGElement>) {
+    const d = boxDrag.current;
+    if (!d || !markScope) return;
+    const p = sheetPoint(e, e.currentTarget), b = d.box, dx = p.x - d.start.x, dy = p.y - d.start.y;
+    if (d.kind === "new") { markScope.onBox({ x: Math.min(d.start.x, p.x), y: Math.min(d.start.y, p.y), width: Math.abs(dx), height: Math.abs(dy) }); return; }
+    if (d.kind === "move") { markScope.onBox({ ...b, x: Math.min(1 - b.width, Math.max(0, b.x + dx)), y: Math.min(1 - b.height, Math.max(0, b.y + dy)) }); return; }
+    const left = d.kind.includes("w") ? b.x + dx : b.x, right = d.kind.includes("e") ? b.x + b.width + dx : b.x + b.width;
+    const top = d.kind.includes("n") ? b.y + dy : b.y, bottom = d.kind.includes("s") ? b.y + b.height + dy : b.y + b.height;
+    markScope.onBox({ x: Math.max(0, Math.min(left, right)), y: Math.max(0, Math.min(top, bottom)), width: Math.min(1, Math.abs(right - left)), height: Math.min(1, Math.abs(bottom - top)) });
+  }
+  function markUp(e: ReactPointerEvent<SVGSVGElement>) {
+    const d = boxDrag.current;
+    boxDrag.current = null;
+    if (!d || !markScope) return;
+    setDrawingBox(false);
+    // A click without a drag keeps a rectangle there that can be seen and grabbed.
+    const p = sheetPoint(e, e.currentTarget);
+    if (d.kind === "new" && (Math.abs(p.x - d.start.x) < 0.01 || Math.abs(p.y - d.start.y) < 0.008)) markScope.onBox({ x: Math.min(0.88, Math.max(0, d.start.x - 0.06)), y: Math.min(0.94, Math.max(0, d.start.y - 0.03)), width: 0.12, height: 0.06 });
+  }
   useEffect(() => { pan.current = null; setHoverPoint(null); panElement.current?.focus({ preventScroll: true }); }, [trace?.regionId]);
 
   const file = useSourceFile(page.documentName);
@@ -203,6 +298,18 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
     return () => { live = false; };
   }, [storedKey]);
   const storedReady = storedImage?.key === storedKey ? storedImage : null;
+  // Each trade's printed lines from the read of every sheet, found on this sheet's text layer (a scanned sheet shows none).
+  const marksKey = stored && textMarks?.length ? `${stored.doc.id}:${stored.pageNumber}:${textMarks.map(m => `${m.packageId}=${m.quotes.join("|")}`).join(",")}` : "";
+  const [lineMarks, setLineMarks] = useState<{ key: string; marks: (Box & { color: string; label: string; packageId: string; quote: string })[] }>({ key: "", marks: [] });
+  useEffect(() => {
+    if (!marksKey || !stored) return;
+    let live = true;
+    readPageTextBoxes(stored.doc, stored.pageNumber).then(
+      text => { if (live) setLineMarks({ key: marksKey, marks: (textMarks ?? []).flatMap(m => m.quotes.flatMap(quote => findOnSheet(text, quote).map(box => ({ ...box, color: m.color, label: m.label, packageId: m.packageId, quote })))) }); },
+      () => { if (live) setLineMarks({ key: marksKey, marks: [] }); });
+    return () => { live = false; };
+  }, [marksKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shownLines = marksKey && lineMarks.key === marksKey ? lineMarks.marks : [];
   useEffect(() => {
     const region = focus && regions.find(r => r.id === focus.regionId), el = panElement.current;
     if (!isExpanded || !region || !el) return;
@@ -222,36 +329,90 @@ export function DrawingCanvas({ page, regions, selectedId, colors, onSelect, exp
   const displayPage = image ? { ...page, image } : page;
   const height = 1000 / (storedReady?.aspect ?? page.aspect);
   const svgPoints = (points: Point[]) => points.map(point => `${point.x * 1000},${point.y * height}`).join(" ");
-  const drawing = (interactive = false) => sourceNeeded || <svg viewBox={`0 0 1000 ${height}`} role="img" aria-label={`${page.sheet} with ${regions.length} trade regions`}
-    className={interactive && trace ? "flip-tracing" : undefined}
+  // The marked rectangle's corner handles stay about 12 px on screen at any zoom.
+  const handle = 12 / Math.max(0.05, (boxRef.current?.clientWidth ?? 700) * boxZoom / 100 / 1000);
+  // The form opens on the side of the sheet away from the rectangle, so it never covers it (as laid out last).
+  const formOnLeft = (() => {
+    const b = markScope?.box, sheet = boxRef.current?.querySelector("svg")?.getBoundingClientRect(), wrap = wrapRef.current?.getBoundingClientRect();
+    return !!(b && sheet && wrap) && sheet.left + (b.x + b.width / 2) * sheet.width > wrap.left + wrap.width / 2;
+  })();
+  /** Screen pixels per drawing unit (the sheet is 1000 wide) in the drawing box, the full view, or a fixed sheet. */
+  const pxPerUnit = (inBox: boolean, full: boolean) => Math.max(0.05, ((inBox ? boxRef.current : full ? panElement.current : null)?.clientWidth ?? 700) * (inBox ? boxZoom : full ? zoom : 100) / 100 / 1000);
+  const drawing = (interactive = false, inBox = false) => sourceNeeded || <svg viewBox={`0 0 1000 ${height}`} role="img" aria-label={`${page.sheet} with ${regions.length} trade regions`}
+    className={interactive && trace ? "flip-tracing" : inBox && drawingBox ? "flip-drawing-box" : undefined}
     onClick={interactive && trace ? event => { const point = pointerToPage(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect()); if (point) { traceActions?.onPoint(point); panElement.current?.focus({ preventScroll: true }); } } : undefined}
-    onPointerMove={interactive && trace ? event => setHoverPoint(pointerToPage(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect())) : undefined}
+    onPointerDown={inBox ? markDown : undefined}
+    onPointerMove={inBox ? markMove : interactive && trace ? event => setHoverPoint(pointerToPage(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect())) : undefined}
+    onPointerUp={inBox ? markUp : undefined}
     onPointerLeave={() => setHoverPoint(null)}>
     <DrawingBackdrop page={displayPage} height={height}/>
-    <g className="flip-region-layer">{regions.map(region => {
+    {shownLines.length > 0 && <g className="flip-line-layer">{shownLines.map((m, i) => <rect key={i} x={m.x * 1000} y={m.y * height} width={m.width * 1000} height={m.height * height} fill={`${m.color}2a`} stroke={m.color} onClick={() => { if (clickAfterPan.current) { clickAfterPan.current = false; return; } onTextMark?.(m.packageId); }}><title>{`${m.label}: ${m.quote}`}</title></rect>)}</g>}
+    <g className="flip-region-layer">{(() => { const unit = pxPerUnit(inBox, interactive); return regions.map(region => {
       const points = region.polygon.map(point => `${point.x * 1000},${point.y * height}`).join(" ");
-      const centerX = region.polygon.reduce((sum, point) => sum + point.x, 0) / region.polygon.length * 1000;
-      const centerY = region.polygon.reduce((sum, point) => sum + point.y, 0) / region.polygon.length * height;
+      // The selected highlight's number is a small tag at its top-left corner, just outside it, about 15 px tall at any zoom
+      // (Danial, 24 Nov: a 32-unit circle on the box's middle grew with the zoom and covered the title it marked). The rest
+      // show their number on hover and in the list below.
+      const box = bounds(region.polygon), tag = region.number.replace("R-", "");
+      const tagH = 15 / unit, tagW = (tag.length * 6.4 + 10) / unit, gap = 3 / unit;
+      const tagX = Math.min(1000 - tagW, box.x * 1000), above = box.y * height - tagH - gap;
+      const tagY = above >= 0 ? above : (box.y + box.height) * height + gap;
       const color = colors.get(region.packageId) ?? "#697b8c";
-      return <g key={region.id} role={interactive && trace ? undefined : "button"} tabIndex={interactive && trace ? undefined : 0} aria-label={`${region.number}: ${region.label}`} className={`${selectedId === region.id ? "selected" : ""} ${region.status === "pending-review" ? "pending" : ""} ${region.anchor === "image" ? "approximate" : ""} ${trace?.regionId === region.id ? "trace-original" : ""}`} onClick={() => { if (!(interactive && trace)) onSelect(region.id); }} onKeyDown={event => { if (!(interactive && trace) && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onSelect(region.id); } }}>
+      return <g key={region.id} role={interactive && trace ? undefined : "button"} tabIndex={interactive && trace ? undefined : 0} aria-label={`${region.number}: ${region.label}`} className={`${selectedId === region.id ? "selected" : ""} ${region.status === "pending-review" ? "pending" : ""} ${region.anchor === "image" ? "approximate" : ""} ${trace?.regionId === region.id ? "trace-original" : ""}`} onClick={() => { if (clickAfterPan.current) { clickAfterPan.current = false; return; } if (!(interactive && trace)) onSelect(region.id); }} onKeyDown={event => { if (!(interactive && trace) && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onSelect(region.id); } }}>
         <title>{describe ? describe(region) : `${region.number}: ${region.label}`}</title>
         <polygon points={points} fill={`${color}30`} stroke={color}/>
-        <circle cx={centerX} cy={centerY} r="16" fill={color}/>
-        <text x={centerX} y={centerY + 4}>{region.number.replace("R-", "")}</text>
+        {selectedId === region.id && <g className="flip-region-tag"><rect x={tagX} y={tagY} width={tagW} height={tagH} rx={tagH / 2} fill={color}/><text x={tagX + tagW / 2} y={tagY + tagH / 2} dominantBaseline="central" style={{ fontSize: `${9.5 / unit}px` }}>{tag}</text></g>}
       </g>;
-    })}</g>
+    }); })()}</g>
     {!trace && comparison && <polygon className="flip-previous-outline" points={svgPoints(comparison.from)} aria-label="Previous outline"/>}
     {interactive && trace && <g className="flip-trace-overlay" aria-label="New outline">
       {trace.points.length >= 3 && <polygon points={svgPoints(trace.points)}/>}
       <polyline points={svgPoints([...trace.points, ...(hoverPoint ? [hoverPoint] : [])])}/>
       {trace.points.map((point, i) => <circle key={i} cx={point.x * 1000} cy={point.y * height} r="4"/>)}
     </g>}
+    {inBox && markScope?.box && (() => {
+      const b = markScope.box, x = b.x * 1000, y = b.y * height, w = b.width * 1000, h = b.height * height;
+      const corners: [BoxHandle, number, number][] = [["nw", x, y], ["ne", x + w, y], ["sw", x, y + h], ["se", x + w, y + h]];
+      return <g className="flip-new-box" aria-label="New scope line's area">
+        <rect data-handle="move" x={x} y={y} width={w} height={h}/>
+        {corners.map(([k, hx, hy]) => <rect key={k} data-handle={k} className={`flip-box-handle ${k}`} x={hx - handle / 2} y={hy - handle / 2} width={handle} height={handle}/>)}
+      </g>;
+    })()}
   </svg>;
   return <>
-    <div className="flip-canvas-wrap">
-      <div className="flip-sheet">{drawing()}</div>
+    <div ref={wrapRef} className="flip-canvas-wrap" onKeyDown={event => { if (event.key === "Escape" && (menu || markScope?.box)) { event.stopPropagation(); cancelMark(); } }}>
+      {boxNav
+        ? <div ref={boxRef} className={`flip-sheet flip-box-pan ${drawingBox ? "is-drawing" : ""}`} style={{ aspectRatio: `${storedReady?.aspect ?? page.aspect}` }} tabIndex={0} role="region"
+            aria-label={`${page.sheet}: scroll to zoom, drag to move the sheet${markScope ? ", right-click to add a scope line" : ""}`}
+            onPointerDown={e => { clickAfterPan.current = false; if (e.button !== 0 || drawingBox || (e.target as Element).closest("[data-handle], .flip-context-menu")) return; setMenu(null); boxPan.current = { x: e.clientX, y: e.clientY, left: e.currentTarget.scrollLeft, top: e.currentTarget.scrollTop, moved: false }; }}
+            onPointerMove={e => { const p = boxPan.current; if (!p) return; if (!p.moved) { if (Math.hypot(e.clientX - p.x, e.clientY - p.y) < 4) return; p.moved = true; e.currentTarget.setPointerCapture(e.pointerId); } e.currentTarget.scrollLeft = p.left + p.x - e.clientX; e.currentTarget.scrollTop = p.top + p.y - e.clientY; }}
+            onPointerUp={() => { if (boxPan.current?.moved) clickAfterPan.current = true; boxPan.current = null; }}
+            onPointerCancel={() => { boxPan.current = null; }}
+            onDoubleClick={e => { if ((e.target as Element).closest('[role="button"], [data-handle]')) return; boxZoomAt(boxZoom * 2, e.clientX, e.clientY); }}
+            onContextMenu={e => {
+              if (!markScope) return;
+              e.preventDefault();
+              const sheet = e.currentTarget.querySelector("svg"), wrap = wrapRef.current?.getBoundingClientRect();
+              if (!sheet || !wrap) return;
+              setMenu({ left: e.clientX - wrap.left, top: e.clientY - wrap.top, point: sheetPoint(e, sheet) });
+            }}>
+            <div className="flip-zoom-sheet" style={{ width: `${boxZoom}%` }}>{drawing(false, true)}</div>
+          </div>
+        : <div className="flip-sheet">{drawing()}</div>}
       {expandable && <button className="flip-expand" onClick={() => expand(true)} aria-label="Expand drawing"><Maximize2 size={16}/></button>}
       {!image && <span className="flip-image-state"><PencilRuler size={13}/>Diagram preview</span>}
+      {navigation && <>
+        <button className="flip-sheet-step prev" aria-label="Previous drawing" title="Previous drawing" onClick={navigation.onPrev}><ArrowLeft size={18}/></button>
+        <button className="flip-sheet-step next" aria-label="Next drawing" title="Next drawing" onClick={navigation.onNext}><ArrowRight size={18}/></button>
+        <span className="flip-sheet-label">{navigation.label}</span>
+      </>}
+      {boxNav && <div className="flip-box-zoom" role="group" aria-label="Sheet zoom"><button aria-label="Zoom out" onClick={() => boxZoomAt(boxZoom / 1.25)}>−</button><output>{boxZoom}%</output><button aria-label="Zoom in" onClick={() => boxZoomAt(boxZoom * 1.25)}>+</button><button onClick={() => boxZoomAt(100)}>Fit</button></div>}
+      {markScope && !markScope.box && !menu && <span className="flip-box-hint">Scroll to zoom · drag to move · right-click to add a scope line</span>}
+      {drawingBox && <span className="flip-box-hint is-active" role="status">Drag over the area for the new line, or move and resize the box · Esc cancels</span>}
+      {menu && <div className="flip-context-menu" role="menu" style={{ left: menu.left, top: menu.top }}>
+        <button role="menuitem" autoFocus onClick={() => startMark(menu.point)}><Plus size={14}/>Add a scope line here</button>
+        <button role="menuitem" onClick={() => setMenu(null)}>Cancel</button>
+      </div>}
+      {markScope?.box && <div className={`flip-mark-form ${formOnLeft ? "on-left" : ""}`}>{markScope.form}</div>}
     </div>
     {isExpanded && <Modal title={`${page.sheet} · ${page.title}`} subtitle={trace ? "Redraw outline · Trace the work on the sheet." : "Scroll to zoom where you point, drag or use arrow keys to pan, double-click to zoom in. Select a region to see its scope items. Esc closes."} fullScreen onClose={() => { if (trace) traceActions?.onCancel(); else expand(false); }}>
       <div className="flip-full-content" onKeyDownCapture={event => {
@@ -297,9 +458,16 @@ function RegionEditor({ packages, errors, onClose, onSave }: { packages: ReturnT
 }
 
 export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProps) {
-  const { state, run } = useDrawingFlip();
-  const { state: procurement, run: runProcurement } = useProcurement();
+  // One copy of the records: placing the AI's highlights writes the review findings and Drawing Flip together.
+  const { flip: state, runFlip: run, procurement, runProcurement, extraction, placeAllHighlights, addScopeOnDrawing } = useExtraction();
+  /** A scope line being marked on the sheet: its rectangle, and what goes in the bid form (Danial, 24 Nov). */
+  const [markBox, setMarkBox] = useState<MarkBox | null>(null);
+  const [markDraft, setMarkDraft] = useState({ packageId: "", title: "", detail: "" });
   const { documents } = useProjectDocuments();
+  /** Flip through the sheets that carry highlights only (Marcel, 18 Nov: each trade's scope highlighted per page, Next and Previous). */
+  const [onlyMarked, setOnlyMarked] = useState(true);
+  /** Highlights the AI drew while reading that aren't on Drawing Flip yet (lib/extraction placeHighlights). */
+  const waiting = useMemo(() => extraction.drafts.filter(d => d.kind === "region" && d.status === "pending-review" && !d.removed).length, [extraction.drafts]);
   const [fullPage,setFullPage] = useState(false);
   const [trace, setTrace] = useState<Trace | null>(null);
   const [comparison, setComparison] = useState<{ regionId: string; event: Extract<FlipRegion["history"][number], { kind: "redrawn" }> } | null>(null);
@@ -328,9 +496,28 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
   const [regionEditor, setRegionEditor] = useState(false);
   const [errors, setErrors] = useState<DrawingFlipErrors>({});
 
-  const page = state.pages.find(item => item.id === pageId) ?? state.pages[0];
-  const activePageId = page?.id ?? "";
   const [showGuesses, setShowGuesses] = useState(false);
+  // Each trade's printed lines on each sheet from the AI's read of every sheet (lib/use-drawing-references; Danial, 24 Nov:
+  // only the 102 sheets the scope scans read had highlights, while that read had found trades on 376 of Whittier's 424).
+  // Shown as lines the trade appears on, not as reviewed highlights.
+  const references = useDrawingReferences(procurement.packages);
+  const [showLines, setShowLines] = useState(true);
+  const linesByPage = useMemo(() => {
+    const out = new Map<string, Map<string, string[]>>();
+    if (!references.ready) return out;
+    for (const pkg of procurement.packages) for (const ref of references.referencesFor(pkg.id)) {
+      const key = `${ref.docId}:${ref.page}`, trades = out.get(key) ?? new Map<string, string[]>();
+      trades.set(pkg.id, [...new Set([...(trades.get(pkg.id) ?? []), ...ref.lines])]);
+      out.set(key, trades);
+    }
+    return out;
+  }, [references.ready, references.referencesFor, procurement.packages]);
+  const linesOn = (p: { documentId: string; pageNumber: number }) => linesByPage.get(`${p.documentId}:${p.pageNumber}`);
+  const lineCount = (p: { documentId: string; pageNumber: number }) => showLines ? [...(linesOn(p)?.values() ?? [])].reduce((n, lines) => n + lines.length, 0) : 0;
+  const marked = useMemo(() => new Set([...state.regions.filter(r => showGuesses || onPrintedWords(r)).map(r => r.pageId), ...(showLines ? state.pages.filter(p => linesOn(p)?.size).map(p => p.id) : [])]), [state.regions, state.pages, showGuesses, showLines, linesByPage]); // eslint-disable-line react-hooks/exhaustive-deps
+  const flipPages = onlyMarked && marked.size ? state.pages.filter(p => marked.has(p.id)) : state.pages;
+  const page = state.pages.find(item => item.id === pageId) ?? flipPages[0] ?? state.pages[0];
+  const activePageId = page?.id ?? "";
   const guesses = state.regions.filter(r => r.pageId === activePageId && !onPrintedWords(r)).length;
   const visible = useMemo(() => filterRegions(state, procurement, {
     pageId: activePageId,
@@ -341,12 +528,18 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
     corrected: filters.corrected || undefined,
   }).filter(region => (showGuesses || onPrintedWords(region)) && (!owner || procurement.packages.find(pkg => pkg.id === region.packageId)?.owner === owner)), [state, procurement, activePageId, filters, owner, showGuesses]);
   const selected = visible.find(item => item.id === regionId) ?? visible[0] ?? null;
-  const pageIndex = Math.max(0, state.pages.findIndex(item => item.id === activePageId));
+  const pageIndex = Math.max(0, flipPages.findIndex(item => item.id === activePageId));
   const summary = flipSummary(state);
   const pageSummary = flipSummary(state, activePageId);
   const hasRegionFilters = Boolean(filters.query.trim() || filters.packageId || filters.status || filters.origin || filters.corrected || owner);
-  const legend = tradeLegend(state, procurement, activePageId);
+  const regionLegend = tradeLegend(state, procurement, activePageId);
   const colors = useMemo(() => new Map(procurement.packages.map((pkg, index) => [pkg.id, tradeColors[index % tradeColors.length]])), [procurement.packages]);
+  // This sheet's trades: their highlights and the lines the read of every sheet found for them here.
+  const pageLines = page && showLines ? linesOn(page) : undefined;
+  const legend = procurement.packages.filter(pkg => regionLegend.some(item => item.packageId === pkg.id) || pageLines?.has(pkg.id))
+    .map(pkg => ({ packageId: pkg.id, name: pkg.name, regions: (regionLegend.find(item => item.packageId === pkg.id)?.regions ?? 0) + (pageLines?.get(pkg.id)?.length ?? 0) }));
+  const textMarks = [...(pageLines ?? [])].filter(([id]) => (!filters.packageId || filters.packageId === id) && (!owner || procurement.packages.find(pkg => pkg.id === id)?.owner === owner))
+    .map(([id, lines]) => ({ packageId: id, label: procurement.packages.find(pkg => pkg.id === id)?.name ?? id, color: colors.get(id) ?? "#697b8c", quotes: lines }));
   const missing = unlocatedScopes(state, procurement);
   const correctionLog = corrections(state);
   const selectedPackage = selected ? procurement.packages.find(pkg => pkg.id === selected.packageId) : undefined;
@@ -408,22 +601,46 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
       setResult(found);setProgress(`${found.regions.length} regions found · Awaiting review${abort.current.signal.aborted?" · Stopped":""}`);
     }catch(error){setProgress(error instanceof Error?error.message:"Finding scopes failed. Try again.");}finally{setLocating(false);}
   }
-  function movePage(next: number) { const target = state.pages[(next + state.pages.length) % state.pages.length]; if (target) { setPageId(target.id); setRegionId(""); } }
+  function movePage(next: number) { const target = flipPages[(next + flipPages.length) % flipPages.length]; if (target) { setPageId(target.id); setRegionId(""); } }
+  function saveMark() {
+    if (!markBox || !page) return;
+    if (markBox.width < 0.005 || markBox.height < 0.005) { notify("Drag the box over the area first: it is too small to see."); return; }
+    const issue = addScopeOnDrawing({ pageId: page.id, polygon: rectangle(markBox.x, markBox.y, markBox.width, markBox.height), packageId: markDraft.packageId, title: markDraft.title, detail: markDraft.detail }, CURRENT_USER);
+    if (issue) { notify(issue); return; }
+    notify(`Added to ${procurement.packages.find(p => p.id === markDraft.packageId)?.name ?? "the trade"}'s bid form, highlighted on ${page.sheet}.`);
+    // The trade stays chosen for the next line marked on the sheet.
+    setMarkBox(null); setMarkDraft(draft => ({ ...draft, title: "", detail: "" }));
+  }
+  function placeHighlights() {
+    const { placed, noPage } = placeAllHighlights();
+    if (placed) { setOnlyMarked(true); setPageId(""); setRegionId(""); }
+    notify(placed ? `${placed} highlight${placed === 1 ? "" : "s"} placed on the drawings, each in its trade's colour, awaiting your review.${noPage ? ` ${noPage} are on sheets not stored in Project files.` : ""}` : noPage ? `The ${noPage} waiting highlights are on sheets not stored in Project files.` : "No highlights are waiting.");
+  }
 
   if (!state.pages.length) return <div className="flip-view"><PageHeader eyebrow={`${projectName} / Scope coordination`} title="Drawing Flip" description="Flip through drawing pages, assign every marked region to a trade, and connect it to the bid scope." actions={<Button variant="primary" onClick={() => setPageEditor(true)}><FilePlus2 size={16}/>Add drawing page</Button>}/><Panel><Empty title="No drawing pages in this project" description="Add the first sheet, then mark estimator regions or import Structor proposals for contractor review." action={<Button variant="primary" onClick={() => setPageEditor(true)}>Add first page</Button>}/></Panel><PreviewNote>Drawing Flip stores page references and normalized regions with the project. It does not extract drawings in the demo.</PreviewNote>{pageEditor && <PageEditor errors={errors} onClose={() => { setPageEditor(false); setErrors({}); }} onSave={draft => { if (act(current => addPage(current, { ...draft, pageNumber: Number(draft.pageNumber) }), "Drawing page added.")) setPageEditor(false); }}/>}</div>;
 
-  const pickerPages=state.pages.filter(p=>`${p.sheet} ${p.title}`.toLowerCase().includes(sheetQuery.toLowerCase()));
+  const pickerPages=flipPages.filter(p=>`${p.sheet} ${p.title}`.toLowerCase().includes(sheetQuery.toLowerCase()));
   const disciplines=[...new Set(pickerPages.map(p=>p.discipline||"Other"))];
+  const markForm = <form className="flip-mark-card" onSubmit={event => { event.preventDefault(); saveMark(); }}>
+    <strong>New scope line on {page.sheet}</strong>
+    <small>Drag the box or its corners to fit the area it covers.</small>
+    <label className="ui-field">Trade / bid package<select required value={markDraft.packageId} onChange={event => setMarkDraft({ ...markDraft, packageId: event.target.value })}><option value="">Choose the trade…</option>{procurement.packages.map(pkg => <option key={pkg.id} value={pkg.id}>{pkg.code} · {pkg.name}</option>)}</select></label>
+    <label className="ui-field">Scope line<textarea required rows={2} value={markDraft.title} onChange={event => setMarkDraft({ ...markDraft, title: event.target.value })} placeholder="Provide gypsum board soffit at the lobby"/></label>
+    <label className="ui-field">Detail (optional)<input value={markDraft.detail} onChange={event => setMarkDraft({ ...markDraft, detail: event.target.value })} placeholder="Per detail 4 on this sheet"/></label>
+    <div className="flip-form-actions"><Button onClick={() => setMarkBox(null)}>Cancel</Button><Button type="submit" variant="primary" disabled={!markDraft.packageId || !markDraft.title.trim()}><Plus size={15}/>Add to bid form</Button></div>
+  </form>;
   const fullDetail=selected?<><h3>{selected.number} · {selected.label}</h3><p>{selectedPackage?.name}</p><p>Confidence: {selected.confidence===null?"Estimator reviewed":`${Math.round(selected.confidence*100)}% · Verify on sheet`}</p><p>{selected.evidence}</p><RedrawOutlineButton onClick={startRedraw}/><h4>Linked scope items</h4>{linkedScopes.length?linkedScopes.map(s=><article key={s.id}><strong>{s.title}</strong><p>{s.detail}</p><small>{s.source}</small></article>):<p>No scope items linked.</p>}{selected.status==="pending-review"&&<Button onClick={()=>act(s=>approveRegion(s,selected.id,CURRENT_USER),"Region approved.")}>Approve trade assignment</Button>}<Button onClick={()=>{setFullPage(false);setMode("regions");}}>Review assignment & notes</Button>{history}</>:<p>Select a region to see its scope items.</p>;
   return <div className="flip-view">
     <PageHeader eyebrow={`${projectName} / Scope coordination`} title="Drawing Flip" description="Review every trade region on the drawings, correct Structor's assignments, and confirm where each scope item lives." actions={<><Button onClick={() => navigate("scopes")}><ListFilter size={16}/>Scopes & bid forms</Button><Button onClick={() => setPageEditor(true)}><FilePlus2 size={16}/>Add page</Button><Button variant="primary" onClick={() => setRegionEditor(true)}><Plus size={16}/>Mark region</Button></>}/>
+    {waiting > 0 && <Panel className="flip-place-panel" title={`${waiting} highlight${waiting === 1 ? "" : "s"} from the AI's scope readings ${waiting === 1 ? "isn't" : "aren't"} on the drawings yet`} subtitle="Each one marks the printed words a bid-form line was read from, in its trade's colour, linked to that line. They go on as Structor proposals for you to approve or correct here."><Button variant="primary" onClick={placeHighlights}><LocateFixed size={16}/>Show them on the drawings</Button></Panel>}
     <Stats items={[{ label: "Drawing pages", value: state.pages.length, detail: `${summary.regions} mapped regions` }, { label: "Approved regions", value: summary.approved, detail: `${summary.corrected} trade correction${summary.corrected === 1 ? "" : "s"} retained`, tone: "green" }, { label: "Awaiting review", value: summary.pendingReview, detail: "Contractor decision required", tone: summary.pendingReview ? "orange" : "green" }, { label: "Unlocated scope", value: missing.length, detail: "Items without a drawing region", tone: missing.length ? "orange" : "green" }]}/>
 
     <Panel className="flip-find-panel" title="Find scope on drawings" subtitle="Choose a trade. Marks are AI proposals; check their confidence and position on the original sheet."><div className="flip-ai-controls"><label className="ui-field">Trade<select value={locateTrade} disabled={locating} onChange={e=>{setLocateTrade(e.target.value);setResult(null);setProgress("");}}><option value="">Choose trade…</option>{procurement.packages.map(p=><option key={p.id} value={p.id}>{p.name} · {missing.filter(s=>s.packageId===p.id||s.allTrades).length} unlocated</option>)}</select></label><Button variant="primary" disabled={locating||!locateTrade||!missing.some(s=>s.packageId===locateTrade||s.allTrades)} onClick={()=>void findOnDrawings()}>Find on drawings</Button>{locating&&<Button onClick={()=>abort.current?.abort()}>Stop reading</Button>}</div>{progress&&<p role="status">{progress}</p>}{result&&<div className="flip-ai-results">{!result.regions.length&&<p>No usable marks found. Check the sheet yourself.</p>}{result.regions.map((r,i)=><p key={i}>{state.pages.find(p=>p.id===r.pageId)?.sheet} · {r.label} · {Math.round((r.confidence??0)*100)}% · Awaiting review</p>)}{result.dropped.map((d,i)=><p key={`d-${i}`}>Not marked: {d.what} · {d.reason}</p>)}{result.failures.map((f,i)=><p role="alert" key={`f-${i}`}>{f.sheet}: {f.error}</p>)}</div>}</Panel>
     <div className="flip-toolbar ui-panel">
       <label className="flip-sheet-select flip-sheet-search"><span>Search sheets</span><input type="search" value={sheetQuery} onChange={e=>setSheetQuery(e.target.value)} placeholder="Number or title"/></label>
-      <label className="flip-sheet-select"><span>Drawing sheet · {pickerPages.length} of {state.pages.length}</span><select value={activePageId} onChange={event=>{setPageId(event.target.value);setRegionId("");}}>{!pickerPages.some(p=>p.id===activePageId)&&<option value={activePageId}>{page.sheet} · Current sheet</option>}{disciplines.map(d=><optgroup key={d} label={`${d} (${pickerPages.filter(p=>(p.discipline||"Other")===d).length})`}>{pickerPages.filter(p=>(p.discipline||"Other")===d).map(p=><option key={p.id} value={p.id}>{p.sheet} · {p.title} · {state.regions.filter(r=>r.pageId===p.id).length} regions</option>)}</optgroup>)}</select>{!pickerPages.length&&<small role="status">No sheets match.</small>}</label>
-      <div className="flip-page-nav"><button aria-label="Previous drawing" onClick={() => movePage(pageIndex - 1)}><ArrowLeft size={16}/></button><span>{pageIndex + 1} / {state.pages.length}</span><button aria-label="Next drawing" onClick={() => movePage(pageIndex + 1)}><ArrowRight size={16}/></button></div>
+      {marked.size > 0 && <label className="flip-corrected flip-only-marked"><input type="checkbox" checked={onlyMarked} onChange={event => { setOnlyMarked(event.target.checked); setRegionId(""); }}/>Only sheets with highlights ({marked.size})</label>}
+      <label className="flip-sheet-select"><span>Drawing sheet · {pickerPages.length} of {state.pages.length}</span><select value={activePageId} onChange={event=>{setPageId(event.target.value);setRegionId("");}}>{!pickerPages.some(p=>p.id===activePageId)&&<option value={activePageId}>{page.sheet} · Current sheet</option>}{disciplines.map(d=><optgroup key={d} label={`${d} (${pickerPages.filter(p=>(p.discipline||"Other")===d).length})`}>{pickerPages.filter(p=>(p.discipline||"Other")===d).map(p=><option key={p.id} value={p.id}>{p.sheet} · {p.title} · {state.regions.filter(r=>r.pageId===p.id).length+lineCount(p)} highlights</option>)}</optgroup>)}</select>{!pickerPages.length&&<small role="status">No sheets match.</small>}</label>
+      <div className="flip-page-nav"><button aria-label="Previous drawing" onClick={() => movePage(pageIndex - 1)}><ArrowLeft size={16}/></button><span>{pageIndex + 1} / {flipPages.length}</span><button aria-label="Next drawing" onClick={() => movePage(pageIndex + 1)}><ArrowRight size={16}/></button></div>
       <div className="flip-page-meta"><strong>{page.discipline} · Revision {page.revision || "—"}</strong><span>{page.documentName} · PDF page {page.pageNumber}</span></div>
       <Badge tone={pageSummary.pendingReview ? "orange" : "green"}>{pageSummary.pendingReview ? `${pageSummary.pendingReview} to review` : !pageSummary.regions ? "No regions" : "Page reviewed"}</Badge>
     </div>
@@ -437,7 +654,7 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
           <select aria-label="Filter by review status" value={filters.status} onChange={event => setFilters({ ...filters, status: event.target.value as Filters["status"] })}><option value="">All review states</option><option value="pending-review">Awaiting review</option><option value="approved">Approved</option></select>
           <select aria-label="Filter by origin" value={filters.origin} onChange={event => setFilters({ ...filters, origin: event.target.value as Filters["origin"] })}><option value="">All origins</option><option value="ai">Structor AI</option><option value="estimator">Estimator</option></select>
           <div className="flip-filter-options">
-            <label className="flip-corrected"><input type="checkbox" checked={filters.corrected} onChange={event => setFilters({ ...filters, corrected: event.target.checked })}/>Corrections</label>{guesses > 0 && <label className="flip-corrected" title="AI outlines read from the drawing picture, not pinned to printed words. Hidden by default: highlights sit on the words."><input type="checkbox" checked={showGuesses} onChange={event => setShowGuesses(event.target.checked)}/>Show AI area guesses ({guesses})</label>}
+            <label className="flip-corrected" title="The printed lines the AI's read of every sheet found for each trade, boxed on the sheet in the trade's colour. Click one to show that trade only."><input type="checkbox" checked={showLines} onChange={event => setShowLines(event.target.checked)}/>Trade lines from every sheet{references.ai ? "" : " (by section numbers)"}</label><label className="flip-corrected"><input type="checkbox" checked={filters.corrected} onChange={event => setFilters({ ...filters, corrected: event.target.checked })}/>Corrections</label>{guesses > 0 && <label className="flip-corrected" title="AI outlines read from the drawing picture, not pinned to printed words. Hidden by default: highlights sit on the words."><input type="checkbox" checked={showGuesses} onChange={event => setShowGuesses(event.target.checked)}/>Show AI area guesses ({guesses})</label>}
           </div>
         </div>
         <div className="flip-viewer-toolbar">
@@ -445,14 +662,14 @@ export function DrawingFlipWorkspace({ projectName, notify, navigate }: ViewProp
           <Button onClick={() => setFullPage(true)}><Maximize2 size={15}/>Open full page</Button>
         </div>
         <div className="flip-drawing">
-          {!visible.length && <div className="flip-empty-note" role="status">
+          {!visible.length && !textMarks.length && <div className="flip-empty-note" role="status">
             {pageSummary.regions && hasRegionFilters
               ? <>No highlights match these filters. <button onClick={() => { setFilters({ query: "", packageId: "", status: "", origin: "", corrected: false }); setOwner(""); }}>Clear filters</button></>
               : guesses > 0 && !showGuesses
                 ? "AI area guesses are hidden."
                 : "No highlights yet. Review AI scope proposals or use Mark region to add one."}
           </div>}
-          <DrawingCanvas expandable={false} page={page} regions={visible} selectedId={selected?.id ?? ""} colors={colors} onSelect={id=>{setRegionId(id);setMode("regions");}} fullPage={fullPage} onFullPage={setFullPage} regionDetail={fullDetail} trace={trace} traceActions={traceActions} comparison={comparedEvent && selected ? { regionId: selected.id, from: comparedEvent.from } : null} focus={focus} describe={describe} onClearComparison={() => setComparison(null)}/>
+          <DrawingCanvas expandable={false} page={page} regions={visible} selectedId={selected?.id ?? ""} colors={colors} onSelect={id=>{setRegionId(id);setMode("regions");}} navigation={{ label: `${page.sheet} · ${pageIndex + 1} / ${flipPages.length}`, onPrev: () => movePage(pageIndex - 1), onNext: () => movePage(pageIndex + 1) }} markScope={{ box: markBox, onBox: setMarkBox, form: markForm }} textMarks={textMarks} onTextMark={id => setFilters(current => ({ ...current, packageId: current.packageId === id ? "" : id }))} fullPage={fullPage} onFullPage={setFullPage} regionDetail={fullDetail} trace={trace} traceActions={traceActions} comparison={comparedEvent && selected ? { regionId: selected.id, from: comparedEvent.from } : null} focus={focus} describe={describe} onClearComparison={() => setComparison(null)}/>
         </div>
         <div className="flip-region-strip">{visible.map(region => <button key={region.id} className={selected?.id === region.id ? "selected" : ""} onClick={() => setRegionId(region.id)}><i style={{ background: colors.get(region.packageId) }}/><span><strong>{region.number} · {region.label}</strong><small>{procurement.packages.find(pkg => pkg.id === region.packageId)?.name} · {region.status === "pending-review" ? "Awaiting contractor" : "Approved"}</small></span><ChevronRight size={15}/></button>)}</div>
       </section>

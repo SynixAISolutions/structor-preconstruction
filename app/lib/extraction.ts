@@ -375,6 +375,46 @@ export function addRunToBidForms(records: Pick<ReviewRecords, "extraction" | "pr
   return { extraction, procurement, added, duplicates, held };
 }
 
+/**
+ * Puts the highlights the AI drew while reading on Drawing Flip, in their trades, awaiting review there (Danial, 24 Nov:
+ * "in Drawing Flip I still don't see scopes that go with drawings"). Whittier's runs had drawn 837 highlights on 99
+ * sheets, each linked to the line it supports, but one reached Drawing Flip only when someone accepted it on its own,
+ * and 47 had been: the sheets showed nothing. Each highlight still waiting whose sheet is a Drawing Flip page becomes a
+ * Structor proposal there, linked to its lines already in the bid form (a line accepted later is linked then, by
+ * acceptDraft), and its finding is marked placed, accepted by Structor AI as addRunToBidForms does with the lines. The
+ * contractor approves or corrects each one on Drawing Flip. `runId` limits it to one run's highlights.
+ */
+export function placeHighlights(records: ReviewRecords, runId?: string, at = now()): ReviewRecords & { placed: number; noPage: number } {
+  const { procurement } = records;
+  let { flip } = records;
+  const pages = new Map(flip.pages.map(p => [p.sheet.replace(/[^a-z0-9]/gi, "").toUpperCase(), p.id]));
+  const scopes = new Set(procurement.scopes.map(s => s.id));
+  const drafts = records.extraction.drafts;
+  const placedIds = new Map<string, string>();
+  let noPage = 0;
+  for (const draft of drafts) {
+    if (draft.kind !== "region" || draft.status !== "pending-review" || draft.removed || (runId && draft.runId !== runId)) continue;
+    const pageId = pages.get(draft.sheet.replace(/[^a-z0-9]/gi, "").toUpperCase());
+    if (!pageId) { noPage++; continue; }
+    // Its lines in the bid form: the findings it was drawn for, or, when the reading didn't link them, its run's line with its words.
+    const words = draft.label.trim().toLowerCase();
+    const scopeIds = [...new Set(drafts.filter((d): d is ScopeDraft => d.kind === "scope" && d.packageId === draft.packageId && !!d.acceptedId && scopes.has(d.acceptedId)
+      && (draft.scopeDraftIds.includes(d.id) || d.runId === draft.runId && d.title.trim().toLowerCase() === words)).map(d => d.acceptedId!))];
+    const evidence = draft.citations.map(c => `${c.sheet ?? c.document} p.${c.page}: “${c.quote}”`).join(" ").slice(0, 2000) || draft.label;
+    const run = records.extraction.runs.find(r => r.id === draft.runId);
+    try {
+      flip = addRegion(flip, procurement, { pageId, label: draft.label, polygon: draft.polygon, packageId: draft.packageId, scopeIds, evidence, confidence: draft.confidence, origin: "ai", anchor: draft.anchor }, AI_ACTOR, run?.finishedAt ?? at);
+    } catch (error) { if (error instanceof DrawingFlipRuleError) continue; throw error; }
+    placedIds.set(draft.id, flip.regions.at(-1)!.id);
+  }
+  if (!placedIds.size) return { ...records, placed: 0, noPage };
+  const extraction = { ...records.extraction, drafts: drafts.map(d => {
+    const regionId = placedIds.get(d.id);
+    return regionId && d.kind === "region" ? { ...d, status: "accepted" as const, reviewedBy: AI_ACTOR, reviewedAt: at, acceptedId: regionId, history: [...d.history, { kind: "accepted" as const, at, by: AI_ACTOR }] } : d;
+  }) };
+  return { extraction, procurement, flip, placed: placedIds.size, noPage };
+}
+
 /** Puts a rejected finding back in the review queue. An accepted one can't come back: change it where it now lives. */
 export function reopenDraft(state: ExtractionState, draftId: string, by: string, at = now()): ExtractionState {
   needBy(by);

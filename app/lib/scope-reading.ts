@@ -7,16 +7,19 @@
 // trade the same way.
 
 import { extractDrawingScope, extractTradeScope, chunkPages, type ScopeRunResult } from "./ai-client";
-import { checkMemoryLines, consolidateScope } from "./ai-more-client";
+import { checkMemoryLines, consolidateScope, readDrawingNotes } from "./ai-more-client";
+import { noteBatches, type TradeNote } from "./drawing-notes";
+import type { Dropped } from "./ai-jobs";
+import type { DraftInput } from "./extraction";
 import type { PageInput } from "./drawing-flip";
 import type { ManualSection } from "./manual-sections";
 import type { TradePackage } from "./procurement";
-import type { RegisterRow, VolumeSection } from "./project-files";
+import type { RegisterRow, StoredDocument, VolumeSection } from "./project-files";
 import { readPageTextBoxes, readStoredText, renderStoredPage } from "./project-files-client";
 import { findInSheetImage } from "./sheet-ocr";
 import { checkImageQuotes, pinFindings, type TextBox } from "./text-anchor";
 import { NO_COUNTS, type TradeCounts } from "./run-time-left";
-import { checkScheduleTags, dropBorrowedTags, isFinishSchedule, type ReadPage, type ScheduleSheet, type TagOwner } from "./finish-schedule";
+import { checkScheduleTags, dropBorrowedTags, isFinishSchedule, leaveOthersItems, type ReadPage, type ScheduleSheet, type TagOwner } from "./finish-schedule";
 import { lineCheckDrafts, planLineCheck, type CheckPage, type ExistingLine, type MemoryLine } from "./memory-check";
 
 /** `counts` says how far the reading is in requests and sheets, for the automatic run's time left (lib/run-time-left). */
@@ -66,6 +69,11 @@ export async function readTradeScope(args: {
    * write is looked for on the pages it read, and written where a page calls for it.
    */
   memoryLines?: MemoryLine[];
+  /**
+   * The trade's notes from the AI's read of every sheet (lib/drawing-notes tradeNotes) on the sheets it doesn't read whole:
+   * written into bid-form lines from their text, each highlighted on the note it quotes.
+   */
+  notes?: TradeNote<StoredDocument>[];
 }): Promise<ScopeRunResult> {
   const { pkg, sections: stored, sheets, signal, memory } = args;
   // Every specification page and drawing sheet the reading read, with its text, for checkTags.
@@ -211,27 +219,71 @@ export async function readTradeScope(args: {
     if (!lines.length || (outcome.input.error && !outcome.input.drafts.length)) return;
     const existing: ExistingLine[] = outcome.input.drafts.flatMap(d => d.kind === "scope" ? [{ text: `${d.title} ${d.detail}`, source: d.source, cites: d.citations.map(c => `${c.document}#${c.page}`) }] : []);
     const plan = planLineCheck(lines, checkPages, existing);
-    let found = 0, failed = 0;
+    let found = 0, failed = 0, leftToOthers = 0;
     if (plan.requests.length) {
       say("specification", "Checking your bid-form lines on this project…");
       try {
         const checked = await checkMemoryLines(pkg, plan.requests, signal, (done, total) => say("specification", `Checking your bid-form lines on this project: ${Math.min(done + 1, total)} of ${total}`));
-        const added = lineCheckDrafts(checked.answers, pkg.id, existing);
-        found = added.length; failed = checked.failed;
+        const answered = lineCheckDrafts(checked.answers, pkg.id, existing);
+        // An item another trade carries here (toilet partitions on Whittier) is left to it (lib/finish-schedule).
+        const others = args.owners ? leaveOthersItems({ drafts: answered, pkg, reads: stored.map(s => s.section), owners: args.owners }) : { drafts: answered, dropped: [] };
+        const added = others.drafts;
+        found = added.length; failed = checked.failed; leftToOthers = others.dropped.length;
         outcome.input = { ...outcome.input, drafts: [...outcome.input.drafts, ...added] };
-        outcome.dropped.push(...checked.dropped);
+        outcome.dropped.push(...checked.dropped, ...others.dropped);
       } catch (error) {
         if (signal.aborted) return;
         outcome.dropped.push({ what: "Your bid-form lines", reason: `Not checked on this project (${error instanceof Error ? error.message : "AI error"}).` });
         return;
       } finally { say("specification", ""); }
     }
-    const notFound = lines.length - plan.covered - found;
-    outcome.dropped.push({ what: "Your bid-form lines", reason: `${lines.length} lines from your bid forms and scope checklists checked against the pages read: ${plan.covered} already written, ${found} found and added with their quotes, ${notFound} not called for on these pages${plan.unplaced.length ? ` (${plan.unplaced.length} of them on no page at all)` : ""}${failed ? `; ${failed} check request(s) failed` : ""}.` });
+    const notFound = lines.length - plan.covered - found - leftToOthers;
+    outcome.dropped.push({ what: "Your bid-form lines", reason: `${lines.length} lines from your bid forms and scope checklists checked against the pages read: ${plan.covered} already written, ${found} found and added with their quotes, ${leftToOthers ? `${leftToOthers} left to the trade that carries the item on this project, ` : ""}${notFound} not called for on these pages${plan.unplaced.length ? ` (${plan.unplaced.length} of them on no page at all)` : ""}${failed ? `; ${failed} check request(s) failed` : ""}.` });
+  }
+
+  /**
+   * The trade's notes on every other sheet (lib/drawing-notes), after the specification and its own sheets, so the lines
+   * those wrote are already on the bid form and aren't written again. Each line cites the notes it was written from, and
+   * its highlight sits on them.
+   */
+  async function readNotes(outcome: ScopeRunResult | null): Promise<ScopeRunResult | null> {
+    const notes = args.notes ?? [];
+    if (!notes.length || signal.aborted) return outcome;
+    const startedAt = new Date().toISOString();
+    const drafts: DraftInput[] = [], dropped: Dropped[] = [], documents: { name: string; pages: number }[] = [];
+    let failed = 0, model = "";
+    for (const group of Map.groupBy(notes, n => n.doc.id).values()) {
+      if (signal.aborted) break;
+      const doc = group[0].doc;
+      documents.push({ name: doc.name, pages: doc.pageCount });
+      const existing = [...(outcome?.input.drafts ?? []), ...drafts].flatMap(d => d.kind === "scope" ? [d.title] : []);
+      const batches = noteBatches(group).map(b => b.map(n => ({ sheet: n.sheet, title: n.title, page: n.page, lines: n.lines })));
+      const read = await readDrawingNotes(pkg, doc.name, batches, existing, memory, signal, (done, total) => say("sheets", `Reading this trade's notes on ${group.length} more sheets: part ${Math.min(done + 1, total)} of ${total}`));
+      failed += read.failed; model = read.model || model; dropped.push(...read.dropped);
+      for (const n of group) {
+        const text = n.lines.join("\n");
+        readPages.push({ document: doc.name, page: n.page, text });
+        checkPages.push({ document: doc.name, page: n.page, text, where: n.sheet, sheet: n.sheet });
+      }
+      // Each line's highlight on the note it quotes, where the sheet's text layer prints it.
+      const cited = new Set(read.drafts.flatMap(d => d.citations.map(c => c.sheet ?? "")));
+      const boxes = new Map<string, TextBox[]>();
+      await Promise.all(group.filter(n => cited.has(n.sheet)).map(async n => { try { boxes.set(n.sheet, await readPageTextBoxes(doc, n.page)); } catch { /* no text layer: no highlight */ } }));
+      const pinned = pinFindings(read.drafts, boxes, new Map(), false);
+      drafts.push(...pinned);
+      const highlighted = new Set(pinned.filter(d => d.kind === "region").map(d => (d as { sheet: string }).sheet));
+      const flipError = args.addFlipPages(group.filter(n => highlighted.has(n.sheet)).map(n => ({ sheet: n.sheet, title: n.title, discipline: "", revision: "", documentId: doc.id, documentName: doc.name, pageNumber: n.page })));
+      if (flipError) dropped.push({ what: "Drawing highlights", reason: flipError });
+    }
+    say("sheets", "");
+    const written = drafts.filter(d => d.kind === "scope").length;
+    dropped.push({ what: "Notes on every sheet", reason: `${pkg.name}'s notes on ${notes.length} more sheets (${notes.reduce((n, x) => n + x.lines.length, 0)} notes) read: ${written} lines written, each with the notes it quotes${failed ? `; ${failed} request(s) failed` : ""}.` });
+    const run: ScopeRunResult = { input: { packageIds: [pkg.id], engine: { mode: "live", model: model || "unknown" }, documents, startedAt, finishedAt: new Date().toISOString(), drafts, ...(drafts.length ? {} : { error: "No lines were written from the notes." }) }, dropped, failures: [] };
+    return outcome ? mergeRuns(outcome, run) : run;
   }
 
   const [specification, drawings] = await Promise.all([stored.length ? readSpecification() : null, sheets.length ? readSheets() : []]);
-  const outcome = drawings.reduce<ScopeRunResult | null>((run, drawn) => run ? mergeRuns(run, drawn) : drawn, specification);
+  const outcome = await readNotes(drawings.reduce<ScopeRunResult | null>((run, drawn) => run ? mergeRuns(run, drawn) : drawn, specification));
   if (!outcome) throw new Error("This trade has no specification sections or drawing sheets to read.");
   if (!signal.aborted) await checkTags(outcome);
   if (!signal.aborted) await checkLines(outcome);
