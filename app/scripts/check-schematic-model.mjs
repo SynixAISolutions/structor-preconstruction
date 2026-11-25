@@ -9,7 +9,7 @@ const { dimensionedWallLayers } = await import("../lib/wall-assemblies.ts");
 const { drawingLengthFeet } = await import("../lib/drawing-dimensions.ts");
 const { printedSectionDatums, resolveSectionDatums } = await import("../lib/section-datums.ts");
 const { doorScheduleSheets, matchDoorSizes, printedDoorSizes } = await import("../lib/door-schedule-dimensions.ts");
-const { glazingDetailSheets, glazingDetailSource, printedGlazingReferences } = await import("../lib/glazing-detail-references.ts");
+const { glazingDetailSheets, glazingDetailSource, glazingPlacement, glazingSizeForTag, printedGlazingElevations, printedGlazingReferences, printedWindowSizes } = await import("../lib/glazing-detail-references.ts");
 
 // Levels from architectural plan titles.
 assert.equal(M.levelOfTitle("LEVEL 01 - FIRST FLOOR PLAN"), 1);
@@ -194,6 +194,78 @@ const glassSources = printedGlazingReferences([word("E1 STOREFRONT - SF-1A", .5,
 assert.equal(glazingDetailSource("SF-1A", glassSources).sheet, "A-611B");
 assert.equal(glazingDetailSource("SF-1", glassSources), undefined);
 assert.equal(glazingDetailSource("SF-1A", [...glassSources, { ...glassSources[0], source: { ...glassSources[0].source, page: 8 } }]), undefined);
+
+const ticks = (x, y) => [line([x, y], [x + 1.7, y - 1.7], 1.2), line([x, y], [x - 1.7, y + 1.7], 1.2)];
+const elevationInk = [
+  line([98, 90], [282, 90], .24), ...ticks(100, 90), ...ticks(280, 90),
+  line([310, 118], [310, 329], .24), ...ticks(310, 120), ...ticks(310, 327),
+  line([100, 120], [280, 120], .9), line([100, 327], [280, 327], .9),
+  line([100, 120], [100, 327], .9), line([280, 120], [280, 327], .9),
+  line([90, 374], [322, 374], .72),
+];
+const elevationWords = [
+  { text: '10′-0″', a: [177, 84], b: [203, 84], height: 9 },
+  { text: '11′-6″', a: [304, 237], b: [304, 210], height: 9 },
+  { text: 'STOREFRONT - SF-4', a: [99, 368], b: [272, 368], height: 16 },
+  { text: "1/4\" = 1'-0\"", a: [103, 391], b: [170, 391], height: 16 },
+  { text: 'SILL 1′-0″ AFF', a: [107, 340], b: [173, 340], height: 9 },
+];
+const [{ size: elevation, quote: caption }] = printedGlazingElevations(elevationWords, elevationInk);
+assert.equal(elevation.width, 10);
+assert.equal(elevation.height, 11.5);
+assert.equal(elevation.sill.feet, 1);
+assert.equal(printedGlazingElevations(elevationWords, [...elevationInk, line([70, 120], [280, 120], .9)])[0].size, undefined,
+  "A taller or wider continuous frame means the candidate may be an internal bay");
+assert.equal(printedGlazingElevations(elevationWords.filter(run => !run.text.includes("=")), elevationInk)[0].size, undefined);
+assert.equal(printedGlazingElevations(elevationWords.map(run => run.text === "10′-0″" ? { ...run, text: "9′-0″" } : run), elevationInk)[0].size, undefined);
+const aw = (str, x, y) => ({ str, x, y, w: .024, h: .01 });
+const windows = printedWindowSizes([
+  aw("TYPE MARK", .11, .12), aw("ROUGH HEIGHT", .4, .12), aw("ROUGH WIDTH", .47, .12),
+  aw("W-08", .11, .16), aw("8′-0 1/2″", .4, .16), aw("4′-0 1/2″", .47, .16),
+  aw("W-09", .11, .19), aw("4′-0 1/2″", .47, .19),
+]);
+assert.equal(windows.length, 1);
+assert.equal(windows[0].size.kind, "rough-opening");
+assert.equal(windows[0].size.height, 8 + .5 / 12);
+const windowSource = { documentId: "windows", sheet: "A601", page: 1, quote: caption };
+const dimensions = glazingSizeForTag("SF4", [{ tag: "SF-4", source: windowSource, size: elevation }]);
+assert.equal(dimensions.source, windowSource);
+assert.equal(glazingSizeForTag("SF-4", [
+  { tag: "SF-4", source: windowSource, size: elevation },
+  { tag: "SF-4", source: windowSource, size: { ...elevation, height: 13 } },
+]), undefined, "Conflicting sizes must not follow an ambiguous plan tag");
+const glazedRun = { a: [0, 1], b: [10, 1], dimensions };
+const calibrated = { height: 14, sizing: "Printed scale, 8 ft per inch" };
+assert.deepEqual(glazingPlacement(glazedRun, calibrated), { base: 1, height: 11.5, dimensioned: true });
+assert.equal(glazingPlacement({ ...glazedRun, b: [8, 1] }, calibrated).dimensioned, false);
+assert.equal(glazingPlacement(glazedRun, { ...calibrated, sizing: "Sized to the building area (no scale read)" }).dimensioned, false);
+assert.equal(glazingPlacement(glazedRun, { ...calibrated, height: 12 }).dimensioned, false);
+const { printedSlabNotes, printedFloorFinishes, slabNoteLevel, slabNoteArea, finishesForRoom } = await import("../lib/schematic-floor-details.ts");
+const slabNotes = printedSlabNotes([
+  '2. SLAB ON GRADE SHALL BE 125 mm CONCRETE PLACED OVER VAPOR RETARDER AND 200 mm MIN.',
+  'GRANULAR BASE. REINFORCE WITH WELDED MESH.',
+  '3. FOOTINGS SHALL BE 1′-6″ BELOW SLAB ON GRADE.',
+].join("\n"));
+assert.equal(slabNotes.length, 1);
+assert.deepEqual(slabNotes[0].layers.map(layer => [layer.material, layer.label, layer.minimum ?? false]),
+  [["Concrete slab", "125 mm", false], ["Vapor retarder", undefined, false], ["Granular base", "200 mm", true]]);
+assert.equal(printedSlabNotes("1. 5 INCH PIPE ABOVE THE SLAB-ON-GRADE.").length, 0);
+const noteSheet = { title: "Level 01 Framing Plan - Area B", discipline: "Structural" };
+assert.equal(slabNoteLevel(noteSheet), 1);
+assert.equal(slabNoteLevel({ ...noteSheet, discipline: "Architectural" }), null);
+assert.equal(slabNoteArea(noteSheet, assembled.level, areaRows), 1);
+assert.equal(slabNoteArea({ ...noteSheet, title: "Level 01 Framing Plan - Area C" }, assembled.level, areaRows), undefined);
+const finishBoxes = [
+  aw("CODE", .11, .07), aw("TYPE", .23, .07), aw("LOCATION", .44, .07),
+  aw("FLOOR", .1, .12), aw("AT-1", .1, .15), aw("ATHLETIC FLOORING", .23, .15), aw("GYM", .44, .15),
+  aw("MILLWORK", .1, .18), aw("W-1", .1, .21), aw("WOOD PANEL", .23, .21), aw("GYM", .44, .21),
+];
+const finishGrid = [.08, .19, .39, .58].map(x => line([x * 1000, 25], [x * 1000, 250]));
+const finishRead = printedFloorFinishes(finishBoxes, finishGrid, { width: 1000, height: 1000 });
+assert.deepEqual(finishRead, [{ tag: "AT-1", material: "ATHLETIC FLOORING", location: "GYM" }]);
+const finishes = finishRead.map(note => ({ ...note, source: windowSource }));
+assert.equal(finishesForRoom({ name: "Gymnasium (including court)", number: "102" }, finishes).length, 1);
+assert.equal(finishesForRoom({ name: "Gym storage", number: "103" }, finishes).length, 0);
 
 // Corrections.
 const model = { levels: [{ id: "L1", name: "Level 01", order: 1, elevation: 0, height: 14, outline: [[0, 0], [10, 0], [10, 10]], rooms: [], source: { documentId: "d", sheet: "A1.1", page: 46 }, sizing: "" }, { id: "L2", name: "Level 02", order: 2, elevation: 14, height: 16, outline: [[0, 0], [10, 0], [10, 10]], rooms: [], source: { documentId: "d", sheet: "A1.2", page: 47 }, sizing: "" }], warnings: [], builtAt: "" };

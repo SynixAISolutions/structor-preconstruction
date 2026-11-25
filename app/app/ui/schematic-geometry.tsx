@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { isSportsFloor } from "./schematic-scene";
+import { glazingPlacement } from "../../lib/glazing-detail-references";
 import { edgesIntersect, footprintValid, openOutline, polygonArea, type Point, type SchematicLevel } from "../../lib/schematic-model";
 import { inside, insideRoom, type Room } from "../../lib/room-detection";
 import { stairPieces } from "../../lib/stair-detection";
@@ -130,17 +131,19 @@ export function schematicDoors(level: SchematicLevel, doorHeight = DEFAULT_DOOR_
   }
   return group;
 }
-/** Glass is drawn up to 10 ft (a storefront's usual head), or the level's height if lower. */
-export const GLASS_HEIGHT = 10;
-/** A level's glass (level.glazing) as one instanced mesh of thin translucent panels from the floor. */
-export function schematicGlazing(level: SchematicLevel): THREE.InstancedMesh | null {
-  const glass = (level.glazing ?? []).flatMap((run, index) => run.excluded ? [] : [{ run, index }]);
+/** Glazing uses the plan run and the matching frame elevation when its size is supported. */
+export function schematicGlazing(level: SchematicLevel, viewLimit = Infinity): THREE.InstancedMesh | null {
+  const glass = (level.glazing ?? []).flatMap((run, index) => {
+    if (run.excluded) return [];
+    const { base, height } = glazingPlacement(run, level);
+    return base < viewLimit ? [{ run, index, base, height: Math.min(height, viewLimit - base) }] : [];
+  });
   if (!glass.length) return null;
-  const height = Math.min(level.height, GLASS_HEIGHT), place = new THREE.Object3D();
+  const place = new THREE.Object3D();
   const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#7cc4e8", transparent: true, opacity: .45, roughness: .1 }), glass.length);
-  glass.forEach(({ run: g }, i) => {
+  glass.forEach(({ run: g, base, height }, i) => {
     const dx = g.b[0] - g.a[0], dy = g.b[1] - g.a[1];
-    place.position.set((g.a[0] + g.b[0]) / 2, height / 2, -(g.a[1] + g.b[1]) / 2);
+    place.position.set((g.a[0] + g.b[0]) / 2, base + height / 2, -(g.a[1] + g.b[1]) / 2);
     place.rotation.set(0, Math.atan2(dy, dx), 0);
     place.scale.set(Math.max(Math.hypot(dx, dy), .01), height, .15);
     place.updateMatrix(); mesh.setMatrixAt(i, place.matrix);

@@ -4,10 +4,11 @@
 // section sheets in Project files, has the AI read their images, and turns the readings into levels.
 
 import { useCallback, useRef } from "react";
+import type { PDFPageProxy } from "pdfjs-dist";
 import { aiJob } from "./ai-more-client";
 import type { PartitionKeyRead, PartitionTypeRead, PlanReading, PlanTag } from "./ai-jobs-more";
 import { doorNumber, doorScheduleSheets, matchDoorSizes, printedDoorSizes, type SourcedDoorSize } from "./door-schedule-dimensions";
-import { glazingDetailSheets, glazingDetailSource, printedGlazingReferences, type GlazingDetailReference } from "./glazing-detail-references";
+import { glazingDetailSheets, glazingDetailSource, glazingSizeForTag, printedGlazingElevations, printedGlazingReferences, printedWindowSizes, type GlazingDetailReference } from "./glazing-detail-references";
 import type { WallLayer } from "./wall-assemblies";
 import { mergePartitionTypes, scheduleRow, tagKey, type PartitionType } from "./tag-placement";
 import { drawingRegister, type StoredDocument } from "./project-files";
@@ -16,6 +17,9 @@ import { pageTurn } from "./page-turns";
 import type { Project } from "./projects";
 import { vectorsFromOperators } from "./plan-vectors";
 import { drawingTextRuns } from "./drawing-dimensions";
+import { isFinishSchedule } from "./finish-schedule";
+import { printedFloorFinishes, printedSlabNotes, slabNoteArea, slabNoteLevel, type FloorFinishNote } from "./schematic-floor-details";
+import { pageTextBoxes } from "./text-anchor";
 import { planRegistration } from "./schematic-plan-alignment";
 import { assembleFloorPlans, type FloorPlanBuild, type ReadFloorPlan } from "./schematic-plan-areas";
 import { addTaggedDoorOpenings, printedDoorTags } from "./tagged-door-openings";
@@ -26,6 +30,22 @@ import { useLocalDraft } from "./use-local-draft";
 async function pageSize(doc: StoredDocument, page: number) {
   const viewport = (await (await openStoredPdf(doc)).getPage(page)).getViewport({ scale: 1 });
   return { widthIn: viewport.width / 72, heightIn: viewport.height / 72 };
+}
+
+async function readDetailDrawing(doc: StoredDocument, pageNumber: number, signal?: AbortSignal) {
+  const [pdfjs, pdf] = await Promise.all([import("pdfjs-dist"), openStoredPdf(doc)]);
+  const page: PDFPageProxy = await pdf.getPage(pageNumber);
+  const view = page.getViewport({ scale: 1 });
+  const { items } = await pageTurn(() => page.getTextContent(), true);
+  const words = items.filter(item => "str" in item);
+  const operators = await pageTurn(() => page.getOperatorList(), true).catch(() => null);
+  signal?.throwIfAborted();
+  return {
+    boxes: pageTextBoxes(words, view),
+    text: drawingTextRuns(words, view),
+    segments: operators ? vectorsFromOperators(operators, pdfjs.OPS as unknown as Record<string, number>, view.transform).segments : [],
+    page: { width: view.width, height: view.height },
+  };
 }
 
 /**
@@ -213,17 +233,58 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
     const refs: GlazingDetailReference[] = [];
     for (const row of glazingDetailSheets(register)) {
       args.signal?.throwIfAborted();
-      args.onProgress?.(`Finding glazing elevation references on ${row.sheet}…`);
-      const boxes = await pageTurn(() => readPageTextBoxes(row.doc, row.page), true).catch(() => []);
-      for (const { tag, quote } of printedGlazingReferences(boxes)) {
-        refs.push({ tag, source: { documentId: row.doc.id, sheet: row.sheet, page: row.page, quote } });
+      args.onProgress?.("Reading glazing dimensions on " + row.sheet + "…");
+      try {
+        const detail = await readDetailDrawing(row.doc, row.page, args.signal);
+        const reads = [
+          ...printedGlazingElevations(detail.text, detail.segments),
+          ...printedWindowSizes(detail.boxes),
+        ];
+        for (const { tag, quote, size } of reads) {
+          refs.push({ tag, size, source: { documentId: row.doc.id, sheet: row.sheet, page: row.page, quote } });
+        }
+      } catch (error) {
+        if (args.signal?.aborted) throw error;
+        const boxes = await pageTurn(() => readPageTextBoxes(row.doc, row.page), true).catch(() => []);
+        for (const { tag, quote } of printedGlazingReferences(boxes)) {
+          refs.push({ tag, source: { documentId: row.doc.id, sheet: row.sheet, page: row.page, quote } });
+        }
       }
     }
     for (const level of levels) {
       level.glazing = level.glazing?.map(glass => {
-        const elevationDetail = glass.type ? glazingDetailSource(glass.type, refs) : undefined;
-        return elevationDetail ? { ...glass, elevationDetail } : glass;
+        if (!glass.type) return glass;
+        const elevationDetail = glazingDetailSource(glass.type, refs);
+        const dimensions = glazingSizeForTag(glass.type, refs);
+        return { ...glass, ...(elevationDetail ? { elevationDetail } : {}), ...(dimensions ? { dimensions } : {}) };
       });
+    }
+  }
+  const floorFinishes: FloorFinishNote[] = [];
+  for (const row of register) {
+    const order = slabNoteLevel(row);
+    const level = order === null ? undefined : levels.find(level => level.order === order);
+    if (!level && !(row.discipline === "Architectural" && isFinishSchedule(row.title))) continue;
+    args.signal?.throwIfAborted();
+    args.onProgress?.("Reading floor details on " + row.sheet + "…");
+    const source = { documentId: row.doc.id, sheet: row.sheet, page: row.page };
+    try {
+      if (level) {
+        const planArea = slabNoteArea(row, level, register);
+        if (planArea === undefined) continue;
+        const saved = await readStoredText(row.doc, { first: row.page, last: row.page });
+        const notes = printedSlabNotes(saved[0]?.text ?? "");
+        if (notes.length) level.floorAssemblies = [...(level.floorAssemblies ?? []),
+          ...notes.map(({ quote, layers }) => ({ source: { ...source, quote }, layers, planArea }))];
+      } else {
+        const detail = await readDetailDrawing(row.doc, row.page, args.signal);
+        for (const finish of printedFloorFinishes(detail.boxes, detail.segments, detail.page)) {
+          floorFinishes.push({ ...finish, source: { ...source, quote: finish.tag } });
+        }
+      }
+    } catch (error) {
+      if (args.signal?.aborted) throw error;
+      warnings.push(row.sheet + ": the floor details could not be read.");
     }
   }
   // The partition type schedule, to describe the wall types and catch codes it doesn't list.
@@ -236,7 +297,7 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
     const unknown = [...new Set(levels.flatMap(l => (l.walls ?? []).filter(w => w.type && !w.typeSet && partitionTypes?.length && !scheduleRow(w.type, partitionTypes)).map(w => w.type!)))];
     if (unknown.length) warnings.push(`Wall tags not in the partition schedule on ${typeSheet.sheet} (check them on the plan; they may be misread): ${unknown.join(", ")}.`);
   }
-  return { levels, warnings, builtAt: new Date().toISOString(), ...(partitionTypes ? { partitionTypes, partitionSheet: typeSheet!.sheet } : {}) };
+  return { levels, warnings, builtAt: new Date().toISOString(), ...(floorFinishes.length ? { floorFinishes } : {}), ...(partitionTypes ? { partitionTypes, partitionSheet: typeSheet!.sheet } : {}) };
 }
 
 /**

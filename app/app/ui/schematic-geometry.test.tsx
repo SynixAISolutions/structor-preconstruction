@@ -41,6 +41,22 @@ test("glass read from the drawing: translucent panels up to 10 ft, minus what th
   assert.equal(schematicGlazing({ ...level, glazing: [] }), null);
   mesh.geometry.dispose();
 });
+test("a matching printed elevation sets the glazing height and sill", () => {
+  const glazed: SchematicLevel = { ...level, glazing: [{
+    a: [10, 20], b: [20, 20], type: "SF-4",
+    dimensions: { kind: "frame", width: 10, height: 11.5, widthLabel: "10′-0″", heightLabel: "11′-6″",
+      sill: { feet: 1, quote: "SILL 1′-0″ AFF" }, source: { ...level.source, quote: "STOREFRONT - SF-4" } },
+  }] };
+  const full = schematicGlazing(glazed)!;
+  assert.equal(full.boundingBox!.min.y, 1);
+  assert.equal(full.boundingBox!.max.y, 12.5);
+  assert.deepEqual(full.userData.glazing, [0]);
+  const cut = schematicGlazing(glazed, 5)!;
+  assert.equal(cut.boundingBox!.min.y, 1);
+  assert.equal(cut.boundingBox!.max.y, 5);
+  assert.equal(schematicGlazing(glazed, 1), null);
+  full.dispose(); full.geometry.dispose(); cut.dispose(); cut.geometry.dispose();
+});
 test("operable partitions read from the drawing: panels up to 10 ft, minus what the estimator marked not a partition", () => {
   const divided: SchematicLevel = { ...level, walls: [], partitions: [{ a: [10, 20], b: [30, 20], thickness: .35 }, { a: [30, 20], b: [40, 20], thickness: .35, excluded: true }] };
   const mesh = schematicPartitions(divided)!;

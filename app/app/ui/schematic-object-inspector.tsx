@@ -1,6 +1,8 @@
 import { inside, type Room } from "../../lib/room-detection";
 import { planSource, type PlanSource, type SchematicLevel } from "../../lib/schematic-model";
 import type { DimensionSource } from "../../lib/section-datums";
+import { glazingPlacement } from "../../lib/glazing-detail-references";
+import { finishesForRoom, type FloorFinishNote } from "../../lib/schematic-floor-details";
 import { Button, Panel } from "./shared";
 import { isSportsFloor, type SchematicPick, type WallPick } from "./schematic-scene";
 
@@ -11,9 +13,10 @@ const doorLabel = (level: SchematicLevel, index: number) => "Door " + (level.doo
 const glazingLabel = (level: SchematicLevel, index: number) => "Glazing " + (level.glazing?.[index]?.type || index + 1);
 const roomLabel = (room: Room, index: number) => [room.number, room.name].filter(Boolean).join(" ") || "Unnamed floor " + (index + 1);
 
-export function SchematicObjectInspector({ levels, spaces, pick, canOpenPlan, onPick, onClose, onPlan, onDimension }: {
+export function SchematicObjectInspector({ levels, spaces, floorFinishes, pick, canOpenPlan, onPick, onClose, onPlan, onDimension }: {
   levels: SchematicLevel[];
   spaces: ReadonlyMap<string, Room[]>;
+  floorFinishes?: FloorFinishNote[];
   pick: ObjectPick | null;
   canOpenPlan: (source: PlanSource) => boolean;
   onPick: (pick: ObjectPick, isolateLevel?: boolean) => void;
@@ -43,11 +46,15 @@ export function SchematicObjectInspector({ levels, spaces, pick, canOpenPlan, on
   const schedule = door?.scheduledSize;
   const selectedGlass = pick?.kind === "glazing" ? level?.glazing?.[pick.index] : undefined;
   const glass = selectedGlass?.excluded ? undefined : selectedGlass;
-  const glassDetail = glass?.elevationDetail;
+  const glassSize = glass?.dimensions;
+  const glassDetail = glass?.elevationDetail ?? (glassSize?.kind === "frame" ? glassSize.source : undefined);
+  const placement = glass && level ? glazingPlacement(glass, level) : undefined;
   const selectedRoom = pick?.kind === "floor" ? spaces.get(pick.levelId)?.[pick.index] : undefined;
   const floor = selectedRoom?.open ? undefined : selectedRoom;
   const floorArea = floor && level?.planAreas?.findIndex(area => inside(floor.at, area.outline ?? level.outline));
-  const source = level && planSource(level, door?.planArea ?? glass?.planArea ?? (floorArea || 0));
+  const source = level && planSource(level, door?.planArea ?? glass?.planArea ?? (floorArea ?? 0));
+  const slabNotes = floor ? (level?.floorAssemblies ?? []).filter(note => note.planArea === null || note.planArea === (floorArea ?? 0)) : [];
+  const finishes = floor ? finishesForRoom(floor, floorFinishes) : [];
 
   return <Panel title="Object inspector" className="sm-inspector">
     <div className="sm-inspector-body">
@@ -104,16 +111,33 @@ export function SchematicObjectInspector({ levels, spaces, pick, canOpenPlan, on
           {schedule && <div><dt>Scheduled size</dt><dd>{schedule.width.toLocaleString(undefined, { maximumFractionDigits: 3 })} ft wide × {schedule.height.toLocaleString(undefined, { maximumFractionDigits: 3 })} ft high</dd></div>}
           {floor && <div><dt>Detected room area</dt><dd>{floor.area.toLocaleString()} SF</dd></div>}
           {glass && <div><dt>Run on plan</dt><dd>{Math.hypot(glass.b[0] - glass.a[0], glass.b[1] - glass.a[1]).toLocaleString(undefined, { maximumFractionDigits: 2 })} ft</dd></div>}
+          {glassSize && <div><dt>{glassSize.kind === "frame" ? "Frame size" : "Scheduled rough opening"}</dt><dd>{glassSize.widthLabel} wide × {glassSize.heightLabel} high</dd></div>}
+          {glassSize?.sill && <div><dt>Sill elevation</dt><dd>{glassSize.sill.quote}</dd></div>}
           <div><dt>Source</dt><dd>{source.sheet} · PDF page {source.page}</dd></div>
         </dl>
-        {floor && <p>Area follows the detected room boundary. Slab and finish layers are unverified.</p>}
+        {slabNotes.map(note => <details key={note.source.sheet + note.source.quote}>
+          <summary>Slab-on-grade layers · {note.source.sheet}</summary>
+          <ol>{note.layers.map(layer => <li key={layer.material}>{layer.material} · {layer.label ? layer.label + (layer.minimum ? " minimum" : "") : "Thickness unspecified"}</li>)}</ol>
+          <p>Verify this room is over slab-on-grade on the structural plan.</p>
+          <Button onClick={() => onDimension(note.source, "Slab-on-grade layers")}>Open slab note</Button>
+        </details>)}
+        {finishes.length > 0 && <details>
+          <summary>Floor finishes for {floor?.name || floor?.number}</summary>
+          <ul>{finishes.map(finish => <li key={finish.source.sheet + finish.tag}>
+            {finish.tag} · {finish.material} <Button onClick={() => onDimension(finish.source, finish.material)}>{finish.source.sheet}</Button>
+          </li>)}</ul>
+          <p>Check the finish plan for each finish boundary.</p>
+        </details>}
+        {floor && !slabNotes.length && !finishes.length && <p>Floor build-up awaits a matching drawing detail.</p>}
         {floor && isSportsFloor(floor) && <p>Court markings and equipment require their own drawing evidence.</p>}
         {door?.basis === "tagged-gap" && <p>A printed door tag matches this gap in the wall. {door.scheduledSize ? "Door swing is unverified." : "Door height and swing are unverified."}</p>}
         {door && door.basis !== "tagged-gap" && !door.scheduledSize && <p>3D door height is estimated until a schedule row is matched.</p>}
         {door && !door.number && <p>The swing was detected on the plan. No door tag was matched.</p>}
-        {glass && <p>Height is estimated. Individual panes and frames need dimensioned elevations.</p>}
+        {glass && !placement?.dimensioned && <p>{glassSize?.kind === "frame" ? "The frame size awaits a matching run and level height. The preview uses an estimated height." : "The preview uses an estimated glazing height."}</p>}
+        {placement?.dimensioned && !glassSize?.sill && <p>Frame height is dimensioned. Sill placement needs verification.</p>}
         {canOpenPlan(source) && <Button onClick={() => onPlan(level, pick, source)}>{floor ? "Open " + source.sheet : glass ? "Show glazing on plan" : "Show door on plan"}</Button>}
         {schedule && <Button onClick={() => onDimension(schedule.source, doorLabel(level, pick.index))}>Door schedule · {schedule.source.sheet}</Button>}
+        {glassSize?.kind === "rough-opening" && <Button onClick={() => onDimension(glassSize.source, "Window schedule")}>Window schedule · {glassSize.source.sheet}</Button>}
         {glassDetail && <Button onClick={() => onDimension(glassDetail, glazingLabel(level, pick.index))}>Glazing elevation · {glassDetail.sheet}</Button>}
       </div>}
     </div>

@@ -242,7 +242,7 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
         if (wallMesh) { wallMesh.userData.levelId = level.id; scope.add(wallMesh); }
         const doorMesh = walls ? schematicDoors(display, Math.min(display.height, DEFAULT_DOOR_HEIGHT)) : null;
         for (const mesh of [
-          doorMesh, walls ? schematicGlazing(display) : null, walls ? schematicPartitions(display) : null,
+          doorMesh, walls ? schematicGlazing(level, cutaway ? CUTAWAY_HEIGHT : undefined) : null, walls ? schematicPartitions(display) : null,
           walls ? schematicRailings(display) : null, walls ? schematicColumns(display) : null,
         ]) if (mesh) scope.add(mesh);
         const stairs = walls ? schematicStairs(level, stairRise(model, level)) : null;
@@ -689,7 +689,7 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
           <small>Drag to orbit · Scroll to zoom · Select an element to inspect</small>
         </div>
         <aside className="sm-levels">
-          <SchematicObjectInspector levels={current.levels} spaces={spacesByLevel}
+          <SchematicObjectInspector levels={current.levels} spaces={spacesByLevel} floorFinishes={current.floorFinishes}
             pick={activePick?.kind === "wall" ? null : activePick} canOpenPlan={plan => documents.some(document => document.id === plan.documentId)}
             onPick={(pick, isolateLevel) => {
               inspect(pick);

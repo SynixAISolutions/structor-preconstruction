@@ -12,6 +12,8 @@ import { doorsFromSwings, swingArcs } from "./door-detection";
 import { floorOpenings } from "./floor-openings";
 import { compactFloorPlanTitle } from "./floor-plan-label";
 import type { SourcedDoorSize } from "./door-schedule-dimensions";
+import type { GlazingDimensions } from "./glazing-detail-references";
+import type { FloorAssemblyNote, FloorFinishNote } from "./schematic-floor-details";
 import type { DimensionSource } from "./section-datums";
 import { mergeTags, placeTags, tagOvals, type PartitionType, type PlacedTag } from "./tag-placement";
 import type { Curve, Segment } from "./plan-vectors";
@@ -38,6 +40,7 @@ export type SchematicLevel = {
   /** Area sheets joined in the level's shared coordinates. Area 0 uses the primary outline. */
   planAreas?: SchematicPlanArea[];
   unplacedPlans?: PlanSource[];
+  floorAssemblies?: FloorAssemblyNote[];
   /** How the size was found: the printed scale, or the building area. */
   sizing: string;
   /**
@@ -72,7 +75,7 @@ export type SchematicLevel = {
  */
 export type SchematicStair = { flights: { a: Point; b: Point; width: number; risers: number; arrow: "a" | "b" | null }[]; excluded?: boolean };
 /** A run of glass from a to b, in feet; `type` from the plan's storefront/window tags (SF-10). */
-export type SchematicGlazing = SourcedPlanElement & { a: Point; b: Point; type?: string | null; excluded?: boolean; elevationDetail?: DimensionSource };
+export type SchematicGlazing = SourcedPlanElement & { a: Point; b: Point; type?: string | null; excluded?: boolean; elevationDetail?: DimensionSource; dimensions?: GlazingDimensions };
 /**
  * An operable partition from a to b, in feet, or a guardrail when `kind` is "railing". Kept apart from the walls: each is bought
  * and built as its own item, and has no wall type. Both divide the rooms either side.
@@ -142,7 +145,7 @@ export function levelSpaces(level: Pick<SchematicLevel, "walls" | "doors" | "gla
 }
 
 /** `partitionTypes`: the wall types the partition type sheet lists (read by AI), to describe and check wall types. */
-export type SchematicModel = { levels: SchematicLevel[]; warnings: string[]; builtAt: string; partitionTypes?: PartitionType[]; partitionSheet?: string };
+export type SchematicModel = { levels: SchematicLevel[]; warnings: string[]; builtAt: string; partitionTypes?: PartitionType[]; partitionSheet?: string; floorFinishes?: FloorFinishNote[] };
 
 /** The sheet that schedules the partition (wall) types, by its title; null when the set has none. */
 export function partitionTypeSheet<T extends Pick<RegisterRow, "title" | "discipline">>(register: T[]): T | null {
@@ -597,7 +600,7 @@ export function editGlazing(model: SchematicModel, levelId: string, index: numbe
   return editLevel(model, levelId, l => {
     if (!l.glazing?.[index]) throw new Error("That glass is no longer in the model.");
     const t = change.type === undefined ? undefined : change.type.trim().toUpperCase().replace(/\s+/g, "").slice(0, 16);
-    return { ...l, glazing: l.glazing.map((g, i) => i !== index ? g : { ...g, ...(t !== undefined && g.type !== (t || null) ? { type: t || null, elevationDetail: undefined } : {}), ...(change.excluded !== undefined ? { excluded: change.excluded } : {}) }) };
+    return { ...l, glazing: l.glazing.map((g, i) => i !== index ? g : { ...g, ...(t !== undefined && g.type !== (t || null) ? { type: t || null, elevationDetail: undefined, dimensions: undefined } : {}), ...(change.excluded !== undefined ? { excluded: change.excluded } : {}) }) };
   });
 }
 
