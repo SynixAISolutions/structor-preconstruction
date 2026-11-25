@@ -14,7 +14,9 @@ import { CONFIRM_ABOVE, dollars, estimateCost } from "../../lib/ai-cost";
 import { useAiReader } from "../../lib/ai-reader-client";
 import { leftOut, planMemory, rememberedSections, tradeMemory, type MemoryEntry } from "../../lib/memory";
 import { borrowedTags, tagFamilies } from "../../lib/finish-schedule";
-import { loadSheetTexts } from "../../lib/sheet-reference-client";
+import { AI_REFERENCES_KEY, findReferencesWithAi, loadSheetTexts, type AiReferences } from "../../lib/sheet-reference-client";
+import { tradeNotes } from "../../lib/drawing-notes";
+import { useLocalDraft } from "../../lib/use-local-draft";
 import { memoryForScan, useScanMemory } from "../../lib/memory-client";
 import { tradeLines } from "../../lib/memory-check";
 import { readTradeScope } from "../../lib/scope-reading";
@@ -75,6 +77,24 @@ export function AiScopeWriter({ review, notify, onOpenFiles, onReview }: { revie
   // A trade's approved exclusions can hand its drawing sheets to the trade that carries the work (site demolition to Earthwork).
   const sheetSplit = useMemo(() => sheetsByTrade(register, packages, p => leftOut(remembered, p, activeProject ?? "")), [register, packages, remembered, activeProject]);
   const sheetsFor = (id: string) => withDrawings ? sheetSplit.sheets.get(id) ?? [] : [];
+  // Each trade also writes from its notes on every other sheet, sorted by the AI's read of every sheet (lib/drawing-notes;
+  // Danial, 25 Nov), when that read is of the sheets as they are now.
+  const [sheetRead] = useLocalDraft<AiReferences | null>(AI_REFERENCES_KEY, null);
+  const sheetsKey = useMemo(() => register.map(r => `${r.doc.id}:${r.page}`).join("|"), [register]);
+  const notesCurrent = !!sheetRead && sheetRead.key === sheetsKey;
+  const notesFor = (id: string) => withDrawings ? tradeNotes(sheetRead, sheetsKey, register, id, new Set(sheetsFor(id).map(r => `${r.doc.id}:${r.page}`))) : [];
+  const [readingSheets, setReadingSheets] = useState(false);
+  /** The AI reads every sheet's notes and sorts them to the trades (lib/sheet-reference-client), for the trades to write from. */
+  async function readEverySheet() {
+    if (readingSheets || !activeProject) return;
+    setReadingSheets(true);
+    try {
+      const texts = await loadSheetTexts(documents);
+      await findReferencesWithAi(activeProject, texts.key, texts.sheets, packages.map(p => ({ id: p.id, name: p.name, code: p.code, sections: (assigned.get(p.id) ?? []).map(s => `${s.section} ${s.title}`) })));
+      notify("Every sheet is read: each trade now also writes from its notes on every sheet.");
+    } catch (error) { notify(error instanceof Error ? error.message : "The sheets could not be read."); }
+    finally { setReadingSheets(false); }
+  }
   const [chosen, setChosen] = useState<string[]>([]);
   const [states, setStates] = useState<Record<string, TradeState>>({});
   const [busy, setBusy] = useState(false);
@@ -103,7 +123,7 @@ export function AiScopeWriter({ review, notify, onOpenFiles, onReview }: { revie
     const pkg = packages.find(p => p.id === id)!;
     update(id, { status: "reading" });
     const outcome = await readTradeScope({
-      pkg, sections: assigned.get(id) ?? [], sheets: sheetsFor(id), signal, memory: tradeMemory(memory, pkg, projectId, assigned.get(id) ?? [], readers, split.partial.get(id), withDrawings ? sheetSplit.handed.get(id) : []),
+      pkg, sections: assigned.get(id) ?? [], sheets: sheetsFor(id), notes: notesFor(id), signal, memory: tradeMemory(memory, pkg, projectId, assigned.get(id) ?? [], readers, split.partial.get(id), withDrawings ? sheetSplit.handed.get(id) : []),
       owners, leavesOut: leftOut(memory, pkg, projectId), ...tags, memoryLines: tradeLines(memory, pkg, projectId),
       onProgress: p => update(id, { status: "reading", done: p.done, total: p.total, note: p.note }),
       addFlipPages: pages => { const errors = latest.current.runFlip(current => pages.reduce((state, page) => state.pages.some(x => x.sheet === page.sheet) ? state : addPage(state, page), current)); return errors ? Object.values(errors)[0] ?? "A sheet could not be added to Drawing Flip." : null; },
@@ -145,15 +165,18 @@ export function AiScopeWriter({ review, notify, onOpenFiles, onReview }: { revie
 
   const totalPages = chosen.reduce((n, id) => n + pages(id), 0);
   const totalSheets = chosen.reduce((n, id) => n + sheetsFor(id).length, 0);
+  const chosenNotes = chosen.flatMap(id => notesFor(id));
+  const noteChars = chosenNotes.reduce((n, x) => n + x.lines.reduce((m, l) => m + l.length + 1, 0), 0);
   // Claude costs money per page: the estimate shows before the reading starts (Danial, 28 Oct). A manual page holds
-  // about 3,500 characters; a sheet sends its image and its text.
-  const estimate = reader?.reader === "claude" ? estimateCost(reader.model, { requests: Math.ceil(totalPages / 5) + totalSheets, chars: totalPages * 3_500 + totalSheets * 4_000, images: totalSheets }) : null;
+  // about 3,500 characters; a sheet sends its image and its text; notes go as text, a few dozen sheets per request.
+  const estimate = reader?.reader === "claude" ? estimateCost(reader.model, { requests: Math.ceil(totalPages / 5) + totalSheets + Math.ceil(chosenNotes.length / 25), chars: totalPages * 3_500 + totalSheets * 4_000 + noteChars * 2, images: totalSheets }) : null;
   return <>
     <Button onClick={() => setOpen(true)}><Sparkles size={15}/>Write scopes with AI</Button>
     {open && <Modal title="Write scopes with AI" subtitle="The AI reads the project manual and the drawing sheets in Project files and proposes bid-form lines for each trade. You accept, reject, move or delete every line." wide onClose={() => { if (!busy) setOpen(false); }}>
       {!ready ? <p role="status">Looking for the project manual and drawings in Project files…</p> : !volumes.length && !register.length ? <div className="ai-reader"><p>No project manual is stored for this project yet.</p><Button variant="primary" onClick={() => { setOpen(false); onOpenFiles(); }}>Upload it in Project files</Button></div> : <div className="ai-reader">
         <p>{volumes.length ? <><strong>{volumes.map(v => v.name).join(", ")}</strong> · {volumes.reduce((n, v) => n + v.pageCount, 0)} pages · {specs.length} specification sections{volumes.length > 1 ? `, read from all ${volumes.length} volumes` : ""}. Division 01 general requirements stay in the General section.</> :"No project manual is stored, so the drawings alone will be read. Scopes from drawings can miss specification requirements: upload the manual when you have it."}</p>
-        {register.length > 0 && <label className="ai-drawings-toggle"><input type="checkbox" checked={withDrawings} disabled={busy} onChange={e => setWithDrawings(e.target.checked)}/> Also read each trade's drawing sheets ({register.length} sheets stored): plans, schedules and notes, up to six per trade. Highlights go to Drawing Flip.</label>}
+        {register.length > 0 && <label className="ai-drawings-toggle"><input type="checkbox" checked={withDrawings} disabled={busy} onChange={e => setWithDrawings(e.target.checked)}/> Also read the drawings ({register.length} sheets stored): each trade's plans and schedules as images, up to six, {notesCurrent ? "and its notes on every other sheet, from the read of every sheet" : "and, once every sheet is read, its notes on every other sheet"}. Highlights go to Drawing Flip.</label>}
+        {register.length > 0 && withDrawings && !notesCurrent && <div className="ai-every-sheet"><p>The sheets haven't been read one by one for these drawings yet, so each trade would see only its six sheets. Reading every sheet first sorts every note on every sheet to its trade (about a dollar for a large set).</p><Button disabled={busy || readingSheets} onClick={() => void readEverySheet()}>{readingSheets ? "Reading every sheet…" : "Read every sheet first"}</Button></div>}
         <div className="ai-section-actions"><Button disabled={busy} onClick={() => setChosen(packages.filter(p => pages(p.id) > 0 || sheetsFor(p.id).length > 0).map(p => p.id))}>Select every trade</Button><Button disabled={busy} onClick={() => setChosen([])}>Clear</Button></div>
         <div className="ai-section-list">{packages.map(pkg => {
           const sections = assigned.get(pkg.id) ?? [];

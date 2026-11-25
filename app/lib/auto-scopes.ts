@@ -18,7 +18,8 @@ import { applyBidPackagePlan } from "./bid-package-ai";
 import { planBidPackages } from "./bid-package-client";
 import { aiReader } from "./ai-reader-client";
 import { estimateCost } from "./ai-cost";
-import { findReferencesWithAi, loadSheetTexts, PARALLEL_REFERENCES, referenceRunNow } from "./sheet-reference-client";
+import { AI_REFERENCES_KEY, findReferencesWithAi, loadSheetTexts, PARALLEL_REFERENCES, referenceRunNow, type AiReferences } from "./sheet-reference-client";
+import { tradeNotes } from "./drawing-notes";
 import { ocrScannedManualPages, ocrScannedSheets, sheetOcrNow } from "./sheet-text-ocr";
 import { referenceWork, SHEET_REFERENCE_LIMITS } from "./sheet-reference-ai";
 import { AI_REQUESTS_AT_ONCE, aiTimes } from "./ai-pool";
@@ -310,8 +311,13 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
       const { pkg, sections, sheets } = next;
       setTrade(pkg.id, { status: "reading", note: "" });
       try {
+        // Its notes on every other sheet, from the read of every sheet (lib/drawing-notes): that read finishes first when
+        // this run makes it, so every trade writes from every sheet (Danial, 25 Nov).
+        if (references) await references;
+        const register = drawingRegister(storedDocuments(projectId) ?? documents);
+        const sheetNotes = tradeNotes(readDraft<AiReferences | null>(projectId, AI_REFERENCES_KEY, null), register.map(r => `${r.doc.id}:${r.page}`).join("|"), register, pkg.id, new Set(sheets.map(r => `${r.doc.id}:${r.page}`)));
         const outcome = await readTradeScope({
-          pkg, sections, sheets, signal: controller.signal, memory: tradeMemory(memory.entries, pkg, projectId, sections, readers, split.partial.get(pkg.id), handed.get(pkg.id)),
+          pkg, sections, sheets, notes: sheetNotes, signal: controller.signal, memory: tradeMemory(memory.entries, pkg, projectId, sections, readers, split.partial.get(pkg.id), handed.get(pkg.id)),
           owners, leavesOut: leaves(pkg), borrowed, printed, memoryLines: tradeLines(memory.entries, pkg, projectId),
           onProgress: p => {
             const left = ledger.get(pkg.id);
