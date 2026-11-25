@@ -5,7 +5,7 @@ type LocatedPick = { levelId: string; index: number };
 export type WallPick = LocatedPick & { kind: "wall"; layer?: number };
 export type DoorPick = LocatedPick & { kind: "door" };
 export type FloorPick = LocatedPick & { kind: "floor" };
-export type GlazingPick = LocatedPick & { kind: "glazing" };
+export type GlazingPick = LocatedPick & { kind: "glazing"; part?: number };
 export type SchematicPick = WallPick | DoorPick | FloorPick | GlazingPick;
 
 export const CUTAWAY_HEIGHT = 5;
@@ -25,7 +25,9 @@ export function schematicObjectPick(hit: THREE.Intersection): SchematicPick | nu
   const door = data.doors?.[hit.instanceId];
   if (typeof door === "number") return { kind: "door", levelId: data.levelId, index: door };
   const glass = data.glazing?.[hit.instanceId];
-  return typeof glass === "number" ? { kind: "glazing", levelId: data.levelId, index: glass } : null;
+  if (typeof glass !== "number") return null;
+  const part = data.glazingParts?.[hit.instanceId];
+  return { kind: "glazing", levelId: data.levelId, index: glass, ...(typeof part === "number" ? { part } : {}) };
 }
 
 /** Fit the projected bounds. A narrow viewer has less horizontal room than the same camera's vertical field of view. */

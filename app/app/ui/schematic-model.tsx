@@ -11,7 +11,7 @@ import { openStoredPdf, renderStoredPage, useProjectDocuments } from "../../lib/
 import { drawingRegister, type StoredDocument } from "../../lib/project-files";
 import type { Project } from "../../lib/projects";
 import { useLocalDraft } from "../../lib/use-local-draft";
-import { alignSheetFrame, footprintValid, openOutline, printedSheetFrame, DEFAULT_DOOR_HEIGHT, wallLayerGroup, schematicColumns, schematicDoors, schematicGeometry, schematicGlazing, schematicPartitions, schematicRailings, schematicRoomFloors, schematicStairs, schematicWalls, sheetPoint, wallTotals, type SheetFrame } from "./schematic-geometry";
+import { alignSheetFrame, footprintValid, openOutline, printedSheetFrame, DEFAULT_DOOR_HEIGHT, wallLayerGroup, schematicColumns, schematicDoors, schematicGeometry, schematicGlazing, schematicGlazingParts, schematicPartitions, schematicRailings, schematicRoomFloors, schematicStairs, schematicWalls, sheetPoint, wallTotals, type SheetFrame } from "./schematic-geometry";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, PreviewNote, type ViewProps } from "./shared";
 import { SchematicObjectInspector } from "./schematic-object-inspector";
 import { SchematicHeightEvidence } from "./schematic-height-evidence";
@@ -241,8 +241,10 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
         const wallMesh = walls ? schematicWalls(display) : null;
         if (wallMesh) { wallMesh.userData.levelId = level.id; scope.add(wallMesh); }
         const doorMesh = walls ? schematicDoors(display, Math.min(display.height, DEFAULT_DOOR_HEIGHT)) : null;
+        const glazingLimit = cutaway ? CUTAWAY_HEIGHT : undefined;
         for (const mesh of [
-          doorMesh, walls ? schematicGlazing(level, cutaway ? CUTAWAY_HEIGHT : undefined) : null, walls ? schematicPartitions(display) : null,
+          doorMesh, walls ? schematicGlazing(level, glazingLimit) : null,
+          ...(walls ? schematicGlazingParts(level, glazingLimit) : []), walls ? schematicPartitions(display) : null,
           walls ? schematicRailings(display) : null, walls ? schematicColumns(display) : null,
         ]) if (mesh) scope.add(mesh);
         const stairs = walls ? schematicStairs(level, stairRise(model, level)) : null;
@@ -310,7 +312,8 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
         if ((selection.kind === "door" || selection.kind === "glazing") && mesh instanceof THREE.InstancedMesh) {
           const indices = selection.kind === "door" ? object.userData.doors : object.userData.glazing;
           (indices as number[] | undefined)?.forEach((index, i) => {
-            if (index === selection.index) {
+            const wrongPart = selection.kind === "glazing" && selection.part !== undefined && object.userData.glazingParts?.[i] !== selection.part;
+            if (index === selection.index && !wrongPart) {
               mesh.getMatrixAt(i, matrix);
               addOutline(new THREE.Matrix4().multiplyMatrices(mesh.matrixWorld, matrix));
             }

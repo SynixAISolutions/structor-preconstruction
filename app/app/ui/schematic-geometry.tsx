@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { isSportsFloor } from "./schematic-scene";
-import { glazingPlacement } from "../../lib/glazing-detail-references";
+import { glazingPlacement, placedGlazingElevation } from "../../lib/glazing-detail-references";
 import { edgesIntersect, footprintValid, openOutline, polygonArea, type Point, type SchematicLevel } from "../../lib/schematic-model";
 import { inside, insideRoom, type Room } from "../../lib/room-detection";
 import { stairPieces } from "../../lib/stair-detection";
@@ -134,7 +134,7 @@ export function schematicDoors(level: SchematicLevel, doorHeight = DEFAULT_DOOR_
 /** Glazing uses the plan run and the matching frame elevation when its size is supported. */
 export function schematicGlazing(level: SchematicLevel, viewLimit = Infinity): THREE.InstancedMesh | null {
   const glass = (level.glazing ?? []).flatMap((run, index) => {
-    if (run.excluded) return [];
+    if (run.excluded || placedGlazingElevation(run, level)) return [];
     const { base, height } = glazingPlacement(run, level);
     return base < viewLimit ? [{ run, index, base, height: Math.min(height, viewLimit - base) }] : [];
   });
@@ -152,6 +152,43 @@ export function schematicGlazing(level: SchematicLevel, viewLimit = Infinity): T
   mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingBox(); mesh.computeBoundingSphere();
   return mesh;
 }
+/** Visible elevation faces, with no manufactured profile depth. Each instance points to its source part. */
+export function schematicGlazingParts(level: SchematicLevel, viewLimit = Infinity): THREE.InstancedMesh[] {
+  const faces = (level.glazing ?? []).flatMap((run, index) => {
+    if (run.excluded) return [];
+    const elevation = placedGlazingElevation(run, level);
+    if (!elevation) return [];
+    const { base } = glazingPlacement(run, level);
+    const dx = run.b[0] - run.a[0], dy = run.b[1] - run.a[1], length = Math.hypot(dx, dy);
+    const angle = Math.atan2(dy, dx);
+    return elevation.parts.flatMap((part, partIndex) => {
+      const bottom = base + part.y, height = Math.min(part.height, viewLimit - bottom);
+      if (height <= 0) return [];
+      const offset = (part.x + part.width / 2 - elevation.width / 2) / length;
+      const x = (run.a[0] + run.b[0]) / 2 + dx * offset;
+      const z = -((run.a[1] + run.b[1]) / 2 + dy * offset);
+      return [{ x, y: bottom + height / 2, z, width: part.width, height, angle, index, partIndex, pane: part.kind === "Pane" }];
+    });
+  });
+  const place = new THREE.Object3D();
+  return [...Map.groupBy(faces, face => face.pane)].map(([pane, instances]) => {
+    const material = new THREE.MeshStandardMaterial(pane ?
+      { color: "#7cc4e8", transparent: true, opacity: .45, roughness: .1, depthWrite: false, side: THREE.DoubleSide } :
+      { color: "#87919a", roughness: .6, side: THREE.DoubleSide });
+    const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), material, instances.length);
+    instances.forEach((face, i) => {
+      place.position.set(face.x, face.y, face.z);
+      place.rotation.set(0, face.angle, 0);
+      place.scale.set(face.width, face.height, 1);
+      place.updateMatrix();
+      mesh.setMatrixAt(i, place.matrix);
+    });
+    mesh.userData = { levelId: level.id, glazing: instances.map(face => face.index), glazingParts: instances.map(face => face.partIndex) };
+    mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingBox(); mesh.computeBoundingSphere();
+    return mesh;
+  });
+}
+
 /** Operable partitions are drawn up to 10 ft, or the level's height if lower, until their printed height is read (Project 1's are 9'-8" and 10'-0"). */
 export const PARTITION_HEIGHT = 10;
 /** A level's operable partitions (level.partitions) as one instanced mesh of panels from the floor, darker than the walls. */

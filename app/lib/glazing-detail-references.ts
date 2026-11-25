@@ -1,4 +1,5 @@
 import { drawingLengthFeet, type DrawingTextRun } from "./drawing-dimensions";
+import { glazingElevationParts, glazingLegend, type GlazingElevation } from "./glazing-elevation-parts";
 import { dimensionLabels, dimensionSpans } from "./model-scoreboard";
 import type { Point, Segment } from "./plan-vectors";
 import type { RegisterRow } from "./project-files";
@@ -10,6 +11,7 @@ type GlazingSize = {
   kind: "frame" | "rough-opening";
   width: number; height: number; widthLabel: string; heightLabel: string;
   sill?: { feet: number; quote: string };
+  elevation?: GlazingElevation;
 };
 export type GlazingDimensions = GlazingSize & { source: DimensionSource };
 export type GlazingDetailReference = { tag: string; source: DimensionSource; size?: GlazingSize };
@@ -112,6 +114,7 @@ function elevationSill(text: DrawingTextRun[], bounds: [number, number, number, 
 
 /** Read the dimensions of labeled, scale-verified elevations. Require all four drawn frame edges. */
 export function printedGlazingElevations(text: DrawingTextRun[], segments: Segment[]): PrintedGlazing[] {
+  const legend = glazingLegend(text);
   const spans = dimensionSpans(segments, 1);
   const labels = dimensionLabels(spans, text);
   const dimensions = spans.flatMap((span, index) => {
@@ -164,7 +167,9 @@ export function printedGlazingElevations(text: DrawingTextRun[], segments: Segme
     const { w, v } = best;
     if (found.some(other => other.w.from < w.from - 1.2 || other.w.to > w.to + 1.2 || other.v.from < v.from - 1.2 || other.v.to > v.to + 1.2)) return [reference];
     const sill = elevationSill(text, [w.from, v.from, w.to, v.to], 2.5 * h);
-    return [{ ...reference, size: { kind: "frame" as const, width: w.feet, height: v.feet, widthLabel: w.label, heightLabel: v.label, ...(sill ? { sill } : {}) } }];
+    const elevation = glazingElevationParts(text, segments, { left: w.from, right: w.to, top: v.from, bottom: v.to }, ppf, legend);
+    return [{ ...reference, size: { kind: "frame" as const, width: w.feet, height: v.feet,
+      widthLabel: w.label, heightLabel: v.label, ...(sill ? { sill } : {}), ...(elevation ? { elevation } : {}) } }];
   });
 }
 
@@ -182,12 +187,17 @@ export function glazingSizeForTag(tag: string, refs: GlazingDetailReference[]): 
   const frames = hits.filter(hit => hit.kind === "frame");
   const sizes = frames.length ? frames : hits;
   const first = sizes[0];
-  return first && sizes.every(size => Math.abs(first.width - size.width) <= .25 / 12 &&
-    Math.abs(first.height - size.height) <= .25 / 12 && first.sill?.feet === size.sill?.feet) ? first : undefined;
+  if (!first || sizes.some(size => Math.abs(first.width - size.width) > .25 / 12 ||
+    Math.abs(first.height - size.height) > .25 / 12 || first.sill?.feet !== size.sill?.feet)) return undefined;
+  const source = first.kind === "frame" ? glazingDetailSource(tag, refs) : undefined;
+  return source ? first : { ...first, elevation: undefined };
 }
 
 export const GLASS_HEIGHT = 10;
-export function glazingPlacement(run: { a: Point; b: Point; dimensions?: GlazingDimensions }, level: Pick<SchematicLevel, "height" | "sizing">) {
+type PlanGlazing = { a: Point; b: Point; dimensions?: GlazingDimensions };
+type GlazingLevel = Pick<SchematicLevel, "height" | "sizing">;
+
+export function glazingPlacement(run: PlanGlazing, level: GlazingLevel) {
   const d = run.dimensions, sill = d?.sill?.feet ?? 0;
   const width = Math.hypot(run.b[0] - run.a[0], run.b[1] - run.a[1]);
   const scaled = /^Printed scale, [\d.]+ ft per inch$/.test(level.sizing);
@@ -195,4 +205,11 @@ export function glazingPlacement(run: { a: Point; b: Point; dimensions?: Glazing
     return { base: sill, height: d.height, dimensioned: true };
   }
   return { base: 0, height: Math.min(level.height, GLASS_HEIGHT), dimensioned: false };
+}
+
+
+/** A symmetric elevation can face either direction along its plan run. Keep its measured part sizes. */
+export function placedGlazingElevation(run: PlanGlazing, level: GlazingLevel): GlazingElevation | undefined {
+  const elevation = run.dimensions?.elevation;
+  return elevation?.symmetric && elevation.parts.length && glazingPlacement(run, level).dimensioned ? elevation : undefined;
 }

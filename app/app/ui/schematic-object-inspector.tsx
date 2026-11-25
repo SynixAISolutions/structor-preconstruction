@@ -1,9 +1,10 @@
 import { inside, type Room } from "../../lib/room-detection";
 import { planSource, type PlanSource, type SchematicLevel } from "../../lib/schematic-model";
 import type { DimensionSource } from "../../lib/section-datums";
-import { glazingPlacement } from "../../lib/glazing-detail-references";
+import { glazingPlacement, placedGlazingElevation } from "../../lib/glazing-detail-references";
 import { finishesForRoom, type FloorFinishNote } from "../../lib/schematic-floor-details";
 import { Button, Panel } from "./shared";
+import { GlazingElevationInspector } from "./schematic-glazing-elevation";
 import { isSportsFloor, type SchematicPick, type WallPick } from "./schematic-scene";
 
 type ObjectPick = Exclude<SchematicPick, WallPick>;
@@ -49,6 +50,7 @@ export function SchematicObjectInspector({ levels, spaces, floorFinishes, pick, 
   const glassSize = glass?.dimensions;
   const glassDetail = glass?.elevationDetail ?? (glassSize?.kind === "frame" ? glassSize.source : undefined);
   const placement = glass && level ? glazingPlacement(glass, level) : undefined;
+  const glassPlaced = !!(glass && level && placedGlazingElevation(glass, level));
   const selectedRoom = pick?.kind === "floor" ? spaces.get(pick.levelId)?.[pick.index] : undefined;
   const floor = selectedRoom?.open ? undefined : selectedRoom;
   const floorArea = floor && level?.planAreas?.findIndex(area => inside(floor.at, area.outline ?? level.outline));
@@ -135,6 +137,8 @@ export function SchematicObjectInspector({ levels, spaces, floorFinishes, pick, 
         {door && !door.number && <p>The swing was detected on the plan. No door tag was matched.</p>}
         {glass && !placement?.dimensioned && <p>{glassSize?.kind === "frame" ? "The frame size awaits a matching run and level height. The preview uses an estimated height." : "The preview uses an estimated glazing height."}</p>}
         {placement?.dimensioned && !glassSize?.sill && <p>Frame height is dimensioned. Sill placement needs verification.</p>}
+        {pick.kind === "glazing" && glassSize?.elevation && <GlazingElevationInspector
+          elevation={glassSize.elevation} part={pick.part} placed={glassPlaced} onPart={part => onPick({ ...pick, part })}/>}
         {canOpenPlan(source) && <Button onClick={() => onPlan(level, pick, source)}>{floor ? "Open " + source.sheet : glass ? "Show glazing on plan" : "Show door on plan"}</Button>}
         {schedule && <Button onClick={() => onDimension(schedule.source, doorLabel(level, pick.index))}>Door schedule · {schedule.source.sheet}</Button>}
         {glassSize?.kind === "rough-opening" && <Button onClick={() => onDimension(glassSize.source, "Window schedule")}>Window schedule · {glassSize.source.sheet}</Button>}

@@ -240,6 +240,36 @@ assert.deepEqual(glazingPlacement(glazedRun, calibrated), { base: 1, height: 11.
 assert.equal(glazingPlacement({ ...glazedRun, b: [8, 1] }, calibrated).dimensioned, false);
 assert.equal(glazingPlacement(glazedRun, { ...calibrated, sizing: "Sized to the building area (no scale read)" }).dimensioned, false);
 assert.equal(glazingPlacement(glazedRun, { ...calibrated, height: 12 }).dimensioned, false);
+const frameParts = [
+  line([104, 124], [276, 124], .3), line([104, 323], [276, 323], .3),
+  ...[104, 188, 192, 276].map(x => line([x, 124], [x, 323], .3)),
+];
+const labelRun = (text, x, y, width, height = 9) => ({ text, a: [x, y], b: [x + width, y], height });
+const glassMarks = [labelRun("GL-T", 118, 310, 22), labelRun("GL-T", 210, 310, 22)];
+const legendWords = [
+  labelRun("GLAZING LEGEND", 680, 40, 90, 14),
+  labelRun("MARK", 660, 58, 28), labelRun("TYPE", 715, 58, 25),
+  labelRun("GL-T", 660, 74, 22), labelRun("TEMPERED FLOAT GLASS", 715, 74, 130),
+  labelRun("GLAZING GENERAL NOTES", 659, 100, 140, 14),
+];
+const measured = printedGlazingElevations([...elevationWords, ...glassMarks, ...legendWords], [...elevationInk, ...frameParts])[0].size;
+assert.ok(measured.elevation.symmetric);
+const panes = measured.elevation.parts.filter(part => part.kind === "Pane");
+assert.equal(panes.length, 2);
+assert.deepEqual(panes.map(part => part.mark), ["GL-T", "GL-T"]);
+assert.equal(panes[0].description, "TEMPERED FLOAT GLASS");
+assert.ok(Math.abs(panes[0].width - 84 / 18) < .001);
+assert.equal(measured.elevation.parts.filter(part => part.kind === "Mullion").length, 1);
+assert.ok(Math.abs(measured.elevation.parts.find(part => part.kind === "Mullion").width - 4 / 18) < .001);
+const changedGlass = printedGlazingElevations([...elevationWords, glassMarks[0], { ...glassMarks[1], text: "GL-L" }], [...elevationInk, ...frameParts])[0].size;
+assert.equal(changedGlass.elevation.symmetric, false, "Matching widths alone do not prove which end faces the elevation");
+const missingEdge = printedGlazingElevations([...elevationWords, ...glassMarks], [...elevationInk, ...frameParts.slice(1)])[0].size;
+assert.equal(missingEdge.elevation, undefined, "A glass label alone cannot complete an open pane boundary");
+assert.equal(glazingSizeForTag("SF-4", [
+  { tag: "SF-4", size: measured, source: windowSource },
+  { tag: "SF-4", size: measured, source: { ...windowSource, page: 7 } },
+]).elevation, undefined, "An ambiguous source may agree on size, but it cannot place components");
+
 const { printedSlabNotes, printedFloorFinishes, slabNoteLevel, slabNoteArea, finishesForRoom } = await import("../lib/schematic-floor-details.ts");
 const slabNotes = printedSlabNotes([
   '2. SLAB ON GRADE SHALL BE 125 mm CONCRETE PLACED OVER VAPOR RETARDER AND 200 mm MIN.',
