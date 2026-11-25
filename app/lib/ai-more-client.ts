@@ -6,6 +6,7 @@ import type { DraftInput } from "./extraction";
 import type { ConsolidatedLine, TitleBlock } from "./ai-jobs-more";
 import { AI_REQUESTS_AT_ONCE, inAiPool, timed } from "./ai-pool";
 import type { LineCheckRequest, LineFound } from "./memory-check";
+import type { NotesSheet } from "./drawing-notes";
 
 export const aiJob = <T>(job: string, input: unknown, signal?: AbortSignal): Promise<T & { model: string }> => timed(job, async () => {
   const response = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job, input }), signal });
@@ -83,6 +84,38 @@ export async function checkMemoryLines(trade: { name: string; code: string }, re
   // In page order, so a line found on two pages cites the first.
   answers.sort((a, b) => requests.indexOf(a.request) - requests.indexOf(b.request));
   return { answers, dropped, failed };
+}
+
+/**
+ * A trade's bid-form lines from its notes on every drawing sheet (lib/drawing-notes), a few dozen sheets per request,
+ * one request after another in the tab's pool: each is told the lines already on the bid form and those the earlier
+ * requests wrote, so the same keynote on sheets in two requests isn't written twice. `failed`: requests that didn't
+ * come back.
+ */
+export async function readDrawingNotes(pkg: { id: string; name: string; code: string }, document: string, batches: NotesSheet[][], existing: string[], memory: string | undefined, signal?: AbortSignal, onProgress?: (done: number, total: number) => void): Promise<{ drafts: DraftInput[]; dropped: { what: string; reason: string }[]; failed: number; model: string }> {
+  const answers: { drafts: DraftInput[] }[] = new Array(batches.length), dropped: { what: string; reason: string }[] = [];
+  let next = 0, done = 0, failed = 0, model = "";
+  const written = [...existing];
+  onProgress?.(0, batches.length);
+  await Promise.all(Array.from({ length: Math.min(1, batches.length) }, async () => {
+    while (next < batches.length && !signal?.aborted) {
+      const i = next++;
+      try {
+        const result = await inAiPool(() => aiJob<{ drafts: DraftInput[]; dropped: { what: string; reason: string }[] }>("drawing-notes", {
+          pkg, document, sheets: batches[i], existing: written.slice(-150), ...(memory ? { memory } : {}),
+        }, signal));
+        answers[i] = { drafts: result.drafts.map(d => ({ ...d, key: `${d.key}@${i + 1}` })) };
+        model = result.model;
+        written.push(...result.drafts.flatMap(d => d.kind === "scope" ? [d.title] : []));
+        dropped.push(...result.dropped);
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        failed++;
+      }
+      onProgress?.(++done, batches.length);
+    }
+  }));
+  return { drafts: answers.flatMap(a => a?.drafts ?? []), dropped, failed, model };
 }
 
 /** Reads one sheet's title block (a JPEG crop of its right-hand strip). */

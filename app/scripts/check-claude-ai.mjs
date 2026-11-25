@@ -174,6 +174,15 @@ const found = H.screenSheetReferences({ sheets: [
 assert.deepEqual(found.sheets, [{ sheet: "A8.1", packages: [{ id: "drywall", lines: ["5/8\" TYPE X GYPSUM BOARD EACH SIDE OF 3-5/8\" METAL STUDS TO DECK", "PROVIDE ACOUSTICAL SEALANT AT HEAD AND SILL"] }, { id: "doors", lines: ["DOOR TYPE A: HOLLOW METAL"] }] }], "Only lines printed on the sheet, for listed packages, once each");
 assert.equal(found.dropped, 3, "An unprinted line, an unknown package and an unknown sheet are counted as set aside");
 assert.throws(() => H.parseSheetReferenceJob({ packages: [], sheets: [] }), /bid packages/);
+// Danial, 25 Nov: every note on a sheet goes to its trade, guided by the contractor's own trade split.
+assert.match(refMessages[0].content, /List them all, not a sample/, "Every note, not the most telling few");
+assert.match(refMessages[0].content, /Leave out dimensions, room names/, "but not dimensions, room names or title blocks");
+const withSplit = H.parseSheetReferenceJob({ ...sheetJob, split: "Trades this contractor buys:\n- Specialties: 10 21 13\nWhat trades carry or leave to others:\n- Drywall doesn't carry: Toilet partitions." });
+assert.match(C.claudeRequest(H.sheetReferenceMessages(withSplit)).system[0].text, /This contractor's trade split, from its own bid forms:\n- Specialties: 10 21 13|Specialties: 10 21 13/, "The split goes in the cached instructions with the package list");
+assert.equal(H.parseSheetReferenceJob({ ...sheetJob, split: "x".repeat(20_000) }).split.length, H.SHEET_REFERENCE_LIMITS.split, "A long split is cut");
+const many = Array.from({ length: 70 }, (_, i) => `KEYNOTE D.${i + 1} REMOVE ITEM ${i + 1}`);
+const dense = H.parseSheetReferenceJob({ packages: sheetJob.packages, sheets: [{ sheet: "AD-111", title: "DEMOLITION PLAN", discipline: "Architectural demolition", text: many.join("\n") }] });
+assert.equal(H.screenSheetReferences({ sheets: [{ sheet: "AD-111", packages: [{ id: "drywall", lines: many }] }] }, dense).sheets[0].packages[0].lines.length, 60, "Up to 60 notes for a trade on a sheet, not 12");
 
 
 // ── What a reading costs ──
