@@ -17,7 +17,8 @@
 // length-capped and rejected rather than silently cut, so a citation is never misquoted.
 
 import { addRegion, approveRegion, linkScope, DrawingFlipRuleError, type DrawingFlipState, type Point, type RegionAnchor } from "./drawing-flip";
-import { addScope, approveScope, ProcurementRuleError, setScopeQuantity, type Procurement } from "./procurement";
+import { addRepeat, addScope, approveScope, ProcurementRuleError, setScopeQuantity, type Procurement } from "./procurement";
+import { addsWords, sameWork } from "./same-work";
 import type { QuantityUnit } from "./model";
 
 /** Who the history names for the AI's own steps. */
@@ -61,7 +62,9 @@ export type DraftEvent =
   | { kind: "proposed" | "accepted" | "reopened"; at: string; by: string }
   /** `fromPackage`: the trade a finding was moved out of, when `fields` holds packageId (what lib/memory-learn learns from). */
   | { kind: "edited"; at: string; by: string; fields: string[]; fromPackage?: string }
-  | { kind: "rejected"; at: string; by: string; reason: RejectReason; note: string };
+  | { kind: "rejected"; at: string; by: string; reason: RejectReason; note: string }
+  /** The same work as a line the bid form already had; `into` is that line, which now carries this finding's sources too. */
+  | { kind: "merged"; at: string; by: string; into: string };
 
 type DraftBase = {
   id: string;
@@ -344,13 +347,17 @@ export function rejectDraft(state: ExtractionState, draftId: string, reason: Rej
 }
 
 /** Words only, for telling whether two scope lines say the same thing ("Gypsum board, Type X." = "gypsum board type x"). */
+/** Where a finding was read: a document and a page. */
+const citedAt = (c: Citation) => `${c.document}|${c.page}`;
 const sameLine = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
 /**
  * The automatic run's step after reading (Marcel, 24 Oct: whatever the AI finds goes straight into the scope
  * list, and the team approves it): each of the run's scope findings becomes a draft line in its trade's bid
- * form, for Approve scopes. A line the bid form already has (same words, in that trade or every trade) is
- * set aside as a duplicate, so a new revision only adds what is new. A finding whose quoted words aren't printed
+ * form, for Approve scopes. A line the bid form already has (the same work, in that trade or every trade:
+ * lib/same-work) isn't added again: found on another sheet, its sources, highlights and other wording go on the line
+ * already there; found where that line was already read, it is set aside as a duplicate, so a new revision only adds
+ * what is new. A finding whose quoted words aren't printed
  * on its sheet (notOnSheet) is held: it waits in its trade, flagged, for a person to accept or reject. Regions
  * and quantities stay for review.
  */
@@ -360,9 +367,13 @@ export function addRunToBidForms(records: Pick<ReviewRecords, "extraction" | "pr
   for (const draft of records.extraction.drafts) {
     if (draft.runId !== runId || draft.kind !== "scope" || draft.status !== "pending-review") continue;
     if (notOnSheet(draft)) { held++; continue; }
-    const there = procurement.scopes.filter(s => s.packageId === draft.packageId || s.allTrades).map(s => sameLine(s.title));
-    if (there.includes(sameLine(draft.title))) {
-      extraction = rejectDraft(extraction, draft.id, "duplicate", "Already in the bid form.", AI_ACTOR, at);
+    const twin = procurement.scopes.find(s => (s.packageId === draft.packageId || s.allTrades) && (sameLine(s.title) === sameLine(draft.title) || sameWork(s.title, draft.title, s.source, draft.source)));
+    if (twin) {
+      const read = new Set(extraction.drafts.flatMap(d => d.kind === "scope" && d.acceptedId === twin.id ? d.citations.map(citedAt) : []));
+      if (read.size && draft.citations.some(c => !read.has(citedAt(c)))) {
+        procurement = addRepeat(procurement, twin.id, draft, addsWords(twin.title, draft.title), AI_ACTOR, at);
+        extraction = putDraft(extraction, { ...draft, status: "accepted", reviewedBy: AI_ACTOR, reviewedAt: at, acceptedId: twin.id, history: [...draft.history, { kind: "merged", at, by: AI_ACTOR, into: twin.id }] });
+      } else extraction = rejectDraft(extraction, draft.id, "duplicate", "Already in the bid form.", AI_ACTOR, at);
       duplicates++;
       continue;
     }

@@ -7,6 +7,7 @@ import { TradePackageControls } from "./trade-package-controls";
 import { AskAboutTrade } from "./ask-entry-points";
 import "./project-setup.css";
 import { LinkedProjectContent } from "./project-content-links";
+import { RepeatedLines } from "./repeated-lines";
 import {
   ArrowRight,
   Bell,
@@ -142,6 +143,7 @@ function historyLabel(event: ScopeItem["history"][number], packages: Procurement
   if (event.kind === "applied-to-all") return "Applied to every trade";
   if (event.kind === "quantity") return event.quantity ? `Quantity set to ${event.quantity}` : "Quantity removed";
   if (event.kind === "quantity-checked") return "Quantity checked";
+  if (event.kind === "merged") return event.from ? `The same work found on ${event.from}` : "The same work found again";
   return event.kind === "created" ? "Created" : event.kind === "approved" ? "Approved" : event.kind === "reopened" ? "Reopened for review" : "Edited";
 }
 
@@ -224,7 +226,7 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
           <AskAboutTrade trade={activePackage.name} code={activePackage.code}/>
         </div>
         {packageView === "General scope" ? <GeneralScopePanel key={activePackage.id} projectId={projectId} state={state} pkg={activePackage} run={run} by={CURRENT_USER} notify={notify}/> : <>
-        <div className="ui-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search this bid form…"/><Button onClick={approveAll}><CheckCheck size={15}/>Approve visible form</Button></div>
+        <div className="ui-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search this bid form…"/><RepeatedLines key={activePackage.id} pkg={activePackage} items={form} merge={groups => review.mergeRepeats(groups, CURRENT_USER)} notify={notify}/><Button onClick={approveAll}><CheckCheck size={15}/>Approve visible form</Button></div>
         <PackageDrawingReferences key={activePackage.id} pkg={activePackage} packages={state.packages} colors={sourceColors}/>
         <div className="proc-scope-list"><InlineScopeDrafts key={activePackage.id} review={review} packageId={activePackage.id} query={query} sections={specSections} colors={sourceColors} by={CURRENT_USER} notify={notify} onMove={setPackageId}/>{visible.map((item, index) => <article className={`proc-scope-row ${selected?.id === item.id ? "selected" : ""}`} key={item.id}>
           <button type="button" className={`proc-approval ${item.status}`} aria-label={`${item.status === "approved" ? "Reopen" : "Approve"} ${item.title}`} onClick={() => item.status === "approved" ? runAndNotify(run, current => reopenScope(current, item.id, CURRENT_USER), notify, "Scope item reopened for review.") : notify(review.approveScopeItem(item.id, CURRENT_USER) ?? "Scope item approved.")}>{item.status === "approved" && <Check size={12} strokeWidth={2.4} aria-hidden="true"/>}</button>

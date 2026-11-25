@@ -8,6 +8,7 @@ import { useDrawingFlip } from "./use-drawing-flip";
 import { useLocalDraft } from "./use-local-draft";
 import { useProcurement } from "./use-procurement";
 import { removeReviewedScope, approveWithRegions, combineTrades, addScopeOnSheet } from "./scope-review";
+import { mergeLines } from "./repeated-lines";
 import { combineAiReferences } from "./sheet-reference-client";
 import { getActiveProjectId } from "./project-scope";
 
@@ -122,5 +123,22 @@ export function useExtraction() {
     }
   }, [setExtraction, runProcurement, runFlip]);
 
-  return { extraction, procurement, runProcurement, flip, runFlip, run, accept, removeScope, approveScopeItem, combine, placeAllHighlights, addScopeOnDrawing };
+  /** Merges repeated lines of one trade into the line kept (lib/repeated-lines mergeLines), all in one change. Null when done, else why not. */
+  const mergeRepeats = useCallback((groups: { keep: string; same: string[] }[], by: string): string | null => {
+    try {
+      const next = groups.reduce((records, g) => mergeLines(records, g.keep, g.same, by), latest.current);
+      if (next === latest.current) return "Nothing to merge.";
+      latest.current = next;
+      setExtraction(next.extraction);
+      runProcurement(() => next.procurement);
+      runFlip(() => next.flip);
+      return null;
+    } catch (error) {
+      if (error instanceof ExtractionRuleError) return error.message;
+      if (error instanceof Error && error.name === "ProcurementRuleError") return error.message;
+      throw error;
+    }
+  }, [setExtraction, runProcurement, runFlip]);
+
+  return { extraction, procurement, runProcurement, flip, runFlip, run, accept, removeScope, approveScopeItem, combine, placeAllHighlights, addScopeOnDrawing, mergeRepeats };
 }

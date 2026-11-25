@@ -7,6 +7,7 @@ import type { ConsolidatedLine, TitleBlock } from "./ai-jobs-more";
 import { AI_REQUESTS_AT_ONCE, inAiPool, timed } from "./ai-pool";
 import type { LineCheckRequest, LineFound } from "./memory-check";
 import type { NotesSheet } from "./drawing-notes";
+import type { RepeatGroup, RepeatLine } from "./repeated-lines";
 
 export const aiJob = <T>(job: string, input: unknown, signal?: AbortSignal): Promise<T & { model: string }> => timed(job, async () => {
   const response = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job, input }), signal });
@@ -116,6 +117,22 @@ export async function readDrawingNotes(pkg: { id: string; name: string; code: st
     }
   }));
   return { drafts: answers.flatMap(a => a?.drafts ?? []), dropped, failed, model };
+}
+
+/**
+ * Asks the AI which of a trade's lines repeat one another (lib/repeated-lines), 200 lines per request, the alike ones
+ * together. The groups it returned that hold up, the pairs left apart, and how many requests failed.
+ */
+export async function findRepeatedLines(pkg: { name: string; code: string }, batches: RepeatLine[][], signal?: AbortSignal): Promise<{ groups: RepeatGroup[]; dropped: { what: string; reason: string }[]; failed: number; model: string }> {
+  const groups: RepeatGroup[] = [], dropped: { what: string; reason: string }[] = [];
+  let failed = 0, model = "";
+  for (const lines of batches) {
+    try {
+      const result = await inAiPool(() => aiJob<{ groups: RepeatGroup[]; dropped: { what: string; reason: string }[] }>("repeated-lines", { trade: pkg.name, code: pkg.code, lines }, signal));
+      groups.push(...result.groups); dropped.push(...result.dropped); model = result.model;
+    } catch (error) { if (signal?.aborted) throw error; failed++; }
+  }
+  return { groups, dropped, failed, model };
 }
 
 /** Reads one sheet's title block (a JPEG crop of its right-hand strip). */
