@@ -205,13 +205,15 @@ assert.equal(F.leaveOthersItems({ drafts: memLines, pkg: { id: "drywall", name: 
     line("d", "Coordinate accessory locations with framing", "10 28 00 · §1.2.A"),
     line("e", "Furnish and install surface-mounted corner guards", "10 26 00"),
     line("f", "Furnish & install access doors and frames", "08 31 13"),
+    line("h", "Furnish and install in-wall blocking at toilet accessories", "10 28 00"),
+    line("i", "Furnish fire-retardant-treated wood blocking at door frames", "08 11 13"),
     { kind: "region", key: "rb", packageId: "drywall", sheet: "A-601", label: "x", polygon: [], confidence: 1, citations: [], scopeKeys: ["b"] },
     { ...line("g", "Furnish and install toilet accessories", "10 28 00"), packageId: "specialties" },
   ];
   const kept = PS.keepToPart(drafts, { id: "drywall", name: "Drywall" }, ["08 11 13", "08 31 13", "10 28 00"]);
   const titles = kept.drafts.filter(d => d.kind === "scope").map(d => d.title);
-  assert.deepEqual(titles, ["Install toilet accessories and grab bars", "Coordinate accessory locations with framing", "Furnish and install surface-mounted corner guards", "Install access doors and frames", "Furnish and install toilet accessories"],
-    "Furnish and install becomes Install; supply and factory finishing go; coordination, sections the trade carries in full and other trades' lines stay");
+  assert.deepEqual(titles, ["Install toilet accessories and grab bars", "Coordinate accessory locations with framing", "Furnish and install surface-mounted corner guards", "Install access doors and frames", "Furnish and install in-wall blocking at toilet accessories", "Furnish fire-retardant-treated wood blocking at door frames", "Furnish and install toilet accessories"],
+    "Furnish and install becomes Install; supply and factory finishing go; coordination, the trade's own blocking at the item, sections it carries in full and other trades' lines stay");
   assert.equal(kept.drafts.find(d => d.key === "a").detail, "Level, plumb and anchored. Furnished by others.");
   assert.ok(!kept.drafts.some(d => d.key === "rb"), "A line left out takes its highlight with it");
   assert.equal(kept.rewritten, 2);

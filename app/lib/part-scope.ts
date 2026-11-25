@@ -16,6 +16,11 @@ const sectionOf = (source: string) => { const m = SECTION.exec(source.trim()); r
 const FURNISH_AND_INSTALL = /^(?:furnish|provide|supply)\s+(?:and|&)\s+install\b\s*/i;
 const SUPPLY_ONLY = /^(?:furnish|supply)\b(?!\s+(?:and|&)\s+install)/i;
 const SUPPLIERS_WORK = /\b(?:factory|shop)[- ]?(?:prim|finish|paint|appl)\w*|\bfabricat\w*|\bmanufactur\w*/i;
+/**
+ * The trade's own work at an item (run 14: "Furnish and install in-wall blocking at toilet accessories" became "Install
+ * … Furnished by others"): blocking, backing, framing, recesses and openings stay as written, whoever furnishes the item.
+ */
+const OWN_WORK_AT = /\b(?:blocking|backing|grounds?|nailers?|reinforc\w*|framing|framed|studs?|recess\w*|openings?|cut-?outs?|supports?)\b/i;
 
 /**
  * The trade's lines from sections it reads only in part (`partOnly`, section numbers), kept to install work, as described
@@ -29,7 +34,7 @@ export function keepToPart(drafts: DraftInput[], pkg: { id: string; name: string
   const kept = drafts.map(d => {
     if (d.kind !== "scope" || d.packageId !== pkg.id) return d;
     const section = sectionOf(d.source);
-    if (!section || !part.has(section)) return d;
+    if (!section || !part.has(section) || OWN_WORK_AT.test(d.title)) return d;
     if (SUPPLIERS_WORK.test(d.title) || SUPPLY_ONLY.test(d.title)) {
       gone.add(d.key);
       dropped.push({ what: d.title, reason: `${pkg.name} reads ${section} only for its part (installing what others furnish), so supplying, fabricating or factory finishing is left to the supplier.` });
