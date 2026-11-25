@@ -11,7 +11,8 @@ import type { Dropped } from "./ai-jobs";
 import { quoteOnPage } from "./ai-jobs";
 
 /** One sheet's notes sorted to a trade, with where the sheet is. */
-export type TradeNote<D> = { doc: D; page: number; sheet: string; title: string; lines: string[] };
+/** `discipline`: the sheet's, from the drawing register ("Architectural demolition"). */
+export type TradeNote<D> = { doc: D; page: number; sheet: string; title: string; discipline?: string; lines: string[] };
 /** The notes a request carries: a few dozen sheets' worth. */
 export const DRAWING_NOTES_LIMITS = { sheets: 25, chars: 30_000, existing: 150, findings: 60 };
 
@@ -22,13 +23,13 @@ export const DRAWING_NOTES_LIMITS = { sheets: 25, chars: 30_000, existing: 150, 
  */
 export function tradeNotes<D extends { id: string }>(
   read: { key: string; refs: Record<string, { docId: string; page: number; lines: string[] }[]> } | null | undefined,
-  key: string, register: { doc: D; page: number; sheet: string; title: string }[], packageId: string, skip: Set<string> = new Set(),
+  key: string, register: { doc: D; page: number; sheet: string; title: string; discipline?: string }[], packageId: string, skip: Set<string> = new Set(),
 ): TradeNote<D>[] {
   if (!read || !key || read.key !== key) return [];
   const lines = new Map((read.refs[packageId] ?? []).map(r => [`${r.docId}:${r.page}`, r.lines]));
   return register.flatMap(row => {
     const at = `${row.doc.id}:${row.page}`, notes = lines.get(at);
-    return notes?.length && !skip.has(at) ? [{ doc: row.doc, page: row.page, sheet: row.sheet, title: row.title, lines: [...new Set(notes)] }] : [];
+    return notes?.length && !skip.has(at) ? [{ doc: row.doc, page: row.page, sheet: row.sheet, title: row.title, ...(row.discipline ? { discipline: row.discipline } : {}), lines: [...new Set(notes)] }] : [];
   });
 }
 
@@ -70,4 +71,28 @@ export function screenDrawingNotes(output: unknown, job: DrawingNotesJob): { dra
   }
   if (found.length > DRAWING_NOTES_LIMITS.findings) dropped.push({ what: `${found.length - DRAWING_NOTES_LIMITS.findings} more lines`, reason: `Over the ${DRAWING_NOTES_LIMITS.findings}-line limit for one request.` });
   return { drafts, dropped };
+}
+
+/** A demolition sheet: its discipline or title says so ("Architectural demolition", "DEMOLITION - LEVEL 01"). */
+const onDemolitionSheet = (n: { title: string; discipline?: string }) => /demolition/i.test(n.discipline ?? "") || /\bDEMOLITION\b/i.test(n.title);
+const REMOVAL = /^(?:remove|demolish|demo)\b/i;
+const PUT_BACK = /\b(?:re-?install|reinstallation|re-?use in the new work|for reuse)\b/i;
+
+/**
+ * A trade's lines from its notes that remove existing work shown only on the demolition sheets ("Remove the existing
+ * gypsum bulkheads where keynoted D.57", written for Whittier's Drywall on 25 Nov) are the demolition trade's: left to it
+ * (`demolition`, the project's demolition package) with a note. A line that puts the work back (remove and reinstall)
+ * stays, and so does every line when the project has no demolition trade, or this trade is it.
+ */
+export function leaveRemovals<D>(drafts: DraftInput[], pkg: { id: string; name: string }, notes: TradeNote<D>[], demolition: { id: string; name: string } | null): { drafts: DraftInput[]; dropped: Dropped[] } {
+  if (!demolition || demolition.id === pkg.id) return { drafts, dropped: [] };
+  const demoSheets = new Set(notes.filter(onDemolitionSheet).map(n => n.sheet));
+  const dropped: Dropped[] = [], gone = new Set<string>();
+  for (const d of drafts) {
+    if (d.kind !== "scope" || d.packageId !== pkg.id || !REMOVAL.test(d.title) || PUT_BACK.test(`${d.title} ${d.detail}`)) continue;
+    if (!d.citations.length || !d.citations.every(c => c.sheet && demoSheets.has(c.sheet))) continue;
+    gone.add(d.key);
+    dropped.push({ what: d.title, reason: `Removing existing work shown on the demolition sheets is ${demolition.name}'s, so this line is left to that trade.` });
+  }
+  return { drafts: drafts.filter(d => !gone.has(d.key) && !(d.kind === "region" && d.scopeKeys?.some(k => gone.has(k)))), dropped };
 }

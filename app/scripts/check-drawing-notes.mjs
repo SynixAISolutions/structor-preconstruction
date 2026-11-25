@@ -66,4 +66,26 @@ assert.ok(answer.drafts.every(d => d.kind === "scope" && d.packageId === "demoli
 assert.deepEqual(answer.dropped.map(d => d.what), ["Remove the existing roof.", "Remove hazardous materials."], "A quote that isn't one of the cited sheet's notes, or a sheet that wasn't sent, keeps the line off the bid form");
 assert.equal(new Set(answer.drafts.map(d => d.key)).size, answer.drafts.length, "Keys are unique");
 
-console.log("Drawing notes checked: the notes the read of every sheet sorted to a trade (in order, once each, not on the sheets it reads whole, only from a read of these sheets), batches, the request (lines once across sheets, nothing the notes don't state, the lines already written, the trade's memory), and only lines quoting a sent sheet's notes reaching the bid form.");
+// ── Removal shown on the demolition sheets is the demolition trade's (Whittier Drywall, 25 Nov: "Remove the existing gypsum bulkheads") ──
+{
+  const notes = [
+    { doc, page: 10, sheet: "AD-000", title: "DEMOLITION - GENERAL NOTES", discipline: "Architectural demolition", lines: ["D.57 REMOVE EXISTING GYPSUM BULKHEADS"] },
+    { doc, page: 46, sheet: "A-413", title: "INTERIOR ELEVATIONS - LIBRARY", discipline: "Architectural", lines: ["REMOVE AND REINSTALL CEILING TILES"] },
+  ];
+  const cite = sheet => ({ document: doc.name, page: 1, sheet, quote: "x" });
+  const lines = [
+    { kind: "scope", key: "n1", packageId: "drywall", title: "Remove the existing gypsum bulkheads where keynoted D.57.", detail: "", source: "AD-000", citations: [cite("AD-000")] },
+    { kind: "scope", key: "n2", packageId: "drywall", title: "Remove existing ceiling tiles and reinstall them after the work.", detail: "", source: "AD-000", citations: [cite("AD-000")] },
+    { kind: "scope", key: "n3", packageId: "drywall", title: "Remove damaged gypsum board at the library and patch.", detail: "", source: "A-413", citations: [cite("A-413")] },
+    { kind: "region", key: "r1", packageId: "drywall", sheet: "AD-000", label: "x", polygon: [], confidence: 1, citations: [], scopeKeys: ["n1"] },
+  ];
+  const demolition = { id: "demolition", name: "Demolition" };
+  const left = N.leaveRemovals(lines, { id: "drywall", name: "Drywall" }, notes, demolition);
+  assert.deepEqual(left.drafts.map(d => d.key), ["n2", "n3"], "Removal on a demolition sheet goes (with its highlight); remove-and-reinstall, and removal shown on another sheet, stay");
+  assert.equal(left.dropped[0].reason, "Removing existing work shown on the demolition sheets is Demolition's, so this line is left to that trade.");
+  assert.equal(N.leaveRemovals(lines, { id: "drywall", name: "Drywall" }, notes, null).drafts.length, lines.length, "No demolition trade on the project: the line stays");
+  assert.equal(N.leaveRemovals(lines, demolition, notes, demolition).drafts.length, lines.length, "The demolition trade keeps its own removals");
+  assert.equal(N.tradeNotes(read, key, rows.map(r => ({ ...r, discipline: r.sheet.startsWith("AD") ? "Architectural demolition" : "Architectural" })), "demolition")[0].discipline, "Architectural demolition", "A note carries its sheet's discipline");
+}
+
+console.log("Drawing notes checked: the notes the read of every sheet sorted to a trade (in order, once each, not on the sheets it reads whole, only from a read of these sheets), batches, the request (lines once across sheets, nothing the notes don't state, the lines already written, the trade's memory), only lines quoting a sent sheet's notes reaching the bid form, and removal on the demolition sheets left to the demolition trade.");

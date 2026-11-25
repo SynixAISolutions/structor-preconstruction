@@ -8,7 +8,8 @@
 
 import { extractDrawingScope, extractTradeScope, chunkPages, type ScopeRunResult } from "./ai-client";
 import { checkMemoryLines, consolidateScope, readDrawingNotes } from "./ai-more-client";
-import { noteBatches, type TradeNote } from "./drawing-notes";
+import { leaveRemovals, noteBatches, type TradeNote } from "./drawing-notes";
+import { keepToPart } from "./part-scope";
 import type { Dropped } from "./ai-jobs";
 import type { DraftInput } from "./extraction";
 import type { PageInput } from "./drawing-flip";
@@ -74,6 +75,8 @@ export async function readTradeScope(args: {
    * written into bid-form lines from their text, each highlighted on the note it quotes.
    */
   notes?: TradeNote<StoredDocument>[];
+  /** Sections the trade reads only for its part (lib/memory rememberedSections partial): its lines there are install lines (lib/part-scope). */
+  partOnly?: string[];
 }): Promise<ScopeRunResult> {
   const { pkg, sections: stored, sheets, signal, memory } = args;
   // Every specification page and drawing sheet the reading read, with its text, for checkTags.
@@ -269,7 +272,11 @@ export async function readTradeScope(args: {
       const cited = new Set(read.drafts.flatMap(d => d.citations.map(c => c.sheet ?? "")));
       const boxes = new Map<string, TextBox[]>();
       await Promise.all(group.filter(n => cited.has(n.sheet)).map(async n => { try { boxes.set(n.sheet, await readPageTextBoxes(doc, n.page)); } catch { /* no text layer: no highlight */ } }));
-      const pinned = pinFindings(read.drafts, boxes, new Map(), false);
+      // Removal shown only on the demolition sheets is the demolition trade's (lib/drawing-notes leaveRemovals).
+      const demolition = args.owners?.("02 41 19").find(o => o.id !== pkg.id) ?? null;
+      const kept = leaveRemovals(pinFindings(read.drafts, boxes, new Map(), false), pkg, group, demolition);
+      dropped.push(...kept.dropped);
+      const pinned = kept.drafts;
       drafts.push(...pinned);
       const highlighted = new Set(pinned.filter(d => d.kind === "region").map(d => (d as { sheet: string }).sheet));
       const flipError = args.addFlipPages(group.filter(n => highlighted.has(n.sheet)).map(n => ({ sheet: n.sheet, title: n.title, discipline: "", revision: "", documentId: doc.id, documentName: doc.name, pageNumber: n.page })));
@@ -287,5 +294,12 @@ export async function readTradeScope(args: {
   if (!outcome) throw new Error("This trade has no specification sections or drawing sheets to read.");
   if (!signal.aborted) await checkTags(outcome);
   if (!signal.aborted) await checkLines(outcome);
+  // Every line from a section the trade reads only in part is an install line (lib/part-scope).
+  const part = keepToPart(outcome.input.drafts, pkg, args.partOnly ?? []);
+  if (part.dropped.length || part.rewritten) {
+    outcome.input = { ...outcome.input, drafts: part.drafts };
+    outcome.dropped.push(...part.dropped);
+    if (part.rewritten) outcome.dropped.push({ what: "Install-only sections", reason: `${part.rewritten} "furnish and install" line${part.rewritten === 1 ? "" : "s"} from sections ${pkg.name} reads only for its part became install lines, furnished by others.` });
+  }
   return outcome;
 }

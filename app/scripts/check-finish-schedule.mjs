@@ -194,4 +194,29 @@ assert.equal(left.dropped[0].reason, "Toilet partitions (10 21 13): carried by S
 assert.equal(F.leaveOthersItems({ drafts: memLines, pkg: { id: "drywall", name: "Drywall" }, reads: ["09 29 00"], owners: () => [] }).drafts.length, memLines.length, "Nobody known to carry it here: the line stays");
 assert.equal(F.leaveOthersItems({ drafts: memLines, pkg: { id: "drywall", name: "Drywall" }, reads: ["09 29 00", "10 28 13", "10 11 00", "10 21 13"], owners: whittier }).dropped.length, 0, "A trade that reads the item's section keeps the line (Project 1 if its split gave Drywall the partitions)");
 
+// ── A section read only for the trade's part: install lines only (Whittier Drywall, 25 Nov) ──
+{
+  const PS = await import("../lib/part-scope.ts");
+  const line = (key, title, source, detail = "") => ({ kind: "scope", key, packageId: "drywall", title, detail, source, citations: [{ document: "Manual.pdf", page: 1, sheet: null, quote: "x" }] });
+  const drafts = [
+    line("a", "Furnish and install toilet accessories and grab bars", "10 28 00", "Level, plumb and anchored."),
+    line("b", "Factory priming of the hollow-metal Work in accordance with the Contract Documents.", "08 11 13 · your bid forms"),
+    line("c", "Furnish hollow-metal frames with anchors", "08 11 13 · §2.4"),
+    line("d", "Coordinate accessory locations with framing", "10 28 00 · §1.2.A"),
+    line("e", "Furnish and install surface-mounted corner guards", "10 26 00"),
+    line("f", "Furnish & install access doors and frames", "08 31 13"),
+    { kind: "region", key: "rb", packageId: "drywall", sheet: "A-601", label: "x", polygon: [], confidence: 1, citations: [], scopeKeys: ["b"] },
+    { ...line("g", "Furnish and install toilet accessories", "10 28 00"), packageId: "specialties" },
+  ];
+  const kept = PS.keepToPart(drafts, { id: "drywall", name: "Drywall" }, ["08 11 13", "08 31 13", "10 28 00"]);
+  const titles = kept.drafts.filter(d => d.kind === "scope").map(d => d.title);
+  assert.deepEqual(titles, ["Install toilet accessories and grab bars", "Coordinate accessory locations with framing", "Furnish and install surface-mounted corner guards", "Install access doors and frames", "Furnish and install toilet accessories"],
+    "Furnish and install becomes Install; supply and factory finishing go; coordination, sections the trade carries in full and other trades' lines stay");
+  assert.equal(kept.drafts.find(d => d.key === "a").detail, "Level, plumb and anchored. Furnished by others.");
+  assert.ok(!kept.drafts.some(d => d.key === "rb"), "A line left out takes its highlight with it");
+  assert.equal(kept.rewritten, 2);
+  assert.match(kept.dropped[0].reason, /Drywall reads 08 11 13 only for its part \(installing what others furnish\)/);
+  assert.equal(PS.keepToPart(drafts, { id: "drywall", name: "Drywall" }, []).drafts, drafts, "No part-read sections: nothing changes");
+}
+
 console.log("finish schedule checks passed");

@@ -317,7 +317,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
         const register = drawingRegister(storedDocuments(projectId) ?? documents);
         const sheetNotes = tradeNotes(readDraft<AiReferences | null>(projectId, AI_REFERENCES_KEY, null), register.map(r => `${r.doc.id}:${r.page}`).join("|"), register, pkg.id, new Set(sheets.map(r => `${r.doc.id}:${r.page}`)));
         const outcome = await readTradeScope({
-          pkg, sections, sheets, notes: sheetNotes, signal: controller.signal, memory: tradeMemory(memory.entries, pkg, projectId, sections, readers, split.partial.get(pkg.id), handed.get(pkg.id)),
+          pkg, sections, sheets, notes: sheetNotes, partOnly: split.partial.get(pkg.id) ?? [], signal: controller.signal, memory: tradeMemory(memory.entries, pkg, projectId, sections, readers, split.partial.get(pkg.id), handed.get(pkg.id)),
           owners, leavesOut: leaves(pkg), borrowed, printed, memoryLines: tradeLines(memory.entries, pkg, projectId),
           onProgress: p => {
             const left = ledger.get(pkg.id);
