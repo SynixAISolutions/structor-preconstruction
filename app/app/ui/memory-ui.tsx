@@ -71,7 +71,7 @@ export function MemoryView({ projects, notify }: ViewProps & { projects: Project
 
   return <div className="cm-view memory-view">
     <PageHeader eyebrow="WORKSPACE" title="AI memory" description="What Structor's AI has learned about how you split and word your scopes. Corrections made while reviewing scopes arrive here as proposals; only entries in use are read when the AI reads drawings and specifications."
-      actions={<><Button disabled={!packages.length} onClick={() => setPreviewing(true)}><Eye size={15}/>What the AI reads</Button><Button onClick={() => setImporting(true)}><FileSpreadsheet size={15}/>Import a bid sheet</Button><Button onClick={() => setImportingChecklists(true)}><FileText size={15}/>Import scope checklists</Button><Button variant="primary" onClick={() => setAdding(true)}><Plus size={15}/>Add to memory</Button></>}/>
+      actions={<><Button disabled={!projectId} onClick={() => setPreviewing(true)}><Eye size={15}/>What the AI reads</Button><Button onClick={() => setImporting(true)}><FileSpreadsheet size={15}/>Import a bid sheet</Button><Button onClick={() => setImportingChecklists(true)}><FileText size={15}/>Import scope checklists</Button><Button variant="primary" onClick={() => setAdding(true)}><Plus size={15}/>Add to memory</Button></>}/>
     <Stats items={[
       { label: "To review", value: counts?.proposed ?? "–", detail: "Learned or imported, not used yet", tone: counts?.proposed ? "orange" : "" },
       { label: "In use", value: counts?.approved ?? "–", detail: "Read by every scan they apply to", tone: "green" },
@@ -189,9 +189,9 @@ function MemoryPreview({ projectId, projectLabel, packages, onClose }: { project
   return <Modal title="What the AI reads" subtitle="Exactly what a scan of this trade is given before the drawings and specifications." wide onClose={onClose}>
     <div className="memory-preview">
       {sheets.length > 0 && <fieldset className="memory-sheets"><legend>Bid sheets used on {projectLabel}</legend>{sheets.map(s => <label key={s.sheet}><input type="checkbox" checked={!leftOut.includes(s.sheet)} onChange={e => setLeftOut(current => e.target.checked ? current.filter(x => x !== s.sheet) : [...current, s.sheet])}/><span>{s.sheet}</span><small>{s.entries.toLocaleString()} entries</small></label>)}<small>Untick a sheet to keep its lines out of this project's scans, for example this project's own bid sheet when you want to check the AI against it. Saved for your team.</small></fieldset>}
-      <label>Trade<select value={tradeId} onChange={e => setTradeId(e.target.value)}>{packages.map(p => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}</select></label>
+      {packages.length > 0 && <label>Trade<select value={tradeId} onChange={e => setTradeId(e.target.value)}>{packages.map(p => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}</select></label>}
       {error ? <p role="alert" className="memory-error">{error}</p> : entries === null ? <p>Loading…</p>
-        : <>{pack ? <pre>{pack}</pre> : <p className="memory-empty"><BrainCircuit size={16}/>Nothing in use applies to {pkg?.name ?? "this trade"} yet, so its scans read as before.</p>}
+        : <>{pack ? <pre>{pack}</pre> : <p className="memory-empty"><BrainCircuit size={16}/>{pkg ? `Nothing in use applies to ${pkg.name} yet, so its scans read as before.` : "This project has no bid packages yet. Once it has, this shows what each trade's scan reads."}</p>}
           <h3 className="memory-preview-head">When the AI sets this project's bid packages</h3>
           {plan ? <pre>{plan}</pre> : <p className="memory-empty"><BrainCircuit size={16}/>No trade split in use yet, so the AI sets the packages by its general rules.</p>}</>}
     </div>
