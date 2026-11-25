@@ -5,7 +5,7 @@ register("./ts-resolver.mjs", import.meta.url);
 
 const { initialBidders, sampleTradeCompanies, trades } = await import("../lib/data/commercial.ts");
 const { STANDARD_TRADES, addPackage, inviteBidder, inviteCandidates } = await import("../lib/procurement.ts");
-const { newDirectoryCompany, withStartingCompanies } = await import("../lib/directory.ts");
+const { companiesToOffer, isPlaceholderCompany, newDirectoryCompany, withStartingCompanies } = await import("../lib/directory.ts");
 
 // Every standard trade has companies to invite, on a project that starts with nothing.
 const empty = { packages: [], scopes: [], invitations: [], outreach: [], notifications: [] };
@@ -103,4 +103,13 @@ const projects = [{ name: "Project 1", procurement: before }, { name: "Project 2
 assert.deepEqual(R.projectsInviting("x", projects), ["Project 1"], "Each project named once");
 assert.deepEqual(R.projectsInviting("z", projects), []);
 
-console.log("check-directory: every trade has companies, saved directories keep their edits, companies can be added while inviting, and removing one takes only what's its own");
+// Placeholders (example.com) are offered on Project 1 only (Danial, 25 Nov: "clean up the misleading pages").
+assert.ok(initialBidders.every(isPlaceholderCompany), "Every starting company is a placeholder");
+const real = { id: "r1", company: "Real Drywall LLC", name: "Pat", email: "pat@realdrywall.com", trade: "Drywall", location: "", status: "Qualified" };
+assert.ok(!isPlaceholderCompany(real) && isPlaceholderCompany({ email: " Test@Example.COM " }));
+assert.equal(companiesToOffer([...initialBidders, real], true).length, initialBidders.length + 1, "Project 1 offers every company");
+assert.deepEqual(companiesToOffer([...initialBidders, real], false).map(c => c.id), ["r1"], "Another project offers only real companies");
+assert.deepEqual(companiesToOffer([...initialBidders, real], false, ["b1"]).map(c => c.id), ["b1", "r1"], "A company the project already works with stays offered");
+assert.deepEqual(companiesToOffer(initialBidders, false), [], "A directory of placeholders offers nothing on a real project");
+
+console.log("check-directory: every trade has companies, saved directories keep their edits, companies can be added while inviting, removing one takes only what's its own, and placeholders are offered on Project 1 only");

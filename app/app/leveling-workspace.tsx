@@ -36,6 +36,7 @@ import { bidderTotals, rankedBidders, responseNeedsReview } from "../lib/levelin
 import { useValueEngineering } from "../lib/use-value-engineering";
 import { veLevelingBidders } from "../lib/ve-bids";
 import { useLocalDraft } from "../lib/use-local-draft";
+import { SAMPLE_PROJECT_ID } from "../lib/project-scope";
 import { useSubmissions } from "../lib/use-submissions";
 import { clearWorkspace, loadWorkspace, saveWorkspace } from "../lib/workspace-storage";
 import "./ui/leveling-extras.css";
@@ -737,7 +738,8 @@ export default function BidLevelingPage({ projectName, squareFeet }: { projectNa
           <button className={`button ghost ${exceptionsOnly ? "pressed" : ""}`} aria-pressed={exceptionsOnly} onClick={() => setExceptionsOnly((value) => !value)}><SlidersHorizontal />{exceptionsOnly ? "Showing exceptions" : "Exceptions only"}</button>
           <button className="button ghost" disabled={!openItemIds.length} onClick={goToNextException}><ArrowRight />Next exception ({openItemIds.length})</button>
           <label className="search"><Search /><input aria-label="Search scope items" placeholder="Search scope" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
-          <button className="button ghost" onClick={() => void resetDemo()}><RotateCcw />Load demo</button>
+          {/* Project 1's demolition bids: on any other project they would read as that project's (Danial, 25 Nov). */}
+          {projectId === SAMPLE_PROJECT_ID && <button className="button ghost" onClick={() => void resetDemo()}><RotateCcw />Load demo</button>}
           <button className="button ghost" onClick={downloadBackup}><Download />Backup JSON</button>
           <button className="button secondary export" onClick={exportWorkbook}><Download />Export Excel</button>
         </div>

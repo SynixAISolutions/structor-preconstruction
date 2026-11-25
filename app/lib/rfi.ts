@@ -19,7 +19,7 @@
 import type { Procurement } from "./procurement";
 
 export type Severity = "high" | "medium" | "low";
-/** Who raised the issue: Structor's document check, the team, a subcontractor (portal), or an email. */
+/** Who raised the issue: Ask Structor (when asked to), the team, a subcontractor (portal), or an email. */
 export type IssueOrigin = "ai" | "team" | "subcontractor" | "email";
 /**
  * pending-review (AI and subcontractor issues) → open (reviewed) → in-rfi → resolved.

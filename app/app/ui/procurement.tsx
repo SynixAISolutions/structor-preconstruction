@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
-import { newDirectoryCompany } from "../../lib/directory";
+import { companiesToOffer, newDirectoryCompany } from "../../lib/directory";
 import { RemoveInvitationDialog } from "./remove-company";
 import { TradePackageControls } from "./trade-package-controls";
 import { AskAboutTrade } from "./ask-entry-points";
@@ -67,7 +67,7 @@ import { inlineDrafts } from "../../lib/scope-review";
 import { ScopeDashboardView } from "./scope-dashboard";
 import { BidThread, PortalLinkDialog, useBidMessages } from "./bid-portal-link";
 import { unreadMessages } from "../../lib/bid-portal";
-import { useActiveProject } from "../../lib/project-scope";
+import { SAMPLE_PROJECT_ID, useActiveProject } from "../../lib/project-scope";
 import { useMemoryLearner } from "../../lib/use-memory-learner";
 import { ScopeMatrixView } from "./scope-matrix";
 import { notOnSheet } from "../../lib/extraction";
@@ -281,10 +281,12 @@ function AddCompanyForm({ trade, directory, startName, onAdd, onCancel }: { trad
   </form>;
 }
 
-function BidderInvite({ state, pkgId, directory, setDirectory, run, notify, onClose }: {
+function BidderInvite({ state, pkgId, directory, sample, setDirectory, run, notify, onClose }: {
   state: Procurement;
   pkgId: string;
   directory: Bidder[];
+  /** The sample project: its placeholder companies are offered too (lib/directory companiesToOffer). */
+  sample: boolean;
   setDirectory: Dispatch<SetStateAction<Bidder[]>>;
   run: ReturnType<typeof useProcurement>["run"];
   notify: ViewProps["notify"];
@@ -293,7 +295,7 @@ function BidderInvite({ state, pkgId, directory, setDirectory, run, notify, onCl
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
   const pkg = state.packages.find(item => item.id === pkgId)!;
-  const candidates = inviteCandidates(state, directory, pkgId, query);
+  const candidates = inviteCandidates(state, companiesToOffer(directory, sample), pkgId, query);
   // A trade usually gets several bidders, so the dialog stays open after each invitation; the invited company leaves the list.
   function addAndInvite(company: Bidder) {
     setDirectory(current => [...current, company]);
@@ -393,7 +395,7 @@ function PackagesWorkspace({ projectName, notify, navigate, onProposals }: ViewP
         </div>}
       </Panel>
     </div>
-    {invitePackage && <BidderInvite state={state} pkgId={invitePackage} directory={directory} setDirectory={setDirectory} run={run} notify={notify} onClose={() => setInvitePackage(null)}/>}
+    {invitePackage && <BidderInvite state={state} pkgId={invitePackage} directory={directory} sample={projectId === SAMPLE_PROJECT_ID} setDirectory={setDirectory} run={run} notify={notify} onClose={() => setInvitePackage(null)}/>}
     {removeFor && (() => {
       const invitation = state.invitations.find(item => item.id === removeFor), bidder = directory.find(item => item.id === invitation?.bidderId), pkg = state.packages.find(item => item.id === invitation?.packageId);
       return invitation ? <RemoveInvitationDialog invitation={invitation} company={bidder?.company ?? "This company"} trade={pkg?.name ?? "this trade"} submissions={submissions} runProcurement={run} runSubmissions={runSubmissions} setMessages={setBidMessages} notify={notify} onClose={() => setRemoveFor(null)}/> : null;
