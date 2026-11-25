@@ -10,7 +10,7 @@
 
 import { doorsFromSwings, swingArcs } from "./door-detection";
 import { floorOpenings } from "./floor-openings";
-import { compactFloorPlanTitle } from "./floor-plan-label";
+import { compactFloorPlanTitle, printedPlanLevels } from "./floor-plan-label";
 import type { SourcedDoorSize } from "./door-schedule-dimensions";
 import type { GlazingDimensions } from "./glazing-detail-references";
 import type { FloorAssemblyNote, FloorFinishNote } from "./schematic-floor-details";
@@ -23,7 +23,7 @@ import { borrowArrows, groupFlights, planFlights, type Flight } from "./stair-de
 import { hexagonTags, planColumns, planGlazing, planPartitions, planRailings, planWalls } from "./wall-detection";
 
 export type Point = [number, number];
-export type PlanSource = { documentId: string; sheet: string; page: number };
+export type PlanSource = { documentId: string; sheet: string; page: number; quote?: string };
 export type SchematicPlanArea = { source: PlanSource; frame: Frame; offset: Point; outline?: Point[] };
 type SourcedPlanElement = { planArea?: number };
 export type SchematicRoom = SourcedPlanElement & { name: string; number: string; at: Point };
@@ -39,6 +39,8 @@ export type SchematicLevel = {
   source: PlanSource;
   /** Area sheets joined in the level's shared coordinates. Area 0 uses the primary outline. */
   planAreas?: SchematicPlanArea[];
+  /** The view is valid in isolation. Its position relative to the building grid needs review. */
+  alignmentUnverified?: boolean;
   unplacedPlans?: PlanSource[];
   floorAssemblies?: FloorAssemblyNote[];
   /** How the size was found: the printed scale, or the building area. */
@@ -171,6 +173,8 @@ export function levelOfTitle(title: string): number | null {
   const compact = compactFloorPlanTitle(title);
   if (compact) return compact.level;
   const t = title.toUpperCase();
+  const basement = /^(?:BASEMENT\s+|LEVEL\s+)?B([1-9]\d?)(?:\s|$)/.exec(t);
+  if (basement) return -Number(basement[1]);
   const n = t.match(/\bLEVEL\s*0?(\d{1,2})\b/)?.[1] ?? t.match(/\b(\d{1,2})(?:ST|ND|RD|TH)\s+FLOOR\b/)?.[1];
   if (n !== undefined) return Number(n);
   const word = Object.keys(ORDINALS).find(w => new RegExp(`\\b${w}\\s+(FLOOR|LEVEL)\\b`).test(t));
@@ -178,14 +182,15 @@ export function levelOfTitle(title: string): number | null {
 }
 
 /** Multiple area sheets form a single floor. An overview is only used when no detail plan is listed. */
-export function levelPlanSheets<T extends Pick<RegisterRow, "sheet" | "title" | "discipline">>(register: T[]): { level: number; row: T; areas?: T[] }[] {
+export function levelPlanSheets<T extends Pick<RegisterRow, "sheet" | "title" | "discipline"> & { viewLevel?: number; typicalView?: boolean }>(register: T[]): { level: number; row: T; areas?: T[] }[] {
   const byLevel = new Map<number, T[]>();
   for (const row of register) {
     const title = row.title.toUpperCase();
     const compact = compactFloorPlanTitle(title);
     const architectural = row.discipline === "Architectural" || (row.discipline === "Landscape" && compact?.sheet === row.sheet.toUpperCase());
     if (!architectural || (!compact && !/FLOOR PLAN|AREA PLAN|LEVEL\s*0?\d+\s*-?\s*PLAN/.test(title)) || NOT_A_FLOOR_PLAN.test(title)) continue;
-    const level = levelOfTitle(title);
+    if (row.viewLevel === undefined && printedPlanLevels(title).length > 1) continue;
+    const level = row.viewLevel ?? levelOfTitle(title);
     if (level === null) continue;
     const rows = byLevel.get(level);
     if (rows) rows.push(row);
@@ -197,10 +202,10 @@ export function levelPlanSheets<T extends Pick<RegisterRow, "sheet" | "title" | 
       const part = floorPlanArea(row.title);
       if (part && !parts.has(part)) parts.set(part, row);
     }
-    const detail = rows.find(row => !floorPlanArea(row.title) && !/\bOVERALL\b/i.test(row.title));
+    const detail = rows.find(row => !row.typicalView && !floorPlanArea(row.title) && !/\bOVERALL\b/i.test(row.title));
     if (detail) return { level, row: detail };
     const [row, ...areas] = [...parts.values()];
-    return areas.length ? { level, row, areas } : { level, row: row ?? rows[0] };
+    return areas.length ? { level, row, areas } : { level, row: row ?? rows.find(row => !row.typicalView) ?? rows[0] };
   });
 }
 
@@ -542,7 +547,10 @@ export function consensusMarkers(readings: Marker[][], weights: number[] = []): 
   return { markers: picked.map(({ name, elevation, votes }) => ({ name, elevation, votes })), disputed, warnings };
 }
 
-export function levelName(level: number): string { return level === 0 ? "Basement" : `Level ${String(level).padStart(2, "0")}`; }
+export function levelName(level: number): string {
+  if (level < 0) return "Basement B" + -level;
+  return level === 0 ? "Basement" : `Level ${String(level).padStart(2, "0")}`;
+}
 
 /** Moves one outline point (a correction); the result keeps every other value. */
 export function moveOutlinePoint(model: SchematicModel, levelId: string, index: number, to: Point, areaIndex = 0): SchematicModel {

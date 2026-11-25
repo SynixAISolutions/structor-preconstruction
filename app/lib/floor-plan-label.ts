@@ -15,3 +15,28 @@ export function compactFloorPlanFromText(text: string): ReturnType<typeof compac
   }
   return titles.size === 1 ? titles.values().next().value ?? null : null;
 }
+
+const namedFloors: Record<string, number> = { GROUND: 1, FIRST: 1, SECOND: 2, THIRD: 3, FOURTH: 4, FIFTH: 5, SIXTH: 6, SEVENTH: 7, EIGHTH: 8, NINTH: 9, TENTH: 10 };
+
+function floorNumber(label: string): number | undefined {
+  const name = label.trim().replace(/^LEVELS?\s+|\s+LEVEL$/g, "");
+  const basement = /^(?:BASEMENT\s+)?B([1-9]\d?)$/.exec(name);
+  if (basement) return -Number(basement[1]);
+  const floor = /^L?(\d{1,2})(?:ST|ND|RD|TH)?$/.exec(name);
+  return floor ? Number(floor[1]) : namedFloors[name];
+}
+
+/** The levels explicitly named by a plan caption or sheet title, including a printed typical-floor range. */
+export function printedPlanLevels(title: string): number[] {
+  const name = title.toUpperCase().replace(/\(\s*TYP(?:ICAL)?\.?\s*\)/g, "").trim();
+  const caption = /^(.*?)\s+FLOOR\s+PLANS?$/.exec(name);
+  if (!caption) return [];
+  const levels: number[] = [];
+  for (const label of caption[1].split(/\s*(?:&|,|\/|\bAND\b)\s*/)) {
+    const [first, last, extra] = label.split(/\s*(?:[-–—]|\bTO\b|\bTHROUGH\b)\s*/);
+    const from = floorNumber(first), to = last === undefined ? from : floorNumber(last);
+    if (from === undefined || to === undefined || extra !== undefined || Math.abs(to - from) > 30) return [];
+    for (let level = Math.min(from, to); level <= Math.max(from, to); level++) levels.push(level);
+  }
+  return [...new Set(levels)].sort((a, b) => a - b);
+}

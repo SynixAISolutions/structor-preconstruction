@@ -1,7 +1,8 @@
 import { alignPlanDrawings, type PlanRegistration } from "./schematic-plan-alignment";
 import { footprintValid, openOutline, polygonArea, type LevelFlights, type Point, type SchematicLevel } from "./schematic-model";
+import type { PlanGrid } from "./schematic-stack-grid";
 
-export type ReadFloorPlan = { level: SchematicLevel; flights: LevelFlights; registration: PlanRegistration | null; area: string | null };
+export type ReadFloorPlan = { level: SchematicLevel; flights: LevelFlights; registration: PlanRegistration | null; area: string | null; grid: PlanGrid };
 type Limit = { axis: 0 | 1; at: number; keep: -1 | 1 };
 type Placed = { plan: ReadFloorPlan; offset: Point; limits: Limit[] };
 type Segment = { a: Point; b: Point };
@@ -97,9 +98,9 @@ type LevelPlacement = { areas: Placed[] };
 export type FloorPlanBuild = { level: SchematicLevel; flights: LevelFlights; placement: LevelPlacement; warnings: string[] };
 
 /** Build one level from its verified area sheets, keeping the original sheet behind each selectable element. */
-export function assembleFloorPlans(plans: ReadFloorPlan[], below?: LevelPlacement): FloorPlanBuild {
+export function assembleFloorPlans(plans: ReadFloorPlan[], below?: LevelPlacement, stackOffset?: Point): FloorPlanBuild {
   const [primary, ...others] = plans;
-  const areas: Placed[] = [{ plan: primary, offset: [0, 0], limits: [] }];
+  const areas: Placed[] = [{ plan: primary, offset: stackOffset ?? [0, 0], limits: [] }];
   const unresolved = new Set(others);
   for (const anchor of areas) {
     for (const plan of unresolved) {
@@ -115,7 +116,7 @@ export function assembleFloorPlans(plans: ReadFloorPlan[], below?: LevelPlacemen
   if (unplacedPlans.length) warnings.push(primary.level.name + " needs plan alignment for " + unplacedPlans.map(source => source.sheet).join(", ") + ". Their geometry is omitted until the drawing supplies a reliable match.");
   const level = { ...primary.level, ...(unplacedPlans.length ? { unplacedPlans } : {}) };
   const placement: LevelPlacement = { areas };
-  if (areas.length === 1) return { level, flights: primary.flights, placement, warnings };
+  if (areas.length === 1 && !stackOffset?.some(value => value !== 0)) return { level, flights: primary.flights, placement, warnings };
 
   if (below) {
     const offsets = areas.flatMap(area => {

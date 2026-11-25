@@ -4,10 +4,12 @@ import { register } from "node:module";
 register("./ts-resolver.mjs", import.meta.url);
 const M = await import("../lib/schematic-model.ts");
 const { EXTRA_JOBS } = await import("../lib/ai-jobs-more.ts");
-const { compactFloorPlanFromText } = await import("../lib/floor-plan-label.ts");
+const { compactFloorPlanFromText, printedPlanLevels } = await import("../lib/floor-plan-label.ts");
 const { dimensionedWallLayers } = await import("../lib/wall-assemblies.ts");
 const { drawingLengthFeet } = await import("../lib/drawing-dimensions.ts");
-const { printedSectionDatums, resolveSectionDatums } = await import("../lib/section-datums.ts");
+const { printedSectionDatums, resolveSectionDatums, sectionDatumLevel } = await import("../lib/section-datums.ts");
+const { separatedPlanViews, clipPlanBox, pointOnPlanSheet } = await import("../lib/schematic-plan-views.ts");
+const { alignStackedPlan, printedPlanGrid } = await import("../lib/schematic-stack-grid.ts");
 const { doorScheduleSheets, matchDoorSizes, printedDoorSizes } = await import("../lib/door-schedule-dimensions.ts");
 const { glazingDetailSheets, glazingDetailSource, glazingPlacement, glazingSizeForTag, printedGlazingElevations, printedGlazingReferences, printedWindowSizes } = await import("../lib/glazing-detail-references.ts");
 
@@ -46,6 +48,58 @@ assert.deepEqual(M.levelPlanSheets(areaRows).map(({ level, row, areas }) => [lev
   [[1, "A-111A", "A-111B"], [2, "A-112A", "A-112B"]], "Two area plans take priority over the overview and belong to one level");
 
 const line = (a, b, width = .72) => ({ a, b, width, color: "#000000" });
+const planSheet = (sheet, title, other = {}) => ({ sheet, title, discipline: "Architectural", ...other });
+assert.deepEqual(printedPlanLevels("B1 & B2 FLOOR PLANS"), [-2, -1]);
+assert.deepEqual(printedPlanLevels("1ST & 2ND-6TH (TYP.) FLOOR PLANS"), [1, 2, 3, 4, 5, 6]);
+assert.deepEqual(M.levelPlanSheets([planSheet("A103", "6TH & 7TH FLOOR PLANS")]), [],
+  "A multi-level sheet is never assigned whole to its last named floor");
+const planCaption = (text, x, y, height = 18) => ({ text, a: [x, y], b: [x + text.length * height / 2, y], height });
+const paper = { width: 1100, height: 750 };
+const viewText = [planCaption("1ST FLOOR PLAN", 100, 630), planCaption("2ND-5TH FLOOR PLAN", 620, 630),
+  planCaption('1/8" = 1\'-0"', 100, 647, 12), planCaption('1/4" = 1\'-0"', 620, 647, 12)];
+const viewRules = [line([95, 634], [520, 634]), line([615, 634], [1000, 634])];
+const views = separatedPlanViews(paper, viewText, viewRules);
+assert.deepEqual(views.map(({ levels, scale }) => [levels, scale]), [[[1], 8], [[2, 3, 4, 5], 4]]);
+assert.equal(views[0].box[2], views[1].box[0]);
+assert.ok(pointOnPlanSheet([.5, .5], views[1].box)[0] > views[1].box[0]);
+assert.ok(clipPlanBox([0, 0, 1, 1], views[1].box).every((value, i) => Math.abs(value - views[1].box[i]) < 1e-8));
+assert.deepEqual(separatedPlanViews(paper, viewText, [line([95, 634], [690, 634]), viewRules[1]]), []);
+assert.deepEqual(M.levelPlanSheets([
+  planSheet("A102", views[1].title, { viewLevel: 4, typicalView: true }),
+  planSheet("A104", "4TH FLOOR PLAN"),
+]).map(result => result.row.sheet), ["A104"], "A floor-specific view takes precedence over a typical view");
+assert.equal(sectionDatumLevel("B2"), -2);
+assert.equal(sectionDatumLevel("9TH FLOOR"), 9);
+
+function gridFixture(dx, dy, jog) {
+  const labels = [], strokes = [];
+  for (const [axis, names] of [[0, ["A", "B", "C"]], [1, ["1", "2", "3"]]]) {
+    for (const [i, label] of names.entries()) {
+      const at = 70 + i * 162, shift = axis ? dy : dx, side = axis ? dx : dy;
+      const point = (across, along) => axis ? [along + side, across + shift] : [across + shift, along + side];
+      const center = point(at + jog, 30);
+      const points = Array.from({ length: 24 }, (_, n) => {
+        const angle = n * Math.PI / 12;
+        return [center[0] + 15 * Math.cos(angle), center[1] + 15 * Math.sin(angle)];
+      });
+      strokes.push(...points.map((a, j) => line(a, points[(j + 1) % points.length], .24)));
+      strokes.push(line(point(at + jog, 45), point(at + jog, 57), .24));
+      if (jog) strokes.push(line(point(at + jog, 57), point(at, 75), .24));
+      strokes.push(line(point(at, 82), point(at, 115), .24), line(point(at, 124), point(at, 285), .24));
+      labels.push({ text: label, a: [center[0] - 4, center[1] + 5], b: [center[0] + 4, center[1] + 5], height: 15 });
+    }
+  }
+  return printedPlanGrid(labels, strokes, [], 1 / 9);
+}
+const referenceGrid = gridFixture(0, 0, 0);
+const displacedGrid = gridFixture(900, -36, 12);
+assert.equal(referenceGrid.length, 6);
+assert.equal(displacedGrid.length, 6, "A jogged bubble supplies the physical grid line beyond the jog");
+const stackOffset = alignStackedPlan(referenceGrid, displacedGrid);
+assert.ok(Math.abs(stackOffset[0] + 100) < .001 && Math.abs(stackOffset[1] - 4) < .001);
+assert.equal(alignStackedPlan(referenceGrid, displacedGrid.filter(mark => mark.axis === 1)), null);
+assert.equal(alignStackedPlan(referenceGrid, displacedGrid.map(mark => mark.label === "C" ? { ...mark, at: mark.at + 2 } : mark)), null);
+
 const overlap = Array.from({ length: 12 }, (_, i) => [
   line([188, 42 + i * 13], [210 + i * 2, 42 + i * 13]),
   line([200 + i * 5, 31 + i * 11], [200 + i * 5, 56 + i * 13]),
@@ -69,6 +123,9 @@ const makeArea = (area, registration, outline, walls, rooms = []) => ({
 });
 const A = makeArea("A", left, [[0, 0], [26, 0], [26, 44], [0, 44]],
   [{ a: [17, 25], b: [28, 25], thickness: .5 }]);
+const stacked = assembleFloorPlans([A], undefined, [-100, 4]);
+assert.deepEqual(stacked.level.walls[0].a, [-83, 29]);
+assert.deepEqual(stacked.level.planAreas[0].offset, [-100, 4], "The source sheet overlay keeps the same translation as the 3D objects");
 const D = makeArea("B", right, [[4, 4], [32, 4], [32, 48], [4, 48]],
   [{ a: [4, 29], b: [28, 29], thickness: .5 }], [{ name: "GYM", number: "102", at: [15, 20] }]);
 const assembled = assembleFloorPlans([A, D]);

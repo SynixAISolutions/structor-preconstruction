@@ -8,23 +8,26 @@ import type { PDFPageProxy } from "pdfjs-dist";
 import { aiJob } from "./ai-more-client";
 import type { PartitionKeyRead, PartitionTypeRead, PlanReading, PlanTag } from "./ai-jobs-more";
 import { doorNumber, doorScheduleSheets, matchDoorSizes, printedDoorSizes, type SourcedDoorSize } from "./door-schedule-dimensions";
+import { printedPlanLevels } from "./floor-plan-label";
 import { glazingDetailSheets, glazingDetailSource, glazingSizeForTag, printedGlazingElevations, printedGlazingReferences, printedWindowSizes, type GlazingDetailReference } from "./glazing-detail-references";
 import type { WallLayer } from "./wall-assemblies";
 import { mergePartitionTypes, scheduleRow, tagKey, type PartitionType } from "./tag-placement";
-import { drawingRegister, type StoredDocument } from "./project-files";
-import { openStoredPdf, readPageTextBoxes, readStoredText, renderStoredPage, renderStoredRegion, renderStoredTiles } from "./project-files-client";
+import { drawingRegister, type RegisterRow, type StoredDocument } from "./project-files";
+import { openStoredPdf, readPageTextBoxes, readStoredText, renderStoredPage, renderStoredRegion, renderStoredRow, renderStoredTiles } from "./project-files-client";
 import { pageTurn } from "./page-turns";
 import type { Project } from "./projects";
-import { vectorsFromOperators } from "./plan-vectors";
+import { vectorsFromOperators, type Point } from "./plan-vectors";
 import { drawingTextRuns } from "./drawing-dimensions";
 import { isFinishSchedule } from "./finish-schedule";
 import { printedFloorFinishes, printedSlabNotes, slabNoteArea, slabNoteLevel, type FloorFinishNote } from "./schematic-floor-details";
 import { pageTextBoxes } from "./text-anchor";
 import { planRegistration } from "./schematic-plan-alignment";
 import { assembleFloorPlans, type FloorPlanBuild, type ReadFloorPlan } from "./schematic-plan-areas";
+import { clipPlanBox, containsPlanPoint, pointOnPlanSheet, separatedPlanViews, type PlanBox, type PlanView } from "./schematic-plan-views";
+import { alignStackedPlan, printedPlanGrid, type PlanGrid } from "./schematic-stack-grid";
 import { addTaggedDoorOpenings, printedDoorTags } from "./tagged-door-openings";
 import { consensusMarkers, feetPerInch, floorPlanArea, heightSheets, levelHeights, levelName, contentTiles, levelColumns, levelDoors, levelGlazing, levelOpenings, levelPartitions, levelFlights, levelPlanSheets, levelTags, levelWalls, stairsArriving, type LevelFlights, partitionTypeSheet, tagTiles, toFeet, type Marker, type SchematicLevel, type PlanSource, type SchematicModel, type SchematicRoom } from "./schematic-model";
-import { printedSectionDatums, resolveSectionDatums, type SourcedDatum } from "./section-datums";
+import { printedSectionDatums, resolveSectionDatums, sectionDatumLevel, type SourcedDatum } from "./section-datums";
 import { useLocalDraft } from "./use-local-draft";
 
 async function pageSize(doc: StoredDocument, page: number) {
@@ -46,6 +49,37 @@ async function readDetailDrawing(doc: StoredDocument, pageNumber: number, signal
     segments: operators ? vectorsFromOperators(operators, pdfjs.OPS as unknown as Record<string, number>, view.transform).segments : [],
     page: { width: view.width, height: view.height },
   };
+}
+
+type PlanRow = RegisterRow & { view?: PlanView; viewLevel?: number; typicalView?: boolean };
+const sourceOfPlan = (row: PlanRow): PlanSource => ({
+  documentId: row.doc.id, sheet: row.sheet, page: row.page, ...(row.view ? { quote: row.view.title } : {}),
+});
+
+/** Use the view captions from a shared sheet and keep its original sheet and page as evidence. */
+async function readPlanRows(register: RegisterRow[], warnings: string[], onProgress?: (text: string) => void, signal?: AbortSignal): Promise<PlanRow[]> {
+  const rows: PlanRow[] = [];
+  for (const row of register) {
+    const listed = row.discipline === "Architectural" ? printedPlanLevels(row.title) : [];
+    if (listed.length < 2) { rows.push(row); continue; }
+    signal?.throwIfAborted();
+    onProgress?.(`Separating the floor-plan views on ${row.sheet}…`);
+    const drawing = await readDetailDrawing(row.doc, row.page, signal).catch(() => null);
+    signal?.throwIfAborted();
+    const views = drawing ? separatedPlanViews(drawing.page, drawing.text, drawing.segments) : [];
+    if (!views.length || views.length === 1 && views[0].levels.length < listed.length) {
+      warnings.push(`${row.sheet} contains multiple floor plans. Their separate view boundaries could not be verified.`);
+      continue;
+    }
+    const shown = new Set(views.flatMap(view => view.levels));
+    if (shown.size !== listed.length || listed.some(level => !shown.has(level))) {
+      warnings.push(`${row.sheet} has different level numbers in its sheet title and view captions. The model follows the printed view captions.`);
+    }
+    for (const view of views) {
+      for (const viewLevel of view.levels) rows.push({ ...row, title: view.title, view, viewLevel, typicalView: view.levels.length > 1 });
+    }
+  }
+  return rows;
 }
 
 /**
@@ -82,9 +116,10 @@ export async function readLevelMarkers(doc: StoredDocument, page: number, sheet:
 /** Build from the current drawings, preferring printed dimensions; use image readings for drawings without usable text. */
 export async function buildSchematicModel(args: { documents: StoredDocument[]; project: Project; onProgress?: (text: string) => void; signal?: AbortSignal }): Promise<SchematicModel> {
   const register = drawingRegister(args.documents);
-  const plans = levelPlanSheets(register);
-  if (!plans.length) throw new Error("No floor plan sheets were found. Upload the architectural drawings in Project files first.");
   const warnings: string[] = [];
+  const plans = levelPlanSheets(await readPlanRows(register, warnings, args.onProgress, args.signal));
+  if (!plans.length) throw new Error(warnings.length ? warnings.join(" ") : "No floor plan sheets were found. Upload the architectural drawings in Project files first.");
+  const alignStack = plans.some(({ row, areas }) => row.view || areas?.some(area => area.view));
   const sections = heightSheets(register).slice(0, 3), section = sections[0];
   const datums: SourcedDatum[] = [];
   for (const row of sections) {
@@ -111,13 +146,25 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
       warnings.push(`The level elevations on ${section.sheet} could not be read.`);
     }
   } else warnings.push("No section or elevation sheet was found.");
-  const heights = levelHeights(plans.map(p => p.level), read);
+  const planOrders = plans.map(p => p.level);
+  if (alignStack) {
+    const sectionOnly = read.flatMap(datum => {
+      const order = sectionDatumLevel(datum.name);
+      return order !== null && Number.isFinite(order) && !planOrders.includes(order) ? [levelName(order)] : [];
+    });
+    if (sectionOnly.length) warnings.push(`Section datums with no corresponding floor-plan view: ${[...new Set(sectionOnly)].join(", ")}.`);
+  }
+  const heights = levelHeights(planOrders, read);
   warnings.push(...heights.warnings);
-  type PlanRead = { level: number; row: (typeof plans)[number]["row"]; reading: PlanReading; page: { widthIn: number; heightIn: number }; scale: number | null; scaleAt: [number, number] | null; borrowed?: string };
+  type ReadPlan = { reading: PlanReading; page: { widthIn: number; heightIn: number }; scale: number | null; scaleAt: Point | null };
+  type PlanRead = ReadPlan & { level: number; row: PlanRow; borrowed?: string };
   // The printed scale is read close up (at full-sheet size 1/8" was misread as 3/32"): around where it
   // was seen, else along the bottom of the sheet, where drawing titles sit (the title block is on the right).
-  const scaleIn = (row: PlanRead["row"], box: [number, number, number, number]) => renderStoredRegion(row.doc, row.page, box, 2000, true)
-    .then(image => aiJob<{ scale: string; title: string }>("drawing-scale", { sheet: row.sheet, image }, args.signal)).catch(() => null);
+  const scaleIn = (row: PlanRow, box: PlanBox) => {
+    const crop = row.view ? clipPlanBox(box, row.view.box) : box;
+    return crop ? renderStoredRegion(row.doc, row.page, crop, 2000, true)
+      .then(image => aiJob<{ scale: string; title: string }>("drawing-scale", { sheet: row.sheet, image }, args.signal)).catch(() => null) : Promise.resolve(null);
+  };
   const scaleNear = async (row: PlanRead["row"], [sx, sy]: [number, number]) => feetPerInch((await scaleIn(row, [Math.min(0.84, Math.max(0, sx - 0.08)), Math.min(0.95, Math.max(0, sy - 0.025)), 0.16, 0.05]))?.scale ?? "");
   const scaleAlongBottom = async (row: PlanRead["row"]) => {
     const found = await Promise.all(([[0, 0.8, 0.3, 0.2], [0.27, 0.8, 0.3, 0.2], [0.54, 0.8, 0.3, 0.2]] as [number, number, number, number][]).map(box => scaleIn(row, box)));
@@ -125,22 +172,39 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
     return feetPerInch((read.find(f => /FLOOR|LEVEL|PLAN/i.test(f!.title)) ?? read[0])?.scale ?? "");
   };
   const plansRead: PlanRead[] = [];
+  const readView = async (row: PlanRow): Promise<ReadPlan> => {
+    const view = row.view;
+    const imageRead = view ? renderStoredRegion(row.doc, row.page, view.box, 2000, true)
+      : renderStoredPage(row.doc, row.page, 1800, true).then(r => r.image);
+    const [image, page, text] = await Promise.all([imageRead, pageSize(row.doc, row.page),
+      view ? [] : readStoredText(row.doc, { first: row.page, last: row.page })]);
+    const ask = () => aiJob<PlanReading>("plan-outline", { sheet: row.sheet, title: row.title, image }, args.signal);
+    const result = await ask().catch(error => { if (args.signal?.aborted) throw error; return ask(); });
+    const reading: PlanReading = view ? {
+      ...result,
+      outline: result.outline.map(point => pointOnPlanSheet(point, view.box)),
+      rooms: result.rooms.map(room => ({ ...room, at: pointOnPlanSheet(room.at, view.box) })),
+      scaleAt: result.scaleAt ? pointOnPlanSheet(result.scaleAt, view.box) : result.scaleAt,
+    } : result;
+    if (reading.note) warnings.push(row.sheet + ": " + reading.note);
+    const closeUp = reading.scaleAt && !view?.scale ? await scaleNear(row, reading.scaleAt) : null;
+    const scale = view ? view.scale ?? closeUp ?? feetPerInch(reading.scale)
+      : closeUp ?? feetPerInch(text[0]?.text ?? "") ?? await scaleAlongBottom(row) ?? feetPerInch(reading.scale);
+    return { reading, page, scale, scaleAt: closeUp ? reading.scaleAt! : null };
+  };
+  const viewReads = new Map<PlanView, Promise<ReadPlan>>();
   const splitLevels = new Set(plans.filter(plan => plan.areas?.length).map(plan => plan.level));
   const unreadPlans = new Map<number, PlanSource[]>();
   for (const { level, row } of plans.flatMap(({ level, row, areas }) => [row, ...(areas ?? [])].map(row => ({ level, row })))) {
     args.onProgress?.("Reading the " + levelName(level) + " plan (" + row.sheet + ")…");
     try {
-      const [{ image }, page, text] = await Promise.all([renderStoredPage(row.doc, row.page, 1800, true), pageSize(row.doc, row.page), readStoredText(row.doc, { first: row.page, last: row.page })]);
-      const ask = () => aiJob<PlanReading>("plan-outline", { sheet: row.sheet, title: row.title, image }, args.signal);
-      const reading = await ask().catch(error => { if (args.signal?.aborted) throw error; return ask(); });
-      if (reading.note) warnings.push(row.sheet + ": " + reading.note);
-      const closeUp = reading.scaleAt ? await scaleNear(row, reading.scaleAt) : null;
-      const scale = closeUp ?? feetPerInch(text[0]?.text ?? "") ?? await scaleAlongBottom(row) ?? feetPerInch(reading.scale);
-      plansRead.push({ level, row, reading, page, scale, scaleAt: closeUp ? reading.scaleAt! : null });
+      const result = row.view && viewReads.get(row.view) || readView(row);
+      if (row.view) viewReads.set(row.view, result);
+      plansRead.push({ level, row, ...await result });
     } catch (error) {
-      if (args.signal?.aborted || !splitLevels.has(level)) throw error;
-      warnings.push(row.sheet + ": the area outline could not be read. Check the source plan.");
-      const source = { documentId: row.doc.id, sheet: row.sheet, page: row.page };
+      if (args.signal?.aborted || !row.view && !splitLevels.has(level)) throw error;
+      warnings.push(`${row.sheet}: the ${levelName(level)} view could not be read. Check the source plan.`);
+      const source = sourceOfPlan(row);
       unreadPlans.set(level, [...(unreadPlans.get(level) ?? []), source]);
     }
   }
@@ -148,31 +212,39 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
   // Floor plans of one set share a sheet size, layout and (nearly always) scale. A plan whose scale
   // wasn't read is read again where a sibling's scale was found; failing that it takes the sibling's
   // scale, so the levels line up instead of one being sized by area.
-  const siblingsOf = (o: PlanRead) => plansRead.filter(p => p !== o && p.scale && p.row.doc.id === o.row.doc.id && Math.abs(p.page.widthIn - o.page.widthIn) < 0.5 && Math.abs(p.page.heightIn - o.page.heightIn) < 0.5);
-  for (const o of plansRead.filter(p => !p.scale)) {
+  const siblingsOf = (o: PlanRead) => plansRead.filter(p => p !== o && !p.row.view && p.scale && p.row.doc.id === o.row.doc.id && Math.abs(p.page.widthIn - o.page.widthIn) < 0.5 && Math.abs(p.page.heightIn - o.page.heightIn) < 0.5);
+  for (const o of plansRead.filter(p => !p.scale && !p.row.view)) {
     for (const sibling of siblingsOf(o).filter(p => p.scaleAt)) { o.scale = await scaleNear(o.row, sibling.scaleAt!); if (o.scale) break; }
     if (!o.scale) { const sibling = siblingsOf(o)[0]; if (sibling) { o.scale = sibling.scale; o.borrowed = sibling.row.sheet; } }
   }
   const scales = plansRead.filter(o => o.scale && !o.borrowed);
   if (new Set(scales.map(o => o.scale)).size > 1) warnings.push(`The floor plans read different scales (${scales.map(o => `${o.row.sheet} ${o.scale} ft per inch`).join(", ")}); check them on the sheets.`);
   const areasOf = new Map<number, ReadFloorPlan[]>();
+  const viewGeometry = new Map<PlanView, Awaited<ReturnType<typeof planVectorWalls>>>();
   for (const { level, row, reading, page, scale, borrowed } of plansRead) {
-    const sized = toFeet({ outline: reading.outline, rooms: reading.rooms, page, feetPerInch: scale, targetSf: args.project.squareFeet > 0 && !splitLevels.has(level) ? args.project.squareFeet / plans.length : 0 });
+    const sized = toFeet({ outline: reading.outline, rooms: reading.rooms, page, feetPerInch: scale, targetSf: args.project.squareFeet > 0 && !row.view && !splitLevels.has(level) ? args.project.squareFeet / plans.length : 0 });
     if (borrowed) { sized.sizing += ` (from ${borrowed}; this sheet's scale wasn't read)`; warnings.push(`${row.sheet}: no printed scale was read; ${borrowed}'s scale is used (same set and sheet size).`); }
     else if (!scale) warnings.push(`${row.sheet}: no printed scale was read; ${sized.sizing.toLowerCase()}.`);
     args.onProgress?.(`Finding the walls on ${row.sheet}…`);
-    const found = await planVectorWalls(row.doc, row.page, row.sheet, sized.frame, reading.outline, !!scale, !borrowed && !!scale, splitLevels.has(level), args.signal, args.onProgress).catch(error => { if (args.signal?.aborted) throw error; return { walls: [], doors: [], glazing: [], partitions: [], columns: [], openings: [], flights: { arriving: [], rising: [] } as LevelFlights, rooms: [], note: "The sheet's lines could not be read for walls.", tagWarning: "", registration: null }; });
+    const found = row.view && viewGeometry.get(row.view) || await planVectorWalls(row.doc, row.page, row.sheet, sized.frame, reading.outline,
+      { scaled: !!scale, printedScale: !borrowed && !!scale, alignAreas: splitLevels.has(level), alignStack, view: row.view, signal: args.signal, onProgress: args.onProgress })
+      .catch(error => {
+        if (args.signal?.aborted) throw error;
+        return { walls: [], doors: [], glazing: [], partitions: [], columns: [], openings: [], flights: { arriving: [], rising: [] } as LevelFlights, rooms: [], note: "The sheet's lines could not be read for walls.", tagWarning: "", registration: null, grid: [] };
+      });
+    if (row.view) viewGeometry.set(row.view, found);
     if (!found.walls.length) warnings.push(`${row.sheet}: ${found.note}`);
     if (found.tagWarning) warnings.push(`${row.sheet}: ${found.tagWarning}`);
     const area: ReadFloorPlan = {
       area: floorPlanArea(row.title),
       registration: found.registration,
+      grid: found.grid,
       flights: found.flights,
       level: {
         id: "L" + level, name: levelName(level), order: level,
         elevation: heights.elevations.get(level) ?? 0, height: heights.heights.get(level) ?? 14,
         vertical: heights.vertical.get(level), outline: sized.outline, rooms: found.rooms.length ? found.rooms : sized.rooms,
-        source: { documentId: row.doc.id, sheet: row.sheet, page: row.page }, sizing: sized.sizing, frame: sized.frame,
+        source: sourceOfPlan(row), sizing: sized.sizing, frame: sized.frame,
         walls: found.walls, wallNote: found.note, doors: found.doors, glazing: found.glazing, partitions: found.partitions,
         columns: found.columns, openings: level === plansRead[0].level ? [] : found.openings,
       },
@@ -182,9 +254,16 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
     else areasOf.set(level, [area]);
   }
   const levels: SchematicLevel[] = [], flightsOf = new Map<number, LevelFlights>();
+  const gridCandidates = [areasOf.get(1)?.[0], ...[...areasOf.values()].map(areas => areas[0])];
+  const anchorGrid = alignStack ? gridCandidates.find(plan => plan && alignStackedPlan(plan.grid, plan.grid))?.grid : undefined;
   let previous: FloorPlanBuild["placement"] | undefined;
   for (const [order, areas] of areasOf) {
-    const built = assembleFloorPlans(areas, previous);
+    const offset = anchorGrid ? alignStackedPlan(anchorGrid, areas[0].grid) : null;
+    const built = assembleFloorPlans(areas, alignStack ? undefined : previous, offset ?? undefined);
+    if (alignStack && !offset) {
+      built.level.alignmentUnverified = true;
+      warnings.push(`${built.level.name} can be inspected separately. Its position needs review because the printed grids could not be matched.`);
+    }
     const unread = unreadPlans.get(order);
     if (unread?.length) built.level.unplacedPlans = [...(built.level.unplacedPlans ?? []), ...unread];
     levels.push(built.level);
@@ -196,7 +275,9 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
   const lowest = Math.min(...levels.map(l => l.order));
   for (const l of levels) {
     const below = [...flightsOf.keys()].filter(k => k < l.order).sort((p, q) => q - p)[0];
-    l.stairs = l.order === lowest ? [] : stairsArriving(flightsOf.get(l.order) ?? { arriving: [], rising: [] }, below === undefined ? null : flightsOf.get(below) ?? null);
+    const alignedBelow = below !== undefined && !l.alignmentUnverified && !levels.find(level => level.order === below)?.alignmentUnverified;
+    l.stairs = l.order === lowest ? [] : stairsArriving(flightsOf.get(l.order) ?? { arriving: [], rising: [] },
+      alignedBelow ? flightsOf.get(below) ?? null : null);
   }
   // A schedule supplies the door size independently of the plan. Match only doors on scaled plans.
   const scaledLevels = new Set(plansRead.filter(plan => plan.scale && !plan.borrowed).map(plan => plan.level));
@@ -341,16 +422,23 @@ async function readPartitionTypes(doc: StoredDocument, pageNumber: number, sheet
  * level's frame; then their door numbers and wall types from the tags the AI reads on small tiles of the
  * plan (3 at a time), placed through the plan's own tag ovals and leaders (lib/tag-placement).
  */
-async function planVectorWalls(doc: StoredDocument, pageNumber: number, sheetName: string, frame: { widthFeet: number; heightFeet: number }, outline: [number, number][], scaled: boolean, printedScale: boolean, alignAreas: boolean, signal?: AbortSignal, onProgress?: (text: string) => void) {
+async function planVectorWalls(doc: StoredDocument, pageNumber: number, sheetName: string, frame: { widthFeet: number; heightFeet: number }, outline: Point[],
+  { scaled, printedScale, alignAreas, alignStack, view, signal, onProgress }: {
+    scaled: boolean; printedScale: boolean; alignAreas: boolean; alignStack: boolean; view?: PlanView; signal?: AbortSignal; onProgress?: (text: string) => void;
+  }) {
   const [pdfjs, pdf] = await Promise.all([import("pdfjs-dist"), openStoredPdf(doc)]);
   const page = await pdf.getPage(pageNumber);
   const viewport = page.getViewport({ scale: 1 }), sheet = { widthPt: viewport.width, heightPt: viewport.height };
-  const { segments, curves, fills } = vectorsFromOperators(await pageTurn(() => page.getOperatorList(), true), pdfjs.OPS as unknown as Record<string, number>, viewport.transform);
+  const drawing = vectorsFromOperators(await pageTurn(() => page.getOperatorList(), true), pdfjs.OPS as unknown as Record<string, number>, viewport.transform);
+  const inView = ([x, y]: Point) => !view || containsPlanPoint([x / sheet.widthPt, y / sheet.heightPt], view.box);
+  const segments = view ? drawing.segments.filter(line => inView(line.a) && inView(line.b)) : drawing.segments;
+  const curves = view ? drawing.curves.filter(line => [line.from, line.to, line.c1, line.c2].every(inView)) : drawing.curves;
+  const fills = view ? drawing.fills.filter(fill => fill.every(inView)) : drawing.fills;
   const printed = printedScale ? await pageTurn((): Promise<{ items: Parameters<typeof printedDoorTags>[0] }> => page.getTextContent(), true).catch(() => null) : null;
   signal?.throwIfAborted();
-  const registration = alignAreas && printed
-    ? planRegistration(segments, drawingTextRuns(printed.items, viewport), frame.widthFeet * 72 / viewport.width)
-    : null;
+  const text = printed && (alignAreas || alignStack) ? drawingTextRuns(printed.items, viewport).filter(run => inView(run.a) && inView(run.b)) : null;
+  const registration = alignAreas && text ? planRegistration(segments, text, frame.widthFeet * 72 / viewport.width) : null;
+  const grid: PlanGrid = alignStack && text ? printedPlanGrid(text, segments, curves, frame.widthFeet / viewport.width) : [];
   const walls = levelWalls(segments, sheet, frame, outline, scaled);
   const doors = levelDoors(segments, curves, sheet, frame, outline, walls.walls);
   const glazing = levelGlazing(segments, sheet, frame, outline, walls.weight, walls.walls, doors);
@@ -358,23 +446,40 @@ async function planVectorWalls(doc: StoredDocument, pageNumber: number, sheetNam
   const columns = levelColumns(segments, sheet, frame, outline, walls.weight, walls.walls);
   const openings = levelOpenings(segments, sheet, frame, outline);
   const flights = levelFlights(segments, fills, sheet, frame, outline, walls.weight);
-  if (!walls.walls.length) return { ...walls, doors, glazing, partitions, columns, openings, flights, rooms: [] as SchematicRoom[], tagWarning: "", registration };
-  const tiles = tagTiles(sheet, frame, outline), read: { tile: [number, number, number, number]; tags: PlanTag[] }[] = [];
-  let failed = 0;
-  for (let i = 0; i < tiles.length; i += 3) {
-    onProgress?.(`Reading the door, wall and room tags on ${sheetName} (part ${Math.min(i + 3, tiles.length)} of ${tiles.length})…`);
-    await Promise.all(tiles.slice(i, i + 3).map(async tile => {
-      try { read.push({ tile, tags: (await aiJob<{ tags: PlanTag[] }>("plan-tags", { sheet: sheetName, image: await renderStoredRegion(doc, pageNumber, tile, 1200, true) }, signal)).tags }); }
-      catch (error) { if (signal?.aborted) throw error; failed++; }
-    }));
+  if (!walls.walls.length) return { ...walls, doors, glazing, partitions, columns, openings, flights, rooms: [] as SchematicRoom[], tagWarning: "", registration, grid };
+  const tiles = tagTiles(sheet, frame, outline).flatMap(tile => {
+    const crop = view ? clipPlanBox(tile, view.box) : tile;
+    return crop ? [crop] : [];
+  });
+  const read: { tile: PlanBox; tags: PlanTag[] }[] = [];
+  let failed = 0, done = 0;
+  const rows = view ? Map.groupBy(tiles, tile => tile[1]).values() : [tiles];
+  for (const row of rows) {
+    for (let i = 0; i < row.length; i += 3) {
+      signal?.throwIfAborted();
+      const batch = row.slice(i, i + 3);
+      done += batch.length;
+      onProgress?.(`Reading the door, wall and room tags on ${sheetName} (part ${done} of ${tiles.length})…`);
+      const parts = view && batch.length > 1 ? await renderStoredRow(doc, pageNumber, batch, 1200, true).catch(() => null) : null;
+      await Promise.all(batch.map(async (tile, index) => {
+        try {
+          const part = parts?.[index];
+          const image = part?.image ?? await renderStoredRegion(doc, pageNumber, tile, 1200, true);
+          const { tags } = await aiJob<{ tags: PlanTag[] }>("plan-tags", { sheet: sheetName, image }, signal);
+          read.push({ tile: part?.box ?? tile, tags });
+        } catch (error) { if (signal?.aborted) throw error; failed++; }
+      }));
+    }
   }
   const tagged = levelTags(read, segments, curves, sheet, frame, walls.walls, doors, glazing);
 
   signal?.throwIfAborted();
-  const verifiedDoors = printed ? addTaggedDoorOpenings(tagged.doors, tagged.walls, printedDoorTags(printed.items, viewport, frame)) : tagged.doors;
+  const printedTags = printed ? printedDoorTags(printed.items, viewport, frame).filter(({ at: [x, y] }) =>
+    !view || containsPlanPoint([x / frame.widthFeet, y / frame.heightFeet], view.box)) : [];
+  const verifiedDoors = addTaggedDoorOpenings(tagged.doors, tagged.walls, printedTags);
   // Room tags read on the tiles are sharper than the whole-sheet reading's; the level keeps those when there are any.
   const rooms: SchematicRoom[] = tagged.tags.filter(t => t.kind === "room").map(t => ({ name: t.name ?? "", number: t.text, at: t.at }));
-  return { note: walls.note, walls: tagged.walls, doors: verifiedDoors, glazing: tagged.glazing, partitions, columns, openings, flights, rooms, registration, tagWarning: failed ? `${failed} of ${tiles.length} parts of the plan could not be read for door and wall tags; some doors and walls have no number or type.` : "" };
+  return { note: walls.note, walls: tagged.walls, doors: verifiedDoors, glazing: tagged.glazing, partitions, columns, openings, flights, rooms, registration, grid, tagWarning: failed ? `${failed} of ${tiles.length} parts of the plan could not be read for door and wall tags; some doors and walls have no number or type.` : "" };
 }
 
 /** The open project's schematic model under "schematic-model"; `run` applies a correction (moveOutlinePoint, setLevelHeight) or a rebuild and returns null or the error. */

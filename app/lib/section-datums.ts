@@ -1,12 +1,12 @@
 import { drawingLengthFeet } from "./drawing-dimensions";
-import { levelOfTitle } from "./schematic-model";
+import { levelName, levelOfTitle } from "./schematic-model";
 import type { TextBox } from "./text-anchor";
 
 export type DimensionSource = { documentId: string; sheet: string; page: number; quote: string };
 export type PrintedDatum = { name: string; elevation: number; quote: string };
 export type SourcedDatum = Omit<PrintedDatum, "quote"> & { source: DimensionSource };
 
-const LEVEL = /^(?:(?:LEVEL\s*L?\s*\d{1,2}|L\d{1,2}|BASEMENT(?:\s+(?:FLOOR|LEVEL))?|(?:GROUND|FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH)\s+(?:FLOOR|LEVEL))(?:\s*[-–:]?\s*(?:EXISTING|NEW(?: ADDITION)?|ADDITION))?|(?:(?:T\.?\s*O\.?|TOP OF|LOW|HIGH)\s+)?ROOF)$/i;
+const LEVEL = /^(?:(?:LEVEL\s*L?\s*\d{1,2}|L\d{1,2}|(?:BASEMENT\s+)?B[1-9]\d?(?:\s+(?:FLOOR|LEVEL))?|BASEMENT(?:\s+(?:FLOOR|LEVEL))?|(?:\d{1,2}(?:ST|ND|RD|TH)|GROUND|FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH|SEVENTH|EIGHTH|NINTH|TENTH)\s+(?:FLOOR|LEVEL))(?:\s*[-–:]?\s*(?:EXISTING|NEW(?: ADDITION)?|ADDITION))?|(?:(?:T\.?\s*O\.?|TOP OF|LOW|HIGH)\s+)?ROOF)$/i;
 
 const label = (text: string) => text.trim().replace(/\s+/g, " ");
 
@@ -66,7 +66,7 @@ export function resolveSectionDatums(readings: SourcedDatum[]): { markers: Sourc
   for (const [key, group] of groups) {
     const ordered = [...group].sort((a, b) => a.elevation - b.elevation);
     if (ordered.at(-1)!.elevation - ordered[0].elevation > .25 / 12) {
-      const name = key === Infinity ? "Roof" : `Level ${String(key).padStart(2, "0")}`;
+      const name = key === Infinity ? "Roof" : levelName(key);
       const options = [...new Set(group.map(d => `${d.source.quote} on ${d.source.sheet}`))].slice(0, 5);
       warnings.push(`${name} has different printed elevations (${options.join(", ")}). Its position needs review.`);
     } else markers.push(group[0]);
