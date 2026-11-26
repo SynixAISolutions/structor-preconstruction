@@ -18,6 +18,6 @@ Rules (memory): test on Project 1's real data, put related work in one PR, ask o
 - Tip: don't run `pnpm build` while this worktree's dev server runs; it broke the dev server's compiled page (500, "Cannot use import statement outside a module"). Restarting the dev server fixed it.
 
 ## Next
-1. Push `core/marcel-open-items`, open one PR, bind it.
+1. Done 26 Nov: pushed, **PR #169** opened and bound; Vercel checks green, mergeable. Preview: https://structor-preconstruction-git-core-m-a328d9-tools-3633s-projects.vercel.app (the in-app browser refused to open it, so step 2 hasn't been done).
 2. On the PR's Vercel preview (LIVE database: look, don't write): Project 1 → a trade → Standard scope tab should list the trade's approved checklist lines (1,417 checklist entries were approved 24 Nov); Invite bidders shows the ranking. Don't press Add or Apply there without Danial's OK.
 3. Ask Danial once to merge, together with PR #146 after its live test.
