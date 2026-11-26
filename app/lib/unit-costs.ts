@@ -7,6 +7,7 @@
 import { CSI_DIVISIONS } from "./csi";
 import type { TakeoffRow } from "./data/preconstruction";
 import type { BudgetHistory } from "./historical-budget";
+import type { Procurement } from "./procurement";
 import type { Project, TaxStatus } from "./projects";
 
 export type UnitCost = {
@@ -55,6 +56,28 @@ export function entriesFromEstimate(rows: TakeoffRow[], project: Pick<Project, "
     entries.push({ id: `uc-${hashOf(`${project.id}|${itemKey(row.item)}|${unitKey(row.unit)}`)}`, item: row.item.trim(), unit: unitKey(row.unit), rate: row.rate, division: divisionOf(row.division), project: project.name, projectId: project.id, location: project.location, taxStatus: project.taxStatus, certifications: [...project.certifications], date, by, source: "Estimate" });
   }
   return { entries, unreviewed, unpriced, samples };
+}
+
+/**
+ * The open project's own prices from its takeoff by trade (lib/takeoff-by-trade): bid-form lines an estimator priced
+ * themselves, per the unit of the line's quantity. A price picked from a benchmark or an estimate line is left out, so
+ * the database never counts a price twice. One price per item: when two lines read alike, the newest price stands.
+ */
+export function entriesFromTakeoff(state: Procurement, project: Pick<Project, "id" | "name" | "location" | "taxStatus" | "certifications">, date: string, by: string): { entries: UnitCost[]; picked: number } {
+  const found = new Map<string, UnitCost & { at: string }>();
+  let picked = 0;
+  for (const s of state.scopes) {
+    const p = s.unitPrice, q = s.quantity;
+    if (s.allTrades || !p || !q || unitKey(p.unit) !== unitKey(q.unit) || !(p.rate > 0)) continue;
+    if (p.origin !== "estimator") { picked++; continue; }
+    const item = s.title.trim().slice(0, 200), unit = unitKey(q.unit);
+    const id = `uc-${hashOf(`${project.id}|${itemKey(item)}|${unit}`)}`;
+    const was = found.get(id);
+    if (was && was.at >= p.at) continue;
+    const division = state.packages.find(pkg => pkg.id === s.packageId)?.division ?? null;
+    found.set(id, { id, item, unit, rate: p.rate, division: divisionOf(division), project: project.name, projectId: project.id, location: project.location, taxStatus: project.taxStatus, certifications: [...project.certifications], date, by, source: "Estimate", at: p.at });
+  }
+  return { entries: [...found.values()].map(({ at: _at, ...entry }) => entry), picked };
 }
 
 /** One price per job per item: saving again replaces a changed rate and leaves an unchanged one with its date. */

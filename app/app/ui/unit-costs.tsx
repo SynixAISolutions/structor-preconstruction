@@ -5,7 +5,7 @@ import { ChevronDown, ChevronRight, Plus, Save, Trash2 } from "lucide-react";
 import { editEstimateItem } from "../../lib/estimate";
 import type { BudgetHistory } from "../../lib/historical-budget";
 import { CERTIFICATION_PROGRAMS, TAX_STATUSES, type Project, type TaxStatus } from "../../lib/projects";
-import { BENCHMARK_MARGIN, EMPTY_UNIT_COSTS, UNIT_COSTS_KEY, addUnitCost, benchmarks, checkEstimate, divisionCostsPerSf, entriesFromEstimate, filterUnitCosts, removeUnitCost, requirementsOf, saveUnitCosts, unitCostRows, type UnitCostFilter, type UnitCostInput, type UnitCostState } from "../../lib/unit-costs";
+import { BENCHMARK_MARGIN, EMPTY_UNIT_COSTS, UNIT_COSTS_KEY, addUnitCost, benchmarks, checkEstimate, divisionCostsPerSf, entriesFromEstimate, entriesFromTakeoff, filterUnitCosts, removeUnitCost, requirementsOf, saveUnitCosts, unitCostRows, type UnitCostFilter, type UnitCostInput, type UnitCostState } from "../../lib/unit-costs";
 import { CSI_DIVISIONS } from "../../lib/csi";
 import { useEstimate } from "../../lib/use-estimate";
 import { useLocalDraft } from "../../lib/use-local-draft";
@@ -38,9 +38,12 @@ export function UnitCostsView({ project, navigate, notify }: ViewProps & { proje
 
   function saveProject() {
     const found = entriesFromEstimate(rows, project, today(), actor);
-    const saved = saveUnitCosts(state, found.entries);
+    // The takeoff by trade's own prices too; an estimate line's price stands where both price the same item.
+    const takeoff = entriesFromTakeoff(procurement, project, today(), actor);
+    const ids = new Set(found.entries.map(e => e.id));
+    const saved = saveUnitCosts(state, [...found.entries, ...takeoff.entries.filter(e => !ids.has(e.id))]);
     setState(saved.state);
-    const left = [found.unreviewed && `${found.unreviewed} not reviewed yet`, found.unpriced && `${found.unpriced} without a rate`, found.samples && `${found.samples} illustrative`].filter(Boolean).join(", ");
+    const left = [found.unreviewed && `${found.unreviewed} not reviewed yet`, found.unpriced && `${found.unpriced} without a rate`, found.samples && `${found.samples} illustrative`, takeoff.picked && `${takeoff.picked} takeoff price${takeoff.picked === 1 ? "" : "s"} taken from a benchmark or an estimate line`].filter(Boolean).join(", ");
     notify(`${project.name}: ${saved.added} unit cost${saved.added === 1 ? "" : "s"} added, ${saved.updated} updated, ${saved.unchanged} unchanged.${left ? ` Left out: ${left}.` : ""}`);
   }
   function plug(id: string, median: number, count: number) {
