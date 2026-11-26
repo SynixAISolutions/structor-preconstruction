@@ -17,7 +17,8 @@
 // length-capped and rejected rather than silently cut, so a citation is never misquoted.
 
 import { addRegion, approveRegion, linkScope, DrawingFlipRuleError, type DrawingFlipState, type Point, type RegionAnchor } from "./drawing-flip";
-import { addScope, approveScope, ProcurementRuleError, setScopeQuantity, type Procurement } from "./procurement";
+import { addRepeat, addScope, approveScope, ProcurementRuleError, setScopeQuantity, type Procurement } from "./procurement";
+import { addsWords, sameWork } from "./same-work";
 import type { QuantityUnit } from "./model";
 
 /** Who the history names for the AI's own steps. */
@@ -59,8 +60,11 @@ export const REJECT_REASONS: Record<RejectReason, string> = {
 
 export type DraftEvent =
   | { kind: "proposed" | "accepted" | "reopened"; at: string; by: string }
-  | { kind: "edited"; at: string; by: string; fields: string[] }
-  | { kind: "rejected"; at: string; by: string; reason: RejectReason; note: string };
+  /** `fromPackage`: the trade a finding was moved out of, when `fields` holds packageId (what lib/memory-learn learns from). */
+  | { kind: "edited"; at: string; by: string; fields: string[]; fromPackage?: string }
+  | { kind: "rejected"; at: string; by: string; reason: RejectReason; note: string }
+  /** The same work as a line the bid form already had; `into` is that line, which now carries this finding's sources too. */
+  | { kind: "merged"; at: string; by: string; into: string };
 
 type DraftBase = {
   id: string;
@@ -311,7 +315,8 @@ export function editDraft(state: ExtractionState, procurement: Procurement, draf
   const fields = (Object.keys(changes) as (keyof DraftChanges)[]).filter(k => k in next && (next as Record<string, unknown>)[k] !== (draft as Record<string, unknown>)[k]);
   if (!fields.length) return state;
   const original = draft.original ?? pick(draft);
-  let drafts = state.drafts.map(d => d.id === draft.id ? { ...next, original, history: [...draft.history, { kind: "edited" as const, at, by: by.trim(), fields }] } as Draft : d);
+  const event = { kind: "edited" as const, at, by: by.trim(), fields, ...(packageId !== draft.packageId ? { fromPackage: draft.packageId } : {}) };
+  let drafts = state.drafts.map(d => d.id === draft.id ? { ...next, original, history: [...draft.history, event] } as Draft : d);
   if (packageId !== draft.packageId) drafts = drafts.map(d => unlinkMoved(d, draft, packageId));
   return { ...state, drafts };
 }
@@ -342,13 +347,17 @@ export function rejectDraft(state: ExtractionState, draftId: string, reason: Rej
 }
 
 /** Words only, for telling whether two scope lines say the same thing ("Gypsum board, Type X." = "gypsum board type x"). */
+/** Where a finding was read: a document and a page. */
+const citedAt = (c: Citation) => `${c.document}|${c.page}`;
 const sameLine = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
 /**
  * The automatic run's step after reading (Marcel, 24 Oct: whatever the AI finds goes straight into the scope
  * list, and the team approves it): each of the run's scope findings becomes a draft line in its trade's bid
- * form, for Approve scopes. A line the bid form already has (same words, in that trade or every trade) is
- * set aside as a duplicate, so a new revision only adds what is new. A finding whose quoted words aren't printed
+ * form, for Approve scopes. A line the bid form already has (the same work, in that trade or every trade:
+ * lib/same-work) isn't added again: found on another sheet, its sources, highlights and other wording go on the line
+ * already there; found where that line was already read, it is set aside as a duplicate, so a new revision only adds
+ * what is new. A finding whose quoted words aren't printed
  * on its sheet (notOnSheet) is held: it waits in its trade, flagged, for a person to accept or reject. Regions
  * and quantities stay for review.
  */
@@ -358,9 +367,13 @@ export function addRunToBidForms(records: Pick<ReviewRecords, "extraction" | "pr
   for (const draft of records.extraction.drafts) {
     if (draft.runId !== runId || draft.kind !== "scope" || draft.status !== "pending-review") continue;
     if (notOnSheet(draft)) { held++; continue; }
-    const there = procurement.scopes.filter(s => s.packageId === draft.packageId || s.allTrades).map(s => sameLine(s.title));
-    if (there.includes(sameLine(draft.title))) {
-      extraction = rejectDraft(extraction, draft.id, "duplicate", "Already in the bid form.", AI_ACTOR, at);
+    const twin = procurement.scopes.find(s => (s.packageId === draft.packageId || s.allTrades) && (sameLine(s.title) === sameLine(draft.title) || sameWork(s.title, draft.title, s.source, draft.source)));
+    if (twin) {
+      const read = new Set(extraction.drafts.flatMap(d => d.kind === "scope" && d.acceptedId === twin.id ? d.citations.map(citedAt) : []));
+      if (read.size && draft.citations.some(c => !read.has(citedAt(c)))) {
+        procurement = addRepeat(procurement, twin.id, draft, addsWords(twin.title, draft.title), AI_ACTOR, at);
+        extraction = putDraft(extraction, { ...draft, status: "accepted", reviewedBy: AI_ACTOR, reviewedAt: at, acceptedId: twin.id, history: [...draft.history, { kind: "merged", at, by: AI_ACTOR, into: twin.id }] });
+      } else extraction = rejectDraft(extraction, draft.id, "duplicate", "Already in the bid form.", AI_ACTOR, at);
       duplicates++;
       continue;
     }
@@ -371,6 +384,46 @@ export function addRunToBidForms(records: Pick<ReviewRecords, "extraction" | "pr
     added++;
   }
   return { extraction, procurement, added, duplicates, held };
+}
+
+/**
+ * Puts the highlights the AI drew while reading on Drawing Flip, in their trades, awaiting review there (Danial, 24 Nov:
+ * "in Drawing Flip I still don't see scopes that go with drawings"). Whittier's runs had drawn 837 highlights on 99
+ * sheets, each linked to the line it supports, but one reached Drawing Flip only when someone accepted it on its own,
+ * and 47 had been: the sheets showed nothing. Each highlight still waiting whose sheet is a Drawing Flip page becomes a
+ * Structor proposal there, linked to its lines already in the bid form (a line accepted later is linked then, by
+ * acceptDraft), and its finding is marked placed, accepted by Structor AI as addRunToBidForms does with the lines. The
+ * contractor approves or corrects each one on Drawing Flip. `runId` limits it to one run's highlights.
+ */
+export function placeHighlights(records: ReviewRecords, runId?: string, at = now()): ReviewRecords & { placed: number; noPage: number } {
+  const { procurement } = records;
+  let { flip } = records;
+  const pages = new Map(flip.pages.map(p => [p.sheet.replace(/[^a-z0-9]/gi, "").toUpperCase(), p.id]));
+  const scopes = new Set(procurement.scopes.map(s => s.id));
+  const drafts = records.extraction.drafts;
+  const placedIds = new Map<string, string>();
+  let noPage = 0;
+  for (const draft of drafts) {
+    if (draft.kind !== "region" || draft.status !== "pending-review" || draft.removed || (runId && draft.runId !== runId)) continue;
+    const pageId = pages.get(draft.sheet.replace(/[^a-z0-9]/gi, "").toUpperCase());
+    if (!pageId) { noPage++; continue; }
+    // Its lines in the bid form: the findings it was drawn for, or, when the reading didn't link them, its run's line with its words.
+    const words = draft.label.trim().toLowerCase();
+    const scopeIds = [...new Set(drafts.filter((d): d is ScopeDraft => d.kind === "scope" && d.packageId === draft.packageId && !!d.acceptedId && scopes.has(d.acceptedId)
+      && (draft.scopeDraftIds.includes(d.id) || d.runId === draft.runId && d.title.trim().toLowerCase() === words)).map(d => d.acceptedId!))];
+    const evidence = draft.citations.map(c => `${c.sheet ?? c.document} p.${c.page}: “${c.quote}”`).join(" ").slice(0, 2000) || draft.label;
+    const run = records.extraction.runs.find(r => r.id === draft.runId);
+    try {
+      flip = addRegion(flip, procurement, { pageId, label: draft.label, polygon: draft.polygon, packageId: draft.packageId, scopeIds, evidence, confidence: draft.confidence, origin: "ai", anchor: draft.anchor }, AI_ACTOR, run?.finishedAt ?? at);
+    } catch (error) { if (error instanceof DrawingFlipRuleError) continue; throw error; }
+    placedIds.set(draft.id, flip.regions.at(-1)!.id);
+  }
+  if (!placedIds.size) return { ...records, placed: 0, noPage };
+  const extraction = { ...records.extraction, drafts: drafts.map(d => {
+    const regionId = placedIds.get(d.id);
+    return regionId && d.kind === "region" ? { ...d, status: "accepted" as const, reviewedBy: AI_ACTOR, reviewedAt: at, acceptedId: regionId, history: [...d.history, { kind: "accepted" as const, at, by: AI_ACTOR }] } : d;
+  }) };
+  return { extraction, procurement, flip, placed: placedIds.size, noPage };
 }
 
 /** Puts a rejected finding back in the review queue. An accepted one can't come back: change it where it now lives. */

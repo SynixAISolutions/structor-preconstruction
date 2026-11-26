@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { BookOpen, Download, ListChecks, MessageCircleQuestion, RotateCcw, Send, X } from "lucide-react";
+import { BookOpen, Download, ListChecks, RotateCcw, Send, X } from "lucide-react";
 import { applyProposal, undoChange, type AppliedChange, type Proposal } from "../../lib/assistant-actions";
 import { askStructor, runSavedTask, savedTaskChoices } from "../../lib/assistant-client";
 import { SAVED_TASKS, type SavedTask } from "../../lib/assistant-tools";
@@ -10,6 +10,9 @@ import { usd } from "../../lib/format";
 import { useLocalDraft } from "../../lib/use-local-draft";
 import { manualGuides } from "../../lib/user-manual";
 import type { Screen } from "./shared";
+import { StructorOrb } from "./structor-orb";
+import { startersFor } from "./ask-starters";
+import { onAskRequested } from "./open-ask";
 import "./ask-structor.css";
 
 type ProposalState = { proposal: Proposal; status: "pending" | "applied" | "dismissed" | "undone"; error?: string };
@@ -17,7 +20,6 @@ type ProposalState = { proposal: Proposal; status: "pending" | "applied" | "dism
 type Message = { role: "user" | "assistant"; text: string; screens?: string[]; tools?: string[]; proposals?: ProposalState[]; reports?: BidPackageReport[] };
 /** Messages kept per project in this browser. */
 const KEPT = 40;
-const STARTERS = ["Who is the apparent low bidder on each trade?", "Which budget lines are over budget?", "What RFIs are still open?", "What is this page for?"];
 const OUTCOME = { pending: "not applied yet", applied: "applied by the user", dismissed: "dismissed by the user", undone: "applied, then undone by the user" };
 const pageTitle = (id: string) => manualGuides.find(g => g.id === id)?.title ?? id;
 const money = (n: number | null) => n == null ? "–" : usd(n);
@@ -41,9 +43,24 @@ export function AskStructor({ currentScreen, onOpenManual, onNavigate }: { curre
   const [choices, setChoices] = useState<Record<string, string[]>>({});
   const [picked, setPicked] = useState<Record<string, string>>({});
   const list = useRef<HTMLDivElement>(null);
+  const composer = useRef<HTMLInputElement>(null);
   const applied = useRef(new Map<string, AppliedChange>());
   const page = manualGuides.find(g => g.id === currentScreen)?.title ?? "this page";
   useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight }); }, [messages, busy, tasksOpen]);
+  // New look (NEW_LOOK_DEMO.md §3.5): on a wide screen the page makes room for the open panel instead of being covered.
+  useEffect(() => { document.documentElement.classList.toggle("ask-open", open); return () => document.documentElement.classList.remove("ask-open"); }, [open]);
+
+  useEffect(() => {
+    let frame = 0;
+    const unsubscribe = onAskRequested(question => {
+      setDraft(question);
+      setTasksOpen(false);
+      setOpen(true);
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => composer.current?.focus({ preventScroll: true }));
+    });
+    return () => { unsubscribe(); cancelAnimationFrame(frame); };
+  }, []);
 
   async function ask(question: string) {
     const q = question.trim();
@@ -98,14 +115,14 @@ export function AskStructor({ currentScreen, onOpenManual, onNavigate }: { curre
   }
 
   return <>
-    <button className="ask-launcher" type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-controls="ask-structor-panel"><MessageCircleQuestion size={22} aria-hidden="true"/><span>Ask Structor</span></button>
+    <button className="ask-launcher" type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-controls="ask-structor-panel"><StructorOrb size={26} mood={busy ? "thinking" : "idle"}/><span>Ask Structor</span></button>
     {open && <section id="ask-structor-panel" className="ask-panel" aria-label="Ask Structor">
-      <header><div><strong>Ask Structor</strong><small>About this project, {page} or anything in the app</small></div><span className="ask-header-actions">
+      <header><StructorOrb size={34} mood={busy ? "thinking" : "idle"}/><div><strong>Ask Structor</strong><small>About this project, {page} or anything in the app</small></div><span className="ask-header-actions">
         <button type="button" className="ui-icon-btn" aria-label="Saved tasks" title="Saved tasks" aria-expanded={tasksOpen} disabled={!!busy} onClick={() => void openTasks()}><ListChecks size={16}/></button>
         {messages.length > 0 && <button type="button" className="ui-icon-btn" aria-label="Start a new chat" title="Start a new chat (this project's chat is cleared)" disabled={!!busy} onClick={() => { setMessages(() => []); applied.current.clear(); }}><RotateCcw size={16}/></button>}
         <button type="button" className="ui-icon-btn" aria-label="Close Ask Structor" onClick={() => setOpen(false)}><X size={17}/></button></span></header>
       <div className="ask-messages" ref={list} aria-live="polite">
-        {!messages.length && !tasksOpen && <div className="ask-starters"><p>Answers come from this project's live data and Structor's guide. Ask Structor can prepare a change, like a VE idea or an RFI draft, but it only happens when you click Apply. Each project's chat is kept in this browser.</p>{STARTERS.map(s => <button type="button" key={s} onClick={() => void ask(s)}>{s}</button>)}<button type="button" onClick={() => void openTasks()}><ListChecks size={13} aria-hidden="true"/> Saved tasks</button></div>}
+        {!messages.length && !tasksOpen && <div className="ask-starters"><span className="ask-hello"><StructorOrb size={56} mood="happy" float/><strong>Hi, I&apos;m Structor.</strong></span><p>Answers come from this project's live data and Structor's guide. Ask Structor can prepare a change, like a VE idea or an RFI draft, but it only happens when you click Apply. Each project's chat is kept in this browser.</p>{startersFor(currentScreen).map(s => <button type="button" key={s} onClick={() => void ask(s)}>{s}</button>)}<button type="button" onClick={() => void openTasks()}><ListChecks size={13} aria-hidden="true"/> Saved tasks</button></div>}
         {messages.map((m, i) => <div key={i} className={`ask-message ${m.role}`}>
           <p>{m.text}</p>
           {m.reports?.map(r => <ReportCard key={`${r.packageId}-${r.trade}`} report={r} onNavigate={onNavigate}/>)}
@@ -130,7 +147,7 @@ export function AskStructor({ currentScreen, onOpenManual, onNavigate }: { curre
         </div>}
         {busy && <div className="ask-message assistant"><p className="ask-progress">{busy}…</p></div>}
       </div>
-      <form onSubmit={(e: FormEvent) => { e.preventDefault(); void ask(draft); }}><input aria-label="Your question" value={draft} onChange={e => setDraft(e.target.value)} placeholder="Ask about this project…" disabled={!!busy}/><button type="submit" className="ui-icon-btn" aria-label="Send question" disabled={!!busy || !draft.trim()}><Send size={16}/></button></form>
+      <form onSubmit={(e: FormEvent) => { e.preventDefault(); void ask(draft); }}><input ref={composer} aria-label="Your question" value={draft} onChange={e => setDraft(e.target.value)} placeholder="Ask about this project…" disabled={!!busy}/><button type="submit" className="ui-icon-btn" aria-label="Send question" disabled={!!busy || !draft.trim()}><Send size={16}/></button></form>
       <button type="button" className="ask-guide" onClick={() => { setOpen(false); onOpenManual(); }}><BookOpen size={15}/>Open the full guide</button>
     </section>}
   </>;

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as THREE from "three";
-import { alignSheetFrame, footprintValid, openOutline, printedSheetFrame, schematicColumns, schematicDoors, schematicGeometry, schematicGlazing, schematicPartitions, schematicRailings, schematicRoomFloors, schematicStairs, schematicWalls, sheetPoint, wallTotals } from "./schematic-geometry";
-import { moveOutlinePoint, setLevelHeight, type Point, type SchematicLevel, type SchematicModel } from "../../lib/schematic-model";
+import { schematicCameraFit, schematicObjectPick } from "./schematic-scene";
+import { alignSheetFrame, footprintValid, openOutline, printedSheetFrame, schematicColumns, schematicDoors, schematicGeometry, schematicGlazing, schematicGlazingParts, schematicPartitions, schematicRailings, schematicRoomFloors, schematicStairs, schematicWalls, sheetPoint, wallTotals } from "./schematic-geometry";
+import { levelSpaces, moveOutlinePoint, setLevelHeight, setOpenToBelow, type Point, type SchematicLevel, type SchematicModel } from "../../lib/schematic-model";
 
 const level: SchematicLevel = { id: "L1", name: "Level 01", order: 1, elevation: 0, height: 14, outline: [[10, 20], [50, 20], [50, 60], [10, 60]], rooms: [{ name: "Lobby", number: "101", at: [20, 30] }], source: { documentId: "qa", sheet: "A1.1", page: 1 }, sizing: "Printed scale, 8 ft per inch" };
 test("schematic geometry flips drawing y, extrudes to the read height, and corrections move upper levels", () => {
@@ -39,6 +40,59 @@ test("glass read from the drawing: translucent panels up to 10 ft, minus what th
   assert.equal(wallTotals(glazed)!.glassFeet, 20);
   assert.equal(schematicGlazing({ ...level, glazing: [] }), null);
   mesh.geometry.dispose();
+});
+test("a matching printed elevation sets the glazing height and sill", () => {
+  const glazed: SchematicLevel = { ...level, glazing: [{
+    a: [10, 20], b: [20, 20], type: "SF-4",
+    dimensions: { kind: "frame", width: 10, height: 11.5, widthLabel: "10′-0″", heightLabel: "11′-6″",
+      sill: { feet: 1, quote: "SILL 1′-0″ AFF" }, source: { ...level.source, quote: "STOREFRONT - SF-4" } },
+  }] };
+  const full = schematicGlazing(glazed)!;
+  assert.equal(full.boundingBox!.min.y, 1);
+  assert.equal(full.boundingBox!.max.y, 12.5);
+  assert.deepEqual(full.userData.glazing, [0]);
+  const cut = schematicGlazing(glazed, 5)!;
+  assert.equal(cut.boundingBox!.min.y, 1);
+  assert.equal(cut.boundingBox!.max.y, 5);
+  assert.equal(schematicGlazing(glazed, 1), null);
+  full.dispose(); full.geometry.dispose(); cut.dispose(); cut.geometry.dispose();
+});
+test("scale-matched symmetric glazing parts keep their measured faces and are picked individually", () => {
+  const glazed: SchematicLevel = { ...level, glazing: [
+    { a: [9, 20], b: [10, 20], excluded: true },
+    {
+      a: [10, 20], b: [20, 20], type: "SF-6",
+      dimensions: { kind: "frame", width: 10, height: 11.5, widthLabel: "10′-0″", heightLabel: "11′-6″",
+        sill: { feet: 1, quote: "SILL 1′-0″ AFF" }, source: { ...level.source, quote: "STOREFRONT - SF-6" },
+        elevation: { width: 10, height: 11.5, symmetric: true, parts: [
+          { kind: "Pane", mark: "GL-T", x: .25, y: .25, width: 4.625, height: 11 },
+          { kind: "Pane", mark: "GL-T", x: 5.125, y: .25, width: 4.625, height: 11 },
+          { kind: "Mullion", x: 4.875, y: .25, width: .25, height: 11 },
+        ] },
+      },
+    },
+  ] };
+  assert.equal(schematicGlazing(glazed), null, "The old opaque volume cannot intercept hits on the drawn parts");
+  const [glass, frame] = schematicGlazingParts(glazed);
+  assert.equal(glass.count, 2);
+  assert.equal(frame.count, 1);
+  assert.equal(glass.boundingBox!.min.y, 1.25);
+  assert.equal(glass.boundingBox!.max.y, 12.25);
+  assert.equal(glass.boundingBox!.min.z, -20);
+  assert.equal(glass.boundingBox!.max.z, -20, "The elevation does not give the profile depth");
+  const ray = new THREE.Raycaster(new THREE.Vector3(12, 4, -10), new THREE.Vector3(0, 0, -1));
+  const first = ray.intersectObjects([glass, frame], false)[0];
+  assert.deepEqual(schematicObjectPick(first), { kind: "glazing", levelId: "L1", index: 1, part: 0 });
+  ray.ray.origin.x = 15;
+  assert.deepEqual(schematicObjectPick(ray.intersectObjects([glass, frame], false)[0]), { kind: "glazing", levelId: "L1", index: 1, part: 2 });
+  const cut = schematicGlazingParts(glazed, 5);
+  assert.ok(cut.every(mesh => mesh.boundingBox!.max.y === 5));
+  const original = glazed.glazing![1], size = original.dimensions!;
+  const asymmetric: SchematicLevel = { ...glazed, glazing: [{ ...original, dimensions: { ...size, elevation: { ...size.elevation!, symmetric: false } } }] };
+  assert.deepEqual(schematicGlazingParts(asymmetric), []);
+  const fallback = schematicGlazing(asymmetric)!;
+  assert.equal(fallback.count, 1, "An unaligned elevation keeps the assembly-level preview");
+  for (const mesh of [glass, frame, ...cut, fallback]) { mesh.dispose(); mesh.geometry.dispose(); }
 });
 test("operable partitions read from the drawing: panels up to 10 ft, minus what the estimator marked not a partition", () => {
   const divided: SchematicLevel = { ...level, walls: [], partitions: [{ a: [10, 20], b: [30, 20], thickness: .35 }, { a: [30, 20], b: [40, 20], thickness: .35, excluded: true }] };
@@ -137,4 +191,93 @@ test("stairs arriving at a level: treads and landings hanging down to the floor 
   const area = (g: THREE.BufferGeometry) => { const p = g.getAttribute("position"), index = g.getIndex()!; let sum = 0; for (let i = 0; i < index.count; i += 3) { const [a, b, c] = [0, 1, 2].map(k => new THREE.Vector3().fromBufferAttribute(p, index.getX(i + k))); sum += new THREE.Vector3().crossVectors(b.clone().sub(a), c.clone().sub(a)).length() / 2; } return sum; };
   assert.equal(Math.round(area(floor.geometry)), Math.round(18 * 9.1 - (6.32 * 3.76 + 6.32 * 3.95 + 3.95 * 8.125)), "The room's floor less the two flights and the west landing");
   assert.equal((schematicRoomFloors([{ ...room, outline: [[195, 101.4], [209, 101.4], [209, 110.5], [195, 110.5]] }], stairs.openings)!.children[0] as THREE.Mesh).geometry.getAttribute("position").count, 4 + 4 * 2, "An opening reaching past the room's outline isn't cut from it");
+});
+
+test("floors generated from plan lines pick the right room through an upper opening", () => {
+  const outline: Point[] = [[0, 0], [80, 0], [80, 80], [0, 80]];
+  const interior: Point[] = [[25, 25], [55, 25], [55, 55], [25, 55]];
+  const walls = [outline, interior].flatMap(ring =>
+    ring.map((a, index) => ({ a, b: ring[(index + 1) % ring.length], thickness: .5 })),
+  );
+  const lower = { ...level, outline, walls, rooms: [] };
+  const upper = { ...lower, id: "L2", order: 2, elevation: 14, openings: [[40, 40]] as Point[],
+    rooms: [{ name: "Circulation", number: "201", at: [10, 40] as Point }] };
+  const model: SchematicModel = { levels: [lower, upper], builtAt: "qa", warnings: [] };
+  const upperRooms = levelSpaces(upper);
+  const around = upperRooms.find(room => room.name === "Circulation")!;
+  assert.equal(around.area, 5500);
+  const corrected = setOpenToBelow(model, "L2", { ...around, at: [40, 40] }, true);
+  assert.equal(corrected.levels[1].openings?.length, 2, "Opening the outer area preserves the inner opening");
+  const restored = setOpenToBelow(corrected, "L2", around, false);
+  assert.deepEqual(restored.levels[1].openings, upper.openings, "Restoring the outer floor leaves the inner opening");
+
+  const scene = new THREE.Group();
+  const overlappingStair: Point[] = [[35, 20], [45, 20], [45, 60], [35, 60]];
+  for (const slab of model.levels) {
+    const mesh = schematicRoomFloors(levelSpaces(slab), slab.id === "L2" ? [overlappingStair] : [])!;
+    mesh.position.y = slab.elevation;
+    mesh.children.forEach(floor => { floor.userData.levelId = slab.id; });
+    scene.add(mesh);
+  }
+  scene.updateMatrixWorld(true);
+  const pickFromAbove = (x: number, y: number) => {
+    const ray = new THREE.Raycaster(new THREE.Vector3(x, 30, -y), new THREE.Vector3(0, -1, 0));
+    const hit = ray.intersectObject(scene, true)[0];
+    return hit && schematicObjectPick(hit);
+  };
+  assert.deepEqual(pickFromAbove(10, 40), { kind: "floor", levelId: "L2", index: upperRooms.indexOf(around) });
+  assert.deepEqual(pickFromAbove(40, 22), { kind: "floor", levelId: "L2", index: upperRooms.indexOf(around) },
+    "A stair well crossing the opening's edges cannot corrupt the floor triangulation");
+  const lowerRooms = levelSpaces(lower);
+  const unnamed = lowerRooms.findIndex(room => room.area === 900);
+  assert.ok(unnamed >= 0);
+  assert.deepEqual(pickFromAbove(40, 40), { kind: "floor", levelId: "L1", index: unnamed });
+});
+
+test("both leaves of a double door resolve past a stall to the same source door", () => {
+  const door = { a: [10, 20] as Point, b: [16, 20] as Point, width: 6, leaves: 2, hinges: [[10, 20], [16, 20]] as Point[],
+    openTo: [[10, 23], [16, 23]] as Point[], kind: "door" as const, thickness: .4 };
+  const model = schematicDoors({ ...level, height: 5, doors: [{ ...door, kind: "compartment" }, door] }, 5)!;
+  const [leaves] = model.children;
+  for (const instanceId of [0, 1]) {
+    assert.deepEqual(schematicObjectPick({ object: leaves, instanceId } as THREE.Intersection), {
+      kind: "door", levelId: "L1", index: 1,
+    });
+  }
+});
+
+test("a matched door schedule sets its leaf and header height", () => {
+  const door = {
+    a: [10, 20] as Point, b: [13, 20] as Point, width: 3, leaves: 1, hinges: [[10, 20]] as Point[],
+    openTo: [[10, 23]] as Point[], kind: "door" as const, thickness: .4, number: "D02",
+    scheduledSize: { number: "D02", width: 3, height: 8, source: { documentId: "schedule", page: 1, sheet: "A601", quote: "D02" } },
+  };
+  const [header, leaf] = schematicDoors({ ...level, doors: [door] })!.children as THREE.InstancedMesh[];
+  const transform = new THREE.Matrix4();
+  leaf.getMatrixAt(0, transform);
+  assert.equal(new THREE.Vector3().setFromMatrixScale(transform).y, 8);
+  header.getMatrixAt(0, transform);
+  assert.equal(new THREE.Vector3().setFromMatrixPosition(transform).y, 11, "Header covers 8 ft to 14 ft");
+});
+
+test("a picked glazing run preserves its index when earlier runs are excluded", () => {
+  const run = { a: [10, 20] as Point, b: [15, 20] as Point };
+  const glass = schematicGlazing({ ...level, glazing: [{ ...run, excluded: true }, run] })!;
+  assert.equal(glass.count, 1);
+  const ray = new THREE.Raycaster(new THREE.Vector3(12, 4, -30), new THREE.Vector3(0, 0, 1));
+  const hits = ray.intersectObject(glass);
+  assert.deepEqual(schematicObjectPick(hits[0]), { kind: "glazing", levelId: level.id, index: 1 });
+});
+
+test("camera fit keeps a wide plan inside a narrow viewer", () => {
+  const box = new THREE.Box3(new THREE.Vector3(0, 0, 0), new THREE.Vector3(248, 14, 108));
+  const camera = new THREE.PerspectiveCamera(42, .75, .1, 1000);
+  const fit = schematicCameraFit(box, camera.fov, camera.aspect, false);
+  camera.position.copy(fit.position);
+  camera.lookAt(fit.center);
+  camera.updateMatrixWorld();
+  for (const x of [0, 248]) for (const y of [0, 14]) for (const z of [0, 108]) {
+    const point = new THREE.Vector3(x, y, z).project(camera);
+    assert.ok(Math.abs(point.x) < .97 && Math.abs(point.y) < .97);
+  }
 });

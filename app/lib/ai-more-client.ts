@@ -5,6 +5,9 @@
 import type { DraftInput } from "./extraction";
 import type { ConsolidatedLine, TitleBlock } from "./ai-jobs-more";
 import { AI_REQUESTS_AT_ONCE, inAiPool, timed } from "./ai-pool";
+import type { LineCheckRequest, LineFound } from "./memory-check";
+import type { NotesSheet } from "./drawing-notes";
+import type { RepeatGroup, RepeatLine } from "./repeated-lines";
 
 export const aiJob = <T>(job: string, input: unknown, signal?: AbortSignal): Promise<T & { model: string }> => timed(job, async () => {
   const response = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job, input }), signal });
@@ -52,6 +55,84 @@ export async function consolidateScope(trade: string, drafts: DraftInput[], sign
     }
   }));
   return { drafts: [...results.flat(), ...others], merged: scopes.length, dropped: scopes.length - used };
+}
+
+/**
+ * Looks for the contractor's lines on this project's pages (lib/memory-check): each request in a slot of the tab's
+ * shared pool. Resolves to every answer that came back, the screened-out quotes, and how many requests failed.
+ */
+export async function checkMemoryLines(trade: { name: string; code: string }, requests: LineCheckRequest[], signal?: AbortSignal, onProgress?: (done: number, total: number) => void): Promise<{ answers: { request: LineCheckRequest; found: LineFound[] }[]; dropped: { what: string; reason: string }[]; failed: number }> {
+  const answers: { request: LineCheckRequest; found: LineFound[] }[] = [], dropped: { what: string; reason: string }[] = [];
+  let next = 0, done = 0, failed = 0;
+  onProgress?.(0, requests.length);
+  await Promise.all(Array.from({ length: Math.min(AI_REQUESTS_AT_ONCE, requests.length) }, async () => {
+    while (next < requests.length && !signal?.aborted) {
+      const request = requests[next++];
+      try {
+        const result = await inAiPool(() => aiJob<{ found: LineFound[]; dropped: { what: string; reason: string }[] }>("memory-check", {
+          trade: trade.name, code: trade.code, document: request.document,
+          pages: request.pages.map(p => ({ page: p.page, text: p.text, where: p.where })), lines: request.lines, existing: request.existing,
+        }, signal));
+        answers.push({ request, found: result.found });
+        dropped.push(...result.dropped);
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        failed++;
+      }
+      onProgress?.(++done, requests.length);
+    }
+  }));
+  // In page order, so a line found on two pages cites the first.
+  answers.sort((a, b) => requests.indexOf(a.request) - requests.indexOf(b.request));
+  return { answers, dropped, failed };
+}
+
+/**
+ * A trade's bid-form lines from its notes on every drawing sheet (lib/drawing-notes), a few dozen sheets per request,
+ * one request after another in the tab's pool: each is told the lines already on the bid form and those the earlier
+ * requests wrote, so the same keynote on sheets in two requests isn't written twice. `failed`: requests that didn't
+ * come back.
+ */
+export async function readDrawingNotes(pkg: { id: string; name: string; code: string }, document: string, batches: NotesSheet[][], existing: string[], memory: string | undefined, signal?: AbortSignal, onProgress?: (done: number, total: number) => void): Promise<{ drafts: DraftInput[]; dropped: { what: string; reason: string }[]; failed: number; model: string }> {
+  const answers: { drafts: DraftInput[] }[] = new Array(batches.length), dropped: { what: string; reason: string }[] = [];
+  let next = 0, done = 0, failed = 0, model = "";
+  const written = [...existing];
+  onProgress?.(0, batches.length);
+  await Promise.all(Array.from({ length: Math.min(1, batches.length) }, async () => {
+    while (next < batches.length && !signal?.aborted) {
+      const i = next++;
+      try {
+        const result = await inAiPool(() => aiJob<{ drafts: DraftInput[]; dropped: { what: string; reason: string }[] }>("drawing-notes", {
+          pkg, document, sheets: batches[i], existing: written.slice(-150), ...(memory ? { memory } : {}),
+        }, signal));
+        answers[i] = { drafts: result.drafts.map(d => ({ ...d, key: `${d.key}@${i + 1}` })) };
+        model = result.model;
+        written.push(...result.drafts.flatMap(d => d.kind === "scope" ? [d.title] : []));
+        dropped.push(...result.dropped);
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        failed++;
+      }
+      onProgress?.(++done, batches.length);
+    }
+  }));
+  return { drafts: answers.flatMap(a => a?.drafts ?? []), dropped, failed, model };
+}
+
+/**
+ * Asks the AI which of a trade's lines repeat one another (lib/repeated-lines), 200 lines per request, the alike ones
+ * together. The groups it returned that hold up, the pairs left apart, and how many requests failed.
+ */
+export async function findRepeatedLines(pkg: { name: string; code: string }, batches: RepeatLine[][], signal?: AbortSignal): Promise<{ groups: RepeatGroup[]; dropped: { what: string; reason: string }[]; failed: number; model: string }> {
+  const groups: RepeatGroup[] = [], dropped: { what: string; reason: string }[] = [];
+  let failed = 0, model = "";
+  for (const lines of batches) {
+    try {
+      const result = await inAiPool(() => aiJob<{ groups: RepeatGroup[]; dropped: { what: string; reason: string }[] }>("repeated-lines", { trade: pkg.name, code: pkg.code, lines }, signal));
+      groups.push(...result.groups); dropped.push(...result.dropped); model = result.model;
+    } catch (error) { if (signal?.aborted) throw error; failed++; }
+  }
+  return { groups, dropped, failed, model };
 }
 
 /** Reads one sheet's title block (a JPEG crop of its right-hand strip). */

@@ -14,7 +14,7 @@ export type Screen =
   | "contracts" | "contract-compare" | "schedule" | "drawings" | "revisions" | "checks" | "specs"
   | "turnover" | "settings" | "model" | "specifications" | "value-engineering"
   | "architect" | "ratings" | "prequalification" | "drawing-flip" | "buyout" | "model-mep" | "model-structural" | "model-exterior"
-  | "rfp-requirements" | "compliance" | "assumptions" | "workload" | "exhibits";
+  | "rfp-requirements" | "compliance" | "assumptions" | "workload" | "exhibits" | "memory";
 
 export type ViewProps = { navigate: (screen: Screen) => void; notify: (message: string) => void; projectName: string };
 
@@ -28,7 +28,13 @@ export type ScreenScope = "global" | "project" | "subcontractor" | "architect";
  * `section` is a sub-heading inside a group; items sharing one are adjacent.
  * `keywords` are extra quick-find terms, including every screen's former names.
  */
-export type ScreenDef = { id: Screen; label: string; icon: string; count?: string; section?: string; keywords?: string[] };
+/**
+ * `availability`: where a screen is offered (Danial, 25 Nov: "clean up the misleading pages"). "hidden": not built yet, so
+ * it is off the menu and quick find; "sample": only on the sample project (Project 1), whose MEP, structural and exterior
+ * models were traced for it. On any other project those pages showed the same generated model as Interior finishes.
+ * A link to a screen that isn't offered opens `fallback`.
+ */
+export type ScreenDef = { id: Screen; label: string; icon: string; count?: string; section?: string; keywords?: string[]; availability?: "hidden" | "sample"; fallback?: Screen };
 export type ScreenGroup = { label: string; scope: ScreenScope; items: ScreenDef[] };
 
 /** The screen the app opens on. Marcel: start from All projects. */
@@ -42,12 +48,15 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
   { label: "WORKSPACE", scope: "global", items: [
     { id: "projects", label: "All projects", icon: "FolderOpen" },
     { id: "bidders", label: "Subcontractor directory", icon: "Users", keywords: ["bidder directory", "companies", "trade partners"] },
-    { id: "ratings", label: "Subcontractor ratings", icon: "Gauge", keywords: ["rate subcontractors", "reviews", "scorecard"] },
+    // A placeholder until the rating criteria are agreed: off the menu, so it doesn't read as a working page.
+    { id: "ratings", label: "Subcontractor ratings", icon: "Gauge", keywords: ["rate subcontractors", "reviews", "scorecard"], availability: "hidden", fallback: "bidders" },
     { id: "prequalification", label: "Subcontractor aggregate limits", icon: "ClipboardCheck", keywords: ["aggregate limit", "single project limit", "open contract value", "Textura", "bonding capacity", "Subcontractor prequalification", "prequal"] },
     // Marcel's features list, item 33: "track capacity of all estimators to make sure they are not over or under worked".
     { id: "workload", label: "Estimator workload", icon: "Users", keywords: ["resource tracking", "capacity", "estimators", "workload", "who is free", "over worked"] },
     // Marcel's process doc: rates kept from each job as a benchmark for the next.
     { id: "unit-costs", label: "Unit cost database", icon: "Gauge", keywords: ["unit prices", "benchmark", "cost database", "cost per square foot", "historical rates", "price book"] },
+    // Danial, 23 Nov: "an AI agent that keeps context always so for next scan or extract it knows exactly what to extract".
+    { id: "memory", label: "AI memory", icon: "BrainCircuit", keywords: ["company memory", "playbook", "rules", "learned", "corrections", "wording examples", "project decisions", "what the ai knows", "training"] },
   ]},
   { label: "PRECONSTRUCTION", scope: "project", items: [
     { id: "turnover", label: "Preconstruction to-do", icon: "ClipboardCheck", keywords: ["project turnover", "percent complete", "checklist", "overview", "dashboard", "project health", "progress", "project setup", "getting started", "onboarding", "missing documents", "upload"] },
@@ -75,9 +84,9 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     // Marcel's features list, item 35: "Assumptions and Clarifications or Basis of Estimate under preconstruction budget".
     { id: "assumptions", label: "Assumptions & clarifications", icon: "ListChecks", section: BUDGET, keywords: ["basis of estimate", "qualifications", "clarifications", "assumptions", "exclusions", "proposal clarifications"] },
     { id: "model", label: "Interior finishes", icon: "Box", section: MODEL, keywords: ["3d model studio", "3d model", "interiors", "finishes", "doors", "walkthrough"] },
-    { id: "model-mep", label: "MEP coordination", icon: "Box", section: MODEL, keywords: ["3d mep", "mechanical", "electrical", "plumbing", "fire protection", "bim", "clash"] },
-    { id: "model-structural", label: "Structural model", icon: "Box", section: MODEL, keywords: ["3d structure", "concrete", "steel", "framing", "columns"] },
-    { id: "model-exterior", label: "Exterior model", icon: "Box", section: MODEL, keywords: ["3d exterior", "facade", "envelope", "roof", "storefront"] },
+    { id: "model-mep", label: "MEP coordination", icon: "Box", section: MODEL, keywords: ["3d mep", "mechanical", "electrical", "plumbing", "fire protection", "bim", "clash"], availability: "sample", fallback: "model" },
+    { id: "model-structural", label: "Structural model", icon: "Box", section: MODEL, keywords: ["3d structure", "concrete", "steel", "framing", "columns"], availability: "sample", fallback: "model" },
+    { id: "model-exterior", label: "Exterior model", icon: "Box", section: MODEL, keywords: ["3d exterior", "facade", "envelope", "roof", "storefront"], availability: "sample", fallback: "model" },
   ]},
   // Marcel's issues log, item 18 (18 Nov): "Create a main header titled contracts and procurement, let scope review and buy
   // out be under there, contracts & exhibits be titled contracts, and have one for exhibits, and have list of drawings and
@@ -132,8 +141,19 @@ export const screenLabel = (id: Screen): string => ALL_SCREENS.find(screen => sc
 /** The group a screen sits in, SUBCONTRACTOR VIEW included; undefined for Settings, which is global and ungrouped. */
 export const screenGroup = (id: Screen): ScreenGroup | undefined => [...SCREEN_GROUPS, SUBCONTRACTOR_VIEW, ARCHITECT_VIEW].find(group => group.items.some(screen => screen.id === id));
 
-/** Screens matching a free-text query, for the quick-find palette. */
-export const searchScreens = (query: string): ScreenDef[] => {
+/** Whether a screen is offered (`sample`: the open project is the sample project). */
+export const screenOffered = (screen: ScreenDef, sample: boolean): boolean =>
+  !screen.availability || (screen.availability === "sample" && sample);
+
+/** The screen to show for `id`: itself where it is offered, otherwise where its links go. */
+export const shownScreen = (id: Screen, sample: boolean): Screen => {
+  const def = ALL_SCREENS.find(screen => screen.id === id);
+  return !def || screenOffered(def, sample) ? id : def.fallback ?? DEFAULT_SCREEN;
+};
+
+/** Screens matching a free-text query, for the quick-find palette: only those offered (`sample` as in screenOffered). */
+export const searchScreens = (query: string, sample = false): ScreenDef[] => {
   const q = query.trim().toLowerCase();
-  return q ? ALL_SCREENS.filter(screen => [screen.label, screen.section ?? "", ...(screen.keywords ?? [])].some(term => term.toLowerCase().includes(q))) : ALL_SCREENS;
+  const offered = ALL_SCREENS.filter(screen => screenOffered(screen, sample));
+  return q ? offered.filter(screen => [screen.label, screen.section ?? "", ...(screen.keywords ?? [])].some(term => term.toLowerCase().includes(q))) : offered;
 };

@@ -15,38 +15,79 @@ const digits = (code: string) => code.replace(/\D/g, "").padEnd(6, "0").slice(0,
 const AFFINITY: Record<string, string> = { "093": "096", "095": "092", "097": "092", "098": "092", "087": "081", "079": "071" };
 
 /**
- * Each section goes to the package the AI put it in (TradePackage.sections, lib/bid-package-ai). A section no
- * package lists goes to the trade of its CSI division. When several trades share a division: the trade
- * with the same level-2 code (10 14 signage), then a whole-division trade (10 00 00 specialties), then
- * the same CSI group (09 2x drywall), then the group's usual partner (AFFINITY), then the closest code.
+ * Each section goes to the packages the contractor's approved trade split gives it (`remembered`: lib/memory
+ * rememberedSections, package id to sections; a section several trades carry goes to each), else to the package the
+ * AI put it in (TradePackage.sections, lib/bid-package-ai), else to the trade of its CSI division. When several
+ * trades share a division: the trade with the same level-2 code (10 14 signage), then a whole-division trade
+ * (10 00 00 specialties), then the same CSI group (09 2x drywall), then the group's usual partner (AFFINITY), then the
+ * closest code. `partial` (package id to sections it carries only in part) adds readers: whoever carries the section
+ * still reads it.
  */
-export function sectionsByTrade<S extends StoredSection>(sections: S[], packages: Pick<TradePackage, "id" | "division" | "code" | "sections">[]): Map<string, S[]> {
+export function sectionsByTrade<S extends StoredSection>(sections: S[], packages: Pick<TradePackage, "id" | "division" | "code" | "sections">[], remembered?: Map<string, string[]>, partial?: Map<string, string[]>): Map<string, S[]> {
   const out = new Map<string, S[]>(packages.map(p => [p.id, []]));
-  const placed = new Map<string, string>();
-  for (const p of packages) for (const s of p.sections ?? []) if (!placed.has(s)) placed.set(s, p.id);
+  const placed = new Map<string, string[]>(), inPart = new Map<string, string[]>();
+  const add = (map: Map<string, string[]>, section: string, id: string) => { if (out.has(id) && !map.get(section)?.includes(id)) map.set(section, [...(map.get(section) ?? []), id]); };
+  for (const [id, list] of remembered ?? []) for (const s of list) add(placed, s, id);
+  for (const p of packages) for (const s of p.sections ?? []) if (!placed.has(s)) placed.set(s, [p.id]);
+  for (const [id, list] of partial ?? []) for (const s of list) add(inPart, s, id);
   for (const section of sections) {
     const code = digits(section.section);
     if (code.startsWith("00") || code.startsWith("01")) continue;
-    const chosen = placed.get(section.section);
-    if (chosen) { out.get(chosen)!.push(section); continue; }
-    const candidates = packages.filter(p => digits(p.code).slice(0, 2) === code.slice(0, 2));
-    if (!candidates.length) continue;
-    const group = code.slice(0, 3);
-    const level2 = candidates.filter(p => digits(p.code).slice(0, 4) === code.slice(0, 4));
-    const whole = candidates.filter(p => digits(p.code).endsWith("0000"));
-    const inGroup = candidates.filter(p => digits(p.code).slice(0, 3) === group);
-    const byAffinity = candidates.filter(p => digits(p.code).slice(0, 3) === AFFINITY[group]);
-    const pool = level2.length ? level2 : whole.length ? whole : inGroup.length ? inGroup : byAffinity.length ? byAffinity : candidates;
-    const best = [...pool].sort((a, b) => Math.abs(Number(digits(a.code)) - Number(code)) - Math.abs(Number(digits(b.code)) - Number(code)))[0];
-    out.get(best.id)!.push(section);
+    const chosen = placed.get(section.section) ?? byDivision(code, packages);
+    for (const id of new Set([...chosen, ...(inPart.get(section.section) ?? [])])) out.get(id)!.push(section);
   }
   return out;
+}
+
+/** The trade of a section's CSI division (see sectionsByTrade), or none. */
+function byDivision(code: string, packages: Pick<TradePackage, "id" | "code">[]): string[] {
+  const candidates = packages.filter(p => digits(p.code).slice(0, 2) === code.slice(0, 2));
+  if (!candidates.length) return [];
+  const group = code.slice(0, 3);
+  const level2 = candidates.filter(p => digits(p.code).slice(0, 4) === code.slice(0, 4));
+  const whole = candidates.filter(p => digits(p.code).endsWith("0000"));
+  const inGroup = candidates.filter(p => digits(p.code).slice(0, 3) === group);
+  const byAffinity = candidates.filter(p => digits(p.code).slice(0, 3) === AFFINITY[group]);
+  const pool = level2.length ? level2 : whole.length ? whole : inGroup.length ? inGroup : byAffinity.length ? byAffinity : candidates;
+  return [[...pool].sort((a, b) => Math.abs(Number(digits(a.code)) - Number(code)) - Math.abs(Number(digits(b.code)) - Number(code)))[0].id];
+}
+
+/** Every package that reads each section (sectionsByTrade's result turned around), for telling a trade who shares it. */
+export function readersBySection<S extends StoredSection>(assigned: Map<string, S[]>, packages: Pick<TradePackage, "id" | "name">[]): Map<string, { id: string; name: string }[]> {
+  const out = new Map<string, { id: string; name: string }[]>();
+  for (const [id, list] of assigned) {
+    const pkg = packages.find(p => p.id === id);
+    if (pkg) for (const s of list) out.set(s.section, [...(out.get(s.section) ?? []), { id: pkg.id, name: pkg.name }]);
+  }
+  return out;
+}
+
+/**
+ * Who carries a section's work on this project, for a section that may not be in its manual (a finish legend's types,
+ * lib/finish-schedule): the packages that read a project section with the same number, else the same level-2 number
+ * (09 51 13 and 09 51 33), else the trade of its CSI division by sectionsByTrade's rule. Empty when no trade fits.
+ * `partial` (package id to the sections it reads only in part, lib/memory rememberedSections): such a reader counts
+ * only when nobody reads the section in full (Whittier: Doors reads 09 91 23 for its door finishes, Painting carries it).
+ */
+export function sectionOwners(readers: Map<string, { id: string; name: string }[]>, packages: Pick<TradePackage, "id" | "name" | "code">[], partial?: Map<string, string[]>): (section: string) => { id: string; name: string }[] {
+  return section => {
+    const code = digits(section);
+    for (const n of [6, 4]) {
+      const hit = [...readers].filter(([s]) => digits(s).slice(0, n) === code.slice(0, n)).flatMap(([s, list]) => list.map(o => ({ ...o, inPart: !!partial?.get(o.id)?.includes(s) })));
+      const full = hit.filter(o => !o.inPart);
+      if (hit.length) return [...new Map((full.length ? full : hit).map(({ id, name }) => [id, { id, name }])).values()];
+    }
+    return byDivision(code, packages).flatMap(id => packages.filter(p => p.id === id).map(p => ({ id: p.id, name: p.name })));
+  };
 }
 
 // Which drawing sheets carry a trade's scope (15 Oct: scopes come from all the project files, the
 // drawings as well as the specifications). Title keywords by CSI code, most telling first, capped
 // so a trade costs a handful of vision requests.
-const SHEET_RULES: { code: RegExp; titles: RegExp[]; disciplines?: string[] }[] = [
+// `schedules`: sheets a trade reads on top of its others, because they define the tags its lines name. Whittier's
+// A-506 Interior Finish Schedules is where ACP-1 to ACP-5, WDC-1, BAF-1, CG-1 and AWP-1 to AWP-3 are defined; without
+// it Drywall's scan saw "ACP-1" on a ceiling plan with nothing to say what it is (23 Nov fair test).
+const SHEET_RULES: { code: RegExp; titles: RegExp[]; disciplines?: string[]; schedules?: RegExp }[] = [
   { code: /^02 4/, titles: [/DEMOLITION/] },
   { code: /^02 8/, titles: [/HAZARD|ABATEMENT|ASBESTOS/] },
   { code: /^03/, titles: [/FOUNDATION|CONCRETE/, /STRUCTURAL NOTES/] },
@@ -55,7 +96,7 @@ const SHEET_RULES: { code: RegExp; titles: RegExp[]; disciplines?: string[] }[] 
   { code: /^06/, titles: [/CASEWORK|MILLWORK/, /INTERIOR DETAILS/] },
   { code: /^07/, titles: [/ROOF PLAN/, /WALL SECTIONS|EXTERIOR SECTION|MOCK-UP/] },
   { code: /^08/, titles: [/DOOR/, /WINDOW|STOREFRONT|GLAZING|CURTAIN WALL/] },
-  { code: /^09 [245]/, titles: [/PARTITION/, /REFLECTED CEILING|CEILING DETAILS/, /^LEVEL \d+ - \w+ FLOOR PLAN/] },
+  { code: /^09 [245]/, titles: [/PARTITION/, /REFLECTED CEILING|CEILING DETAILS/, /^LEVEL \d+ - \w+ FLOOR PLAN/], schedules: /FINISH SCHEDULE/ },
   { code: /^09 [36]/, titles: [/FINISH/] },
   { code: /^09 9/, titles: [/FINISH/, /INTERIOR ELEVATIONS/] },
   { code: /^10/, titles: [/SIGNAGE|TOILET ACCESSOR|SPECIALT/] },
@@ -75,22 +116,62 @@ const SHEET_RULES: { code: RegExp; titles: RegExp[]; disciplines?: string[] }[] 
   { code: /^33/, titles: [/UTILIT|STORM ?WATER|SEWER/] },
 ];
 export const MAX_SHEETS_PER_TRADE = 6;
+/** The most schedule sheets a trade adds on top of MAX_SHEETS_PER_TRADE. */
+export const MAX_SCHEDULE_SHEETS = 2;
 
 type SheetRow = { title: string; discipline?: string };
 const ruleFor = (code: string) => SHEET_RULES.find(r => r.code.test(code));
 
 /**
  * The drawing sheets (from drawingRegister) that show a trade's work: the ones the AI chose for the package
- * (TradePackage.sheets), else by its CSI code: title keywords first, then its discipline's sheets.
+ * (TradePackage.sheets), else by its CSI code: title keywords first, then its discipline's sheets. Then the trade's
+ * schedule sheets (SHEET_RULES schedules), up to MAX_SCHEDULE_SHEETS more, whichever way the others were chosen.
  */
 export function sheetsForTrade<T extends SheetRow & { sheet?: string }>(register: T[], trade: string | Pick<TradePackage, "code" | "sheets">, max = MAX_SHEETS_PER_TRADE): T[] {
-  if (typeof trade !== "string" && trade.sheets?.length) return trade.sheets.flatMap(s => register.filter(r => r.sheet === s).slice(0, 1)).slice(0, max);
   const code = typeof trade === "string" ? trade : trade.code;
-  const rule = ruleFor(code), out: T[] = [];
+  const rule = ruleFor(code);
+  const withSchedules = (out: T[]) => [...out, ...(rule?.schedules ? register.filter(row => rule.schedules!.test(row.title.toUpperCase()) && !out.includes(row)).slice(0, MAX_SCHEDULE_SHEETS) : [])];
+  if (typeof trade !== "string" && trade.sheets?.length) return withSchedules(trade.sheets.flatMap(s => register.filter(r => r.sheet === s).slice(0, 1)).slice(0, max));
+  const out: T[] = [];
   const add = (match: (row: T) => boolean) => { for (const row of register) if (out.length < max && !out.includes(row) && match(row)) out.push(row); };
   for (const re of rule?.titles ?? []) add(row => re.test(row.title.toUpperCase()));
   if (rule?.disciplines) add(row => rule.disciplines!.includes(row.discipline ?? ""));
-  return out;
+  return withSchedules(out);
+}
+
+// Drawn work a contractor's bid forms move from one trade to another (Marcel's Jelleff forms: Demolition "doesn't
+// carry: Site Demo"; Asphalt and Site concrete leave the demolition of existing pavement and curbs to the earthwork
+// contractor). The sheets move only when the trade's own approved exclusions name the work and the project has the
+// receiving trade; otherwise they stay, so a sheet is never left unread.
+// ponytail: a hand table; add a row when a contractor moves other drawn work between trades.
+const MEP_DISCIPLINES = ["Electrical", "Mechanical", "Plumbing", "Fire protection", "Technology"];
+const SHEET_HAND_OFFS: { work: string; from: RegExp; to: RegExp; prefer: RegExp; excluded: RegExp; sheet: (row: SheetRow) => boolean }[] = [
+  { work: "site demolition", from: /^02 4/, to: /^31/, prefer: /earth|excavat|site ?work/i, excluded: /\bsite\s*demo(lition)?\b/i,
+    // An MEP sheet stays ("ELECTRICAL DEMOLITION SITE PLAN" on Jelleff: the trade demolishes MEP; cut and cap is others').
+    sheet: row => /DEMOLITION/.test(row.title.toUpperCase()) && !MEP_DISCIPLINES.includes(row.discipline ?? "") && (row.discipline === "Civil" || /\bSITE\b/.test(row.title.toUpperCase())) },
+];
+
+/** A drawing sheet another trade's exclusions sent to this one, and why. */
+export type HandedSheet = { sheet: string; title: string; work: string; from: string };
+
+/**
+ * The drawing sheets each package reads (sheetsForTrade), after the contractor's exclusions: a sheet showing work a
+ * trade doesn't carry (`leavesOut`: its approved "doesn't carry" lines, lib/memory leftOut) goes to the trade that
+ * does (SHEET_HAND_OFFS). `handed`: what each receiving package was given, so its scan can be told why.
+ */
+export function sheetsByTrade<T extends SheetRow & { sheet?: string }, P extends Pick<TradePackage, "id" | "code" | "name" | "sheets">>(register: T[], packages: P[], leavesOut?: (pkg: P) => string[]): { sheets: Map<string, T[]>; handed: Map<string, HandedSheet[]> } {
+  const sheets = new Map<string, T[]>(packages.map(p => [p.id, sheetsForTrade(register, p)]));
+  const handed = new Map<string, HandedSheet[]>();
+  for (const rule of SHEET_HAND_OFFS) for (const from of packages.filter(p => rule.from.test(p.code))) {
+    if (!(leavesOut?.(from) ?? []).some(text => rule.excluded.test(text))) continue;
+    const to = packages.filter(p => p.id !== from.id && rule.to.test(p.code)).sort((a, b) => Number(!rule.prefer.test(a.name)) - Number(!rule.prefer.test(b.name)) || a.code.localeCompare(b.code))[0];
+    const moving = (sheets.get(from.id) ?? []).filter(rule.sheet);
+    if (!to || !moving.length) continue;
+    sheets.set(from.id, sheets.get(from.id)!.filter(row => !moving.includes(row)));
+    sheets.set(to.id, [...(sheets.get(to.id) ?? []), ...moving.filter(row => !sheets.get(to.id)?.includes(row))]);
+    handed.set(to.id, [...(handed.get(to.id) ?? []), ...moving.map(row => ({ sheet: row.sheet ?? "", title: row.title, work: rule.work, from: from.name }))]);
+  }
+  return { sheets, handed };
 }
 
 export type TradeSuggestion = TradePackage & { sections: string[]; sheets: string[] };

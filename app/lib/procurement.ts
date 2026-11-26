@@ -25,7 +25,9 @@ export type ScopeEvent =
   | { kind: "quantity"; at: string; by: string; quantity: string }
   | { kind: "moved"; at: string; by: string; from: string; to: string }
   | { kind: "copied"; at: string; by: string; from: string; to: string }
-  | { kind: "applied-to-all"; at: string; by: string };
+  | { kind: "applied-to-all"; at: string; by: string }
+  /** The AI found the same work on another sheet or in another wording; this line carries it too. */
+  | { kind: "merged"; at: string; by: string; from: string };
 
 /**
  * How much work a scope item covers (Marcel's issues log, item 19, 18 Nov: "make sure we have quantity take offs next
@@ -326,6 +328,27 @@ export function editScope(state: Procurement, id: string, changes: Partial<Pick<
   if (next.title === item.title && next.detail === item.detail && next.source === item.source) return state;
   return replaceScope(state, { ...next, status: "draft", history: [...item.history, { kind: "edited", at, by }] });
 }
+
+/**
+ * The AI found this line's work again: its sheet goes in the line's detail ("Also on AD0101, AD0200."), and its wording
+ * when it says more than the line does, and the line stays as it was. Only a line the AI wrote and no one has touched
+ * since is changed.
+ */
+export function addRepeat(state: Procurement, id: string, repeat: { title: string; source: string }, saysMore: boolean, by: string, at = now()): Procurement {
+  const item = findScope(state, id);
+  if (item.origin !== "ai" || item.status !== "draft" || item.history.some(h => h.kind !== "created" && h.kind !== "merged")) return state;
+  const source = repeat.source.trim(), where = source && !item.source.includes(source) ? ` on ${source}` : "", wording = `Also${where}: ${repeat.title.trim()}`;
+  // "Also on A, B." is one sentence, however many sheets: the next sheet joins it.
+  const listed = /(?:^| )Also on ([^.:]+)\.$/.exec(item.detail);
+  if (!saysMore && where && listed) {
+    if (listed[1].split(", ").includes(source)) return replaceScope(state, { ...item, history: [...item.history, { kind: "merged", at, by, from: source }] });
+    return replaceScope(state, { ...item, detail: item.detail.slice(0, listed.index) + item.detail.slice(listed.index).replace(listed[1], `${listed[1]}, ${source}`), history: [...item.history, { kind: "merged", at, by, from: source }] });
+  }
+  const also = !saysMore ? (where ? `Also${where}.` : "") : item.detail.includes(repeat.title.trim()) ? "" : wording;
+  if (!also || item.detail.length + also.length > REPEAT_DETAIL) return replaceScope(state, { ...item, history: [...item.history, { kind: "merged", at, by, from: source }] });
+  return replaceScope(state, { ...item, detail: [item.detail, also].filter(Boolean).join(" "), history: [...item.history, { kind: "merged", at, by, from: source }] });
+}
+const REPEAT_DETAIL = 2000;
 
 export function approveScope(state: Procurement, id: string, by: string, at = now()): Procurement {
   const item = findScope(state, id);

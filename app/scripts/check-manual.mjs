@@ -46,7 +46,7 @@ const guideIds = new Set(ids);
 const unique = (values, message) => assert.equal(new Set(values).size, values.length, message);
 const nonempty = (value, message) => assert(typeof value === "string" && value.trim(), message);
 
-assert.equal(screens.length, 37, "Expected coverage of all 37 current app screens (Exhibits, 20 Nov; (RFP requirements, Contract comparison and Unit cost database joined, 4 Nov; Compliance, Assumptions & clarifications and Estimator workload, 17 Nov)");
+assert.equal(screens.length, 38, "Expected coverage of all 38 current app screens (AI memory, 23 Nov; Exhibits, 20 Nov; (RFP requirements, Contract comparison and Unit cost database joined, 4 Nov; Compliance, Assumptions & clarifications and Estimator workload, 17 Nov)");
 unique(screens, "Screen ids must be unique");
 unique(ids, "Manual article ids must be unique");
 unique(manualGroups, "Manual group names must be unique");
@@ -98,6 +98,24 @@ assert.equal(screenGroup("portal")?.label, "SUBCONTRACTOR VIEW", "The portal kee
 assert.equal(ALL_SCREENS.find(screen => screen.id === "prequalification").label, "Subcontractor aggregate limits", "Renamed from prequalification (Marcel, 24 Oct)");
 for (const [former, id] of [["prequalification", "prequalification"], ["Subcontractor prequalification", "prequalification"], ["preview as subcontractor", "portal"], ["spec matrix", "specs"], ["drawing register", "drawings"], ["bidder directory", "bidders"], ["project turnover", "turnover"], ["project setup", "turnover"], ["conversations", "packages"], ["documents", "documents"]]) {
   assert(searchScreens(former).some(screen => screen.id === id), `Quick find must still reach ${id} by its former name "${former}"`);
+}
+// Danial, 25 Nov ("clean up the misleading pages"): Ratings is off the menu until it's built; the traced MEP, structural and
+// exterior models are Project 1's only (on another project they showed the same generated model as Interior finishes).
+{
+  const { screenOffered, shownScreen } = load("lib/screens.ts");
+  const offered = sample => SCREEN_GROUPS.flatMap(group => group.items).filter(item => screenOffered(item, sample)).map(item => item.id);
+  for (const sample of [true, false]) {
+    assert(!offered(sample).includes("ratings"), "Ratings is not in the menu");
+    assert(!searchScreens("ratings", sample).length && !searchScreens("", sample).some(s => s.id === "ratings"), "Quick find doesn't offer Ratings");
+    assert.equal(shownScreen("ratings", sample), "bidders", "A link to Ratings opens the Subcontractor directory");
+  }
+  assert.deepEqual(offered(true).filter(id => id.startsWith("model")), ["model", "model-mep", "model-structural", "model-exterior"], "Project 1 keeps all four 3D pages");
+  assert.deepEqual(offered(false).filter(id => id.startsWith("model")), ["model"], "Another project's 3D model studio is its one generated model");
+  assert.equal(shownScreen("model-mep", false), "model");
+  assert.equal(shownScreen("model-mep", true), "model-mep");
+  assert(searchScreens("clash", true).some(s => s.id === "model-mep") && !searchScreens("clash", false).length, "Quick find follows the project");
+  assert.equal(shownScreen("budget", false), "budget", "Every other screen is shown as it is");
+  assert.equal(offered(false).length, SCREEN_GROUPS.flatMap(group => group.items).length - 4);
 }
 // The manual follows the navigation: same group, and each title starts with the nav label.
 for (const screen of ALL_SCREENS) {

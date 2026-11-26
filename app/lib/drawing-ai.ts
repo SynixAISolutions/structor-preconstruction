@@ -3,15 +3,19 @@ import { polygonArea, type Point } from "./drawing-flip";
 import type { DraftInput, Citation } from "./extraction";
 import { sheetsForTrade } from "./project-scopes";
 import { sheetKey, type RegisterRow } from "./project-files";
+import { memoryBlock, memoryField, MEMORY_PROMPT_RULE } from "./memory";
 
-export type DrawingJob = { pkg: { id: string; name: string; code: string }; document: string; sheet: string; page: number; text: string; image: string };
+/** `memory`: the contractor's approved memory for this trade (lib/memory contextPack), when there is any. */
+export type DrawingJob = { pkg: { id: string; name: string; code: string }; document: string; sheet: string; page: number; text: string; image: string; memory?: string };
 export function parseDrawingJob(raw: unknown): DrawingJob {
   const value = raw as DrawingJob;
   if (!value || typeof value !== "object" || !value.pkg?.id || !value.pkg?.name || typeof value.pkg.id !== "string" || typeof value.pkg.name !== "string" || value.pkg.id.length > 100 || value.pkg.name.length > 200) throw new AiJobError("Choose a trade package.");
   if (typeof value.document !== "string" || !value.document.trim() || value.document.length > 200 || typeof value.sheet !== "string" || !value.sheet.trim() || value.sheet.length > 40 || !Number.isInteger(value.page) || value.page < 1) throw new AiJobError("Name the drawing document, sheet and PDF page.");
   if (typeof value.text !== "string" || value.text.length > 60_000) throw new AiJobError("The drawing text exceeds the page-reading limit.");
   if (typeof value.image !== "string" || value.image.length > 3_000_000 || !/^data:image\/jpeg;base64,\/9j\/[A-Za-z0-9+/=]+$/.test(value.image)) throw new AiJobError("Send one rendered JPEG drawing page, at most 3 MB. External image URLs are not accepted.");
-  return { ...value, pkg: { id: value.pkg.id.trim(), name: value.pkg.name.trim(), code: typeof value.pkg.code === "string" ? value.pkg.code.slice(0, 40) : "" }, document: value.document.trim(), sheet: value.sheet.trim() };
+  const memory = memoryField(value.memory, message => { throw new AiJobError(message); });
+  const { memory: _sent, ...rest } = value; // eslint-disable-line @typescript-eslint/no-unused-vars
+  return { ...rest, pkg: { id: value.pkg.id.trim(), name: value.pkg.name.trim(), code: typeof value.pkg.code === "string" ? value.pkg.code.slice(0, 40) : "" }, document: value.document.trim(), sheet: value.sheet.trim(), ...(memory ? { memory } : {}) };
 }
 
 export function drawingMessages(job: DrawingJob): ChatMessage[] {
@@ -23,10 +27,11 @@ export function drawingMessages(job: DrawingJob): ChatMessage[] {
       "Propose at most 12 findings, combining repeated requirements. Each needs a verb-led title, a short detail and a verbatim quote of the printed words (a keynote, general note, schedule row or material callout) that support the work. Do not outline areas of the drawing: the quote is highlighted where it is printed.",
       "Quantities are optional. Only propose a quantity where printed dimensions or a clearly countable set support it. Never scale pixels, assume a height, multiply tags by arbitrary counts, or count a repeated view twice.",
       "For quantity give item, value, unit (SF, LF, EA or CY), and basis explaining dimensions, deductions, count and coverage. Otherwise omit it. Every result waits for estimator review; a checked quote does not verify its geometry or quantity.",
+      ...(job.memory ? [MEMORY_PROMPT_RULE] : []),
       'Return JSON only: {"sheet":"A10.1","findings":[{"title":"Provide FRP panels at the tagged kitchen walls.","detail":"Check the shown panel extents.","quote":"WALL PROTECTION: FRP-01","quantity":{"item":"FRP panels","value":32,"unit":"SF","basis":"One dimensioned 4 ft by 8 ft panel; review coverage."}}]}',
     ].join("\n") },
     { role: "user", content: [
-      { type: "text", text: `Trade: ${job.pkg.name} (${job.pkg.code}). Document: ${job.document}, PDF page ${job.page}, sheet ${job.sheet}.\nReadable page text:\n${job.text}` },
+      { type: "text", text: `Trade: ${job.pkg.name} (${job.pkg.code}). Document: ${job.document}, PDF page ${job.page}, sheet ${job.sheet}.\n${memoryBlock(job.memory)}Readable page text:\n${job.text}` },
       { type: "image_url", image_url: { url: job.image, detail: "original" } },
     ] },
   ];

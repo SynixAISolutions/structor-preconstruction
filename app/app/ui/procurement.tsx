@@ -1,11 +1,13 @@
 "use client";
 
 import { useMemo, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
-import { newDirectoryCompany } from "../../lib/directory";
+import { companiesToOffer, newDirectoryCompany } from "../../lib/directory";
 import { RemoveInvitationDialog } from "./remove-company";
 import { TradePackageControls } from "./trade-package-controls";
+import { AskAboutTrade } from "./ask-entry-points";
 import "./project-setup.css";
 import { LinkedProjectContent } from "./project-content-links";
+import { RepeatedLines } from "./repeated-lines";
 import {
   ArrowRight,
   Bell,
@@ -66,7 +68,8 @@ import { inlineDrafts } from "../../lib/scope-review";
 import { ScopeDashboardView } from "./scope-dashboard";
 import { BidThread, PortalLinkDialog, useBidMessages } from "./bid-portal-link";
 import { unreadMessages } from "../../lib/bid-portal";
-import { useActiveProject } from "../../lib/project-scope";
+import { SAMPLE_PROJECT_ID, useActiveProject } from "../../lib/project-scope";
+import { useMemoryLearner } from "../../lib/use-memory-learner";
 import { ScopeMatrixView } from "./scope-matrix";
 import { notOnSheet } from "../../lib/extraction";
 import { GeneralScopes } from "./general-scopes";
@@ -140,6 +143,7 @@ function historyLabel(event: ScopeItem["history"][number], packages: Procurement
   if (event.kind === "applied-to-all") return "Applied to every trade";
   if (event.kind === "quantity") return event.quantity ? `Quantity set to ${event.quantity}` : "Quantity removed";
   if (event.kind === "quantity-checked") return "Quantity checked";
+  if (event.kind === "merged") return event.from ? `The same work found on ${event.from}` : "The same work found again";
   return event.kind === "created" ? "Created" : event.kind === "approved" ? "Approved" : event.kind === "reopened" ? "Reopened for review" : "Edited";
 }
 
@@ -153,6 +157,8 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
   // Marcel, 18 Nov: each trade's general scope first, the detailed items a tab away.
   const [packageView, setPackageView] = useState("General scope");
   const projectId = useActiveProject();
+  // Every correction made while reviewing goes to the AI memory as a proposal (lib/memory-learn).
+  useMemoryLearner(projectId, state, review.extraction);
 
   const [specSections] = useLocalDraft("specification-sections", initialSpecSections);
   const [generalOpen, setGeneralOpen] = useState(false);
@@ -205,27 +211,32 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
     notify((drafts.length + proposals.length ? `${drafts.length + proposals.length} scope items approved.` : "Every visible item is already approved.") + left);
   }
 
-  if (!activePackage) return <div className="proc-view"><PageHeader eyebrow={`${projectName} / Project intelligence`} title="Scopes & bid forms" description="Review scope requirements before they reach subcontractors." actions={<><TradePackageControls state={state} run={run} combine={(from, to) => review.combine(from, to, CURRENT_USER)} notify={notify}/><AiScopeWriter review={review} notify={notify} onOpenFiles={() => navigate("documents")}/></>}/><ScopeViewTabs value={scopeTab} onChange={setScopeTab}/><div role="tabpanel" id="scope-tab-panel" aria-labelledby={`scope-tab-${SCOPE_TABS.indexOf(scopeTab)}`}>{scopeTab === "Section coverage" ? coverage : <Empty title="No bid packages yet" description="Write scopes with AI suggests trades from your drawings or project manual. Confirm them before reading scopes, or add a trade package yourself."/>}</div></div>;
+  if (!activePackage) return <div className="proc-view"><PageHeader eyebrow={`${projectName} / Project intelligence`} title="Scopes & bid forms" description="Review scope requirements before they reach subcontractors." actions={<><TradePackageControls state={state} run={run} combine={(from, to) => review.combine(from, to, CURRENT_USER)} notify={notify}/><AiScopeWriter review={review} notify={notify} onOpenFiles={() => navigate("documents")} onReview={id => { setScopeTab("Bid forms"); setPackageId(id); setPackageView("Detailed scope"); setQuery(""); }}/></>}/><ScopeViewTabs value={scopeTab} onChange={setScopeTab}/><div role="tabpanel" id="scope-tab-panel" aria-labelledby={`scope-tab-${SCOPE_TABS.indexOf(scopeTab)}`}>{scopeTab === "Section coverage" ? coverage : <Empty title="No bid packages yet" description="Write scopes with AI suggests trades from your drawings or project manual. Confirm them before reading scopes, or add a trade package yourself."/>}</div></div>;
 
   return <div className="proc-view">
-    <PageHeader eyebrow={`${projectName} / Project intelligence`} title="Scopes & bid forms" description="Review each requirement, correct its trade, and publish one clear bid form." actions={<><TradePackageControls state={state} run={run} combine={(from, to) => review.combine(from, to, CURRENT_USER)} notify={notify}/>{scopeTab === "Bid forms" && <><ScopeExportButton state={state} projectName={projectName} notify={notify}/><AiScopeWriter review={review} notify={notify} onOpenFiles={() => navigate("documents")}/>{unread.length > 0 && <Button onClick={() => setNotificationsOpen(true)}><Bell size={15}/>{unread.length} notification{unread.length === 1 ? "" : "s"}</Button>}<Button variant="primary" onClick={() => setEditor({ packageId: activePackage.id, title: "", detail: "", source: "", origin: "estimator" })}><Plus size={16}/>Add scope item</Button></>}</>}/>
+    <PageHeader eyebrow={`${projectName} / Project intelligence`} title="Scopes & bid forms" description="Review each requirement, correct its trade, and publish one clear bid form." actions={<><TradePackageControls state={state} run={run} combine={(from, to) => review.combine(from, to, CURRENT_USER)} notify={notify}/>{scopeTab === "Bid forms" && <><ScopeExportButton state={state} projectName={projectName} notify={notify}/><AiScopeWriter review={review} notify={notify} onOpenFiles={() => navigate("documents")} onReview={id => { setScopeTab("Bid forms"); setPackageId(id); setPackageView("Detailed scope"); setQuery(""); }}/>{unread.length > 0 && <Button onClick={() => setNotificationsOpen(true)}><Bell size={15}/>{unread.length} notification{unread.length === 1 ? "" : "s"}</Button>}<Button variant="primary" onClick={() => setEditor({ packageId: activePackage.id, title: "", detail: "", source: "", origin: "estimator" })}><Plus size={16}/>Add scope item</Button></>}</>}/>
     <ScopeViewTabs value={scopeTab} onChange={setScopeTab}/>
     <div className="proc-view" role="tabpanel" id="scope-tab-panel" aria-labelledby={`scope-tab-${SCOPE_TABS.indexOf(scopeTab)}`}>{scopeTab === "Scope matrix" ? <ScopeMatrixView review={review} actor={CURRENT_USER} notify={notify} onOpen={(id, itemId) => { setScopeTab("Bid forms"); setGeneralOpen(id === null); if (id) setPackageId(id); setSelectedId(itemId); setQuery(""); }}/> : scopeTab === "Dashboard" ? <ScopeDashboardView state={state} run={run} proposed={proposedFor} notify={notify} onOpen={id => { setScopeTab("Bid forms"); setGeneralOpen(false); setPackageId(id); setSelectedId(""); }}/> : scopeTab === "Section coverage" ? coverage : <><Stats items={[{ label: "Trade packages", value: state.packages.length, detail: "One bid form per trade" }, { label: "Scope items", value: state.scopes.length, detail: "Project requirements" }, { label: "Approved", value: state.scopes.filter(item => item.status === "approved").length, detail: "Reviewed by an estimator", tone: "green" }, { label: "Published", value: state.packages.filter(pkg => packageStatus(state, pkg.id) === "published").length, detail: "Current with bidders" }]}/>
     <div className="proc-scope-layout">
       <aside className="ui-panel proc-trades"><button className={generalOpen ? "active" : ""} onClick={() => setGeneralOpen(true)}><span className="proc-division">01</span><span><strong>General</strong><small>Applies to every trade</small></span></button><div className="proc-aside-title">TRADE PACKAGES</div>{trades.map(pkg => { const items = bidForm(state, pkg.id); const status = packageStatus(state, pkg.id); const pending = review.extraction.drafts.filter(d => d.packageId === pkg.id && d.status === "pending-review").length; return <button className={!generalOpen && pkg.id === activePackage.id ? "active" : ""} key={pkg.id} onClick={() => { setGeneralOpen(false); setPackageId(pkg.id); setSelectedId(""); }}><span className="proc-division">{pkg.division}</span><span><strong>{pkg.name}</strong><small>{items.filter(item => item.status === "approved").length}/{items.length} approved{pending > 0 && ` · ${pending} proposed`}</small></span><Badge tone={statusTone(status)}>{statusLabels[status]}</Badge></button>; })}<button className="proc-aside-link" onClick={() => navigate("packages")}>Manage bidders<ArrowRight size={14}/></button></aside>
       {generalOpen ? <GeneralScopes review={review} by={CURRENT_USER} notify={notify} onEdit={item => setEditor({...item})} onAdd={() => setEditor({packageId:activePackage.id,title:"",detail:"",source:"",origin:"estimator"})}/> : <>
       <Panel title={activePackage.name} subtitle={`${activePackage.code} · ${activePackage.owner ? `Owner: ${activePackage.owner}` : "No owner yet"} · Due ${displayDate(activePackage.due)}`} action={<Badge tone={statusTone(packageState)}>{statusLabels[packageState]}{activePackage.published ? ` · v${activePackage.published.version}` : ""}</Badge>} className="proc-scope-panel">
-        <div className="general-scope-tabs"><Tabs tabs={["General scope", "Detailed scope"]} value={packageView} onChange={setPackageView}/></div>
+        <div className="general-scope-tabs trade-ask-toolbar">
+          <Tabs tabs={["General scope", "Detailed scope"]} value={packageView} onChange={setPackageView}/>
+          <AskAboutTrade trade={activePackage.name} code={activePackage.code}/>
+        </div>
         {packageView === "General scope" ? <GeneralScopePanel key={activePackage.id} projectId={projectId} state={state} pkg={activePackage} run={run} by={CURRENT_USER} notify={notify}/> : <>
-        <div className="ui-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search this bid form…"/><Button onClick={approveAll}><CheckCheck size={15}/>Approve visible form</Button><FindQuantitiesButton pkg={activePackage} state={state} run={run} notify={notify} by={CURRENT_USER}/></div>
+        <div className="ui-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search this bid form…"/><RepeatedLines key={activePackage.id} pkg={activePackage} items={form} merge={groups => review.mergeRepeats(groups, CURRENT_USER)} notify={notify}/><Button onClick={approveAll}><CheckCheck size={15}/>Approve visible form</Button><FindQuantitiesButton pkg={activePackage} state={state} run={run} notify={notify} by={CURRENT_USER}/></div>
         <PackageDrawingReferences key={activePackage.id} pkg={activePackage} packages={state.packages} colors={sourceColors}/>
         <div className="proc-scope-list"><InlineScopeDrafts key={activePackage.id} review={review} packageId={activePackage.id} query={query} sections={specSections} colors={sourceColors} by={CURRENT_USER} notify={notify} onMove={setPackageId}/>{visible.map((item, index) => <article className={`proc-scope-row ${selected?.id === item.id ? "selected" : ""}`} key={item.id}>
-          <button className={`proc-approval ${item.status}`} aria-label={`${item.status === "approved" ? "Reopen" : "Approve"} ${item.title}`} onClick={() => item.status === "approved" ? runAndNotify(run, current => reopenScope(current, item.id, CURRENT_USER), notify, "Scope item reopened for review.") : notify(review.approveScopeItem(item.id, CURRENT_USER) ?? "Scope item approved.")}>{item.status === "approved" ? <Check size={14}/> : <span/>}</button>
+          <button type="button" className={`proc-approval ${item.status}`} aria-label={`${item.status === "approved" ? "Reopen" : "Approve"} ${item.title}`} onClick={() => item.status === "approved" ? runAndNotify(run, current => reopenScope(current, item.id, CURRENT_USER), notify, "Scope item reopened for review.") : notify(review.approveScopeItem(item.id, CURRENT_USER) ?? "Scope item approved.")}>{item.status === "approved" && <Check size={12} strokeWidth={2.4} aria-hidden="true"/>}</button>
           <button className="proc-scope-copy" onClick={() => setSelectedId(item.id)}><span className="proc-scope-meta"><b>{String(index + 1).padStart(2, "0")}</b><Badge tone={item.status === "approved" ? "green" : "amber"}>{item.status === "approved" ? "Approved" : "Needs review"}</Badge>{item.allTrades && <Badge tone="blue">All trades</Badge>}{item.quantity && <QuantityChip quantity={item.quantity}/>}</span><strong>{item.title}</strong><small><FileText size={12}/>{item.source || "Source not linked"} · {ORIGIN_LABELS[item.origin]}</small></button>
-          <OpenSourceButton evidence={evidenceOf(item)} onOpen={index => setOpened({ item, index })}/>
-          <button className="ui-icon-btn" aria-label={`Move ${item.title}`} title="Move or copy to another trade" onClick={() => { setMoveItem(item); setMoveTo(state.packages.find(p => p.id !== item.packageId)?.id || ""); }}><MoveRight size={15}/></button>
-          <button className="ui-icon-btn" aria-label={`Delete ${item.title}`} title={item.allTrades ? "Delete from every trade" : "Delete scope"} onClick={() => { const message = review.removeScope(item.id,CURRENT_USER); notify(message || "Scope item removed from the current bid form."); if(!message) setSelectedId(""); }}><Trash2 size={15}/></button>
-          <button className="ui-icon-btn" aria-label={`Edit ${item.title}`} onClick={() => setEditor({ id: item.id, packageId: item.packageId, title: item.title, detail: item.detail, source: item.source, origin: item.origin })}><Pencil size={15}/></button>
+          <div className="proc-scope-row-actions">
+            <OpenSourceButton evidence={evidenceOf(item)} onOpen={index => setOpened({ item, index })}/>
+            <button className="ui-icon-btn" aria-label={`Move ${item.title}`} title="Move or copy to another trade" onClick={() => { setMoveItem(item); setMoveTo(state.packages.find(p => p.id !== item.packageId)?.id || ""); }}><MoveRight size={15}/></button>
+            <button className="ui-icon-btn" aria-label={`Delete ${item.title}`} title={item.allTrades ? "Delete from every trade" : "Delete scope"} onClick={() => { const message = review.removeScope(item.id,CURRENT_USER); notify(message || "Scope item removed from the current bid form."); if(!message) setSelectedId(""); }}><Trash2 size={15}/></button>
+            <button className="ui-icon-btn" aria-label={`Edit ${item.title}`} onClick={() => setEditor({ id: item.id, packageId: item.packageId, title: item.title, detail: item.detail, source: item.source, origin: item.origin })}><Pencil size={15}/></button>
+          </div>
         </article>)}</div>
         {!visible.length && !proposed.some(d => (d.kind === "scope" ? d.title : d.kind === "region" ? d.label : d.item).toLowerCase().includes(query.toLowerCase())) && <Empty title="No scope items found" description="Add a requirement or adjust your search."/>}
         <div className="proc-publish-bar"><div><strong>{form.filter(item => item.status === "approved").length} of {form.length} approved</strong>{blockers.map(reason => <span key={reason}>{reason}</span>)}</div><Button variant="primary" disabled={blockers.length > 0} onClick={() => runAndNotify(run, current => publishPackage(current, activePackage.id, CURRENT_USER), notify, activePackage.published ? "Revision published and bidder notifications recorded. No email was sent." : "Bid form published and bidder notifications recorded. No email was sent.")}><Send size={15}/>{activePackage.published ? "Publish revision" : "Publish to subcontractors"}</Button></div>
@@ -272,10 +283,12 @@ function AddCompanyForm({ trade, directory, startName, onAdd, onCancel }: { trad
   </form>;
 }
 
-function BidderInvite({ state, pkgId, directory, setDirectory, run, notify, onClose }: {
+function BidderInvite({ state, pkgId, directory, sample, setDirectory, run, notify, onClose }: {
   state: Procurement;
   pkgId: string;
   directory: Bidder[];
+  /** The sample project: its placeholder companies are offered too (lib/directory companiesToOffer). */
+  sample: boolean;
   setDirectory: Dispatch<SetStateAction<Bidder[]>>;
   run: ReturnType<typeof useProcurement>["run"];
   notify: ViewProps["notify"];
@@ -284,7 +297,7 @@ function BidderInvite({ state, pkgId, directory, setDirectory, run, notify, onCl
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
   const pkg = state.packages.find(item => item.id === pkgId)!;
-  const candidates = inviteCandidates(state, directory, pkgId, query);
+  const candidates = inviteCandidates(state, companiesToOffer(directory, sample), pkgId, query);
   // A trade usually gets several bidders, so the dialog stays open after each invitation; the invited company leaves the list.
   function addAndInvite(company: Bidder) {
     setDirectory(current => [...current, company]);
@@ -384,7 +397,7 @@ function PackagesWorkspace({ projectName, notify, navigate, onProposals }: ViewP
         </div>}
       </Panel>
     </div>
-    {invitePackage && <BidderInvite state={state} pkgId={invitePackage} directory={directory} setDirectory={setDirectory} run={run} notify={notify} onClose={() => setInvitePackage(null)}/>}
+    {invitePackage && <BidderInvite state={state} pkgId={invitePackage} directory={directory} sample={projectId === SAMPLE_PROJECT_ID} setDirectory={setDirectory} run={run} notify={notify} onClose={() => setInvitePackage(null)}/>}
     {removeFor && (() => {
       const invitation = state.invitations.find(item => item.id === removeFor), bidder = directory.find(item => item.id === invitation?.bidderId), pkg = state.packages.find(item => item.id === invitation?.packageId);
       return invitation ? <RemoveInvitationDialog invitation={invitation} company={bidder?.company ?? "This company"} trade={pkg?.name ?? "this trade"} submissions={submissions} runProcurement={run} runSubmissions={runSubmissions} setMessages={setBidMessages} notify={notify} onClose={() => setRemoveFor(null)}/> : null;

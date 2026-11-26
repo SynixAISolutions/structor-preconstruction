@@ -75,15 +75,17 @@ export function GeneralScopePanel({ projectId, state, pkg, run, by, notify }: { 
       <span className="general-scope-actions">{everyTrade}<Button onClick={() => void copy()}><Copy size={14}/>Copy</Button><Button disabled={busy} onClick={() => void write()}><RefreshCw size={14}/>{busy ? "Writing…" : "Rewrite"}</Button></span>
     </div>
     {(stale || missing.length > 0) && <p className="general-scope-stale" role="status">{missing.length ? `${missing.length} detailed item${missing.length === 1 ? " isn't" : "s aren't"} covered by a general line${stale ? ": the detailed scope changed since this was written" : ""}.` : "The detailed scope changed since this was written."} Rewrite to include {missing.length === 1 ? "it" : "them"}.</p>}
-    <ol className="general-scope-lines">{general.lines.map(line => {
+    <ol className="general-scope-lines" role="list">{general.lines.map((line, lineIndex) => {
       const expanded = open.includes(line.id), covered = line.members.map(id => byId.get(id)).filter(Boolean);
+      const evidence = lineEvidence(line.members);
       return <li key={line.id}>
+        <span className="general-scope-index" aria-hidden="true">{String(lineIndex + 1).padStart(2, "0")}</span>
         {editing === line.id
           ? <form className="general-scope-edit" onSubmit={e => saveLine(e, line.id)}><input name="text" autoFocus defaultValue={line.text} maxLength={400} aria-label="General scope line"/><button type="submit" className="ui-icon-btn" aria-label="Save line"><Check size={14}/></button><button type="button" className="ui-icon-btn" aria-label="Cancel" onClick={() => setEditing(null)}><X size={14}/></button></form>
           : <div className="general-scope-line"><span className="general-scope-text">{line.text}{line.edited && <small> · edited</small>}</span>
-            <span className="general-scope-line-actions"><OpenSourceButton evidence={lineEvidence(line.members)} onOpen={index => setOpened({ title: line.text, evidence: lineEvidence(line.members), index })}/>{covered.length > 0 && <button type="button" className="cm-text-button" aria-expanded={expanded} onClick={() => setOpen(o => expanded ? o.filter(x => x !== line.id) : [...o, line.id])}>{expanded ? <ChevronDown size={13}/> : <ChevronRight size={13}/>}{covered.length} item{covered.length === 1 ? "" : "s"}</button>}
+            <span className="general-scope-line-actions"><OpenSourceButton evidence={evidence} onOpen={index => setOpened({ title: line.text, evidence, index })}/>{covered.length > 0 && <button type="button" className="general-scope-disclosure" aria-expanded={expanded} onClick={() => setOpen(o => expanded ? o.filter(x => x !== line.id) : [...o, line.id])}>{expanded ? <ChevronDown size={13}/> : <ChevronRight size={13}/>}{covered.length} item{covered.length === 1 ? "" : "s"}</button>}
               <button type="button" className="ui-icon-btn" aria-label={`Edit: ${line.text}`} onClick={() => setEditing(line.id)}><Pencil size={13}/></button>
-              <button type="button" className="ui-icon-btn" aria-label={`Remove: ${line.text}`} onClick={() => act(s => removeGeneralLine(s, pkg.id, line.id), "Line removed.")}><Trash2 size={13}/></button></span></div>}
+              <button type="button" className="ui-icon-btn general-scope-remove" aria-label={`Remove: ${line.text}`} onClick={() => act(s => removeGeneralLine(s, pkg.id, line.id), "Line removed.")}><Trash2 size={13}/></button></span></div>}
         {expanded && <ul className="general-scope-members">{covered.map(item => <li key={item!.id}><span>{item!.title}</span><OpenSourceButton evidence={evidenceOf(item!)} onOpen={index => setOpened({ title: item!.title, evidence: evidenceOf(item!), index })}/></li>)}</ul>}
       </li>;
     })}</ol>

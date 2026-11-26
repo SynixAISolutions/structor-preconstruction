@@ -1,0 +1,9 @@
+.repeats { display: grid; gap: 14px; }
+.repeats-error { color: var(--danger, #b42318); }
+.repeats-group { border: 1px solid var(--line, #e3e3e3); border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; }
+.repeats-group h3 { margin: 0; font-size: 14px; line-height: 1.4; display: grid; gap: 2px; }
+.repeats-group h3 > span { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; opacity: .65; }
+.repeats-group small { opacity: .7; font-weight: 400; display: block; }
+.repeats-group label { display: flex; gap: 10px; align-items: flex-start; line-height: 1.4; }
+.repeats-group input { margin-top: 3px; }
+.repeats-note { margin: 0; opacity: .75; }

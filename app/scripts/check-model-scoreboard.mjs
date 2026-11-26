@@ -36,6 +36,14 @@ const lightTick = (x, y, w) => [line(x, y, x + 1.7, y - 1.7, w), line(x, y, x - 
 assert.equal(B.dimensionSpans([line(97, 50, 280, 50, 0.24), ...lightTick(100, 50, 0.36), ...lightTick(277, 50, 0.36)], FT).length, 1, "0.36 pt ticks make a span");
 assert.equal(B.dimensionSpans([line(97, 50, 280, 50, 0.24), ...lightTick(100, 50, 0.24), ...lightTick(277, 50, 0.24)], FT).length, 0, "Hairline strokes aren't ticks");
 
+// Native text is matched by position and rotation, independent of the length the drawing measures.
+const dimSpans = [{ a: [20, 10], b: [92, 10], feet: 8 }, { a: [125, 92], b: [125, 20], feet: 8 }];
+const verticalLabel = { text: "8′-0″", a: [119, 65], b: [119, 47], height: 9 };
+const native = [{ text: "8'-4\"", a: [46, 4], b: [66, 4], height: 9 }, verticalLabel, { ...verticalLabel, text: "08", a: [122, 64] }];
+assert.deepEqual(B.dimensionLabels(dimSpans, native), ["8'-4\"", "8′-0″"]);
+assert.equal(B.scoreDimensions(dimSpans, B.dimensionLabels(dimSpans, native)).agree, 1, "A mismatched printed value still reaches the scorer");
+assert.equal(B.dimensionLabels(dimSpans, [...native, { ...verticalLabel, text: "8′-2″" }])[1], "", "Conflicting labels need review");
+
 // ── Printed against measured ──
 const scored = B.scoreDimensions([{ feet: 23, a: [0, 0], b: [207, 0] }, { feet: 2, a: [0, 0], b: [18, 0] }, { feet: 8, a: [0, 0], b: [72, 0] }, { feet: 8, a: [0, 0], b: [72, 0] }], [`23' - 0"`, `2' - 6"`, "unreadable", `8' - 0 1/4"`]);
 assert.deepEqual([scored.spans, scored.read, scored.agree, scored.disagree.length], [4, 3, 2, 1], "An unreadable value isn't scored; a difference over half an inch is listed");

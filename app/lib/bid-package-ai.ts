@@ -11,11 +11,14 @@ import { AiJobError, type ChatMessage, type Dropped } from "./ai-jobs";
 import { textModel } from "./deepseek";
 import { AI_BUDGET_MS, readJson } from "./drawing-reader";
 import { addPackage, STANDARD_TRADES, type Procurement, type TradePackage } from "./procurement";
+import { memoryField } from "./memory";
 
 export type BidPackageJob = {
   sections: { section: string; title: string }[];
   sheets: { sheet: string; title: string; discipline: string }[];
   packages: { id: string; name: string; code: string }[];
+  /** The contractor's approved trade split and exclusions (lib/memory planMemory), when there are any. */
+  memory?: string;
 };
 /**
  * One package the AI set: an existing one by id, or a new one. `standard` is the contractor's standard trade it is (its
@@ -59,7 +62,8 @@ export function parseBidPackageJob(raw: unknown): BidPackageJob {
     .filter(s => s.sheet).map(s => [s.sheet, s])).values()];
   const packages = list(o.packages, BID_PACKAGE_LIMITS.packages, "packages").map(p => ({ id: str(p?.id, 100), name: str(p?.name, 200), code: str(p?.code, 40) })).filter(p => p.id && p.name);
   if (!sections.length && !sheets.length) fail("The project has no specification sections or drawing sheets to set bid packages from.");
-  return { sections, sheets, packages };
+  const memory = memoryField(o.memory, fail);
+  return { sections, sheets, packages, ...(memory ? { memory } : {}) };
 }
 
 export function bidPackageMessages(job: BidPackageJob): ChatMessage[] {
@@ -74,6 +78,7 @@ export function bidPackageMessages(job: BidPackageJob): ChatMessage[] {
       "- Name packages only for work the lists show. No placeholder for documents still to come (no \"pending project manual\" package).",
       "- Use the contractor's standard trades below: put work in the standard trade it belongs to and use its id as \"standard\" and its name as \"name\". Don't merge two standard trades into one package, and don't split one. Only work none of them covers gets a new package (\"standard\": null), named as an estimator says it.",
       ...HOUSE_SPLITS.map(rule => `- ${rule}`),
+      ...(job.memory ? ["- When the contractor's own trade split is supplied, it wins over every rule above: put each section in the trade it lists, name that trade as it does, and keep what a trade leaves to others out of it."] : []),
       "- Reuse an existing package, by its id, when it is the same trade; otherwise make a new one.",
       "- name: the trade as an estimator says it, e.g. \"Drywall & acoustical ceilings\", \"Doors, frames & hardware\".",
       "- code: the package's main specification section, as listed, e.g. \"09 29 00\"; for a package with no section, the CSI section that fits best.",
@@ -86,6 +91,7 @@ export function bidPackageMessages(job: BidPackageJob): ChatMessage[] {
       `The contractor's standard trades (id: name, main section):\n${STANDARD_TRADES.map(t => `- ${t.id}: ${t.name}, ${t.code}`).join("\n")}`,
     ].join("\n") },
     { role: "user", content: [
+      ...(job.memory ? [`The contractor's own trade split, approved by its estimators:\n${job.memory}`] : []),
       `Existing bid packages:\n${job.packages.length ? job.packages.map(p => `- id ${p.id}: ${p.name}${p.code ? ` (${p.code})` : ""}`).join("\n") : "(none yet)"}`,
       `Specification sections (${job.sections.length}):\n${job.sections.map(s => `${s.section} ${s.title}`).join("\n") || "(no project manual)"}`,
       `Drawing index (${job.sheets.length} sheets: number | discipline | title):\n${job.sheets.map(s => `${s.sheet} | ${s.discipline || "-"} | ${s.title}`).join("\n") || "(no drawings)"}`,

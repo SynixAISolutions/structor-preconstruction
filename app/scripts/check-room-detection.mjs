@@ -79,6 +79,24 @@ assert.equal(O.floorOpenings(hatch, 9).length, 0, "Dashed lines repeating side b
 // A space under an X is open, so it has no floor. Its neighbour isn't.
 const overOpening = { walls: [...box(0, 0, 20, 10), line([10, 0], [10, 10])].map(w => ({ ...w, thickness: 0.5 })), doors: [], glazing: [], rooms: [], openings: [[5, 5]] };
 assert.deepEqual(S.levelSpaces(overOpening).map(r => [r.area, !!r.open]).sort((p, q) => Number(p[1]) - Number(q[1])), [[100, false], [100, true]], "Open where the X is");
+
+// A disconnected ring around an opening takes out only the opening, leaving the surrounding floor.
+const aroundGym = {
+  walls: [...box(0, 0, 80, 80), ...box(25, 25, 55, 55)],
+  doors: [], glazing: [],
+  tags: [{ name: "Gym below", number: "202", at: [40, 40] }, { name: "Circulation", number: "201", at: [10, 10] }],
+  openings: [[40, 40]],
+};
+const [circulation, gymBelow] = R.levelRooms(aroundGym).sort((a, b) => a.number.localeCompare(b.number));
+assert.deepEqual([circulation.name, circulation.area, circulation.open, circulation.holes], ["Circulation", 5500, undefined, [gymBelow.outline]]);
+assert.deepEqual([gymBelow.name, gymBelow.area, gymBelow.open], ["Gym below", 900, true]);
+assert.deepEqual(R.levelRooms({ ...aroundGym, openings: [] }).map(r => [r.area, !!r.open]), [[5500, false], [900, false]]);
+const untaggedCirculation = R.levelRooms({ ...aroundGym, tags: [] }).find(r => r.holes?.length);
+assert.ok(R.insideRoom(untaggedCirculation.at, untaggedCirculation), "The unnamed floor's label is outside the opening");
+
+// Each hole belongs to the nearest enclosing face, even with three nested outlines.
+const nested = R.levelRooms({ ...aroundGym, walls: [...aroundGym.walls, ...box(35, 35, 45, 45)] });
+assert.deepEqual(nested.map(r => [r.area, r.holes?.length ?? 0, !!r.open]), [[5500, 1, false], [800, 1, false], [100, 0, true]]);
 assert.deepEqual(S.levelSpaces({ ...overOpening, openings: undefined }).map(r => !!r.open), [false, false], "A model built before openings were read has floors");
 
 // A level's spaces follow the estimator's corrections: a wall marked not a wall merges the two rooms.

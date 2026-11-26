@@ -8,26 +8,32 @@
 // replace it), and reloads from inside the app ask with our own (askToLeave).
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { addRunToBidForms, recordRun, type ExtractionState } from "./extraction";
+import { addRunToBidForms, placeHighlights, recordRun, type ExtractionState } from "./extraction";
 import { addPage, DrawingFlipRuleError, type DrawingFlipState } from "./drawing-flip";
 import { addPackage, type Procurement } from "./procurement";
 import { drawingRegister, specificationSections, type StoredDocument } from "./project-files";
 import { readStoredText, storedDocuments, uploadsSettleIn, useProjectDocuments } from "./project-files-client";
-import { sectionsByTrade, tradesToAdd } from "./project-scopes";
+import { readersBySection, sectionOwners, sectionsByTrade, sheetsByTrade, tradesToAdd } from "./project-scopes";
 import { applyBidPackagePlan } from "./bid-package-ai";
 import { planBidPackages } from "./bid-package-client";
 import { aiReader } from "./ai-reader-client";
 import { estimateCost } from "./ai-cost";
-import { findReferencesWithAi, loadSheetTexts, PARALLEL_REFERENCES, referenceRunNow } from "./sheet-reference-client";
+import { AI_REFERENCES_KEY, findReferencesWithAi, loadSheetTexts, PARALLEL_REFERENCES, referenceRunNow, type AiReferences } from "./sheet-reference-client";
+import { tradeNotes } from "./drawing-notes";
 import { ocrScannedManualPages, ocrScannedSheets, sheetOcrNow } from "./sheet-text-ocr";
 import { referenceWork, SHEET_REFERENCE_LIMITS } from "./sheet-reference-ai";
 import { AI_REQUESTS_AT_ONCE, aiTimes } from "./ai-pool";
 import { OCR_WORKERS, ocrWork } from "./sheet-ocr";
 import { blendPace, checkShare, FIRST_PACE, measurePace, secondsLeft, steadyLeft, tradesLeft, type Pace, type TradeLeft } from "./run-time-left";
 import { readTradeScope } from "./scope-reading";
+import { leftOut, planMemory, rememberedSections, tradeMemory } from "./memory";
+import { borrowedTags, tagFamilies } from "./finish-schedule";
+import { memoryForScan } from "./memory-client";
+import { tradeLines } from "./memory-check";
 import { readDraft, writeDraft } from "./use-local-draft";
 import { writeGeneralScope } from "./general-scope-client";
-import { DRAFT_CHANGED, sharedReady, useSharedStatus } from "./shared-sync";
+import { DRAFT_CHANGED, sharedMode, sharedReady, syncProject, useSharedStatus } from "./shared-sync";
+import { acquireClaim, CLAIM_KEY, claimMine, NO_CLAIM, type ReadingClaim } from "./reading-claim";
 import { addedSince, biggestFirst, canReadEveryTrade, changedSince, filesToCompare, heldElsewhere, MAX_SAVED_RUNS, NO_RUNS, onlyChanged, readingWork, runTarget, runToUpdate, stillToRead, tradesToRead, waitsForGoAhead, type AutoRun, type AutoTrade, type SavedRuns, type TradeToRead } from "./auto-scope-plan";
 import { sampleProcurement } from "./data/procurement";
 import { sampleExtraction } from "./data/extraction";
@@ -59,7 +65,38 @@ const thisBrowser = () => browser ||= (() => {
 const me = () => ({ tab: thisTab(), browser: thisBrowser() });
 /** Whether the run is another tab's (this browser's or someone else's), for the progress card's wording. */
 export const readingIn = (run: AutoRun): "tab" | "browser" => run.browser === thisBrowser() ? "tab" : "browser";
+/** The project this tab was reading until another took it over: it saves nothing more about it (lib/reading-claim). */
+let lost: string | null = null;
+const claimOf = (projectId: string): ReadingClaim => ({ ...NO_CLAIM, ...(readDraft<ReadingClaim | null>(projectId, CLAIM_KEY, NO_CLAIM) ?? NO_CLAIM) });
+const writeClaim = (projectId: string, claim: ReadingClaim) => { try { writeDraft<ReadingClaim>(projectId, CLAIM_KEY, claim); } catch { /* storage full: the next tab decides by the run's own beat */ } };
+const pause = (ms: number) => new Promise<void>(done => setTimeout(done, ms));
+/** Brings in the shared copy of a project; false when there is none or it can't be reached. */
+async function pullShared(projectId: string): Promise<boolean> {
+  if (sharedMode() === "off") return false;
+  await syncProject(projectId);
+  return sharedMode() !== "offline" && sharedMode() !== "off";
+}
+/** Takes the reading of a project for this tab (lib/reading-claim), and says whether it got it. */
+const claimReading = (projectId: string, key: string) => acquireClaim({ me: me(), key, sync: () => pullShared(projectId), read: () => claimOf(projectId), write: c => writeClaim(projectId, c), wait: pause });
+/** Says this tab is still reading, unless another has taken over. */
+function beatClaim(projectId: string) {
+  const claim = claimOf(projectId);
+  if (claimMine(claim, me())) writeClaim(projectId, { ...claim, beat: new Date().toISOString() });
+}
+/** The reading is over: the next upload can be read at once. */
+const releaseClaim = (projectId: string) => { if (claimMine(claimOf(projectId), me())) writeClaim(projectId, NO_CLAIM); };
+const CLAIM_RETRY = 125_000;
+let claimRetry: ReturnType<typeof setTimeout> | null = null;
+let checkedClaim = 0;
+/** Whether this tab still holds the reading, asking the shared copy at most every 45 s. */
+async function stillReading(projectId: string): Promise<boolean> {
+  if (sharedMode() === "off" || sharedMode() === "offline") return true;
+  if (Date.now() - checkedClaim > 45_000) { checkedClaim = Date.now(); await pullShared(projectId); }
+  return claimMine(claimOf(projectId), me());
+}
+
 function save(unstamped: AutoRun) {
+  if (lost === unstamped.projectId) return;
   const run = unstamped.status === "running" ? { ...unstamped, tab: thisTab(), browser: thisBrowser(), beat: new Date().toISOString() } : unstamped;
   const runs = [run, ...savedRuns(run.projectId).runs.filter(r => r.id !== run.id)].slice(0, MAX_SAVED_RUNS);
   try { writeDraft<SavedRuns>(run.projectId, RUNS_KEY, { runs }); } catch { /* storage full: the run goes on, unsaved */ }
@@ -160,6 +197,23 @@ export async function readScannedSpecifications(projectId: string, documents: St
 
 async function start(projectId: string, documents: StoredDocument[], target: { key: string; documents: StoredDocument[] }, previous: AutoRun | null) {
   active = projectId;
+  lost = null; checkedClaim = Date.now();
+  // Nobody else may be reading these files (lib/reading-claim): the shared copy is asked, not this browser's own.
+  if (!(await claimReading(projectId, target.key))) {
+    active = null;
+    // Looked at again once the other's claim would have lapsed, in case it never got as far as a run.
+    if (claimRetry) clearTimeout(claimRetry);
+    claimRetry = setTimeout(() => { claimRetry = null; ensureRun(projectId, storedDocuments(projectId) ?? documents); }, CLAIM_RETRY);
+    startWaiting();
+    return;
+  }
+  // The run as it is now, after the shared copy came in: it may have been finished, or taken further, since.
+  const current = savedRuns(projectId).runs.find(r => r.id === previous?.id) ?? (previous ? null : savedRuns(projectId).runs.find(r => r.key === target.key)) ?? null;
+  if (current) {
+    // Finished meanwhile, or another tab (one from before claims) says in the run itself that it is reading.
+    if ((current.status === "done" && !previous?.readAll) || heldElsewhere(current, me())) { releaseClaim(projectId); active = null; startWaiting(); return; }
+    previous = { ...current, readAll: previous?.readAll };
+  }
   window.addEventListener("beforeunload", holdTab);
   const at = () => new Date().toISOString();
 
@@ -204,7 +258,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   const ticking = setInterval(tick, 5_000);
   tick();
   // Says every 30 s that this tab is still reading, for other browsers (save stamps it).
-  const beating = setInterval(() => { if (snapshot.run?.id) save(snapshot.run); }, 30_000);
+  const beating = setInterval(() => { if (snapshot.run?.id) save(snapshot.run); beatClaim(projectId); }, 30_000);
 
   // After a revision, first: which sheets and sections changed, from their page text against the versions the last run read.
   let update = previous?.update;
@@ -215,6 +269,10 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
     await Promise.all(filesToCompare(documents, before).map(async d => texts.set(d.id, new Map((await readStoredText(d).catch(() => [])).map(p => [p.page, p.text])))));
     update = { since: prior.id, ...changedSince(documents, before, (id, page) => texts.get(id)?.get(page)) };
   }
+  // What the contractor's estimators have taught the AI (lib/memory), read once: its trade split sets the packages and
+  // which sections each trade reads, and each trade's scan gets the part that applies. When the memory can't be reached
+  // the run reads without it, as it did before the memory existed.
+  const memory = await memoryForScan(projectId);
   // 1. The bid packages: on a first run, and after a revision that brings sheet numbers or sections no package lists yet
   // (a discipline's drawings sent later), so the AI places them before the trades are read.
   const added = prior && !previous ? addedSince(documents, new Set(prior.key.split("|"))) : { sheets: [], sections: [] };
@@ -222,7 +280,7 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
     if (prior) setupFrom = Date.now();
     emit({ run: { id: "", projectId, key: target.key, documents: target.documents.map(d => d.name), status: "running", startedAt: at(), finishedAt: null, newTrades: [], trades: [], added: 0, duplicates: 0, update } });
     try {
-      const plan = await planBidPackages(documents, procurement.packages, controller.signal);
+      const plan = await planBidPackages(documents, procurement.packages, controller.signal, planMemory(memory.entries, projectId));
       // The latest copy: the team may have changed the packages while the AI read.
       const applied = applyBidPackagePlan(readDraft<Procurement>(projectId, "procurement", sampleProcurement), plan);
       procurement = applied.procurement; newTrades = applied.added;
@@ -246,8 +304,15 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   // "Yes, under $2"), like Wyre reading a small set: two drawings and two specification sections. A larger set waits
   // for the estimator to pick trades in Write scopes.
   const reader = await aiReader().catch(() => null);
-  const all = tradesToRead(procurement.packages, documents);
-  const assigned = sectionsByTrade(specificationSections(documents), procurement.packages);
+  const split = rememberedSections(memory.entries, procurement.packages, projectId, specificationSections(documents).map(s => s.section));
+  // A trade's approved exclusions can hand its drawing sheets to the trade that carries the work (site demolition to Earthwork).
+  const leaves = (pkg: { code: string; name: string }) => leftOut(memory.entries, pkg, projectId);
+  const all = tradesToRead(procurement.packages, documents, split.byPackage, split.partial, leaves);
+  const handed = sheetsByTrade(drawingRegister(documents), procurement.packages, leaves).handed;
+  const assigned = sectionsByTrade(specificationSections(documents), procurement.packages, split.byPackage, split.partial);
+  const readers = readersBySection(assigned, procurement.packages);
+  const owners = sectionOwners(readers, procurement.packages, split.partial);
+  const borrowed = borrowedTags(memory.entries, projectId);
   const refPackages = procurement.packages.map(p => ({ id: p.id, name: p.name, code: p.code, sections: (assigned.get(p.id) ?? []).map(s => `${s.section} ${s.title}`) }));
   // The drawing search runs again only when sheets changed.
   const candidates = update ? onlyChanged(all, update) : all, search = !update || update.sheets.length > 0;
@@ -258,6 +323,10 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   }
   const scopesLater = waitsForGoAhead(fullCost, previous?.readAll);
   const readable = scopesLater ? [] : candidates;
+  // Tags the memory borrows from other projects' bid forms, checked against every tag family this project's drawings
+  // print (lib/finish-schedule). Unreadable drawings: no line is dropped.
+  const printedTexts = borrowed.size && readable.length ? sheetTexts ?? await loadSheetTexts(documents).catch(() => null) : null;
+  const printed = printedTexts ? tagFamilies(printedTexts.sheets.map(s => s.text)) : undefined;
   ledger = ledgerOf(readable, id => !!previous?.trades.some(t => t.packageId === id && t.status === "done"));
   const queued = (t: (typeof readable)[number]): AutoTrade => ({ packageId: t.pkg.id, name: t.pkg.name, status: "queued", added: 0, note: "" });
   let run: AutoRun = previous
@@ -289,10 +358,18 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
   await Promise.all(Array.from({ length: Math.min(PARALLEL_TRADES, queue.length) }, async () => {
     for (let next = queue.shift(); next; next = queue.shift()) {
       const { pkg, sections, sheets } = next;
+      // Another tab reads this project now (this one slept past its claim): stop here, before paying for the trade.
+      if (!(await stillReading(projectId))) { lost = projectId; controller.abort(); return; }
       setTrade(pkg.id, { status: "reading", note: "" });
       try {
+        // Its notes on every other sheet, from the read of every sheet (lib/drawing-notes): that read finishes first when
+        // this run makes it, so every trade writes from every sheet (Danial, 25 Nov).
+        if (references) await references;
+        const register = drawingRegister(storedDocuments(projectId) ?? documents);
+        const sheetNotes = tradeNotes(readDraft<AiReferences | null>(projectId, AI_REFERENCES_KEY, null), register.map(r => `${r.doc.id}:${r.page}`).join("|"), register, pkg.id, new Set(sheets.map(r => `${r.doc.id}:${r.page}`)));
         const outcome = await readTradeScope({
-          pkg, sections, sheets, signal: controller.signal,
+          pkg, sections, sheets, notes: sheetNotes, partOnly: split.partial.get(pkg.id) ?? [], signal: controller.signal, memory: tradeMemory(memory.entries, pkg, projectId, sections, readers, split.partial.get(pkg.id), handed.get(pkg.id)),
+          owners, leavesOut: leaves(pkg), borrowed, printed, memoryLines: tradeLines(memory.entries, pkg, projectId),
           onProgress: p => {
             const left = ledger.get(pkg.id);
             if (left) left.counts = p.counts;
@@ -307,13 +384,19 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
             } catch (error) { return error instanceof DrawingFlipRuleError ? Object.values(error.errors)[0] ?? "A sheet could not be added to Drawing Flip." : "A sheet could not be added to Drawing Flip."; }
           },
         });
+        // Taken over while it read: what it found is left out, since the other tab reads this trade again.
+        if (!(await stillReading(projectId))) { lost = projectId; controller.abort(); return; }
         if (!outcome.input.drafts.length && !outcome.input.error) { setTrade(pkg.id, { status: "done", note: "Nothing new found." }); continue; }
         const input = { ...outcome.input, notes: { failures: outcome.failures.map(f => `${f.section} · pages ${f.pages}: ${f.error}`), screening: outcome.dropped.map(d => `${d.what}: ${d.reason}`) } };
         // Read the latest copies now: the team may have changed the bid forms while the AI read.
         const extraction = recordRun(readDraft<ExtractionState>(projectId, "extraction", sampleExtraction), readDraft<Procurement>(projectId, "procurement", sampleProcurement), input);
-        const added = addRunToBidForms({ extraction, procurement: readDraft<Procurement>(projectId, "procurement", sampleProcurement) }, extraction.runs.at(-1)!.id);
-        writeDraft(projectId, "extraction", added.extraction);
+        const runId = extraction.runs.at(-1)!.id;
+        const added = addRunToBidForms({ extraction, procurement: readDraft<Procurement>(projectId, "procurement", sampleProcurement) }, runId);
+        // Its highlights go on Drawing Flip in the trade's colour, awaiting review there, linked to the lines just added.
+        const shown = placeHighlights({ ...added, flip: readDraft<DrawingFlipState>(projectId, "drawing-flip", sampleDrawingFlip) }, runId);
+        writeDraft(projectId, "extraction", shown.extraction);
         writeDraft(projectId, "procurement", added.procurement);
+        if (shown.placed) writeDraft(projectId, "drawing-flip", shown.flip);
         const failed = !!outcome.input.error && !outcome.input.drafts.length;
         const notes = [outcome.failures.length ? `${outcome.failures.length} request(s) failed.` : "", added.held ? `${added.held} held back: the words they quote aren't printed on the sheet.` : ""].filter(Boolean).join(" ");
         setTrade(pkg.id, { status: failed ? "failed" : "done", added: added.added, note: outcome.input.error ?? notes }, { added: run.added + added.added, duplicates: run.duplicates + added.duplicates });
@@ -336,15 +419,28 @@ async function start(projectId: string, documents: StoredDocument[], target: { k
 
   clearInterval(ticking);
   clearInterval(beating);
+  if (lost === projectId) {
+    emit({ run: null, left: null });
+    active = null;
+    window.removeEventListener("beforeunload", holdTab);
+    startWaiting();
+    return;
+  }
   keepPace(pace);
   emit({ left: null });
   run = { ...run, status: "done", finishedAt: at() };
   save(run);
+  releaseClaim(projectId);
   active = null;
   window.removeEventListener("beforeunload", holdTab);
   if (answer) answerLeave(false);
+  startWaiting();
+}
+
+/** The next project whose files wait to be read, when no reading is in progress. */
+function startWaiting() {
   const [nextProject, nextDocs] = waiting.entries().next().value ?? [];
-  if (nextProject) { waiting.delete(nextProject); ensureRun(nextProject, storedDocuments(nextProject) ?? nextDocs!); }
+  if (nextProject && !active) { waiting.delete(nextProject); ensureRun(nextProject, storedDocuments(nextProject) ?? nextDocs!); }
 }
 
 /**
