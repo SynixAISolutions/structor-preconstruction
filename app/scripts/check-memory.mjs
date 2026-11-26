@@ -206,7 +206,7 @@ assert.deepEqual([scanRead.error, scanRead.entries.length, scanRead.entries.filt
   [null, 1100, 100, [["approved", "p1", "500", null], ["approved", "p1", "500", "500"], ["approved", "p1", "500", "1000"]]],
   "Three pages for 1,100 entries, the rules on the last one included; an entry seen on two pages counted once");
 globalThis.fetch = async () => Response.json({ error: "down" }, { status: 503 });
-assert.deepEqual(await MC.memoryForScan("p1"), { entries: [], error: "down" }, "A scan reads without the memory when it can't be reached, and says why");
+assert.deepEqual(await MC.memoryForScan("p1"), { entries: [], sheets: [], error: "down" }, "A scan reads without the memory when it can't be reached, and says why");
 
 // ── The browser sends each trade's memory with its readings ──
 const sent = [];
@@ -217,5 +217,23 @@ await C.extractTradeScope({ ...reading, memory: scanPack });
 await C.extractDrawingScope({ pkg: reading.pkg, document: "D.pdf", pageCount: 1, pages: [{ page: 1, text: "", sheet: "A1.1" }], render: async () => ({ image: "data:image/jpeg;base64,/9j/AAAA" }), memory: scanPack });
 await C.extractTradeScope(reading);
 assert.deepEqual(sent.map(b => [b.job, b.input.memory === scanPack, "memory" in b.input]), [["scope", true, true], ["drawing", true, true], ["scope", false, false]], "Specification and drawing readings carry the trade's memory; without memory the request is as before");
+
+// ── A project's own bid sheet left out of its scans (Danial, 25 Nov: a new project is checked against MCN's own sheet for it) ──
+{
+  const ev = (sheet, n) => `import:${sheet}:Tab:line:${n}`;
+  const entries = [
+    entry({ id: "own", origin: "import", kind: "example", events: [ev("penn bid sheet", 1)] }),
+    entry({ id: "both", origin: "import", kind: "example", events: [ev("penn bid sheet", 2), ev("hart bid sheets v2", 9)] }),
+    entry({ id: "other", origin: "import", kind: "rule", events: [ev("hart bid sheets v2", 3)] }),
+    entry({ id: "learned", origin: "import", kind: "rule", events: [ev("penn bid sheet", 4), "correction:move:1"] }),
+    entry({ id: "added", origin: "estimator", events: [ev("penn bid sheet", 5)] }),
+    entry({ id: "checklist", origin: "import", events: ["checklist:drywall:1"] }),
+  ];
+  assert.deepEqual(M.bidSheets(entries), [{ sheet: "penn bid sheet", entries: 4 }, { sheet: "hart bid sheets v2", entries: 2 }], "Each sheet with how many entries it gave, most first");
+  assert.deepEqual(M.leaveOutSheets(entries, ["penn bid sheet"]).map(e => e.id), ["both", "other", "learned", "added", "checklist"], "Entries only from the left-out sheet go; one another sheet, a correction, an estimator or a checklist also gave stays");
+  assert.deepEqual(M.leaveOutSheets(entries, ["penn bid sheet", "hart bid sheets v2"]).map(e => e.id), ["learned", "added", "checklist"]);
+  assert.equal(M.leaveOutSheets(entries, []), entries, "Nothing left out: the memory as it is");
+  assert.deepEqual(M.projectMemory(M.leaveOutSheets(entries, ["penn bid sheet"]), "p1").map(e => e.id), ["both", "other", "learned", "added", "checklist"]);
+}
 
 console.log("AI memory checked: entries and their rules, what a scan reads (most specific first, within its limit, nothing unapproved), requests unchanged without memory, the lessons corrections teach and the ones they don't, and the table in a real Postgres: created on first use, one row per lesson, corrections counted once, search by status, kind, project, trade and stemmed words with the best match first, one change at a time, pages that never overlap, a scan reading every page, and every lookup on its index.");

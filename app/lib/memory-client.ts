@@ -5,7 +5,8 @@
 // be reached, the scan reads without it and says so.
 
 import { useEffect, useState } from "react";
-import type { MemoryChange, MemoryEntry, MemoryInput, MemoryKind, MemoryOrigin, MemoryStatus } from "./memory";
+import { bidSheets, leaveOutSheets, type MemoryChange, type MemoryEntry, type MemoryInput, type MemoryKind, type MemoryOrigin, type MemoryStatus } from "./memory";
+import { readDraft } from "./use-local-draft";
 import type { MemoryCounts } from "./memory-store";
 import type { LeveledLine } from "./word-levels";
 
@@ -61,7 +62,10 @@ const MAX_PAGES = 40;
  * a single page leaves out the trade split and the rules. Read once per run; contextPack and planMemory then pick what
  * each step needs. Resolves to [] (and the reason) when the memory can't be reached.
  */
-export async function memoryForScan(projectId: string): Promise<{ entries: MemoryEntry[]; error: string | null }> {
+/** The imported bid sheets a project leaves out of its scans (lib/memory leaveOutSheets), saved with the project. */
+export const LEFT_OUT_SHEETS_KEY = "memory-left-out-sheets";
+
+export async function memoryForScan(projectId: string): Promise<{ entries: MemoryEntry[]; sheets: { sheet: string; entries: number }[]; error: string | null }> {
   try {
     const entries = new Map<string, MemoryEntry>();
     for (let page = 0; page < MAX_PAGES; page++) {
@@ -69,8 +73,9 @@ export async function memoryForScan(projectId: string): Promise<{ entries: Memor
       for (const entry of batch) entries.set(entry.id, entry);
       if (batch.length < MEMORY_PAGE) break;
     }
-    return { entries: [...entries.values()], error: null };
-  } catch (error) { return { entries: [], error: error instanceof Error ? error.message : String(error) }; }
+    const all = [...entries.values()];
+    return { entries: leaveOutSheets(all, readDraft<string[]>(projectId, LEFT_OUT_SHEETS_KEY, [])), sheets: bidSheets(all), error: null };
+  } catch (error) { return { entries: [], sheets: [], error: error instanceof Error ? error.message : String(error) }; }
 }
 
 /**
