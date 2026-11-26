@@ -289,9 +289,9 @@ export const pageGuides = [
     title: "Structor Check & RFIs",
     purpose: "One register of issues found in the documents and questions raised by the team and subcontractors, and the RFIs sent to the design team to settle them.",
     steps: [
-      "Filter the table by trade, severity, status, or who raised the issue (Structor's document check, the team, a subcontractor, or email), or search by number, title, or sheet.",
-      "Review what Structor found and what subcontractors asked: each waits for contractor review. Edit it if needed, then approve it into the log, or answer or dismiss it straight away.",
-      "Add your own issues next to Structor's: title, detail, category, severity, trade, and the sheet or specification section where it was found. Your own issues count as reviewed.",
+      "Filter the table by trade, severity, status, or who raised the issue (Ask Structor, the team, a subcontractor, or email), or search by number, title, or sheet.",
+      "Review what Ask Structor raised and what subcontractors asked: each waits for contractor review. Edit it if needed, then approve it into the log, or answer or dismiss it straight away.",
+      "Add your own issues: title, detail, category, severity, trade, and the sheet or specification section where it was found. Your own issues count as reviewed.",
       "Combine reviewed issues that ask the same thing into one. The others point to it, and any subcontractor who asked still gets the answer.",
       "Resolve an issue the team can answer itself, or dismiss one that is not a real problem. A subcontractor who asked the question is told the answer.",
       "Select reviewed issues and package them into an RFI: write the question, choose the discipline, the design team contact, and the date you need an answer.",
@@ -302,11 +302,11 @@ export const pageGuides = [
     terms: [
       { name: "Severity", meaning: "High, medium, or low: how much the issue could affect scope, price, or schedule." },
       { name: "RFI", meaning: "Request for Information: a formal question to the design team to clear up a conflict, gap, or unclear requirement." },
-      { name: "Provenance", meaning: "Who raised an issue: Structor's document check, the team, a subcontractor through the portal, or an email." },
-      { name: "Contractor review", meaning: "The team's check of an issue raised by Structor or a subcontractor before it can be combined or sent to the design team. Subcontractors see nothing of an RFI until it is sent." },
+      { name: "Provenance", meaning: "Who raised an issue: Ask Structor (when you asked it to), the team, a subcontractor through the portal, or an email." },
+      { name: "Contractor review", meaning: "The team's check of an issue raised by Ask Structor or a subcontractor before it can be combined or sent to the design team. Subcontractors see nothing of an RFI until it is sent." },
     ],
-    example: "Structor flags that the door schedule and partition plan disagree on door D-104. Review and approve the issue, package it into an RFI to the architect, approve and send it; when the answer comes back, share it with the doors, frames and hardware bidders and close the RFI.",
-    reality: "Issues, RFIs, answers, and shares save in this browser for the open project. Sending to the design team and sharing with subcontractors are recorded, not emailed. The sample issues are illustrative, and email import is not connected yet.",
+    example: "An estimator notices that the door schedule and partition plan disagree on door D-104 and asks Structor to raise it. Review and approve the issue, package it into an RFI to the architect, approve and send it; when the answer comes back, share it with the doors, frames and hardware bidders and close the RFI.",
+    reality: "Structor does not check the documents for conflicts on its own: issues come from your team, from subcontractors' portal questions, and from Ask Structor when you ask it to raise one. Issues, RFIs, answers, and shares are saved for the team with the open project. Sending to the design team and sharing with subcontractors are recorded, not emailed. Project 1's sample issues are illustrative, and email import is not connected yet.",
     related: ["drawings", "packages", "portal"],
   },
   {
@@ -455,7 +455,7 @@ export const pageGuides = [
       { name: "Rating parameters", meaning: "The things a subcontractor is scored on. Marcel's examples: change orders, bidding efficiency, professionalism on the ground. The final list is still to be agreed." },
     ],
     example: "After closing out a project, the estimator rates the demolition subcontractor on each parameter; the next team inviting bidders sees the average and the number of ratings.",
-    reality: "This is a placeholder so the feature is not forgotten. Nothing is rated or stored yet; the rating parameters, who may rate, and how ratings are shown still need to be decided.",
+    reality: "Not built yet, so it is off the menu and quick find; a link to it opens the Subcontractor directory. Nothing is rated or stored; the rating parameters, who may rate, and how ratings are shown still need to be decided.",
     related: ["bidders", "prequalification"],
   },
   {
