@@ -286,9 +286,11 @@ function RoomFinishPanel({ objects, bases, records, onSource, onInspect, onInspe
 }
 
 export default function ModelStudio(props: StudioProps) {
-  const studio = props.projectId === SAMPLE_PROJECT_ID ? <SampleProjectStudio {...props}/> : <SchematicModelStudio key={props.projectId} project={props.project} navigate={props.navigate} notify={props.notify}/>;
-  // Marcel's Features item 19: the exterior model with the site's real surroundings (Google's photorealistic 3D map).
-  return props.view === "exterior" ? <>{studio}<SiteContext key={props.projectId} project={props.project} sample={props.projectId === SAMPLE_PROJECT_ID}/></> : studio;
+  const sample = props.projectId === SAMPLE_PROJECT_ID;
+  const studio = sample ? <SampleProjectStudio {...props}/> : <SchematicModelStudio key={props.projectId} project={props.project} navigate={props.navigate} notify={props.notify}/>;
+  // Marcel's Features item 19: the building with its site's real surroundings (Google's photorealistic 3D map), under
+  // Project 1's exterior model and under a real project's model, which is its only model page (lib/screens.ts).
+  return props.view === "exterior" || !sample ? <>{studio}<SiteContext key={`site-${props.projectId}`} project={props.project} sample={sample}/></> : studio;
 }
 
 /** Remembers which model this browser last looked at on Project 1. Storage can be unavailable; the prepared model is then shown. */

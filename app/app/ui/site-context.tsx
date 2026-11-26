@@ -38,7 +38,9 @@ function loadGoogleMaps(key: string, onAuthFailure: () => void): Promise<GoogleM
 
 export function SiteContext({ project, sample }: { project: Project; sample: boolean }) {
   const [site, setSite] = useLocalDraft<Site>("site-context", sample ? SAMPLE_SITE : { address: project.location, lat: null, lng: null });
-  const [address, setAddress] = useState(site.address);
+  // A real project's drafts start blank (lib/project-scope), so its address box starts from the project's location.
+  const [address, setAddress] = useState(site.address || project.location);
+  useEffect(() => { if (site.address) setAddress(site.address); }, [site.address]); // the team's saved address, once it arrives
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const holder = useRef<HTMLDivElement>(null);
@@ -79,22 +81,23 @@ export function SiteContext({ project, sample }: { project: Project; sample: boo
     finally { setBusy(false); }
   }
 
-  return <Panel title="Site and surroundings" subtitle="The building's real neighbourhood in Google's photorealistic 3D map: drag to orbit, scroll to zoom.">
+  return <Panel title="Site and surroundings" subtitle="The building's real neighbourhood in Google's photorealistic 3D map: drag to orbit, scroll to zoom."><div className="site-body">
     <form className="site-form" onSubmit={locate}>
       <label className="site-field"><MapPin size={15}/><span className="mu-sr">Site address</span><input value={address} onChange={e => setAddress(e.target.value)} placeholder="Site street address, e.g. 3265 S St NW, Washington, DC"/></label>
       <Button type="submit" disabled={busy}>{busy ? "Finding…" : "Show site"}</Button>
     </form>
     {error && <p className="site-error" role="alert">{error}</p>}
     {!KEY
-      ? <div className="site-setup"><Mountain size={20}/><div><strong>Switch on the 3D surroundings</strong>
+      ? <details className="site-setup">
+          <summary><Mountain size={18}/><span><strong>The 3D surroundings are off</strong><small>They switch on once Structor's Google Maps key is added. The address above is kept for this project. <em>How to add the key</em></small></span></summary>
           <ol>
             <li>In Google Cloud, on a project with billing, turn on the <b>Maps JavaScript API</b> and the <b>Map Tiles API</b>.</li>
             <li>Create an API key limited to those two APIs and to Structor's web addresses (your live domain and <code>*.vercel.app</code>).</li>
             <li>In Vercel → Settings → Environment Variables, add <code>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> for Production and Preview, then redeploy.</li>
           </ol>
-          <small>The address above is kept for this project; the map appears here once the key is in.</small></div></div>
+        </details>
       : site.lat === null
         ? <p className="site-note">Enter the site's street address and choose Show site.</p>
         : <div className="site-map" ref={holder} aria-label={`3D map around ${site.address}`}/>}
-  </Panel>;
+  </div></Panel>;
 }
