@@ -55,4 +55,7 @@ div.memory-error ul { margin: 4px 0 0; padding-left: 18px; }
 .memory-import-scope { display: grid; gap: 6px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line, #e3e3e3); border-radius: 8px; }
 .memory-import-scope legend { padding: 0 4px; font-weight: 600; font-size: 0.85rem; }
 .memory-import-scope label { display: flex; gap: 8px; align-items: flex-start; font-size: 0.9rem; }
-
+.memory-sheets { display: grid; gap: 6px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line, #e3e3e3); border-radius: 8px; }
+.memory-sheets legend { font-weight: 600; padding: 0 6px; }
+.memory-sheets label { display: flex; gap: 8px; align-items: center; }
+.memory-sheets label small { margin-left: auto; }

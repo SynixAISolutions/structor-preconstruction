@@ -36,6 +36,8 @@ const subscribe = (listener: () => void) => { listeners.add(listener); return ()
 export const useSharedStatus = (): Status => useSyncExternalStore(subscribe, () => status, () => status);
 /** Whether this project's shared copy has been brought in (or can't be: no database, or no connection), so a screen
  * can act on the project's saved state without missing what someone else saved. */
+/** Whether there is a shared copy and it answers, for code outside React (lib/auto-scopes). */
+export const sharedMode = (): SharedState => status.state;
 export const sharedReady = (scope: string) => status.state === "off" || status.state === "offline" || status.pulled.has(scope);
 
 // ── What this browser last had from the shared copy ──
