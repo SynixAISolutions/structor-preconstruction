@@ -79,7 +79,9 @@ Tasks (tick as done):
 
 ## Preview link
 
-- **Latest** branch preview (commit `40331f0`, polish round, built OK 2026-11-26): https://structor-preconstruction-enu7960x3-tools-3633s-projects.vercel.app
+- **Stable branch address (always the newest build of `ui/dark-main-ui`):** https://structor-preconstruction-git-ui-dar-d86c1b-tools-3633s-projects.vercel.app
+- Latest deployment (commit `239fd2a`, workspace-only rail + glass, Ready 2026-11-26): https://structor-preconstruction-78mneg5xq-tools-3633s-projects.vercel.app. Its Vercel page, with the **Share** button: https://vercel.com/tools-3633s-projects/structor-preconstruction/5vhZdbZnjTESM8H7vWgCTa3VF6Dw
+- Earlier: polish round (commit `40331f0`): https://structor-preconstruction-enu7960x3-tools-3633s-projects.vercel.app
 - Earlier preview (commit `e6b1b81`, first build): https://structor-preconstruction-cag10198d-tools-3633s-projects.vercel.app
   Each new push makes a new deployment URL. Find the latest with `gh api "repos/SynixAISolutions/structor-preconstruction/deployments?sha=$(git rev-parse HEAD)"` and then its `/statuses`.
 - It sits behind Vercel Authentication. To share it with Marcel and Rawad, Danial opens the deployment in Vercel and uses **Share** (or adds them to the team). The app's own workspace password still applies after that.
