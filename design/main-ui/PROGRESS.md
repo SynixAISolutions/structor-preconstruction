@@ -85,7 +85,7 @@ Tasks (tick as done):
 
 ## Not done yet / next
 
-- The **remaining screens** (bid leveling, budget, scopes…) already get the new palette and glass from `structor-dark.css`, but haven't been individually polished. Walk each one in the preview, note anything that looks off, and fix it in that screen's CSS under `html[data-structor-theme="dark"]`.
+- ~~Polish the remaining screens~~ **Done 2026-11-26 (round "polish the rest, nothing overlapping")**: see the Log. Re-run the audit after any UI change (how-to in the Log).
 - **Real background renders** (Core dev request #1). Today every project shows the Project 1 stand-in.
 - **Confirm with Danial:** opening a project now lands on its home rather than Project information.
 - **Light theme:** still works, but the new screens were designed dark-first. Check it if anyone uses light.
@@ -135,4 +135,16 @@ Also open with Danial: which reference image is meant for which screen (BRIEF.md
   - `mock.js`: added `split` and `year` charts; `<body data-current>` marks the open screen; menu links to existing mockups; `#` links show a toast instead of jumping.
   - `b2.html`: the wordmark now links to the main page.
   - Checked at 1440×900 and 390×844: no overflow, icons valid, filters and search working, main → Project 1 → back working.
+- 2026-11-26: **Polish round** (Danial: "polish the rest, make sure everything is clean and not overlapping anything").
+  - Built **`design/main-ui/tools/audit.js`**, a browser audit. It walks every screen by hash and flags light leftovers, unreadable dark text, overlapping text, text spilling out of its box, and sideways page scroll. It skips what isn't painted: screen-reader-only text, closed `<details>` groups, and anything clipped by a scrolling or folded container.
+  - How to run it: serve the worktree (`python -m http.server 4321 --bind 127.0.0.1 --directory <worktree>`), then on the app run `const s=document.createElement('script');s.src='http://127.0.0.1:4321/design/main-ui/tools/audit.js?v='+Date.now();document.head.append(s)`, then `await __audit(["projects","turnover",…], 1300, {ignore:null})`. Keep batches to ~10 screens, because the browser tool times out at 45s.
+  - Found and fixed:
+    - (1) **Ask Structor and Record feedback floated over content** on 12 screens. They now dock as two round buttons in `.mu-launcher-slot` at the end of the top bar. The Ask launcher is portaled to `<body>`, so its rules target `html.new-look > body > .ask-launcher`, and its offsets mirror product.css's top-bar padding (32px, then 24px at ≤1200px, then 14px at ≤700px; height 66 or 59).
+    - (2) **The hidden sidebar still held its 238px grid column** on a direct page load. The grid is now one column when nav-v2 is on.
+    - (3) **The project top bar wrapped to two rows at 1440px.** Fixes: the "Saved for your team" text is now dot-only, Quick find is icon-only below 1400px, pill icons are hidden below 1300px, the pills don't wrap, and **below 1100px the original sidebar takes over** (the rail/pill nav and topbar logo only show at ≥1101px).
+    - (4) Drawing Flip's sheet controls are now dark glass (the sheet itself stays white).
+    - (5) Schedule phase notes were dark on dark.
+    - (6) Quantity takeoffs rows were white cards at ≤700px.
+    - (7) The Project information value was dark green on dark.
+  - Final result, all 38 screens: **clean at 1440×900 and 390×844**, and the key screens are clean at 1024×768 (original sidebar). The only light items are intentional: the active rail button (white, as in design A), the CSS 3D building roof on Project information, and the contract preview paper on Contracts. Top bar checked at 1920, 1440, 1360, 1300, 1200, 1101, 1024, 800, 700 and 390: always one row, launchers in the slot, no sideways scroll. Gate passed.
 - Preview tip: the browser pane's `preview_start` may read the wrong folder. Run `python -m http.server 4321 --bind 127.0.0.1 --directory <worktree>` in the background and navigate to `http://127.0.0.1:4321/design/main-ui/project-landing/a.html`.

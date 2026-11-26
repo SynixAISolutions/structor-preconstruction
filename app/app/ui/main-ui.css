@@ -98,13 +98,15 @@ button.mu-card:hover { transform: translateY(-2px); border-color: color-mix(in s
 
 /* The new nav replaces the sidebar on desktop; on small screens the old slide-in menu stays as the way in. */
 .product-app.nav-v2 .mu-rail-slot { position: fixed; z-index: 45; left: clamp(14px, 1.6vw, 26px); top: 96px; }
-@media (min-width: 901px) {
+@media (min-width: 1101px) {
   .product-app.nav-v2 > .product-sidebar { display: none; }
-  .product-app.nav-v2 > .product-main { margin-left: 0; }
+  /* The shell is a grid with a sidebar column (238px, or narrower when collapsed); with the sidebar gone it is one column. */
+  .product-app.nav-v2, .product-app.nav-v2.sidebar-collapsed { grid-template-columns: minmax(0, 1fr); }
+  .product-app.nav-v2 > .product-main { margin-left: 0; grid-column: 1 / -1; }
   .product-app.nav-v2.on-global .product-content { padding-left: calc(clamp(14px, 1.6vw, 26px) + 66px); }
   .product-app.nav-v2 .product-topbar .nav-toggle-desktop { display: none; }
 }
-@media (max-width: 900px) { .product-app.nav-v2 .mu-rail-slot, .product-app.nav-v2 .product-topbar .mu-nav-pills { display: none; } }
+@media (max-width: 1100px) { .product-app.nav-v2 .mu-rail-slot, .product-app.nav-v2 .product-topbar .mu-nav-pills { display: none; } }
 
 /* ---------- Main page (design A) ---------- */
 .mu-hero { min-height: clamp(150px, 22vh, 240px); display: grid; place-items: center; padding-top: 8px; }
@@ -189,7 +191,7 @@ button.mu-card:hover { transform: translateY(-2px); border-color: color-mix(in s
 
 /* With the sidebar gone on desktop, the logo moves into the top bar. */
 .mu-topbar-brand { display: none; }
-@media (min-width: 901px) {
+@media (min-width: 1101px) {
   .product-app.nav-v2 .mu-topbar-brand { display: inline-flex; align-items: center; gap: 9px; margin-right: 14px; border: 0; background: none; cursor: pointer;
     color: var(--nl-ink); font-size: 21px; font-weight: 650; letter-spacing: -1px; }
   .product-app.nav-v2 .mu-topbar-brand .product-logomark { width: 20px; height: 22px; }
@@ -197,3 +199,32 @@ button.mu-card:hover { transform: translateY(-2px); border-color: color-mix(in s
   .product-app.nav-v2 .mu-topbar-brand .product-logomark i:nth-child(2) { left: 8px; top: 0; height: 11px; }
   .product-app.nav-v2 .mu-topbar-brand .product-logomark i:nth-child(3) { left: 8px; top: 14px; height: 8px; }
 }
+
+/* Ask Structor and Record feedback used to float over the bottom-right of every page and covered table cells and buttons
+   (audit, 26 Nov). They now dock in a slot at the end of the top bar as two round buttons, so they never sit on content. */
+/* Positions live on <html>: the Ask launcher is rendered into <body> (outside .product-app); the feedback launcher is inside it. */
+html.new-look { --mu-launch-r: 32px; --mu-launch-top: 16px; }
+/* Mirror the top bar in product.css: 66px tall with 32px side padding; 24px padding at ≤1200px; 59px tall with 14px padding at ≤700px. */
+@media (max-width: 1200px) { html.new-look { --mu-launch-r: 24px; } }
+@media (max-width: 700px) { html.new-look { --mu-launch-r: 14px; --mu-launch-top: 12px; } }
+.product-app.nav-v2 .mu-launcher-slot { display: block; flex: none; width: 80px; height: 34px; }
+:is(.product-app.nav-v2 .voice-launcher, html.new-look > body > .ask-launcher) {
+  position: fixed; top: var(--mu-launch-top); bottom: auto; left: auto; z-index: 70; width: 34px; height: 34px; min-height: 34px; padding: 0; gap: 0;
+  display: grid; place-items: center; border-radius: 50%; box-shadow: none; transform: none; }
+:is(.product-app.nav-v2 .voice-launcher, html.new-look > body > .ask-launcher) > span:not(.structor-orb) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+html.new-look > body > .ask-launcher { right: var(--mu-launch-r); background: transparent; border: 0; }
+html.new-look > body > .ask-launcher:hover { transform: scale(1.06); background: transparent; }
+.product-app.nav-v2 .voice-launcher { right: calc(var(--mu-launch-r) + 46px); background: var(--nl-surface-quiet); border: 1px solid var(--nl-line); color: var(--nl-ink); }
+.product-app.nav-v2 .voice-launcher:hover { background: var(--nl-accent-wash); color: var(--nl-accent-text); }
+html.ask-open .product-app.nav-v2 .voice-launcher { display: none; }
+
+/* The project top bar must fit on one line (audit, 26 Nov: at 1440px the Workspace pill wrapped).
+   Below 1100px the original sidebar takes over (rules above); between 1100 and 1440 the bar compacts step by step. */
+.product-app.nav-v2 .mu-nav-pills { flex-wrap: nowrap; }
+.product-app.nav-v2 .shared-status { font-size: 0; gap: 0; } /* the dot stays; its title explains it */
+.product-app.nav-v2 .top-search { width: auto; max-width: 190px; }
+@media (max-width: 1399px) {
+  .product-app.nav-v2 .top-search { width: 34px; min-width: 34px; max-width: 34px; padding: 0; justify-content: center; }
+  .product-app.nav-v2 .top-search :is(span, kbd) { display: none; }
+}
+@media (max-width: 1299px) { .product-app.nav-v2 .mu-nav-pills .mu-pill > svg:first-child { display: none; } }

@@ -78,3 +78,18 @@ html[data-structor-theme="dark"] .new-look {
   [data-structor-theme="dark"] .new-look { --nl-surface: #1c1a17; }
   [data-structor-theme="dark"] .product-app.new-look { background: #0b0a09; }
 }
+
+/* Audit fixes (26 Nov): leftovers from the light theme. */
+/* Drawing Flip: the sheet stays white paper, but the controls floating on it become dark glass. */
+html[data-structor-theme="dark"] .new-look :is(.flip-sheet-step, .flip-box-zoom, .flip-box-hint, .flip-sheet-label) {
+  background: rgba(22, 20, 18, 0.86); color: var(--nl-ink); border-color: var(--nl-line);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+html[data-structor-theme="dark"] .new-look .flip-box-zoom :is(button, output) { color: var(--nl-ink); background: transparent; }
+/* Schedule: phase notes were dark-on-dark. */
+html[data-structor-theme="dark"] .new-look .sched-phases small { color: var(--nl-muted); }
+/* Quantity takeoffs on small screens: rows turn into stacked cards with a white background (estimate CSS, ≤700px). */
+@media (max-width: 700px) {
+  html[data-structor-theme="dark"] .product-app .est-view :is(.est-trade-table, .est-item-table) tbody tr { background: rgba(28, 25, 22, 0.72); border-color: var(--nl-line); }
+}
+/* Project information: the internal value was a dark sage green (#5d7855) on dark glass. */
+html[data-structor-theme="dark"] .new-look .internal-value strong { color: var(--nl-positive); }
