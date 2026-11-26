@@ -10,6 +10,7 @@ import { AskAboutTrade } from "./ask-entry-points";
 import "./project-setup.css";
 import { LinkedProjectContent } from "./project-content-links";
 import { RepeatedLines } from "./repeated-lines";
+import { StandardScopePanel } from "./standard-scope";
 import {
   ArrowRight,
   Bell,
@@ -224,10 +225,10 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
       {generalOpen ? <GeneralScopes review={review} by={CURRENT_USER} notify={notify} onEdit={item => setEditor({...item})} onAdd={() => setEditor({packageId:activePackage.id,title:"",detail:"",source:"",origin:"estimator"})}/> : <>
       <Panel title={activePackage.name} subtitle={`${activePackage.code} · ${activePackage.owner ? `Owner: ${activePackage.owner}` : "No owner yet"} · Due ${displayDate(activePackage.due)}`} action={<Badge tone={statusTone(packageState)}>{statusLabels[packageState]}{activePackage.published ? ` · v${activePackage.published.version}` : ""}</Badge>} className="proc-scope-panel">
         <div className="general-scope-tabs trade-ask-toolbar">
-          <Tabs tabs={["General scope", "Detailed scope"]} value={packageView} onChange={setPackageView}/>
+          <Tabs tabs={["General scope", "Detailed scope", "Standard scope"]} value={packageView} onChange={setPackageView}/>
           <AskAboutTrade trade={activePackage.name} code={activePackage.code}/>
         </div>
-        {packageView === "General scope" ? <GeneralScopePanel key={activePackage.id} projectId={projectId} state={state} pkg={activePackage} run={run} by={CURRENT_USER} notify={notify}/> : <>
+        {packageView === "General scope" ? <GeneralScopePanel key={activePackage.id} projectId={projectId} state={state} pkg={activePackage} run={run} by={CURRENT_USER} notify={notify}/> : packageView === "Standard scope" ? <StandardScopePanel key={activePackage.id} state={state} pkg={activePackage} run={run} notify={notify} by={CURRENT_USER}/> : <>
         <div className="ui-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search this bid form…"/><RepeatedLines key={activePackage.id} pkg={activePackage} items={form} merge={groups => review.mergeRepeats(groups, CURRENT_USER)} notify={notify}/><Button onClick={approveAll}><CheckCheck size={15}/>Approve visible form</Button></div>
         <PackageDrawingReferences key={activePackage.id} pkg={activePackage} packages={state.packages} colors={sourceColors}/>
         <div className="proc-scope-list"><InlineScopeDrafts key={activePackage.id} review={review} packageId={activePackage.id} query={query} sections={specSections} colors={sourceColors} by={CURRENT_USER} notify={notify} onMove={setPackageId}/>{visible.map((item, index) => <article className={`proc-scope-row ${selected?.id === item.id ? "selected" : ""}`} key={item.id}>
