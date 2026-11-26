@@ -17,7 +17,7 @@ import { useProcurement } from "./use-procurement";
  * leveling candidates to varianceReport().
  */
 export function useEstimate() {
-  const { state: procurement } = useProcurement();
+  const { state: procurement, run: runProcurement } = useProcurement();
   const [saved, setSaved] = useLocalDraft<TakeoffRow[]>("takeoffs", initialTakeoffs);
   const rows = useMemo(() => placeRows(saved, procurement.packages), [saved, procurement.packages]);
   const byTrade = useMemo(() => estimateByTrade(rows, procurement), [rows, procurement]);
@@ -33,5 +33,7 @@ export function useEstimate() {
       throw error;
     }
   }, [setSaved]);
-  return { rows, byTrade, procurement, run };
+  // `runProcurement` changes the same procurement copy this screen reads: another useProcurement() on the screen
+  // would hold its own copy, and not see the change until it loads again.
+  return { rows, byTrade, procurement, run, runProcurement };
 }

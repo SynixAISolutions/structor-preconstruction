@@ -23,6 +23,8 @@ export type ScopeEvent =
   | { kind: "created" | "approved" | "reopened" | "edited" | "quantity-checked"; at: string; by: string }
   /** `quantity` as it reads ("1,240 LF"); empty when it was removed. */
   | { kind: "quantity"; at: string; by: string; quantity: string }
+  /** `price` as it reads ("$3.10 / SF"); empty when it was removed. */
+  | { kind: "unit-price"; at: string; by: string; price: string }
   | { kind: "moved"; at: string; by: string; from: string; to: string }
   | { kind: "copied"; at: string; by: string; from: string; to: string }
   | { kind: "applied-to-all"; at: string; by: string }
@@ -48,6 +50,24 @@ export type ScopeQuantity = {
   checked: boolean;
 };
 
+/**
+ * The contractor's own unit price for a line (Marcel's issues log, item 16, 18 Nov: "divides them up by trade where could
+ * add unit prices and get a rough idea for plugs in leveling"): the trade's takeoff is the bid form's lines, each with
+ * its quantity and this price. It stays with the team: bidders never see it (a published form carries only the
+ * quantity), as his ROM sheets say, "Do not include MCN budget rates".
+ */
+export type ScopeUnitPrice = {
+  /** Dollars per `unit`. */
+  rate: number;
+  /** The quantity's unit when it was priced: a price per SF says nothing once the quantity is in LF. */
+  unit: string;
+  /** Where the price comes from, in words. */
+  basis: string;
+  /** Typed by an estimator, a benchmark from the unit cost database, or the rate of a Quantity takeoffs line. */
+  origin: "estimator" | "benchmark" | "estimate";
+  by: string; at: string;
+};
+
 export type ScopeItem = {
   id: string;
   /** The trade package that owns the item (for an all-trades item: where it came from). */
@@ -62,6 +82,8 @@ export type ScopeItem = {
   allTrades: boolean;
   /** The contractor's quantity for the line; absent or null when it has none. */
   quantity?: ScopeQuantity | null;
+  /** The contractor's unit price for the line, never shown to bidders; absent or null when it has none. */
+  unitPrice?: ScopeUnitPrice | null;
   history: ScopeEvent[];
 };
 
@@ -439,6 +461,28 @@ export function setScopeQuantity(state: Procurement, id: string, input: Quantity
   const quantity = input ? cleanQuantity(input) : null;
   if (JSON.stringify(quantity) === JSON.stringify(item.quantity ?? null)) return state;
   return replaceScope(state, { ...item, quantity, history: [...item.history, { kind: "quantity", at, by, quantity: quantity ? quantityLabel(quantity) : "" }] });
+}
+
+export type UnitPriceInput = { rate: number; basis?: string; origin?: ScopeUnitPrice["origin"] };
+/** "$3.10 / SF", "$1,250 / EA". */
+export const unitPriceLabel = (p: { rate: number; unit: string }): string => `$${p.rate.toLocaleString("en-US", { minimumFractionDigits: p.rate % 1 ? 2 : 0, maximumFractionDigits: 2 })} / ${p.unit}`;
+const PRICE_BASIS: Record<ScopeUnitPrice["origin"], string> = { estimator: "Entered by an estimator", benchmark: "Unit cost database", estimate: "Quantity takeoffs line" };
+
+/**
+ * Sets the contractor's unit price for a line, per the unit of its quantity, or clears it with null. A line needs its
+ * quantity first: the price is per that quantity's unit. Bidders never see it, so a published form isn't Revised by it.
+ */
+export function setScopeUnitPrice(state: Procurement, id: string, input: UnitPriceInput | null, by: string, at = now()): Procurement {
+  const item = findScope(state, id);
+  if (!input) return item.unitPrice ? replaceScope(state, { ...item, unitPrice: null, history: [...item.history, { kind: "unit-price", at, by, price: "" }] }) : state;
+  if (!item.quantity) fail("Add the line's quantity first: the unit price is per its unit.");
+  const rate = Number(input.rate);
+  if (!Number.isFinite(rate) || rate <= 0 || rate >= 1e8) fail("Enter a unit price greater than $0.");
+  const origin = input.origin ?? "estimator";
+  const unitPrice: ScopeUnitPrice = { rate: Math.round(rate * 100) / 100, unit: item.quantity!.unit, basis: String(input.basis ?? "").replace(/\s+/g, " ").trim().slice(0, 300) || PRICE_BASIS[origin], origin, by, at };
+  const was = item.unitPrice;
+  if (was && was.rate === unitPrice.rate && was.unit === unitPrice.unit && was.basis === unitPrice.basis) return state;
+  return replaceScope(state, { ...item, unitPrice, history: [...item.history, { kind: "unit-price", at, by, price: unitPriceLabel(unitPrice) }] });
 }
 
 /** An estimator confirms a quantity they didn't enter themselves. */
