@@ -77,6 +77,12 @@ button.mu-card:hover { transform: translateY(-2px); border-color: color-mix(in s
 .mu-nav { position: relative; z-index: 40; }
 .mu-nav-item { position: relative; }
 .mu-nav-rail { display: flex; flex-direction: column; gap: 12px; }
+/* Workspace rail: bare icons, so each names itself on hover and keyboard focus. */
+.mu-nav-rail .mu-circle { position: relative; }
+.mu-nav-rail .mu-circle[data-tip]:is(:hover, :focus-visible)::after { content: attr(data-tip); position: absolute; left: calc(100% + 12px); top: 50%; transform: translateY(-50%);
+  z-index: 90; white-space: nowrap; pointer-events: none; padding: 6px 11px; border-radius: 10px; font-size: 12px; font-weight: 500; color: var(--nl-ink);
+  background: color-mix(in srgb, var(--nl-canvas) 94%, transparent); border: 1px solid var(--nl-line); box-shadow: 0 12px 28px rgba(0,0,0,.4); }
+.mu-rail-sep { height: 1px; margin: 2px 8px; background: var(--nl-line); }
 .mu-nav-pills { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .mu-nav-pills .mu-pill { height: 34px; padding: 0 12px; font-size: 12px; color: var(--nl-muted); }
 .mu-nav-pills .mu-pill.is-on { color: var(--nl-ink); }
@@ -137,8 +143,9 @@ button.mu-card:hover { transform: translateY(-2px); border-color: color-mix(in s
 .mu-split i { border-radius: 8px; } .mu-split i.c0, .mu-split-legend i.c0 { background: #ec7444; } .mu-split i.c1, .mu-split-legend i.c1 { background: #f3b23a; } .mu-split i.c2, .mu-split-legend i.c2 { background: #cfe35e; }
 .mu-split-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 11px; color: var(--nl-muted); }
 .mu-split-legend span { display: inline-flex; align-items: center; gap: 6px; } .mu-split-legend i { width: 8px; height: 8px; border-radius: 50%; }
-.mu-tall { display: flex; flex-direction: column; align-items: stretch; isolation: isolate; overflow: hidden; }
-.mu-tall::before { content: ""; position: absolute; inset: 0; z-index: -1; background: url("/backgrounds/project-standin.jpg") 70% 60% / 300% auto no-repeat; opacity: .45; filter: blur(2px); }
+/* Plain glass like every other card: the page background shows through. (It used to paint its own zoomed copy of the
+   image inside the card, which read as an opaque panel; Danial, 26 Nov: "why isn't this transparent?") */
+.mu-tall { display: flex; flex-direction: column; align-items: stretch; }
 .mu-tall-label { margin: 6px 0 0; text-align: center; font-size: 11.5px; color: var(--nl-muted); }
 .mu-tall h3 { margin: auto 0 0; text-align: center; font-size: 17px; }
 .mu-tall-sub { margin: 4px 0 14px; text-align: center; font-size: 11.5px; color: var(--nl-muted); }
@@ -228,3 +235,7 @@ html.ask-open .product-app.nav-v2 .voice-launcher { display: none; }
   .product-app.nav-v2 .top-search :is(span, kbd) { display: none; }
 }
 @media (max-width: 1299px) { .product-app.nav-v2 .mu-nav-pills .mu-pill > svg:first-child { display: none; } }
+
+/* Landing pages: lighter glass so the project image shows through every card, as in mockup B2 (dark theme only;
+   light theme falls back to its normal surface). Working screens keep the denser glass for readable tables. */
+:is(.mu-main, .mu-home) .mu-card { background: var(--sd-glass-landing, var(--nl-surface)); -webkit-backdrop-filter: blur(16px) saturate(140%); backdrop-filter: blur(16px) saturate(140%); }

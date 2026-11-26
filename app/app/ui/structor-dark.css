@@ -33,6 +33,8 @@ html[data-structor-theme="dark"] .new-look {
   --nl-shadow-hover: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 28px 56px -20px rgba(0, 0, 0, 0.85);
   --sd-glass-blur: blur(18px) saturate(140%);
   --sd-glass-strong: rgba(22, 20, 18, 0.92);
+  /* The two landing pages (main page, project home) use the lighter glass Danial approved in mockup B2. */
+  --sd-glass-landing: rgba(26, 23, 20, 0.42);
 }
 
 /* The project image sits behind the whole app. The stand-in is Project 1's sheet A2.1, until Core dev's per-project renders exist. */

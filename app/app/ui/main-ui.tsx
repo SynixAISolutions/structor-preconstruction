@@ -6,7 +6,7 @@
 
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { ArrowRight, ArrowUp, CalendarDays, ChevronDown, Flag, Inbox, ListChecks, MapPin, Plus, Ruler, Search, Sparkles, Trash2, Users, Wallet } from "lucide-react";
-import { SCREEN_GROUPS, type Screen, type ScreenDef } from "../../lib/screens";
+import { SCREEN_GROUPS, SETTINGS_SCREEN, type Screen, type ScreenDef } from "../../lib/screens";
 import { PROJECT_TABS, filterProjects, type Project } from "../../lib/projects";
 import { projectOverview } from "../../lib/project-overview";
 import { useSubmissions } from "../../lib/use-submissions";
@@ -53,11 +53,33 @@ export function Gauge({ percent, label }: { percent: number; label?: string }) {
   </div>;
 }
 
-// ---------- Navigation: A's icon rail (main page) and B2's pill bar (project pages). Groups and order: lib/screens.ts ----------
+// ---------- Navigation. Groups, labels and order all come from lib/screens.ts ----------
+// Main page and the other workspace screens: A's icon rail with the workspace tools only. No project menus there
+// (Danial, 26 Nov: "what are the project buttons and navs doing here on main screen?"); you pick a project first.
+// Inside a project: B2's pill bar, one pill per group with a frosted dropdown.
 const GROUP_ICON: Record<string, string> = { WORKSPACE: "LayoutDashboard", PRECONSTRUCTION: "ClipboardCheck", "CONTRACTS & PROCUREMENT": "FileCheck2", OPERATIONS: "CalendarDays" };
-const groupTitle = (label: string) => label.charAt(0) + label.slice(1).toLowerCase().replace("& procurement", "& procurement");
+// lib/screens.ts gives two pairs of tools the same icon ("Users", "Gauge"); on a rail of bare icons they need to differ.
+const RAIL_ICON: Partial<Record<Screen, string>> = { workload: "CalendarDays", "unit-costs": "Wallet" };
+const groupTitle = (label: string) => label.charAt(0) + label.slice(1).toLowerCase();
 
-export function GroupNav({ variant, screen, navigate, icon: Icon, projectName }: { variant: "rail" | "pills"; screen: Screen; navigate: (s: Screen) => void; icon: IconRenderer; projectName: string }) {
+type NavProps = { screen: Screen; navigate: (s: Screen) => void; icon: IconRenderer; projectName: string };
+
+export function GroupNav({ variant, ...props }: NavProps & { variant: "rail" | "pills" }) {
+  return variant === "rail" ? <WorkspaceRail {...props}/> : <ProjectPills {...props}/>;
+}
+
+function WorkspaceRail({ screen, navigate, icon: Icon }: NavProps) {
+  const tools = SCREEN_GROUPS.filter(g => g.scope === "global").flatMap(g => g.items);
+  const item = (id: Screen, label: string, icon: string) => <button key={id} className={`mu-circle${id === screen ? " is-active" : ""}`}
+    aria-label={label} data-tip={label} aria-current={id === screen ? "page" : undefined} onClick={() => navigate(id)}><Icon id={id} name={icon} size={18}/></button>;
+  return <nav className="mu-nav mu-nav-rail" aria-label="Workspace">
+    {tools.map(t => item(t.id, t.label, RAIL_ICON[t.id] ?? t.icon))}
+    <span className="mu-rail-sep" aria-hidden="true"/>
+    {item(SETTINGS_SCREEN.id, SETTINGS_SCREEN.label, SETTINGS_SCREEN.icon)}
+  </nav>;
+}
+
+function ProjectPills({ screen, navigate, icon: Icon, projectName }: NavProps) {
   const [open, setOpen] = useState<string | null>(null);
   const root = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -68,20 +90,16 @@ export function GroupNav({ variant, screen, navigate, icon: Icon, projectName }:
     return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc); };
   }, [open]);
   const go = (s: Screen) => { setOpen(null); navigate(s); };
-  const groups = variant === "pills" ? [...SCREEN_GROUPS.filter(g => g.scope === "project"), ...SCREEN_GROUPS.filter(g => g.scope === "global")] : SCREEN_GROUPS;
+  const groups = [...SCREEN_GROUPS.filter(g => g.scope === "project"), ...SCREEN_GROUPS.filter(g => g.scope === "global")];
   const current = (items: ScreenDef[]) => items.some(i => i.id === screen);
-  return <nav ref={root} className={`mu-nav mu-nav-${variant}`} aria-label="Main">
-    {variant === "rail"
-      ? <button className={`mu-circle${screen === "projects" ? " is-active" : ""}`} aria-label="All projects" aria-current={screen === "projects" ? "page" : undefined} onClick={() => go("projects")}><Icon name="FolderOpen" size={18}/></button>
-      : <>
-          <button className={`mu-pill${screen === "turnover" ? " is-on" : ""}`} aria-current={screen === "turnover" ? "page" : undefined} onClick={() => go("turnover")}><Icon name="Building2" size={15}/>Home</button>
-        </>}
+  return <nav ref={root} className="mu-nav mu-nav-pills" aria-label="Project">
+    <button className={`mu-pill${screen === "turnover" ? " is-on" : ""}`} aria-current={screen === "turnover" ? "page" : undefined} onClick={() => go("turnover")}><Icon name="Building2" size={15}/>Home</button>
     {groups.map(g => {
       const isOpen = open === g.label, project = g.scope === "project";
       return <div className="mu-nav-item" key={g.label}>
-        <button data-group={g.label} className={variant === "rail" ? `mu-circle${current(g.items) ? " is-current" : ""}` : `mu-pill${current(g.items) ? " is-on" : ""}`}
-          aria-haspopup="true" aria-expanded={isOpen} aria-label={variant === "rail" ? groupTitle(g.label) : undefined} onClick={() => setOpen(isOpen ? null : g.label)}>
-          <Icon name={GROUP_ICON[g.label] ?? "Box"} size={variant === "rail" ? 18 : 15}/>{variant === "pills" && <>{groupTitle(g.label)}<ChevronDown size={13}/></>}
+        <button data-group={g.label} className={`mu-pill${current(g.items) ? " is-on" : ""}`}
+          aria-haspopup="true" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : g.label)}>
+          <Icon name={GROUP_ICON[g.label] ?? "Box"} size={15}/>{groupTitle(g.label)}<ChevronDown size={13}/>
         </button>
         {isOpen && <div className="mu-menu" role="menu">
           <h4>{g.label}{project && projectName ? ` · ${projectName.toUpperCase()}` : ""}</h4>

@@ -55,6 +55,12 @@ planning value $33,328,991 · 26,500 sq ft · bids due 2026-02-02 · RFIs due 20
 
 ## Navigation (sidebar replacement)
 
+**Rule from Danial (2026-11-26): no project menus on the main page.** On the main page and the other workspace screens, the rail
+shows only the workspace tools (All projects, Subcontractor directory, ratings, aggregate limits, Estimator workload, Unit cost
+database, AI memory) plus Settings, as bare icons with labels on hover. Project menus (Preconstruction, Contracts & procurement,
+Operations) appear only inside a project, as B2's pill bar. The text below is the original plan; the main page part is superseded.
+
+
 37 screens: WORKSPACE (7), PRECONSTRUCTION (~21, with sub-sections Subcontractor outreach / Preconstruction budget / 3D model studio),
 CONTRACTS & PROCUREMENT (5), OPERATIONS (2), plus Settings and the subcontractor/architect preview views. The rail has one icon per group, and
 clicking one opens a frosted dropdown listing that group's screens under their section headings. Labels, groups and order come from
