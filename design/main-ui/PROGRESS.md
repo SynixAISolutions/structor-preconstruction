@@ -79,7 +79,8 @@ Tasks (tick as done):
 
 ## Preview link
 
-- Branch preview (commit `e6b1b81`, built OK 2026-11-26): https://structor-preconstruction-cag10198d-tools-3633s-projects.vercel.app
+- **Latest** branch preview (commit `40331f0`, polish round, built OK 2026-11-26): https://structor-preconstruction-enu7960x3-tools-3633s-projects.vercel.app
+- Earlier preview (commit `e6b1b81`, first build): https://structor-preconstruction-cag10198d-tools-3633s-projects.vercel.app
   Each new push makes a new deployment URL. Find the latest with `gh api "repos/SynixAISolutions/structor-preconstruction/deployments?sha=$(git rev-parse HEAD)"` and then its `/statuses`.
 - It sits behind Vercel Authentication. To share it with Marcel and Rawad, Danial opens the deployment in Vercel and uses **Share** (or adds them to the team). The app's own workspace password still applies after that.
 
