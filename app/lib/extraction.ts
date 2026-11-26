@@ -449,7 +449,9 @@ function giveQuantity(procurement: Procurement, scopeId: string, draft: Quantity
   if (!item || item.quantity) return procurement;
   const where = [...new Set(draft.citations.map(c => `${c.sheet ?? c.document} p.${c.page}`))].join(", ");
   const basis = `${draft.item}${where ? ` (${where})` : ""}: ${draft.basis.replace(/^AI proposal; verify dimensions and coverage\.\s*/i, "")}`;
-  return setScopeQuantity(procurement, scopeId, { value: draft.quantity, unit: draft.unit, basis, origin: "ai", ref: draft.id, checked: true }, by, at);
+  const c = draft.citations[0];
+  const citation = c ? { document: c.document, page: c.page, sheet: c.sheet, quote: c.quote, fromImage: !!c.verification && c.verification !== "printed" } : null;
+  return setScopeQuantity(procurement, scopeId, { value: draft.quantity, unit: draft.unit, basis, origin: "ai", ref: draft.id, checked: true, citation }, by, at);
 }
 
 /**

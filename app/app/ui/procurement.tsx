@@ -74,7 +74,7 @@ import { ScopeMatrixView } from "./scope-matrix";
 import { notOnSheet } from "../../lib/extraction";
 import { GeneralScopes } from "./general-scopes";
 import { ScopeExportButton } from "./scope-export";
-import { QuantityChip, ScopeQuantityPanel } from "./scope-quantity";
+import { FindQuantitiesButton, QuantityChip, ScopeQuantityPanel } from "./scope-quantity";
 import { AiScopeWriter } from "./ai-scope-writer";
 import { ProposalWorkspace } from "./proposal-review";
 import { useLocalDraft } from "../../lib/use-local-draft";
@@ -227,7 +227,7 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
           <AskAboutTrade trade={activePackage.name} code={activePackage.code}/>
         </div>
         {packageView === "General scope" ? <GeneralScopePanel key={activePackage.id} projectId={projectId} state={state} pkg={activePackage} run={run} by={CURRENT_USER} notify={notify}/> : <>
-        <div className="ui-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search this bid form…"/><RepeatedLines key={activePackage.id} pkg={activePackage} items={form} merge={groups => review.mergeRepeats(groups, CURRENT_USER)} notify={notify}/><Button onClick={approveAll}><CheckCheck size={15}/>Approve visible form</Button></div>
+        <div className="ui-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search this bid form…"/><RepeatedLines key={activePackage.id} pkg={activePackage} items={form} merge={groups => review.mergeRepeats(groups, CURRENT_USER)} notify={notify}/><Button onClick={approveAll}><CheckCheck size={15}/>Approve visible form</Button><FindQuantitiesButton pkg={activePackage} state={state} run={run} notify={notify} by={CURRENT_USER}/></div>
         <PackageDrawingReferences key={activePackage.id} pkg={activePackage} packages={state.packages} colors={sourceColors}/>
         <div className="proc-scope-list"><InlineScopeDrafts key={activePackage.id} review={review} packageId={activePackage.id} query={query} sections={specSections} colors={sourceColors} by={CURRENT_USER} notify={notify} onMove={setPackageId}/>{visible.map((item, index) => <article className={`proc-scope-row ${selected?.id === item.id ? "selected" : ""}`} key={item.id}>
           <button type="button" className={`proc-approval ${item.status}`} aria-label={`${item.status === "approved" ? "Reopen" : "Approve"} ${item.title}`} onClick={() => item.status === "approved" ? runAndNotify(run, current => reopenScope(current, item.id, CURRENT_USER), notify, "Scope item reopened for review.") : notify(review.approveScopeItem(item.id, CURRENT_USER) ?? "Scope item approved.")}>{item.status === "approved" && <Check size={12} strokeWidth={2.4} aria-hidden="true"/>}</button>

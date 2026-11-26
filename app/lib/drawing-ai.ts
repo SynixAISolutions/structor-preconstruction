@@ -145,14 +145,15 @@ const SHEET_TOKEN = /[A-Z]{1,4}[-.]?\d{1,4}(?:\.\d{1,3})?/gi;
  * Keynote 1") goes to that sheet; the others go to the sheets most likely to show the trade (sheetsForTrade).
  * In register order, at most `max` sheets.
  */
-export function locatePlan<T extends LocateItem & { source: string }>(items: T[], register: RegisterRow[], code: string, max = 6): { row: RegisterRow; items: T[] }[] {
+/** `trade`: the trade code, or the trade itself, whose own sheets (set by the AI) come first. */
+export function locatePlan<T extends LocateItem & { source: string }>(items: T[], register: RegisterRow[], trade: Parameters<typeof sheetsForTrade>[1], max = 6): { row: RegisterRow; items: T[] }[] {
   const byKey = new Map(register.map(r => [sheetKey(r.sheet), r]));
   const plan = new Map<RegisterRow, T[]>();
   const put = (row: RegisterRow, item: T) => { const list = plan.get(row) ?? []; if (!list.includes(item)) plan.set(row, [...list, item]); };
-  const trade = sheetsForTrade(register, code);
+  const tradeSheets = sheetsForTrade(register, trade);
   for (const item of items) {
     const cited = (item.source.match(SHEET_TOKEN) ?? []).map(t => byKey.get(sheetKey(t))).filter((r): r is RegisterRow => !!r);
-    for (const row of cited.length ? cited : trade) put(row, item);
+    for (const row of cited.length ? cited : tradeSheets) put(row, item);
   }
   return register.filter(r => plan.has(r)).slice(0, max).map(row => ({ row, items: plan.get(row)!.slice(0, MAX_LOCATE_ITEMS) }));
 }

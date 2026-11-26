@@ -88,7 +88,8 @@ const framing = records.extraction.drafts.find(d => d.kind === "scope" && d.titl
 const quantity = records.extraction.drafts.find(d => d.kind === "quantity");
 const scopeFirst = X.acceptDraft(X.acceptDraft(records, framing.id, "Sadie", at), quantity.id, "Sadie", at);
 const framed = scopeFirst.procurement.scopes.at(-1);
-assert.deepEqual(framed.quantity, { value: 6840, unit: "SF", basis: "Interior partitions, metal stud and gypsum board (A1.1 p.46): Partition length on the plan × height to the underside of structure", origin: "ai", ref: quantity.id, checked: true }, "Accepted after its scope line: the line gets it, checked by whoever accepted it");
+assert.deepEqual(framed.quantity, { value: 6840, unit: "SF", basis: "Interior partitions, metal stud and gypsum board (A1.1 p.46): Partition length on the plan × height to the underside of structure", origin: "ai", ref: quantity.id, checked: true,
+  citation: { document: quantity.citations[0].document, page: 46, sheet: "A1.1", quote: "LOCKERS / CHANGE", fromImage: false } }, "Accepted after its scope line: the line gets it, checked by whoever accepted it, with the sheet to open");
 const pendingOnly = X.acceptDraft(records, framing.id, "Sadie", at);
 assert.equal(pendingOnly.procurement.scopes.at(-1).quantity, undefined, "A quantity still waiting for review stays off the line");
 const quantityFirst = X.acceptDraft(X.acceptDraft(records, quantity.id, "Sadie", at), framing.id, "Sadie", at);
@@ -96,4 +97,62 @@ assert.deepEqual(quantityFirst.procurement.scopes.at(-1).quantity?.value, 6840, 
 const own = P.setScopeQuantity(pendingOnly.procurement, pendingOnly.procurement.scopes.at(-1).id, { value: 7000, unit: "SF", basis: "Our takeoff" }, "Sadie", at);
 assert.equal(X.acceptDraft({ ...pendingOnly, procurement: own }, quantity.id, "Sadie", at).procurement.scopes.at(-1).quantity.value, 7000, "Never over a figure already there");
 
-console.log("Scope quantities checked: an estimator's figure with its unit and basis, publishing it to bidders (value and unit only) and a revision when it changes, unchecked quantities holding the form, the subcontractor's page, Quantity takeoffs lines (most alike first, changes and deletions flagged), and accepted AI drawing quantities on their lines.");
+// ── Find quantities with AI: one sheet a request, only what the sheet prints, the app does the arithmetic ──
+const A = await import("../lib/quantity-ai.ts");
+const jpeg = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
+const sheetText = "DOOR SCHEDULE 101 102 103 HM-1 3'-0\" x 7'-0\" EAST ELEVATION REMOVE EXISTING WINDOW W1 TYP. 12'-6\" ASPHALT PAVING REMOVAL AREA 18,650 SF";
+const items = [{ id: "w", title: "Remove aluminum windows", detail: "", source: "AD-101 · Keynote D.3" }, { id: "p", title: "Remove asphalt pavement", detail: "", source: "CIV0102" }, { id: "d", title: "Remove doors", detail: "", source: "AD-101" }];
+const job = A.parseQuantityJob({ pkg: { id: "demo", name: "Demolition", code: "02 41 19" }, document: "Drawings.pdf", sheet: "AD-101", page: 4, text: sheetText, image: jpeg, items });
+assert.throws(() => A.parseQuantityJob({ ...job, items: [] }), /1 to 40 scope lines/);
+assert.throws(() => A.parseQuantityJob({ ...job, items: [items[0], items[0]] }), /unique/);
+const prompt = JSON.stringify(A.quantityMessages(job));
+assert(prompt.includes("w: Remove aluminum windows") && prompt.includes("[source: AD-101 · Keynote D.3]") && prompt.includes("Never scale or measure from the image") && prompt.includes(jpeg), "Each line with its source, the sheet's text and image, and the rules");
+const screened = A.screenQuantities({ sheet: "AD-101", quantities: [
+  { id: "w", unit: "ea", formula: "7 + 7", quote: "REMOVE EXISTING WINDOW W1", basis: "Counted the W1 tags on the east elevation." },
+  { id: "p", unit: "SF", formula: "18,650", quote: "18,650 SF", basis: "Area printed in the paving removal note." },
+  { id: "d", unit: "LF", formula: "2 * (3 + 7)", quote: "3'-0\" x 7'-0\"", basis: "Perimeter of one door opening as printed." },
+  { id: "d", unit: "EA", formula: "3", quote: "101 102 103", basis: "Three doors in the schedule." },
+  { id: "x", unit: "EA", formula: "4", quote: "W1", basis: "Not a line that was sent." },
+] }, job);
+assert.deepEqual(screened.quantities.map(q => [q.scopeId, q.value, q.unit, q.printed]), [["w", 14, "EA", true], ["p", 18650, "SF", true], ["d", 20, "LF", true]], "Counts, printed areas and printed dimensions, worked out by the app; quotes found in the sheet's text");
+assert.deepEqual(screened.dropped.map(d => d.reason), ["Only one quantity per line and sheet.", "Not one of the scope lines sent."]);
+const bad = (q) => A.screenQuantities({ quantities: [{ id: "w", unit: "EA", formula: "14", quote: "REMOVE EXISTING WINDOW", basis: "Counted the W1 tags on the elevation.", ...q }] }, job);
+assert.match(bad({ unit: "TON" }).dropped[0].reason, /isn't SF, SY, LF, EA or CY/);
+assert.match(bad({ formula: "" }).dropped[0].reason, /No arithmetic/);
+assert.match(bad({ formula: "about 14" }).dropped[0].reason, /No arithmetic/);
+assert.match(bad({ formula: "0" }).dropped[0].reason, /No arithmetic/);
+assert.match(bad({ formula: "29 / 2" }).dropped[0].reason, /whole number/);
+assert.match(bad({ quote: "" }).dropped[0].reason, /No printed words/);
+assert.match(bad({ basis: "W1" }).dropped[0].reason, /No basis/);
+assert.equal(bad({ quote: "SALVAGE HARDWARE TO OWNER" }).quantities[0].printed, false, "A quote the sheet's text doesn't hold is marked as read from the image");
+assert.equal(bad({ quote: "12'-6\"" }).quantities[0].printed, true, "A short printed dimension is found");
+assert.equal(A.screenQuantities({ sheet: "Z-999", quantities: [] }, job).sheet, "AD-101", "The sheet number stays the one sent unless the AI reads the same sheet");
+
+// Which sheets: a line's own sheet, else the trade's; the busiest kept, in register order.
+const doc = { id: "d1", name: "Drawings.pdf", kind: "drawings" };
+const sheetRegister = ["G-001", "CIV0102", "AD-101", "AD-102", "A1.1"].map((sheet, i) => ({ sheet, title: sheet.startsWith("AD") ? "DEMOLITION PLAN" : "SHEET", discipline: "", date: "", doc, page: i + 1, revisions: 1 }));
+const plan = A.quantityPlan(items, sheetRegister, { code: "02 41 19", sheets: ["AD-102"] });
+assert.deepEqual(plan.map(p => [p.row.sheet, p.items.map(i => i.id)]), [["CIV0102", ["p"]], ["AD-101", ["w", "d"]]], "Lines go to the sheets their sources name");
+const unsourced = items.map(i => ({ ...i, source: "02 41 19 · §3.2" }));
+assert.deepEqual(A.quantityPlan(unsourced, sheetRegister, { code: "02 41 19", sheets: ["AD-102"] }).map(p => p.row.sheet), ["AD-102"], "Lines citing the specification go to the trade's own sheets");
+assert.deepEqual(A.quantityPlan(items, sheetRegister, { code: "02 41 19" }, 1).map(p => p.row.sheet), ["AD-101"], "With room for one sheet, the one carrying the most lines");
+
+// Onto the lines, Not checked; the cited sheet wins; a figure already there stays.
+const where = { document: "Drawings.pdf", page: 4, sheet: "AD-101" };
+const proposals = [
+  { ...screened.quantities[0], ...where },
+  { ...screened.quantities[1], ...where },
+  { scopeId: "p", value: 18000, unit: "SF", formula: "18000", quote: "PAVING 18000 SF", basis: "Area printed on the civil plan note.", printed: false, document: "Drawings.pdf", page: 2, sheet: "CIV0102" },
+  { scopeId: "a", value: 1, unit: "EA", formula: "1", quote: "BID FORM", basis: "One acknowledgement of the documents.", printed: true, ...where },
+];
+const civil = { ...published, scopes: published.scopes.map(s => s.id === "p" ? { ...s, source: "CIV0102 · Keynote 6" } : s) };
+const ai = A.applyAiQuantities(civil, proposals, "Structor AI", at);
+assert.deepEqual([ai.added, ai.kept], [2, 1], "Two lines proposed; the windows line kept its estimator's 14 EA");
+assert.deepEqual(scope(ai.state, "w").quantity.origin, "estimator", "Never over a figure already there");
+const paving = scope(ai.state, "p").quantity;
+assert.deepEqual([paving.value, paving.origin, paving.checked, paving.citation], [18000, "ai", false, { document: "Drawings.pdf", page: 2, sheet: "CIV0102", quote: "PAVING 18000 SF", fromImage: true }], "The sheet the line cites wins, Not checked, with its sheet and quote to open");
+assert.match(paving.basis, /^CIV0102: Area printed on the civil plan note\. Worked out as 18000\. The quoted words were read from the sheet image; they aren't in its text layer\. Also quantified on AD-101: 18,650 SF: check whether these add up or repeat\.$/, "The basis says what was read, the arithmetic, and the other sheet's figure");
+assert.deepEqual(P.publishBlockers(ai.state, "demo"), ["2 quantities need an estimator's check."], "AI quantities hold publishing until checked");
+assert.equal(scope(ai.state, "a").quantity.unit, "EA");
+
+console.log("Scope quantities checked: an estimator's figure with its unit and basis, publishing it to bidders (value and unit only) and a revision when it changes, unchecked quantities holding the form, the subcontractor's page, Quantity takeoffs lines (most alike first, changes and deletions flagged), accepted AI drawing quantities on their lines, and Find quantities with AI: its request, screening (units, the app's arithmetic, whole counts, quotes, basis), sheet plan, and proposals Not checked with the cited sheet first.");
