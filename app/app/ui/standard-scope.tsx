@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react";
 import { Check, ListPlus, Layers3 } from "lucide-react";
 import { fetchMemory } from "../../lib/memory-client";
-import { tradeTags } from "../../lib/memory";
+import { tradeTags, type MemoryEntry } from "../../lib/memory";
 import { addStandardScope, missingStandard, standardScopeFor, type StandardLine } from "../../lib/standard-scope";
 import type { Procurement, TradePackage } from "../../lib/procurement";
 import type { useProcurement } from "../../lib/use-procurement";
@@ -14,9 +14,19 @@ import { Badge, Button, Empty } from "./shared";
 
 type Run = ReturnType<typeof useProcurement>["run"];
 
-/** The trade's standard lines from the company's approved checklist entries in the AI memory. */
-const loadStandard = (pkg: Pick<TradePackage, "code" | "name">) =>
-  fetchMemory({ status: ["approved"], origin: ["import"], trades: tradeTags(pkg), limit: 500 }).then(entries => standardScopeFor(pkg, entries));
+/**
+ * The trade's standard lines from the company's approved checklist entries in the AI memory. The memory gives at most
+ * 500 entries a page and a trade's imports (bid sheets as well as checklists) can be more, so every page is read.
+ */
+async function loadStandard(pkg: Pick<TradePackage, "code" | "name">): Promise<StandardLine[]> {
+  const entries: MemoryEntry[] = [];
+  for (let offset = 0; offset < 10_000; offset += 500) {
+    const page = await fetchMemory({ status: ["approved"], origin: ["import"], trades: tradeTags(pkg), limit: 500, offset });
+    entries.push(...page);
+    if (page.length < 500) break;
+  }
+  return standardScopeFor(pkg, entries);
+}
 
 export function StandardScopePanel({ state, pkg, run, notify, by }: { state: Procurement; pkg: TradePackage; run: Run; notify: (message: string) => void; by: string }) {
   const [lines, setLines] = useState<StandardLine[] | null>(null);
