@@ -4,6 +4,7 @@ import { glazingPlacement, placedGlazingElevation } from "../../lib/glazing-deta
 import { edgesIntersect, footprintValid, openOutline, polygonArea, type Point, type SchematicLevel } from "../../lib/schematic-model";
 import { inside, insideRoom, type Room } from "../../lib/room-detection";
 import { stairPieces } from "../../lib/stair-detection";
+import type { FloorAssemblySelection } from "../../lib/schematic-floor-details";
 import { layerColor, layerGap, layerSlabs, openedCenter, type WallLayer } from "../../lib/wall-assemblies";
 
 export { footprintValid, openOutline } from "../../lib/schematic-model";
@@ -59,7 +60,7 @@ export function schematicWalls(level: SchematicLevel): THREE.InstancedMesh | nul
  * wall closed and opened (local z, feet) and its layer number; the view slides it from one to the other. A violet outline
  * keeps the wall's own place. Without layers, the wall alone, highlighted.
  */
-export function wallLayerGroup(level: SchematicLevel, index: number, layers: WallLayer[]): THREE.Group | null {
+export function wallLayerGroup(level: SchematicLevel, index: number, layers: WallLayer[], diagram = false): THREE.Group | null {
   const wall = level.walls?.[index];
   if (!wall) return null;
   const dx = wall.b[0] - wall.a[0], dy = wall.b[1] - wall.a[1], length = Math.max(Math.hypot(dx, dy), .01), thick = Math.max(wall.thickness, .05);
@@ -67,21 +68,25 @@ export function wallLayerGroup(level: SchematicLevel, index: number, layers: Wal
   group.position.set((wall.a[0] + wall.b[0]) / 2, level.height / 2, -(wall.a[1] + wall.b[1]) / 2);
   group.rotation.set(0, Math.atan2(dy, dx), 0);
   group.userData = { length, height: level.height, gap: 0 };
-  const outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(length, level.height, thick)), new THREE.LineBasicMaterial({ color: "#7c3aed" }));
+  const envelope = new THREE.BoxGeometry(length, level.height, thick);
+  const outline = new THREE.LineSegments(new THREE.EdgesGeometry(envelope), new THREE.LineBasicMaterial({ color: "#7c3aed" }));
+  envelope.dispose();
   group.add(outline);
   if (!layers.length) {
     const whole = new THREE.Mesh(new THREE.BoxGeometry(length, level.height, thick), new THREE.MeshStandardMaterial({ color: "#a78bfa", roughness: .8 }));
     whole.userData.whole = true; group.add(whole);
     return group;
   }
-  const slabs = layerSlabs(layers, wall.thickness), gap = layerGap(length);
+  const slabs = diagram ? [] : layerSlabs(layers, wall.thickness);
+  const gap = layerGap(length);
   group.userData.gap = gap;
-  slabs.forEach((slab, i) => {
-    // Insulation in the stud cavity stops just short of the framing's ends and top, so the two faces don't fight.
-    const inset = slab.inside ? .97 : 1;
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(length * inset, level.height * inset, Math.max(slab.depth, .01)), new THREE.MeshStandardMaterial({ color: layerColor(slab.material), roughness: .85 }));
-    mesh.position.z = slab.center;
-    mesh.userData = { layer: i, closed: slab.center, opened: openedCenter(slab, i, slabs.length, gap) };
+  layers.forEach((layer, i) => {
+    const slab = slabs[i], center = slab?.center ?? 0;
+    const geometry = slab ? new THREE.BoxGeometry(length, level.height, slab.depth) : new THREE.PlaneGeometry(length, level.height);
+    const mesh = new THREE.Mesh(geometry,
+      new THREE.MeshStandardMaterial({ color: layerColor(layer.material), roughness: .85, side: THREE.DoubleSide }));
+    mesh.position.z = center;
+    mesh.userData = { layer: i, axis: "z", closed: center, opened: openedCenter({ center }, i, layers.length, gap) };
     group.add(mesh);
   });
   return group;
@@ -297,6 +302,35 @@ export function schematicRoomFloors(rooms: Room[], openings: Point[][] = []): TH
   }
   return group;
 }
+/** Use the same room surface and voids as the selectable model floor. */
+export function floorLayerGroup(geometry: THREE.ShapeGeometry, assembly: FloorAssemblySelection | null): THREE.Group {
+  const group = new THREE.Group();
+  const layers = assembly?.layers ?? [];
+  const shape = geometry.parameters.shapes;
+  geometry.computeBoundingBox();
+  const size = geometry.boundingBox!.getSize(new THREE.Vector3());
+  const gap = Math.min(9, Math.max(1.5, Math.max(size.x, size.z) / 7));
+  if (!layers.length) {
+    const mesh = new THREE.Mesh(geometry.clone(), new THREE.MeshStandardMaterial({ color: "#a78bfa", side: THREE.DoubleSide, roughness: .85 }));
+    mesh.userData.whole = true;
+    group.add(mesh);
+    return group;
+  }
+  let top = 0;
+  for (const [index, layer] of layers.entries()) {
+    const depth = assembly?.basis === "matched" && !layer.minimum ? layer.thicknessFeet ?? 0 : 0;
+    top -= depth;
+    const meshGeometry = depth ? new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false }).rotateX(-Math.PI / 2) : geometry.clone();
+    const mesh = new THREE.Mesh(meshGeometry,
+      new THREE.MeshStandardMaterial({ color: layerColor(layer.material), side: THREE.DoubleSide, roughness: .85 }));
+    mesh.position.y = top;
+    mesh.userData = { layer: index, axis: "y", closed: top, opened: top - index * gap };
+    group.add(mesh);
+  }
+  group.userData.spread = (layers.length - 1) * gap;
+  return group;
+}
+
 /** Count and total centerline length of a level's walls; null for a model built before walls were read. */
 export function wallTotals(level: SchematicLevel): { count: number; feet: number; doors: number | null; compartments: number; glassFeet: number | null; partitionFeet: number | null; railingFeet: number | null; columns: number | null; stairs: number | null } | null {
   if (!level.walls) return null;

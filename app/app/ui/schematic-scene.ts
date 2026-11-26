@@ -4,7 +4,7 @@ import type { Room } from "../../lib/room-detection";
 type LocatedPick = { levelId: string; index: number };
 export type WallPick = LocatedPick & { kind: "wall"; layer?: number };
 export type DoorPick = LocatedPick & { kind: "door" };
-export type FloorPick = LocatedPick & { kind: "floor" };
+export type FloorPick = LocatedPick & { kind: "floor"; layer?: number };
 export type GlazingPick = LocatedPick & { kind: "glazing"; part?: number };
 export type SchematicPick = WallPick | DoorPick | FloorPick | GlazingPick;
 

@@ -8,12 +8,14 @@
 // it the outline is sized so the floor areas add up to the project's building area, and says so.
 // People can correct the outline and heights afterwards. Pure functions.
 
+import { parseInches } from "./wall-assemblies";
 import { doorsFromSwings, swingArcs } from "./door-detection";
 import { floorOpenings } from "./floor-openings";
 import { compactFloorPlanTitle, printedPlanLevels } from "./floor-plan-label";
 import type { SourcedDoorSize } from "./door-schedule-dimensions";
 import type { GlazingDimensions } from "./glazing-detail-references";
-import type { FloorAssemblyNote, FloorFinishNote } from "./schematic-floor-details";
+import type { FloorDetailReference } from "./schematic-assembly-drawings";
+import type { FloorAssemblyDetail, FloorAssemblyNote, FloorFinishNote } from "./schematic-floor-details";
 import type { DimensionSource } from "./section-datums";
 import { mergeTags, placeTags, tagOvals, type PartitionType, type PlacedTag } from "./tag-placement";
 import type { Curve, Segment } from "./plan-vectors";
@@ -25,7 +27,7 @@ import { hexagonTags, planColumns, planGlazing, planPartitions, planRailings, pl
 export type Point = [number, number];
 export type PlanSource = { documentId: string; sheet: string; page: number; quote?: string };
 export type SchematicPlanArea = { source: PlanSource; frame: Frame; offset: Point; outline?: Point[] };
-type SourcedPlanElement = { planArea?: number };
+type SourcedPlanElement = { planArea?: number; outsidePlan?: boolean };
 export type SchematicRoom = SourcedPlanElement & { name: string; number: string; at: Point };
 export type SchematicLevel = {
   id: string; name: string; order: number;
@@ -43,6 +45,7 @@ export type SchematicLevel = {
   alignmentUnverified?: boolean;
   unplacedPlans?: PlanSource[];
   floorAssemblies?: FloorAssemblyNote[];
+  floorReferences?: FloorDetailReference[];
   /** How the size was found: the printed scale, or the building area. */
   sizing: string;
   /**
@@ -86,7 +89,7 @@ export type SchematicPartition = SourcedPlanElement & { a: Point; b: Point; thic
 /** A column at `at`, in feet, with its sides and the angle of `width` in radians. */
 export type SchematicColumn = SourcedPlanElement & { at: Point; width: number; depth: number; angle: number; excluded?: boolean };
 /** A wall centerline from a to b with its thickness, in feet; `type` is its partition type from the plan's tags. */
-export type SchematicWall = SourcedPlanElement & { a: Point; b: Point; thickness: number; type?: string | null; /** The type was set by the estimator for untagged walls, not read from a tag. */ typeSet?: boolean; /** Corrected by the estimator on this wall. */ edited?: boolean; /** Marked by the estimator as not a wall (kept so it can be restored). */ excluded?: boolean };
+export type SchematicWall = SourcedPlanElement & { a: Point; b: Point; thickness: number; type?: string | null; tagRead?: { basis: "printed" | "image" }; /** The type was set by the estimator for untagged walls, not read from a tag. */ typeSet?: boolean; /** Corrected by the estimator on this wall. */ edited?: boolean; /** Marked by the estimator as not a wall (kept so it can be restored). */ excluded?: boolean };
 /**
  * A door opening from a to b, its leaves' hinges and where each leaf swings open to, in feet. "compartment"
  * is a toilet stall's door: toilet partitions, not the door schedule. `thickness` is the host wall's, for the
@@ -129,7 +132,7 @@ export function levelTags(read: { tile: [number, number, number, number]; tags: 
   const placed = placeTags(tags, walls, doors.filter(d => d.kind === "door"), { ovals: tagOvals(curves, pointsPerFoot), lines }, glazing);
   let k = 0;
   return {
-    walls: walls.map((w, i) => ({ ...w, type: placed.wallTypes[i] })),
+    walls: walls.map((w, i) => ({ ...w, type: placed.wallTypes[i], ...(placed.wallTypes[i] ? { tagRead: { basis: "image" as const } } : {}) })),
     doors: doors.map(d => d.kind === "door" ? { ...d, number: placed.doorNumbers[k++] } : d),
     glazing: glazing.map((g, i) => ({ ...g, type: placed.glazingTypes[i] })),
     tags,
@@ -147,7 +150,7 @@ export function levelSpaces(level: Pick<SchematicLevel, "walls" | "doors" | "gla
 }
 
 /** `partitionTypes`: the wall types the partition type sheet lists (read by AI), to describe and check wall types. */
-export type SchematicModel = { levels: SchematicLevel[]; warnings: string[]; builtAt: string; partitionTypes?: PartitionType[]; partitionSheet?: string; floorFinishes?: FloorFinishNote[] };
+export type SchematicModel = { levels: SchematicLevel[]; warnings: string[]; builtAt: string; partitionTypes?: PartitionType[]; partitionSheet?: string; floorFinishes?: FloorFinishNote[]; floorDetails?: FloorAssemblyDetail[] };
 
 /** The sheet that schedules the partition (wall) types, by its title; null when the set has none. */
 export function partitionTypeSheet<T extends Pick<RegisterRow, "title" | "discipline">>(register: T[]): T | null {
@@ -234,7 +237,7 @@ export function heightSheet<T extends Pick<RegisterRow, "title" | "discipline">>
 /** The metric drawing ratios read as scales; other "1:n" (a time, 1:7) are not. */
 const METRIC_RATIOS = new Set([5, 10, 20, 25, 50, 75, 100, 125, 150, 200, 250, 300, 400, 500, 750, 1000, 1250, 1500, 2000, 2500, 5000]);
 const INCH = `(?:"|''|”|″|\\s*IN\\.?)`, FOOT = `(?:'|’|′)`;
-const IMPERIAL = new RegExp(`(\\d+)(?:\\s*\\/\\s*(\\d+))?\\s*${INCH}\\s*=\\s*(\\d+)\\s*${FOOT}(?:\\s*-?\\s*(\\d+)\\s*(?:"|''|”|″))?`, "i");
+const IMPERIAL = new RegExp(`(?<![\\d./])((?:\\d+[ -])?\\d+\\s*\\/\\s*\\d+|\\d+(?:\\.\\d+)?)\\s*${INCH}\\s*=\\s*(\\d+)\\s*${FOOT}(?:\\s*-?\\s*(\\d+)\\s*(?:"|''|”|″))?`, "i");
 
 /**
  * Feet per inch of paper from a printed scale. Architectural: 1/8" = 1'-0" → 8, 3/16" = 1'-0" → 5.333.
@@ -246,9 +249,9 @@ export function feetPerInch(text: string): number | null {
   let ratio: number | null = null;
   const imperial = text.match(IMPERIAL);
   if (imperial) {
-    const inches = imperial[2] ? Number(imperial[1]) / Number(imperial[2]) : Number(imperial[1]);
-    const feet = Number(imperial[3]) + (imperial[4] ? Number(imperial[4]) / 12 : 0);
-    ratio = inches > 0 ? feet / inches : null;
+    const inches = parseInches(imperial[1].replace(/\s*\/\s*/g, "/"));
+    const feet = Number(imperial[2]) + (imperial[3] ? Number(imperial[3]) / 12 : 0);
+    ratio = inches && inches > 0 ? feet / inches : null;
   } else {
     const metric = text.match(/(?<![\d.:])1\s*:\s*(\d{1,4})(?![\d.:])/);
     if (metric && METRIC_RATIOS.has(Number(metric[1]))) ratio = Number(metric[1]) / 12;
@@ -589,7 +592,7 @@ export function editWall(model: SchematicModel, levelId: string, index: number, 
     if (!l.walls?.[index]) throw new Error("That wall is no longer in the model.");
     const t = change.type === undefined ? undefined : change.type.trim().toUpperCase().replace(/\s+/g, "").slice(0, 16);
     return { ...l, walls: l.walls.map((w, i) => i !== index ? w : {
-      ...w, ...(t !== undefined ? { type: t || null, typeSet: false, edited: true } : {}), ...(change.excluded !== undefined ? { excluded: change.excluded } : {}),
+      ...w, ...(t !== undefined ? { type: t || null, typeSet: false, tagRead: undefined, edited: true } : {}), ...(change.excluded !== undefined ? { excluded: change.excluded, outsidePlan: undefined } : {}),
     }) };
   });
 }
@@ -608,7 +611,7 @@ export function editGlazing(model: SchematicModel, levelId: string, index: numbe
   return editLevel(model, levelId, l => {
     if (!l.glazing?.[index]) throw new Error("That glass is no longer in the model.");
     const t = change.type === undefined ? undefined : change.type.trim().toUpperCase().replace(/\s+/g, "").slice(0, 16);
-    return { ...l, glazing: l.glazing.map((g, i) => i !== index ? g : { ...g, ...(t !== undefined && g.type !== (t || null) ? { type: t || null, elevationDetail: undefined, dimensions: undefined } : {}), ...(change.excluded !== undefined ? { excluded: change.excluded } : {}) }) };
+    return { ...l, glazing: l.glazing.map((g, i) => i !== index ? g : { ...g, ...(t !== undefined && g.type !== (t || null) ? { type: t || null, elevationDetail: undefined, dimensions: undefined } : {}), ...(change.excluded !== undefined ? { excluded: change.excluded, outsidePlan: undefined } : {}) }) };
   });
 }
 
@@ -616,7 +619,7 @@ export function editGlazing(model: SchematicModel, levelId: string, index: numbe
 export function editPartition(model: SchematicModel, levelId: string, index: number, excluded: boolean): SchematicModel {
   return editLevel(model, levelId, l => {
     if (!l.partitions?.[index]) throw new Error("That partition is no longer in the model.");
-    return { ...l, partitions: l.partitions.map((p, i) => i === index ? { ...p, excluded } : p) };
+    return { ...l, partitions: l.partitions.map((p, i) => i === index ? { ...p, excluded, outsidePlan: undefined } : p) };
   });
 }
 

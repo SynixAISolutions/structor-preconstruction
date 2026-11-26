@@ -4,10 +4,38 @@ import type { RegisterRow } from "./project-files";
 import { floorPlanArea, levelOfTitle, planSource, type SchematicLevel } from "./schematic-model";
 import type { DimensionSource } from "./section-datums";
 import type { TextBox } from "./text-anchor";
+import { inside, insideRoom, type Room } from "./room-detection";
+import { assemblyFloorLevel, type FloorDetailReference } from "./schematic-assembly-drawings";
 
-type FloorLayer = { material: string; thicknessFeet?: number; label?: string; minimum?: boolean };
+export type FloorLayer = { material: string; thicknessFeet?: number; label?: string; minimum?: boolean };
 export type FloorAssemblyNote = { source: DimensionSource; layers: FloorLayer[]; planArea: number | null };
 export type FloorFinishNote = { source: DimensionSource; tag: string; material: string; location: string };
+export type FloorAssemblyDetail = { source: DimensionSource; layers: FloorLayer[]; detail?: string };
+export type FloorAssemblySelection = FloorAssemblyDetail & { basis: "matched" | "reference"; matchedBy?: "callout" | "level" };
+
+export function floorPlanAreaAt(level: SchematicLevel, at: [number, number]) {
+  if (!level.planAreas?.length) return 0;
+  const area = level.planAreas.findIndex(area => inside(at, area.outline ?? level.outline));
+  return area < 0 ? null : area;
+}
+
+/** Select by explicit printed scope. One typical detail can be inspected without assigning it to a room. */
+export function floorAssemblyForRoom(level: SchematicLevel, room: Pick<Room, "at" | "outline" | "holes">, details: FloorAssemblyDetail[] = []): FloorAssemblySelection | null {
+  const references = (level.floorReferences ?? []).filter(ref => insideRoom(ref.at, room));
+  const pointed = details.filter(detail => detail.detail && references.some(ref =>
+    ref.detail === detail.detail && ref.sheet === detail.source.sheet.toUpperCase().replace(/[^A-Z0-9]/g, "")));
+  if (pointed.length === 1) return { ...pointed[0], basis: "matched", matchedBy: "callout" };
+  if (pointed.length > 1) return null;
+  const planArea = floorPlanAreaAt(level, room.at);
+  const concrete = (level.floorAssemblies ?? []).filter(note => note.planArea === null || note.planArea === planArea);
+  const scoped = details.filter(detail => assemblyFloorLevel(detail.source.quote) === level.order);
+  if (scoped.length === 1) return { ...scoped[0], basis: "matched", matchedBy: "level" };
+  if (scoped.length > 1) return null;
+  if (concrete.length === 1) return { ...concrete[0], basis: "reference" };
+  const typical = details.filter(detail => /^(?:TYP\.?|TYPICAL)\s+(?:FLOOR|SLAB)\b/i.test(detail.source.quote));
+  if (!concrete.length && typical.length === 1) return { ...typical[0], basis: "reference" };
+  return null;
+}
 
 type Title = Pick<RegisterRow, "discipline" | "title">;
 export function slabNoteLevel(row: Title): number | null {

@@ -1,8 +1,8 @@
-import { inside, type Room } from "../../lib/room-detection";
+import type { Room } from "../../lib/room-detection";
 import { planSource, type PlanSource, type SchematicLevel } from "../../lib/schematic-model";
 import type { DimensionSource } from "../../lib/section-datums";
 import { glazingPlacement, placedGlazingElevation } from "../../lib/glazing-detail-references";
-import { finishesForRoom, type FloorFinishNote } from "../../lib/schematic-floor-details";
+import { finishesForRoom, floorPlanAreaAt, type FloorFinishNote } from "../../lib/schematic-floor-details";
 import { Button, Panel } from "./shared";
 import { GlazingElevationInspector } from "./schematic-glazing-elevation";
 import { isSportsFloor, type SchematicPick, type WallPick } from "./schematic-scene";
@@ -53,7 +53,7 @@ export function SchematicObjectInspector({ levels, spaces, floorFinishes, pick, 
   const glassPlaced = !!(glass && level && placedGlazingElevation(glass, level));
   const selectedRoom = pick?.kind === "floor" ? spaces.get(pick.levelId)?.[pick.index] : undefined;
   const floor = selectedRoom?.open ? undefined : selectedRoom;
-  const floorArea = floor && level?.planAreas?.findIndex(area => inside(floor.at, area.outline ?? level.outline));
+  const floorArea = floor && level ? floorPlanAreaAt(level, floor.at) : null;
   const source = level && planSource(level, door?.planArea ?? glass?.planArea ?? (floorArea ?? 0));
   const slabNotes = floor ? (level?.floorAssemblies ?? []).filter(note => note.planArea === null || note.planArea === (floorArea ?? 0)) : [];
   const finishes = floor ? finishesForRoom(floor, floorFinishes) : [];
@@ -130,7 +130,6 @@ export function SchematicObjectInspector({ levels, spaces, floorFinishes, pick, 
           </li>)}</ul>
           <p>Check the finish plan for each finish boundary.</p>
         </details>}
-        {floor && !slabNotes.length && !finishes.length && <p>Floor build-up awaits a matching drawing detail.</p>}
         {floor && isSportsFloor(floor) && <p>Court markings and equipment require their own drawing evidence.</p>}
         {door?.basis === "tagged-gap" && <p>A printed door tag matches this gap in the wall. {door.scheduledSize ? "Door swing is unverified." : "Door height and swing are unverified."}</p>}
         {door && door.basis !== "tagged-gap" && !door.scheduledSize && <p>3D door height is estimated until a schedule row is matched.</p>}

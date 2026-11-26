@@ -6,17 +6,19 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { buildSchematicModel, readWallLayers, useSchematicModel } from "../../lib/schematic-model-client";
 import { editColumn, editDoorNumber, editGlazing, editPartition, editStair, editWall, heightSheet, keptWalls, levelFootprints, levelSpaces, longestWallOfType, moveOutlinePoint, partitionTypeSheet, planSource, polygonArea, setLevelHeight, setOpenToBelow, setPartitionTypes, setUntaggedWallType, stairRise, type Point, type SchematicLevel, type SchematicModel } from "../../lib/schematic-model";
 import { glazingTotals, scheduleRow, wallTypeTotals, type PartitionType } from "../../lib/tag-placement";
-import { dimensionedWallLayers, inchesLabel, layerColor, layersFit, layerSlabs, openedCenter, parseInches } from "../../lib/wall-assemblies";
+import { dimensionedWallLayers, inchesLabel, layerColor, layersFit, parseInches } from "../../lib/wall-assemblies";
 import { openStoredPdf, renderStoredPage, useProjectDocuments } from "../../lib/project-files-client";
 import { drawingRegister, type StoredDocument } from "../../lib/project-files";
 import type { Project } from "../../lib/projects";
 import { useLocalDraft } from "../../lib/use-local-draft";
-import { alignSheetFrame, footprintValid, openOutline, printedSheetFrame, DEFAULT_DOOR_HEIGHT, wallLayerGroup, schematicColumns, schematicDoors, schematicGeometry, schematicGlazing, schematicGlazingParts, schematicPartitions, schematicRailings, schematicRoomFloors, schematicStairs, schematicWalls, sheetPoint, wallTotals, type SheetFrame } from "./schematic-geometry";
+import { floorAssemblyForRoom, floorPlanAreaAt } from "../../lib/schematic-floor-details";
+import { AssemblyLayerList, FloorLayersCard } from "./schematic-assembly-card";
+import { floorLayerGroup, alignSheetFrame, footprintValid, openOutline, printedSheetFrame, DEFAULT_DOOR_HEIGHT, wallLayerGroup, schematicColumns, schematicDoors, schematicGeometry, schematicGlazing, schematicGlazingParts, schematicPartitions, schematicRailings, schematicRoomFloors, schematicStairs, schematicWalls, sheetPoint, wallTotals, type SheetFrame } from "./schematic-geometry";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, PreviewNote, type ViewProps } from "./shared";
 import { SchematicObjectInspector } from "./schematic-object-inspector";
 import { SchematicHeightEvidence } from "./schematic-height-evidence";
 import type { DimensionSource } from "../../lib/section-datums";
-import { CUTAWAY_HEIGHT, isSportsFloor, schematicCameraFit, schematicObjectPick, type SchematicPick, type WallPick } from "./schematic-scene";
+import { CUTAWAY_HEIGHT, isSportsFloor, schematicCameraFit, schematicObjectPick, type FloorPick, type SchematicPick, type WallPick } from "./schematic-scene";
 import { StoredDocumentViewer } from "./project-file-viewer";
 import { inside, type Room } from "../../lib/room-detection";
 import { stairPieces } from "../../lib/stair-detection";
@@ -62,7 +64,8 @@ function layerLabel(text: string, swatch: string) {
 }
 type SceneApi = {
   group: THREE.Group; opened: THREE.Group; highlight: THREE.Group; pickables: THREE.Object3D[];
-  fit: (top?: boolean) => void; focus: (wall: THREE.Object3D) => void;
+  fit: (top?: boolean, building?: boolean) => void; focus: (wall: THREE.Object3D) => void;
+  focusFloor: (floor: THREE.Object3D) => void; isolate: (open: boolean) => void;
   labelsTowardCamera: (wall: THREE.Object3D) => void; invalidate: () => void;
 };
 function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, cutaway, showOutline3D, schedule, selection, onPick, camera, onError }: {
@@ -72,7 +75,7 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
   camera: React.RefObject<CameraApi | null>; onError: (error: string) => void;
 }) {
   const host = useRef<HTMLDivElement>(null), sceneRef = useRef<SceneApi | null>(null), fitted = useRef("");
-  const pick = selection?.kind === "wall" ? selection : null;
+  const pick = selection?.kind === "wall" || selection?.kind === "floor" ? selection : null;
   const error = useRef(onError); error.current = onError;
   const picked = useRef(onPick); picked.current = onPick;
   useEffect(() => {
@@ -90,11 +93,26 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
     const invalidate = () => { if (!frame) frame = requestAnimationFrame(render); };
     let tween: { start: number; fromTarget: THREE.Vector3; toTarget: THREE.Vector3; fromPos: THREE.Vector3; toPos: THREE.Vector3 } | null = null;
     controls.addEventListener("start", () => { tween = null; }); // the estimator's own drag wins over the move to a wall
-    const fit = (top = false) => {
+    let beforeIsolation: { target: THREE.Vector3; position: THREE.Vector3 } | null = null;
+    const fit = (top = false, building = false) => {
       tween = null;
-      const bounds = new THREE.Box3().setFromObject(group); if (bounds.isEmpty()) return;
+      const bounds = new THREE.Box3().setFromObject(building || group.visible ? group : opened); if (bounds.isEmpty()) return;
       const { center, position } = schematicCameraFit(bounds, FOV, view.aspect, top);
       controls.target.copy(center); view.position.copy(position); view.lookAt(center); controls.update(); invalidate();
+      if (building && !group.visible) beforeIsolation = { target: center, position };
+    };
+    const isolate = (open: boolean) => {
+      if (open === !group.visible) return;
+      group.visible = !open;
+      if (open) beforeIsolation = { target: controls.target.clone(), position: view.position.clone() };
+      else if (beforeIsolation) {
+        tween = null;
+        controls.target.copy(beforeIsolation.target);
+        view.position.copy(beforeIsolation.position);
+        controls.update();
+        beforeIsolation = null;
+      }
+      invalidate();
     };
     // A picked wall's axes in the world: its middle, along its length, across its thickness (each pointing toward the camera).
     const axes = (wall: THREE.Object3D) => {
@@ -114,12 +132,26 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
       tween = { start: performance.now(), fromTarget: controls.target.clone(), toTarget: target, fromPos: view.position.clone(), toPos };
       invalidate();
     };
+    const focusFloor = (floor: THREE.Object3D) => {
+      floor.updateWorldMatrix(true, true);
+      const bounds = new THREE.Box3().setFromObject(floor);
+      if (bounds.isEmpty()) return;
+      bounds.min.y -= floor.userData.spread ?? 0;
+      const { center, position } = schematicCameraFit(bounds, FOV, view.aspect, false);
+      if (window.innerWidth > 800) {
+        const right = center.clone().sub(position).cross(new THREE.Vector3(0, 1, 0)).normalize()
+          .multiplyScalar(position.distanceTo(center) * .16);
+        center.add(right); position.add(right);
+      }
+      tween = { start: performance.now(), fromTarget: controls.target.clone(), toTarget: center, fromPos: view.position.clone(), toPos: position };
+      invalidate();
+    };
     // The layer labels go to the wall's end nearer the camera (they are drawn at its -x end).
     const labelsTowardCamera = (wall: THREE.Object3D) => {
       const { end } = axes(wall);
       wall.children.forEach(part => { if (part.userData.label) { if ((part as THREE.Sprite).isSprite) part.position.x = end < 0 ? part.userData.x0 : -part.userData.x0; else part.scale.x = -end; } });
     };
-    const api: SceneApi = { group, opened, highlight, pickables: [], fit, focus, labelsTowardCamera, invalidate };
+    const api: SceneApi = { group, opened, highlight, pickables: [], fit, focus, focusFloor, isolate, labelsTowardCamera, invalidate };
     sceneRef.current = api;
     camera.current = { home: () => fit(), top: () => fit(true), zoom: factor => {
       tween = null;
@@ -135,11 +167,11 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
       ray.setFromCamera(pointer, view);
       const layers: THREE.Object3D[] = [];
       opened.traverse(o => { if (o.userData.layer !== undefined || o.userData.whole) layers.push(o); });
-      for (const hit of ray.intersectObjects([...layers, ...api.pickables], false)) {
+      for (const hit of ray.intersectObjects(group.visible ? api.pickables : layers, false)) {
         const layer = hit.object;
         if (layer.userData.layer !== undefined || layer.userData.whole) {
-          const wall = layer.parent?.userData.pick as WallPick | undefined;
-          if (wall) return { ...wall, layer: layer.userData.layer };
+          const assembly = layer.parent?.userData.pick as WallPick | FloorPick | undefined;
+          if (assembly) return { ...assembly, layer: layer.userData.layer };
         }
         const pick = schematicObjectPick(hit);
         if (pick) return pick;
@@ -191,12 +223,13 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
         if (k >= 1) tween = null;
       }
       let opening = false;
-      opened.children.forEach(wall => {
-        const t = Math.min(1, Math.max(0, (now - wall.userData.start - OPEN_DELAY) / OPEN_TIME));
+      opened.children.forEach(assembly => {
+        const t = Math.min(1, Math.max(0, (now - assembly.userData.start - OPEN_DELAY) / OPEN_TIME));
         const k = ease(t), labels = Math.min(1, Math.max(0, (t - .55) / .45));
         opening ||= t < 1;
-        wall.children.forEach(part => {
-          if (part.userData.closed !== undefined) part.position.z = part.userData.closed + (part.userData.opened - part.userData.closed) * k;
+        assembly.children.forEach(part => {
+          const { closed, opened, axis } = part.userData as { closed?: number; opened: number; axis: "y" | "z" };
+          if (closed !== undefined) part.position[axis] = closed + (opened - closed) * k;
           if (part.userData.label) ((part as THREE.Sprite | THREE.Line).material as THREE.Material).opacity = labels;
         });
       });
@@ -287,7 +320,7 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
     error.current(errors.join(" "));
     const fitKey = [model.builtAt, explode, ...visible].join(":");
     if (current.group.children.length && fitted.current !== fitKey) {
-      current.fit();
+      current.fit(false, true);
       fitted.current = fitKey;
     }
     current.invalidate();
@@ -297,7 +330,7 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
     const current = sceneRef.current;
     if (!current) return;
     disposeGroup(current.highlight);
-    if (selection && selection.kind !== "wall") {
+    if (selection?.kind === "door" || selection?.kind === "glazing") {
       current.group.updateWorldMatrix(true, true);
       const matrix = new THREE.Matrix4();
       for (const object of current.pickables) {
@@ -318,67 +351,96 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
               addOutline(new THREE.Matrix4().multiplyMatrices(mesh.matrixWorld, matrix));
             }
           });
-        } else if (selection.kind === "floor" && object.userData.floorIndex === selection.index) {
-          addOutline(mesh.matrixWorld);
         }
       }
     }
     current.invalidate();
   }, [model, selection, visible, explode, pins, walls, cutaway, showOutline3D, spacesByLevel]);
 
-  // The picked wall: hidden in the model and drawn again as its layers, which open apart (once per wall: a redraw of the model
-  // shows them already open). The camera turns to it the first time.
-  const shown = useRef(""), hold = useRef({ mesh: null as THREE.InstancedMesh | null, instance: -1, matrix: new THREE.Matrix4() }).current;
+  const shown = useRef("");
   useEffect(() => {
-    const current = sceneRef.current; if (!current) return;
+    const current = sceneRef.current;
+    if (!current) return;
     disposeGroup(current.opened);
-    current.invalidate();
-    const level = pick ? model.levels.find(l => l.id === pick.levelId) : undefined, wall = level && pick ? level.walls?.[pick.index] : undefined;
-    if (!pick || !level || !wall || wall.excluded || !walls || !visible.includes(level.id)) { shown.current = ""; return; }
-    const row = wall.type ? scheduleRow(wall.type, schedule) : null;
-    const layers = row?.layers ? dimensionedWallLayers(row.layers, row.thickness, wall.thickness) : [];
-    const opened = wallLayerGroup(level, pick.index, layers);
-    if (!opened) return;
+    const level = pick && model.levels.find(level => level.id === pick.levelId);
+    if (!pick || !level || !walls || !visible.includes(level.id)) {
+      current.isolate(false);
+      shown.current = "";
+      return;
+    }
+
+    let opened: THREE.Group | null = null;
+    if (pick.kind === "floor") {
+      const room = spacesByLevel.get(level.id)?.[pick.index];
+      const mesh = current.pickables.find(object => object.userData.levelId === level.id && object.userData.floorIndex === pick.index) as
+        THREE.Mesh<THREE.ShapeGeometry> | undefined;
+      if (mesh && room && !room.open) {
+        opened = floorLayerGroup(mesh.geometry, floorAssemblyForRoom(level, room, model.floorDetails));
+        opened.position.copy(mesh.position);
+      }
+    } else {
+      const wall = level.walls?.[pick.index];
+      if (wall && !wall.excluded) {
+        const row = wall.type && scheduleRow(wall.type, schedule);
+        const layers = row ? row.layers ?? [] : [];
+        const dimensioned = row && wall.tagRead?.basis !== "image" && dimensionedWallLayers(layers, row.thickness, wall.thickness).length > 0;
+        opened = wallLayerGroup(level, pick.index, layers, !dimensioned);
+        if (opened) {
+          const { length, height, gap } = opened.userData as { length: number; height: number; gap: number };
+          const distance = openedDistance(length, height, gap, layers.length), tall = distance * .032, width = tall * 640 / 72;
+          opened.userData.distance = distance;
+          opened.userData.stack = layers.length ? 1 + layers.length * tall * 1.3 : 0;
+          const parts = [...opened.children];
+          for (const part of parts) {
+            const index = part.userData.layer as number | undefined;
+            if (index === undefined) continue;
+            const material = layers[index].material;
+            const label = layerLabel((index + 1) + "  " + material, layerColor(material));
+            const y = height / 2 + 1 + tall / 2 + index * tall * 1.3, z = part.userData.opened;
+            label.position.set(-length / 2 + width / 2, y, z);
+            label.scale.set(width, tall, 1);
+            label.userData = { label: true, x0: label.position.x };
+            label.renderOrder = 2;
+            opened.add(label);
+          }
+        }
+      }
+    }
+
+    if (!opened) {
+      current.isolate(false);
+      shown.current = "";
+      return;
+    }
     opened.position.y += levelBase(model, level, explode);
-    opened.userData.pick = { kind: "wall", levelId: level.id, index: pick.index } satisfies WallPick;
-    let instances: THREE.InstancedMesh | null = null;
-    current.group.traverse(o => { if (o.userData.levelId === level.id && o.userData.walls) instances = o as THREE.InstancedMesh; });
-    const mesh = instances as THREE.InstancedMesh | null, instance = mesh ? (mesh.userData.walls as number[]).indexOf(pick.index) : -1;
-    if (mesh && instance >= 0) { mesh.getMatrixAt(instance, hold.matrix); hold.mesh = mesh; hold.instance = instance; mesh.setMatrixAt(instance, new THREE.Matrix4().makeScale(0, 0, 0)); mesh.instanceMatrix.needsUpdate = true; mesh.userData.hidden = instance; }
-    // Labels above each opened layer, stepped up so they don't cover each other, each with a leader down to its layer.
-    const { length, height, gap } = opened.userData as { length: number; height: number; gap: number };
-    // Labels sized for the distance the camera will stand at, so they read the same on a short wall and a long one.
-    const slabs = layers.length ? layerSlabs(layers, wall.thickness) : [], distance = openedDistance(length, height, gap, slabs.length), tall = distance * .032, width = tall * 640 / 72;
-    opened.userData.distance = distance; opened.userData.stack = slabs.length ? 1 + slabs.length * tall * 1.3 : 0;
-    slabs.forEach((slab, i) => {
-      const z = openedCenter(slab, i, slabs.length, gap), y = height / 2 + 1 + tall / 2 + i * tall * 1.3;
-      const label = layerLabel(`${i + 1}  ${slab.material}${slab.inches !== null ? ` · ${inchesLabel(slab.inches)}` : slab.inside ? " · in the studs" : ""}`, layerColor(slab.material));
-      // Drawn at the wall's -x end; labelsTowardCamera mirrors them to whichever end faces the viewer.
-      label.position.set(-length / 2 + width / 2, y, z); label.scale.set(width, tall, 1); label.userData = { label: true, x0: label.position.x }; label.renderOrder = 2; opened.add(label);
-      const leader = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-length / 2 + .3, height / 2, z), new THREE.Vector3(-length / 2 + .3, y - tall / 2, z)]), new THREE.LineBasicMaterial({ color: "#7c3aed", transparent: true, opacity: 0, depthTest: false }));
-      leader.userData.label = true; leader.renderOrder = 2; opened.add(leader);
+    opened.userData.pick = { kind: pick.kind, levelId: level.id, index: pick.index };
+    if (pick.layer !== undefined) opened.children.forEach(part => {
+      if (part.userData.layer === pick.layer) {
+        ((part as THREE.Mesh).material as THREE.MeshStandardMaterial).emissive.set("#5b21b6").multiplyScalar(.5);
+      }
     });
-    if (pick.layer !== undefined) opened.children.forEach(part => { if (part.userData.layer === pick.layer) ((part as THREE.Mesh).material as THREE.MeshStandardMaterial).emissive.set("#5b21b6").multiplyScalar(.35); });
-    // The rest of the building fades back while a wall is open, and room labels step aside, so its layers read clearly.
-    const faded: { material: THREE.Material; opacity: number; transparent: boolean; depthWrite: boolean }[] = [], hiddenLabels: THREE.Object3D[] = [];
-    current.group.traverse(o => {
-      if ((o as THREE.Sprite).isSprite) { if (o.visible) { o.visible = false; hiddenLabels.push(o); } return; }
-      const materials = (o as THREE.Mesh).material; if (!materials) return;
-      (Array.isArray(materials) ? materials : [materials]).forEach(material => { faded.push({ material, opacity: material.opacity, transparent: material.transparent, depthWrite: material.depthWrite }); material.transparent = true; material.opacity *= .1; material.depthWrite = false; material.needsUpdate = true; });
-    });
-    const key = `${model.builtAt}:${level.id}:${pick.index}:${layers.length}`, fresh = key !== shown.current;
-    opened.userData.start = fresh ? performance.now() : -Infinity;
+    const key = [model.builtAt, level.id, pick.kind, pick.index, explode, ...visible].join(":");
+    const fresh = key !== shown.current;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    opened.userData.start = fresh && !reducedMotion ? performance.now() : -Infinity;
     current.opened.add(opened);
-    current.labelsTowardCamera(opened);
-    if (fresh) current.focus(opened);
+    current.isolate(true);
+    if (pick.kind === "wall") current.labelsTowardCamera(opened);
+    if (fresh) {
+      if (reducedMotion) {
+        opened.children.forEach(part => {
+          if (part.userData.axis === "y") part.position.y = part.userData.opened;
+          if (part.userData.axis === "z") part.position.z = part.userData.opened;
+        });
+        current.fit();
+      } else if (pick.kind === "floor") current.focusFloor(opened);
+      else current.focus(opened);
+    }
     shown.current = key;
-    return () => {
-      if (hold.mesh && hold.instance >= 0 && hold.mesh.parent) { hold.mesh.setMatrixAt(hold.instance, hold.matrix); hold.mesh.instanceMatrix.needsUpdate = true; delete hold.mesh.userData.hidden; }
-      hold.mesh = null; hold.instance = -1;
-      faded.forEach(f => { f.material.opacity = f.opacity; f.material.transparent = f.transparent; f.material.depthWrite = f.depthWrite; f.material.needsUpdate = true; });
-      hiddenLabels.forEach(o => { o.visible = true; });
-    };
-  }, [model, visible, explode, pins, walls, cutaway, showOutline3D, schedule, pick?.levelId, pick?.index, pick?.layer]);
+    current.invalidate();
+  }, [model, visible, explode, pins, walls, cutaway, showOutline3D, schedule, spacesByLevel,
+    pick?.kind, pick?.levelId, pick?.index, pick?.layer]);
+
   return <div className="sm-canvas" ref={host}/>;
 }
 
@@ -391,7 +453,7 @@ function PickEditor({ level, pick, types, onWall, onDoor, onGlazing, onPartition
   const [value, setValue] = useState(wall ? wall.type ?? "" : glass ? glass.type ?? "" : door?.number ?? "");
   const run = wall ?? glass ?? partition, length = run ? Math.round(Math.hypot(run.b[0] - run.a[0], run.b[1] - run.a[1]) * 10) / 10 : 0;
   if (partition) { const rail = partition.kind === "railing", what = rail ? "guardrail" : "partition"; return <div className="sm-pick" role="group" aria-label={`${rail ? "Guardrail" : "Operable partition"} ${pick.index + 1}`}>
-    <p><strong>{rail ? "Guardrail" : "Operable partition"} {pick.index + 1}</strong> · {length} ft · {Math.round(partition.thickness * 12 * 10) / 10}" thick · {partition.excluded ? `marked not a ${what}` : "divides the spaces either side"}</p>
+    <p><strong>{rail ? "Guardrail" : "Operable partition"} {pick.index + 1}</strong> · {length} ft · {Math.round(partition.thickness * 12 * 10) / 10}" thick · {partition.outsidePlan ? "Detached trace · review" : partition.excluded ? `marked not a ${what}` : "divides the spaces either side"}</p>
     <Button onClick={() => onPartition(!partition.excluded)}>{partition.excluded ? `Restore this ${what}` : `Not a ${what}`}</Button>
     <Button onClick={onClose}>Close</Button>
   </div>; }
@@ -401,8 +463,8 @@ function PickEditor({ level, pick, types, onWall, onDoor, onGlazing, onPartition
     <Button onClick={onClose}>Close</Button>
   </div>;
   return <form className="sm-pick" aria-label={wall ? `Wall ${pick.index + 1}` : glass ? `Glass ${pick.index + 1}` : `Door ${door?.number ?? pick.index + 1}`} onSubmit={e => { e.preventDefault(); if (wall) onWall({ type: value }); else if (glass) onGlazing({ type: value }); else onDoor(value); }}>
-    {wall ? <p><strong>Wall {pick.index + 1}</strong> · {length} ft · {Math.round(wall.thickness * 12 * 10) / 10}" thick · {wall.excluded ? "marked not a wall" : wall.type ? `${wall.type} ${wall.edited ? "(set by you)" : wall.typeSet ? "(set for untagged walls)" : "(from the plan's tag)"}` : "no type"}</p>
-      : glass ? <p><strong>Glass {pick.index + 1}</strong> · {length} ft · {glass.excluded ? "marked not glass" : glass.type ?? "no storefront or window type"}</p>
+    {wall ? <p><strong>Wall {pick.index + 1}</strong> · {length} ft · {Math.round(wall.thickness * 12 * 10) / 10}" thick · {wall.outsidePlan ? "Detached trace · review" : wall.excluded ? "marked not a wall" : wall.type ? `${wall.type} ${wall.edited ? "(set by you)" : wall.typeSet ? "(set for untagged walls)" : "(from the plan's tag)"}` : "no type"}</p>
+      : glass ? <p><strong>Glass {pick.index + 1}</strong> · {length} ft · {glass.outsidePlan ? "Detached trace · review" : glass.excluded ? "marked not glass" : glass.type ?? "no storefront or window type"}</p>
       : <p><strong>Door{door?.number ? ` ${door.number}` : ""}</strong> · {door?.basis === "tagged-gap" ? "tagged opening" : door?.leaves === 2 ? "pair" : "single"} · {door?.width} ft wide</p>}
     <label className="ui-field">{wall ? "Wall type" : glass ? "Storefront or window type" : "Door number"}<input autoFocus maxLength={16} value={value} onChange={e => setValue(e.target.value)} list={wall ? "sm-wall-types" : undefined}/></label>
     {wall && <datalist id="sm-wall-types">{types.map(t => <option key={t} value={t}/>)}</datalist>}
@@ -528,31 +590,36 @@ function WallLayersCard({ level, index, layer, schedule, sheet, reading, onLayer
   const wall = level.walls?.[index];
   if (!wall) return null;
   const length = Math.round(Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1]) * 10) / 10, row = wall.type ? scheduleRow(wall.type, schedule) : null;
-  const layers = row?.layers ?? [], slabs = layerSlabs(layers, wall.thickness), fit = row ? layersFit(layers, row.thickness) : "unknown";
-  const hasLayerGeometry = !!row && dimensionedWallLayers(layers, row.thickness, wall.thickness).length > 0;
-  const total = slabs.filter(s => !s.inside).reduce((sum, s) => sum + (s.inches ?? 0), 0), measured = Math.round(wall.thickness * 12 * 10) / 10;
-  // A wall much thicker or thinner on the plan than its type: likely the wrong type (or a tag read onto the wrong wall).
-  const printed = row ? parseInches(row.thickness) : null, mismatch = printed !== null && Math.abs(measured - printed) > Math.max(1.5, printed * .3);
-  const why = !wall.type ? "This wall has no type: no tag on the plan points to it. Give it one on the plan, or set the untagged walls' type under Wall length by type."
-    : !schedule.length ? sheet ? `The partition types on ${sheet} haven't been read.` : "No partition type sheet was found in the drawings, so this wall's layers can't be read."
-    : !row ? `${wall.type} isn't in the partition schedule${sheet ? ` on ${sheet}` : ""}: check its tag on the plan.`
-    : !layers.length ? schedule.some(t => t.layers?.length) ? `The legend and sections on ${sheet ?? "the partition type sheet"} didn't give ${wall.type}'s layers. Check it on the sheet.` : `${wall.type}'s layers haven't been read from ${sheet ?? "the partition type sheet"} yet.` : "";
+  const layers = row?.layers ?? [], fit = row ? layersFit(layers, row.thickness) : "unknown";
+  const hasLayerGeometry = !!row && wall.tagRead?.basis !== "image" && dimensionedWallLayers(layers, row.thickness, wall.thickness).length > 0;
+  const measured = Math.round(wall.thickness * 12 * 10) / 10;
+  const printed = row ? parseInches(row.thickness) : null;
+  const mismatch = printed !== null && Math.abs(measured - printed) > .5;
+  const why = !wall.type ? "Awaiting a wall type from the plan."
+    : !row ? "This type needs a unique match in the wall assembly drawings."
+    : "The matching detail still needs readable layer labels.";
   return <section className="sm-layers" aria-label={`Wall ${index + 1} layers`}>
-    <header><div><strong>Wall {index + 1}{wall.type ? ` · ${wall.type}` : ""}</strong><span>{level.name} · {length} ft long · {measured}" thick on the plan</span></div><button type="button" className="sm-layers-close" aria-label="Close the wall's layers" onClick={onClose}>×</button></header>
-    {row && <p>{[row.description, row.thickness && `${row.thickness} on the schedule`, row.rating && `Rating ${row.rating}`].filter(Boolean).join(" · ")}</p>}
-    {mismatch && <p className="sm-layers-warn">On the plan this wall measures {measured}", but {wall.type} is {row!.thickness}: check its type on the plan.</p>}
+    <header>
+      <div><strong>Wall {index + 1}{wall.type ? " · " + wall.type : ""}</strong><span>{level.name} · {length} ft long · {measured}" thick on the plan</span></div>
+      <button type="button" className="sm-layers-close" aria-label="Return to model" onClick={onClose}>×</button>
+    </header>
+    {wall.type && <p>{wall.tagRead?.basis === "printed" ? "Printed type tag" : wall.typeSet || wall.edited ? "Adjusted type" : "Type tag needs plan review"}</p>}
+    {row && <p>{[row.description, row.thickness && row.thickness + " on the detail", row.rating].filter(Boolean).join(" · ")}</p>}
+    {mismatch && <p className="sm-layers-warn">Plan thickness {measured}" differs from the detail's {row!.thickness}. Check the type on the plan.</p>}
     {layers.length ? <>
-      <ol className="sm-layer-list">{slabs.map((s, i) => <li key={i}><button type="button" disabled={!hasLayerGeometry} aria-pressed={layer === i} onClick={() => onLayer(i)}><span className="sm-swatch" style={{ background: layerColor(s.material) }}/><span>{i + 1}. {s.material}</span><span>{s.inches !== null ? inchesLabel(s.inches) : s.inside ? "in the stud cavity" : "not given"}</span></button></li>)}</ol>
-      {!hasLayerGeometry && <p>3D layers require a thickness for each layer and agreement with the wall on the plan.</p>}
-      <p className={fit === "off" ? "sm-layers-warn" : undefined}>{fit === "fits" ? `The layers add up to ${inchesLabel(total)}, the schedule's ${row!.thickness}.` : fit === "off" ? `The layers add up to ${inchesLabel(total)}, but the schedule prints ${row!.thickness}: check ${wall.type} on ${sheet ?? "the partition type sheet"}.` : "Not every thickness is given, so the layers can't be checked against the schedule."}</p>
-      <p>Listed from the side the tag is on. Worked out by AI from {sheet ?? "the partition type sheet"}'s legend and typical sections; check them on the sheet.</p>
+      <AssemblyLayerList rows={layers.map(layer => ({ material: layer.material, size: layer.inches === null ? undefined : inchesLabel(layer.inches) }))}
+        active={layer} onLayer={onLayer}/>
+      {!hasLayerGeometry && <p>Layer spacing is illustrative. Check the drawing for thicknesses.</p>}
+      {fit === "off" && <p className="sm-layers-warn">The listed thicknesses differ from the overall detail dimension.</p>}
     </> : <p>{why}</p>}
     <div className="sm-layers-actions">
       <Button onClick={onShowPlan}>Show on the plan</Button>
-      {onOpenSheet && <Button onClick={onOpenSheet}>Open {sheet}</Button>}
-      {onRead && sheet && wall.type && !layers.length && (!schedule.length || row && !schedule.some(t => t.layers?.length)) && <Button disabled={reading} onClick={onRead}>{reading ? "Reading the layers…" : `Read the wall layers on ${sheet}`}</Button>}
+      {onOpenSheet && <Button onClick={onOpenSheet}>Open detail · {row?.source?.sheet ?? sheet}</Button>}
+      {onRead && sheet && wall.type && !layers.length && (!schedule.length || row && !schedule.some(type => type.layers?.length)) &&
+        <Button disabled={reading} onClick={onRead}>{reading ? "Reading the layers…" : "Read wall layers"}</Button>}
     </div>
   </section>;
+
 }
 
 export function SchematicModelStudio({ project, navigate, notify }: { project: Project } & Pick<ViewProps, "navigate" | "notify">) {
@@ -584,6 +651,13 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
   const register = drawingRegister(documents), section = heightSheet(register);
   const schedule = current?.partitionTypes ?? NO_TYPES, typeSheet = partitionTypeSheet(register), typeSheetName = current?.partitionSheet ?? typeSheet?.sheet;
   const typeSheetRow = register.find(r => r.sheet === typeSheetName), pickLevel = wallPick ? current?.levels.find(l => l.id === wallPick.levelId) : undefined;
+  const wallType = wallPick && pickLevel?.walls?.[wallPick.index]?.type;
+  const wallDetail = wallType ? scheduleRow(wallType, schedule)?.source : undefined;
+  const floorPick = activePick?.kind === "floor" ? activePick : null;
+  const floorLevel = floorPick && current?.levels.find(item => item.id === floorPick.levelId);
+  const floorRoom = floorPick && spacesByLevel.get(floorPick.levelId)?.[floorPick.index];
+  const floorAssembly = floorLevel && floorRoom ? floorAssemblyForRoom(floorLevel, floorRoom, current?.floorDetails) : null;
+  const floorPlan = floorLevel && floorRoom ? planSource(floorLevel, floorPlanAreaAt(floorLevel, floorRoom.at) ?? 0) : null;
   useEffect(() => () => { abort.current?.abort(); layersAbort.current?.abort(); }, []);
   useEffect(() => { setSelection(null); setPlanFocus(null); setPlanChoice(null); }, [current?.builtAt]);
   useEffect(() => { if (planFocus) outlinePanel.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [planFocus]);
@@ -684,8 +758,13 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
               layer={wallPick.layer} schedule={schedule} sheet={typeSheetName} reading={readingLayers}
               onLayer={layer => setSelection({ ...wallPick, layer: wallPick.layer === layer ? undefined : layer })}
               onClose={() => setSelection(null)} onShowPlan={() => showOnPlan(pickLevel.id, "wall", wallPick.index)}
-              onOpenSheet={typeSheetRow ? () => setSource({ documentId: typeSheetRow.doc.id, sheet: typeSheetRow.sheet, page: typeSheetRow.page, label: "Partition types" }) : undefined}
+              onOpenSheet={wallDetail ? () => openDimension(wallDetail, "Wall assembly") : typeSheetRow ? () => setSource({ documentId: typeSheetRow.doc.id, sheet: typeSheetRow.sheet, page: typeSheetRow.page, label: "Partition types" }) : undefined}
               onRead={busy || !typeSheet ? undefined : readLayers}/>}
+            {floorPick && floorRoom && floorLevel && <FloorLayersCard room={floorRoom} level={floorLevel.name}
+              assembly={floorAssembly} active={floorPick.layer} onClose={() => setSelection(null)}
+              onLayer={layer => setSelection({ ...floorPick, layer: floorPick.layer === layer ? undefined : layer })}
+              onOpen={floorAssembly ? () => openDimension(floorAssembly.source, "Floor assembly") : undefined}
+              onPlan={floorPlan ? () => setSource({ ...floorPlan, label: floorLevel.name }) : undefined}/>}
           </div>
           {graphicsError && <p className="sm-empty-view" role="alert">{graphicsError}</p>}
           <div className="sm-options" role="group" aria-label="Model display options">
@@ -707,8 +786,8 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
               inspect(pick);
               if (isolateLevel) {
                 setShown([pick.levelId]); setCutaway(true); setExplode(false);
-                viewer.current?.scrollIntoView({ block: "nearest" });
               }
+              if (pick.kind === "floor") viewer.current?.scrollIntoView({ block: "nearest" });
             }}
             onClose={() => setSelection(null)} onDimension={openDimension} onPlan={(item, pick, plan) => {
               if (pick.kind === "door" || pick.kind === "glazing") showOnPlan(item.id, pick.kind, pick.index);
@@ -725,7 +804,7 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
         {section && !level.vertical?.datum && <Button onClick={() => setSource({ documentId: section.doc.id, sheet: section.sheet, page: section.page, label: "Height source" })}>Check heights on {section.sheet}</Button>}
         <button type="button" className="ui-btn secondary" aria-expanded={showOutlineEditor} onClick={() => setShowOutlineEditor(v => !v)}>{showOutlineEditor ? "Close outline editor" : "Edit outline on source sheet"}</button>
         {level.wallNote && <p>Walls: {level.wallNote} They are read from the drawing's own lines, not traced by hand; check them on the sheet. Wall quantities are not priced yet.</p>}
-      {!!level.walls?.length && <details><summary>Wall length by type · {keptWalls(level).filter(w => w.type && !w.typeSet && !w.edited).length} walls typed from the plan's tags{level.walls.some(w => w.edited || w.excluded) ? ` · ${level.walls.filter(w => w.edited || w.excluded).length} corrected by you` : ""}</summary>
+      {!!level.walls?.length && <details><summary>Wall length by type · {keptWalls(level).filter(w => w.type && !w.typeSet && !w.edited).length} walls typed from the plan's tags{level.walls.some(w => w.edited || w.excluded && !w.outsidePlan) ? ` · ${level.walls.filter(w => w.edited || w.excluded && !w.outsidePlan).length} corrected by you` : ""}</summary>
         <div className="sm-table-wrap"><table className="ui-table"><thead><tr><th>Type</th><th>What it is</th><th>Rough thickness</th><th>Rating</th><th>Walls</th><th>Length · ft</th><th>Face area · SF</th><th>Layers</th></tr></thead><tbody>{wallTypeTotals(keptWalls(level), level.height).map(t => {
           const row = t.type === "Untagged" ? null : scheduleRow(t.type, current.partitionTypes ?? []), wall = longestWallOfType(level, t.type);
           return <tr key={t.type}><td>{t.type}</td><td>{t.type === "Untagged" ? "No tag on the plan" : row ? row.description : current.partitionTypes?.length ? <strong>Not in the partition schedule: check the tag on the plan</strong> : "—"}</td><td>{row?.thickness ?? ""}</td><td>{row?.rating ?? ""}</td><td>{t.walls}</td><td>{t.feet.toLocaleString()}</td><td>{t.squareFeet.toLocaleString()}</td><td>{wall >= 0 && <button type="button" className="ui-btn secondary" aria-label={`Open the longest ${t.type === "Untagged" ? "untagged wall" : `${t.type} wall`} in 3D${row?.layers?.length ? " to see its layers" : ""}`} onClick={() => openWall(level.id, wall)}>{row?.layers?.length ? `${row.layers.length} layers · Open in 3D` : "Open in 3D"}</button>}</td></tr>;

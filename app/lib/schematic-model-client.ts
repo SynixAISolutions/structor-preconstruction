@@ -17,9 +17,12 @@ import { openStoredPdf, readPageTextBoxes, readStoredText, renderStoredPage, ren
 import { pageTurn } from "./page-turns";
 import type { Project } from "./projects";
 import { vectorsFromOperators, type Point } from "./plan-vectors";
-import { drawingTextRuns } from "./drawing-dimensions";
+import { drawingLengthFeet, drawingTextRuns } from "./drawing-dimensions";
 import { isFinishSchedule } from "./finish-schedule";
-import { printedFloorFinishes, printedSlabNotes, slabNoteArea, slabNoteLevel, type FloorFinishNote } from "./schematic-floor-details";
+import { printedFloorFinishes, printedSlabNotes, slabNoteArea, slabNoteLevel, type FloorAssemblyDetail, type FloorFinishNote } from "./schematic-floor-details";
+import { assemblyCaptions, assemblyTextMatches, assemblyThickness, floorAssemblySheet, floorLeaderLayers, printedFloorDetailReferences, wallAssemblySheet, type AssemblyKind, type AssemblyRead, type FloorDetailReference } from "./schematic-assembly-drawings";
+import { holdOutsidePlanRuns } from "./schematic-plan-review";
+import { matchPrintedWallTags, printedWallTags } from "./schematic-printed-wall-tags";
 import { pageTextBoxes } from "./text-anchor";
 import { planRegistration } from "./schematic-plan-alignment";
 import { assembleFloorPlans, type FloorPlanBuild, type ReadFloorPlan } from "./schematic-plan-areas";
@@ -219,6 +222,9 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
   }
   const scales = plansRead.filter(o => o.scale && !o.borrowed);
   if (new Set(scales.map(o => o.scale)).size > 1) warnings.push(`The floor plans read different scales (${scales.map(o => `${o.row.sheet} ${o.scale} ft per inch`).join(", ")}); check them on the sheets.`);
+  const partitionTypes = await readModelWallTypes(register, warnings, args.signal, args.onProgress);
+  const floorSheets = register.filter(floorAssemblySheet);
+  const floorSheetKeys = new Set(floorSheets.map(row => row.sheet.toUpperCase().replace(/[^A-Z0-9]/g, "")));
   const areasOf = new Map<number, ReadFloorPlan[]>();
   const viewGeometry = new Map<PlanView, Awaited<ReturnType<typeof planVectorWalls>>>();
   for (const { level, row, reading, page, scale, borrowed } of plansRead) {
@@ -227,10 +233,10 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
     else if (!scale) warnings.push(`${row.sheet}: no printed scale was read; ${sized.sizing.toLowerCase()}.`);
     args.onProgress?.(`Finding the walls on ${row.sheet}…`);
     const found = row.view && viewGeometry.get(row.view) || await planVectorWalls(row.doc, row.page, row.sheet, sized.frame, reading.outline,
-      { scaled: !!scale, printedScale: !borrowed && !!scale, alignAreas: splitLevels.has(level), alignStack, view: row.view, signal: args.signal, onProgress: args.onProgress })
+      { scaled: !!scale, printedScale: !borrowed && !!scale, alignAreas: splitLevels.has(level), alignStack, view: row.view, partitionTypes, floorSheetKeys, signal: args.signal, onProgress: args.onProgress })
       .catch(error => {
         if (args.signal?.aborted) throw error;
-        return { walls: [], doors: [], glazing: [], partitions: [], columns: [], openings: [], flights: { arriving: [], rising: [] } as LevelFlights, rooms: [], note: "The sheet's lines could not be read for walls.", tagWarning: "", registration: null, grid: [] };
+        return { walls: [], doors: [], glazing: [], partitions: [], columns: [], openings: [], flights: { arriving: [], rising: [] } as LevelFlights, rooms: [], floorReferences: [] as FloorDetailReference[], note: "The sheet's lines could not be read for walls.", tagWarning: "", registration: null, grid: [] };
       });
     if (row.view) viewGeometry.set(row.view, found);
     if (!found.walls.length) warnings.push(`${row.sheet}: ${found.note}`);
@@ -244,7 +250,7 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
         id: "L" + level, name: levelName(level), order: level,
         elevation: heights.elevations.get(level) ?? 0, height: heights.heights.get(level) ?? 14,
         vertical: heights.vertical.get(level), outline: sized.outline, rooms: found.rooms.length ? found.rooms : sized.rooms,
-        source: sourceOfPlan(row), sizing: sized.sizing, frame: sized.frame,
+        source: sourceOfPlan(row), sizing: sized.sizing, frame: sized.frame, floorReferences: found.floorReferences,
         walls: found.walls, wallNote: found.note, doors: found.doors, glazing: found.glazing, partitions: found.partitions,
         columns: found.columns, openings: level === plansRead[0].level ? [] : found.openings,
       },
@@ -368,17 +374,26 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
       warnings.push(row.sheet + ": the floor details could not be read.");
     }
   }
-  // The partition type schedule, to describe the wall types and catch codes it doesn't list.
-  const typeSheet = partitionTypeSheet(register);
-  let partitionTypes: PartitionType[] | undefined;
-  if (typeSheet && levels.some(l => l.walls?.some(w => w.type))) {
-    args.onProgress?.(`Reading the partition types on ${typeSheet.sheet}…`);
-    try { partitionTypes = await readPartitionTypes(typeSheet.doc, typeSheet.page, typeSheet.sheet, args.signal); }
-    catch (error) { if (args.signal?.aborted) throw error; warnings.push(`${typeSheet.sheet}: the partition types could not be read.`); }
-    const unknown = [...new Set(levels.flatMap(l => (l.walls ?? []).filter(w => w.type && !w.typeSet && partitionTypes?.length && !scheduleRow(w.type, partitionTypes)).map(w => w.type!)))];
-    if (unknown.length) warnings.push(`Wall tags not in the partition schedule on ${typeSheet.sheet} (check them on the plan; they may be misread): ${unknown.join(", ")}.`);
+  const floorDetails: FloorAssemblyDetail[] = [];
+  for (const row of floorSheets) {
+    args.signal?.throwIfAborted();
+    args.onProgress?.("Reading floor assembly diagrams on " + row.sheet + "…");
+    try {
+      const detail = await readAssemblySheet(row, "floor", args.signal);
+      floorDetails.push(...detail.floorDetails);
+      if (detail.failed || !detail.floorDetails.length) warnings.push(row.sheet + ": some floor assembly labels need review.");
+    } catch (error) {
+      if (args.signal?.aborted) throw error;
+      warnings.push(row.sheet + ": the floor assembly diagrams could not be read.");
+    }
   }
-  return { levels, warnings, builtAt: new Date().toISOString(), ...(floorFinishes.length ? { floorFinishes } : {}), ...(partitionTypes ? { partitionTypes, partitionSheet: typeSheet!.sheet } : {}) };
+  const unknown = [...new Set(levels.flatMap(l => (l.walls ?? []).flatMap(w =>
+    w.type && partitionTypes.length && !scheduleRow(w.type, partitionTypes) ? [w.type] : [])))];
+  if (unknown.length) warnings.push("Wall types awaiting a unique detail match: " + unknown.join(", ") + ".");
+  const sheets = new Set(partitionTypes.map(type => type.source?.sheet).filter(Boolean));
+  const partitionSheet = sheets.size === 1 ? [...sheets][0] : undefined;
+  return { levels, warnings, builtAt: new Date().toISOString(), ...(floorFinishes.length ? { floorFinishes } : {}),
+    ...(partitionTypes.length ? { partitionTypes, partitionSheet } : {}), ...(floorDetails.length ? { floorDetails } : {}) };
 }
 
 /**
@@ -386,9 +401,84 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
  * sheet's parts and one text reading, not a rebuild. Pass the result to setPartitionTypes.
  */
 export async function readWallLayers(documents: StoredDocument[], signal?: AbortSignal): Promise<{ partitionTypes: PartitionType[]; partitionSheet: string }> {
-  const typeSheet = partitionTypeSheet(drawingRegister(documents));
-  if (!typeSheet) throw new Error("No partition type sheet was found in the project's drawings. Upload the sheet that schedules the wall types.");
-  return { partitionTypes: await readPartitionTypes(typeSheet.doc, typeSheet.page, typeSheet.sheet, signal), partitionSheet: typeSheet.sheet };
+  const register = drawingRegister(documents), warnings: string[] = [];
+  const partitionTypes = await readModelWallTypes(register, warnings, signal);
+  const partitionSheet = partitionTypes.find(type => type.source)?.source?.sheet ?? partitionTypeSheet(register)?.sheet;
+  if (!partitionSheet || !partitionTypes.length) throw new Error(warnings.join(" ") || "Upload the wall types or assembly details to read the layers.");
+  return { partitionTypes, partitionSheet };
+}
+
+async function readAssemblySheet(row: RegisterRow, kind: AssemblyKind, signal?: AbortSignal) {
+  const drawing = await readDetailDrawing(row.doc, row.page, signal);
+  const captions = assemblyCaptions(drawing.boxes, drawing.segments, drawing.page, kind);
+  const wallTypes: PartitionType[] = [], floorDetails: FloorAssemblyDetail[] = [];
+  let failed = 0;
+  for (let i = 0; i < captions.length; i += 3) {
+    await Promise.all(captions.slice(i, i + 3).map(async caption => {
+      signal?.throwIfAborted();
+      const source = { documentId: row.doc.id, sheet: row.sheet, page: row.page, quote: caption.title };
+      let reads: AssemblyRead[] = [];
+      // A vector floor section with readable leaders already supplies its printed callouts.
+      const native = kind === "floor" ? floorLeaderLayers(caption, drawing.segments, drawing.page, drawing.text) : [];
+      if (!native.length) {
+        try {
+          const image = await renderStoredRegion(row.doc, row.page, caption.box, 2000, true);
+          const { details } = await aiJob<{ details: AssemblyRead[] }>("assembly-detail", { image, kind, title: caption.title, tags: caption.tags }, signal);
+          reads = details ?? [];
+        } catch (error) {
+          if (signal?.aborted) throw error;
+          failed++;
+        }
+      }
+      const cited = (value: string) => assemblyTextMatches(value, caption.labels);
+      const checked = (read: AssemblyRead | undefined) => (read?.layers ?? []).filter(layer => cited(layer.material));
+      if (kind === "wall") {
+        for (const tag of caption.tags) {
+          const matches = reads.filter(candidate => tagKey(candidate.tag) === tagKey(tag));
+          const read = matches.length === 1 ? matches[0] : undefined;
+          const layers = checked(read).map(layer => {
+            const feet = assemblyThickness(layer.thickness, layer.material);
+            return { material: layer.material, inches: feet === null ? null : feet * 12 };
+          });
+          const thickness = read && cited(read.thickness) && drawingLengthFeet(read.thickness) !== null ? read.thickness : "";
+          const rating = read && cited(read.rating) ? read.rating : "";
+          wallTypes.push({ tag, description: caption.title, thickness, rating, source, ...(layers.length ? { layers } : {}) });
+        }
+      } else {
+        const layers = native.length ? native : checked(reads.length === 1 && !reads[0].tag ? reads[0] : undefined).map(layer => ({ ...layer, thicknessFeet: undefined }));
+        if (layers.length) floorDetails.push({ source, detail: caption.detail, layers: layers.map(({ material, thickness, thicknessFeet: drawn }) => {
+          const thicknessFeet = drawn ?? assemblyThickness(thickness, material);
+          return { material, ...(thicknessFeet === null ? {} : { thicknessFeet, label: thickness }) };
+        }) });
+      }
+    }));
+  }
+  return { wallTypes, floorDetails, failed, captions: captions.length };
+}
+
+async function readModelWallTypes(register: RegisterRow[], warnings: string[], signal?: AbortSignal, progress?: (message: string) => void) {
+  const matches = register.filter(wallAssemblySheet);
+  const legacy = partitionTypeSheet(register);
+  const rows = matches.length ? matches : legacy ? [legacy] : [];
+  const types: PartitionType[] = [];
+  for (const row of rows) {
+    signal?.throwIfAborted();
+    progress?.("Reading wall assembly diagrams on " + row.sheet + "…");
+    try {
+      const detail = await readAssemblySheet(row, "wall", signal);
+      if (detail.captions) {
+        types.push(...detail.wallTypes);
+        if (detail.failed) warnings.push(row.sheet + ": some wall assembly diagrams could not be read.");
+      } else {
+        const scheduled = await readPartitionTypes(row.doc, row.page, row.sheet, signal);
+        types.push(...scheduled.map(type => ({ ...type, source: { documentId: row.doc.id, sheet: row.sheet, page: row.page, quote: type.tag } })));
+      }
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      warnings.push(row.sheet + ": the wall assembly details could not be read.");
+    }
+  }
+  return types.sort((a, b) => a.tag.localeCompare(b.tag, undefined, { numeric: true }));
 }
 
 /**
@@ -423,8 +513,8 @@ async function readPartitionTypes(doc: StoredDocument, pageNumber: number, sheet
  * plan (3 at a time), placed through the plan's own tag ovals and leaders (lib/tag-placement).
  */
 async function planVectorWalls(doc: StoredDocument, pageNumber: number, sheetName: string, frame: { widthFeet: number; heightFeet: number }, outline: Point[],
-  { scaled, printedScale, alignAreas, alignStack, view, signal, onProgress }: {
-    scaled: boolean; printedScale: boolean; alignAreas: boolean; alignStack: boolean; view?: PlanView; signal?: AbortSignal; onProgress?: (text: string) => void;
+  { scaled, printedScale, alignAreas, alignStack, view, partitionTypes, floorSheetKeys, signal, onProgress }: {
+    scaled: boolean; printedScale: boolean; alignAreas: boolean; alignStack: boolean; view?: PlanView; partitionTypes: PartitionType[]; floorSheetKeys: ReadonlySet<string>; signal?: AbortSignal; onProgress?: (text: string) => void;
   }) {
   const [pdfjs, pdf] = await Promise.all([import("pdfjs-dist"), openStoredPdf(doc)]);
   const page = await pdf.getPage(pageNumber);
@@ -434,7 +524,7 @@ async function planVectorWalls(doc: StoredDocument, pageNumber: number, sheetNam
   const segments = view ? drawing.segments.filter(line => inView(line.a) && inView(line.b)) : drawing.segments;
   const curves = view ? drawing.curves.filter(line => [line.from, line.to, line.c1, line.c2].every(inView)) : drawing.curves;
   const fills = view ? drawing.fills.filter(fill => fill.every(inView)) : drawing.fills;
-  const printed = printedScale ? await pageTurn((): Promise<{ items: Parameters<typeof printedDoorTags>[0] }> => page.getTextContent(), true).catch(() => null) : null;
+  const printed = printedScale || partitionTypes.length || floorSheetKeys.size ? await pageTurn((): Promise<{ items: Parameters<typeof printedDoorTags>[0] }> => page.getTextContent(), true).catch(() => null) : null;
   signal?.throwIfAborted();
   const text = printed && (alignAreas || alignStack) ? drawingTextRuns(printed.items, viewport).filter(run => inView(run.a) && inView(run.b)) : null;
   const registration = alignAreas && text ? planRegistration(segments, text, frame.widthFeet * 72 / viewport.width) : null;
@@ -446,7 +536,11 @@ async function planVectorWalls(doc: StoredDocument, pageNumber: number, sheetNam
   const columns = levelColumns(segments, sheet, frame, outline, walls.weight, walls.walls);
   const openings = levelOpenings(segments, sheet, frame, outline);
   const flights = levelFlights(segments, fills, sheet, frame, outline, walls.weight);
-  if (!walls.walls.length) return { ...walls, doors, glazing, partitions, columns, openings, flights, rooms: [] as SchematicRoom[], tagWarning: "", registration, grid };
+  const sourceBoxes = printed ? pageTextBoxes(printed.items.filter(item => "str" in item), viewport)
+    .filter(box => !view || containsPlanPoint([box.x, box.y], view.box)) : [];
+  const floorReferences = printedFloorDetailReferences(sourceBoxes, { width: sheet.widthPt, height: sheet.heightPt }, floorSheetKeys)
+    .map(ref => ({ ...ref, at: [ref.at[0] * frame.widthFeet, ref.at[1] * frame.heightFeet] as Point }));
+  if (!walls.walls.length) return { ...walls, doors, glazing, partitions, columns, openings, flights, floorReferences, rooms: [] as SchematicRoom[], tagWarning: "", registration, grid };
   const tiles = tagTiles(sheet, frame, outline).flatMap(tile => {
     const crop = view ? clipPlanBox(tile, view.box) : tile;
     return crop ? [crop] : [];
@@ -471,15 +565,39 @@ async function planVectorWalls(doc: StoredDocument, pageNumber: number, sheetNam
       }));
     }
   }
-  const tagged = levelTags(read, segments, curves, sheet, frame, walls.walls, doors, glazing);
+  const scheduleKeys = new Set(partitionTypes.map(type => tagKey(type.tag)));
+  const containsNativeText = sourceBoxes.some(box => box.str.length > 3);
+  const nativeCodes = Map.groupBy(sourceBoxes.filter(box => /^\s*\d/.test(box.str)), box => tagKey(box.str));
+  const reviewedReads = read.map(part => {
+    const [left, top, width, height] = part.tile;
+    const tags = part.tags.filter(tag => {
+      if (tag.kind !== "wall" || !scheduleKeys.size) return true;
+      const key = tagKey(tag.text);
+      if (!scheduleKeys.has(key)) return false;
+      if (!containsNativeText || !/^\s*\d/.test(tag.text)) return true;
+      const [x, y] = [left + tag.at[0] * width, top + tag.at[1] * height];
+      return nativeCodes.get(key)?.some(box => Math.hypot((box.x + box.w / 2 - x) * frame.widthFeet,
+        (box.y + box.h / 2 - y) * frame.heightFeet) <= 3) ?? false;
+    });
+    return { ...part, tags };
+  });
+  const tagged = levelTags(reviewedReads, segments, curves, sheet, frame, walls.walls, doors, glazing);
+  const printedWalls = printedWallTags(sourceBoxes, segments, { width: sheet.widthPt, height: sheet.heightPt }, frame, scheduleKeys);
+  tagged.walls = matchPrintedWallTags(tagged.walls, printedWalls, partitionTypes);
 
   signal?.throwIfAborted();
-  const printedTags = printed ? printedDoorTags(printed.items, viewport, frame).filter(({ at: [x, y] }) =>
+  const printedTags = printed && printedScale ? printedDoorTags(printed.items, viewport, frame).filter(({ at: [x, y] }) =>
     !view || containsPlanPoint([x / frame.widthFeet, y / frame.heightFeet], view.box)) : [];
-  const verifiedDoors = addTaggedDoorOpenings(tagged.doors, tagged.walls, printedTags);
+  const footprint = printedScale ? outline.map(([x, y]): Point => [x * frame.widthFeet, y * frame.heightFeet]) : [];
+  const verifiedWalls = holdOutsidePlanRuns(tagged.walls, tagged.walls, footprint);
+  const reviewedGlazing = holdOutsidePlanRuns(tagged.glazing, verifiedWalls, footprint);
+  const reviewedPartitions = holdOutsidePlanRuns(partitions, verifiedWalls, footprint);
+  const held = [...verifiedWalls, ...reviewedGlazing, ...reviewedPartitions].filter(run => run.outsidePlan).length;
+  const note = walls.note + (held ? " " + held + " detached exterior traces held for review on the source plan." : "");
+  const verifiedDoors = addTaggedDoorOpenings(tagged.doors, verifiedWalls, printedTags);
   // Room tags read on the tiles are sharper than the whole-sheet reading's; the level keeps those when there are any.
   const rooms: SchematicRoom[] = tagged.tags.filter(t => t.kind === "room").map(t => ({ name: t.name ?? "", number: t.text, at: t.at }));
-  return { note: walls.note, walls: tagged.walls, doors: verifiedDoors, glazing: tagged.glazing, partitions, columns, openings, flights, rooms, registration, grid, tagWarning: failed ? `${failed} of ${tiles.length} parts of the plan could not be read for door and wall tags; some doors and walls have no number or type.` : "" };
+  return { note, walls: verifiedWalls, doors: verifiedDoors, glazing: reviewedGlazing, partitions: reviewedPartitions, columns, openings, flights, rooms, floorReferences, registration, grid, tagWarning: failed ? `${failed} of ${tiles.length} parts of the plan could not be read for door and wall tags; some doors and walls have no number or type.` : "" };
 }
 
 /** The open project's schematic model under "schematic-model"; `run` applies a correction (moveOutlinePoint, setLevelHeight) or a rebuild and returns null or the error. */

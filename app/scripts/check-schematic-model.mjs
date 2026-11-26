@@ -354,6 +354,37 @@ const finishes = finishRead.map(note => ({ ...note, source: windowSource }));
 assert.equal(finishesForRoom({ name: "Gymnasium (including court)", number: "102" }, finishes).length, 1);
 assert.equal(finishesForRoom({ name: "Gym storage", number: "103" }, finishes).length, 0);
 
+// Drawing assemblies must follow exact plan evidence and keep unknown depths unknown.
+const assemblyCaptionTest = await import("../lib/schematic-assembly-drawings.ts");
+const { floorAssemblyForRoom } = await import("../lib/schematic-floor-details.ts");
+const { printedWallTags, matchPrintedWallTags } = await import("../lib/schematic-printed-wall-tags.ts");
+const { holdOutsidePlanRuns } = await import("../lib/schematic-plan-review.ts");
+assert.equal(M.feetPerInch('1 1/2" = 1\'-0"'), .667);
+assert.equal(assemblyCaptionTest.assemblyFloorLevel("SLAB ON GRADE @ B2 LEVEL"), -2);
+assert.equal(assemblyCaptionTest.assemblyFloorLevel("TYPICAL FLOOR ASSEMBLY @ LEVEL 2"), null);
+assert.equal(assemblyCaptionTest.assemblyThickness('5/8"', '5/8" GYPSUM BOARD'), 5 / 8 / 12);
+assert.equal(assemblyCaptionTest.assemblyThickness('5/8"', '2 5/8" STEEL STUD'), null, "Use the whole dimension");
+assert.equal(assemblyCaptionTest.assemblyThickness('16"', 'STEEL STUDS AT 16" O.C.'), null);
+assert.equal(assemblyCaptionTest.assemblyThickness('2"', '2" MIN. GROUT BED'), null);
+const taggedSection = { source: { documentId: "d", sheet: "A500", page: 3, quote: "FLOOR TYPE F2" }, detail: "3",
+  layers: [{ material: "CONCRETE" }] };
+const assemblyRoom = { outline: [[0, 0], [9, 0], [9, 9], [0, 9]], at: [4, 4] };
+const levelWithReference = { order: 1, floorReferences: [{ sheet: "A500", detail: "3", at: [3, 3] }] };
+assert.equal(floorAssemblyForRoom(levelWithReference, assemblyRoom, [taggedSection]).matchedBy, "callout");
+assert.equal(floorAssemblyForRoom({ order: 1 }, assemblyRoom, [taggedSection]), null);
+assert.equal(floorAssemblyForRoom({ order: 1 }, assemblyRoom, [{ ...taggedSection, source: { ...taggedSection.source, quote: "TYP. FLOOR ASSEMBLY" } }]).basis, "reference");
+assert.equal(floorAssemblyForRoom(levelWithReference, assemblyRoom, [taggedSection, { ...taggedSection, layers: [] }]), null);
+const wallsToVerify = [{ a: [0, 3], b: [8, 3], thickness: .5 }, { a: [12, 14], b: [14, 14], thickness: .5 }];
+const drawingTag = { str: "4", x: .035, y: .033, w: .005, h: .01 };
+const tagBox = [line([31, 28], [45, 28]), line([45, 28], [45, 46]), line([45, 46], [31, 46]), line([31, 46], [31, 28])];
+const tagPaper = { width: 1000, height: 1000 }, tagFrame = { widthFeet: 100, heightFeet: 100 };
+assert.equal(printedWallTags([drawingTag], tagBox.slice(0, 3), tagPaper, tagFrame, new Set(["4"])).length, 0);
+const realMark = printedWallTags([drawingTag], tagBox, tagPaper, tagFrame, new Set(["4"]));
+assert.equal(realMark.length, 1);
+assert.equal(matchPrintedWallTags(wallsToVerify, realMark, [{ tag: "4", thickness: '6"' }])[0].tagRead.basis, "printed");
+assert.equal(matchPrintedWallTags(wallsToVerify, realMark, [{ tag: "4", thickness: '12"' }])[0].type, undefined);
+assert.equal(holdOutsidePlanRuns(wallsToVerify, wallsToVerify, assemblyRoom.outline)[1].outsidePlan, true);
+
 // Corrections.
 const model = { levels: [{ id: "L1", name: "Level 01", order: 1, elevation: 0, height: 14, outline: [[0, 0], [10, 0], [10, 10]], rooms: [], source: { documentId: "d", sheet: "A1.1", page: 46 }, sizing: "" }, { id: "L2", name: "Level 02", order: 2, elevation: 14, height: 16, outline: [[0, 0], [10, 0], [10, 10]], rooms: [], source: { documentId: "d", sheet: "A1.2", page: 47 }, sizing: "" }], warnings: [], builtAt: "" };
 assert.deepEqual(M.moveOutlinePoint(model, "L1", 1, [12, 0]).levels[0].outline[1], [12, 0]);

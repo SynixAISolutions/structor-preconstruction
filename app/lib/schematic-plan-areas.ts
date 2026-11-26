@@ -89,6 +89,7 @@ function translateArea({ plan, offset, limits }: Placed, index: number) {
     partitions: segments(level.partitions),
     columns: byPosition(level.columns, limits, item => item.at).map(item => ({ ...item, at: point(item.at), planArea: index })),
     openings: byPosition(level.openings, limits, item => item).map(point),
+    floorReferences: byPosition(level.floorReferences, limits, item => item.at).map(ref => ({ ...ref, at: point(ref.at) })),
     arriving: arriving.map(stair => ({ ...stair, flights: stair.flights.map(segment) })),
     rising: byPosition(plan.flights.rising, limits, middle).map(segment),
   };
@@ -148,6 +149,7 @@ export function assembleFloorPlans(plans: ReadFloorPlan[], below?: LevelPlacemen
   level.partitions = parts.flatMap(part => part.partitions);
   level.columns = parts.flatMap(part => part.columns);
   level.openings = parts.flatMap(part => part.openings);
+  level.floorReferences = parts.flatMap(part => part.floorReferences);
   level.wallNote = areas.map(({ plan }) => plan.level.source.sheet + ": " + (plan.level.wallNote ?? "")).join(" ");
   return {
     level,
