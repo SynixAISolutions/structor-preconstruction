@@ -77,6 +77,28 @@ assert.deepEqual(out.extraction.drafts.map(d => [d.status, d.rejection?.reason ?
 assert.equal(out.extraction.drafts[1].acceptedId, line.id, "The finding remembers the line it became (its citations stay with the run)");
 assert.deepEqual(E.addRunToBidForms({ extraction: out.extraction, procurement: out.procurement }, ext.runs[0].id, at).added, 0, "Running the step again adds nothing");
 
+// The same work found again (lib/same-work, 25 Nov): on another sheet its sources and wording go on the line already
+// there; on a page that line was already read from, it is set aside.
+{
+  const cite = (page, quote) => [{ document: "demo.pdf", page, quote }];
+  const draft = (key, title, page, source) => ({ key, kind: "scope", packageId: drywall, title, detail: "", source, citations: cite(page, "x") });
+  const input = { packageIds: [drywall], engine: { mode: "live", model: "m" }, documents: [{ name: "demo.pdf", pages: 9 }], startedAt: at, finishedAt: at, drafts: [
+    draft("a", "Remove the lowest level slab along with existing building plumbing.", 1, "AD0100"),
+    draft("b", "Remove lowest level slab along with the existing building plumbing.", 2, "AD0101"),
+    draft("c", "Remove the lowest level slab along with existing building plumbing.", 1, "AD0100"),
+    draft("d", "Remove the lowest level slab together with existing plumbing and footings.", 3, "AD0102"),
+  ] };
+  const ext2 = freeze(E.recordRun(E.EMPTY_EXTRACTION, proc, input));
+  const once = E.addRunToBidForms({ extraction: ext2, procurement: proc }, ext2.runs[0].id, at);
+  const lines = once.procurement.scopes.filter(s => /slab/i.test(s.title));
+  assert.deepEqual([once.added, once.duplicates], [2, 2], "The repeats aren't added; the line with other work is");
+  assert.equal(lines.length, 2);
+  assert.equal(lines[0].detail, "Also on AD0101.", "The kept line says where else it is shown");
+  assert.deepEqual(once.extraction.drafts.map(d => [d.status, d.acceptedId === lines[0].id]), [["accepted", true], ["accepted", true], ["rejected", false], ["accepted", false]], "A repeat on another sheet stands for the kept line; on the same page it is a duplicate");
+  assert.equal(once.extraction.drafts[1].history.at(-1).kind, "merged");
+  assert.deepEqual(once.procurement.scopes.find(s => s.id === lines[0].id).history.map(h => h.kind), ["created", "merged"]);
+}
+
 // Copy a scope item to another trade: a draft there, tagged, original untouched.
 let owned = freeze({ ...out.procurement, packages: out.procurement.packages.map((p, i) => i === 1 ? { ...p, owner: "Victor" } : p) });
 const copied = P.copyScope(owned, line.id, owned.packages[1].id, "Sadie", at);

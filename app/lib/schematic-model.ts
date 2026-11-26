@@ -8,8 +8,16 @@
 // it the outline is sized so the floor areas add up to the project's building area, and says so.
 // People can correct the outline and heights afterwards. Pure functions.
 
+import { parseInches } from "./wall-assemblies";
 import { doorsFromSwings, swingArcs } from "./door-detection";
 import { floorOpenings } from "./floor-openings";
+import { compactFloorPlanTitle, printedPlanLevels } from "./floor-plan-label";
+import type { SourcedDoorSize } from "./door-schedule-dimensions";
+import type { GlazingDimensions } from "./glazing-detail-references";
+import type { StructuralSlab } from "./schematic-structural-slabs";
+import type { FloorDetailReference } from "./schematic-assembly-drawings";
+import type { FloorAssemblyDetail, FloorAssemblyNote, FloorFinishNote } from "./schematic-floor-details";
+import type { DimensionSource } from "./section-datums";
 import { mergeTags, placeTags, tagOvals, type PartitionType, type PlacedTag } from "./tag-placement";
 import type { Curve, Segment } from "./plan-vectors";
 import type { RegisterRow } from "./project-files";
@@ -18,15 +26,28 @@ import { borrowArrows, groupFlights, planFlights, type Flight } from "./stair-de
 import { hexagonTags, planColumns, planGlazing, planPartitions, planRailings, planWalls } from "./wall-detection";
 
 export type Point = [number, number];
-export type SchematicRoom = { name: string; number: string; at: Point };
+export type PlanSource = { documentId: string; sheet: string; page: number; quote?: string };
+export type SchematicPlanArea = { source: PlanSource; frame: Frame; offset: Point; outline?: Point[] };
+type SourcedPlanElement = { planArea?: number; outsidePlan?: boolean };
+export type SchematicRoom = SourcedPlanElement & { name: string; number: string; at: Point };
 export type SchematicLevel = {
   id: string; name: string; order: number;
   /** Feet above the lowest level, and floor-to-floor height. */
   elevation: number; height: number;
+  /** Which readings support this level and its height, when present. */
+  vertical?: LevelVertical;
   /** Footprint in feet, x right, y down as on the plan. */
   outline: Point[];
   rooms: SchematicRoom[];
-  source: { documentId: string; sheet: string; page: number };
+  source: PlanSource;
+  /** Area sheets joined in the level's shared coordinates. Area 0 uses the primary outline. */
+  planAreas?: SchematicPlanArea[];
+  /** The view is valid in isolation. Its position relative to the building grid needs review. */
+  alignmentUnverified?: boolean;
+  unplacedPlans?: PlanSource[];
+  floorAssemblies?: FloorAssemblyNote[];
+  structuralSlab?: StructuralSlab;
+  floorReferences?: FloorDetailReference[];
   /** How the size was found: the printed scale, or the building area. */
   sizing: string;
   /**
@@ -42,7 +63,7 @@ export type SchematicLevel = {
   walls?: SchematicWall[];
   /** How the walls were found, or why there are none. */
   wallNote?: string;
-  /** Doors read from the plan's swings (levelDoors), in the same feet. Missing on models built before 21 Oct. */
+  /** Swings and tagged openings read from the plan, in the same feet. Missing on models built before 21 Oct. */
   doors?: SchematicDoor[];
   /** Glass read from the plan's panes (levelGlazing). Missing on models built before 21 Oct. */
   glazing?: SchematicGlazing[];
@@ -61,22 +82,22 @@ export type SchematicLevel = {
  */
 export type SchematicStair = { flights: { a: Point; b: Point; width: number; risers: number; arrow: "a" | "b" | null }[]; excluded?: boolean };
 /** A run of glass from a to b, in feet; `type` from the plan's storefront/window tags (SF-10). */
-export type SchematicGlazing = { a: Point; b: Point; type?: string | null; excluded?: boolean };
+export type SchematicGlazing = SourcedPlanElement & { a: Point; b: Point; type?: string | null; excluded?: boolean; elevationDetail?: DimensionSource; dimensions?: GlazingDimensions };
 /**
  * An operable partition from a to b, in feet, or a guardrail when `kind` is "railing". Kept apart from the walls: each is bought
  * and built as its own item, and has no wall type. Both divide the rooms either side.
  */
-export type SchematicPartition = { a: Point; b: Point; thickness: number; kind?: "railing"; excluded?: boolean };
+export type SchematicPartition = SourcedPlanElement & { a: Point; b: Point; thickness: number; kind?: "railing"; excluded?: boolean };
 /** A column at `at`, in feet, with its sides and the angle of `width` in radians. */
-export type SchematicColumn = { at: Point; width: number; depth: number; angle: number; excluded?: boolean };
+export type SchematicColumn = SourcedPlanElement & { at: Point; width: number; depth: number; angle: number; excluded?: boolean };
 /** A wall centerline from a to b with its thickness, in feet; `type` is its partition type from the plan's tags. */
-export type SchematicWall = { a: Point; b: Point; thickness: number; type?: string | null; /** The type was set by the estimator for untagged walls, not read from a tag. */ typeSet?: boolean; /** Corrected by the estimator on this wall. */ edited?: boolean; /** Marked by the estimator as not a wall (kept so it can be restored). */ excluded?: boolean };
+export type SchematicWall = SourcedPlanElement & { a: Point; b: Point; thickness: number; type?: string | null; tagRead?: { basis: "printed" | "image" | "continuation"; at?: Point }; tagReview?: boolean; /** The type was set by the estimator for untagged walls, not read from a tag. */ typeSet?: boolean; /** Corrected by the estimator on this wall. */ edited?: boolean; /** Marked by the estimator as not a wall (kept so it can be restored). */ excluded?: boolean };
 /**
  * A door opening from a to b, its leaves' hinges and where each leaf swings open to, in feet. "compartment"
  * is a toilet stall's door: toilet partitions, not the door schedule. `thickness` is the host wall's, for the
  * header above the opening.
  */
-export type SchematicDoor = { a: Point; b: Point; width: number; leaves: number; hinges: Point[]; openTo: Point[]; kind: "door" | "compartment"; thickness: number; number?: string | null };
+export type SchematicDoor = SourcedPlanElement & { a: Point; b: Point; width: number; leaves: number; hinges: Point[]; openTo: Point[]; kind: "door" | "compartment"; thickness: number; number?: string | null; basis?: "tagged-gap"; scheduledSize?: SourcedDoorSize };
 
 /**
  * Tiles over a plan's area for reading its tags: about `paperPt` points square on the sheet (small enough
@@ -113,7 +134,7 @@ export function levelTags(read: { tile: [number, number, number, number]; tags: 
   const placed = placeTags(tags, walls, doors.filter(d => d.kind === "door"), { ovals: tagOvals(curves, pointsPerFoot), lines }, glazing);
   let k = 0;
   return {
-    walls: walls.map((w, i) => ({ ...w, type: placed.wallTypes[i] })),
+    walls: walls.map((w, i) => ({ ...w, type: placed.wallTypes[i], ...(placed.wallTypes[i] ? { tagRead: { basis: "image" as const } } : {}) })),
     doors: doors.map(d => d.kind === "door" ? { ...d, number: placed.doorNumbers[k++] } : d),
     glazing: glazing.map((g, i) => ({ ...g, type: placed.glazingTypes[i] })),
     tags,
@@ -131,7 +152,7 @@ export function levelSpaces(level: Pick<SchematicLevel, "walls" | "doors" | "gla
 }
 
 /** `partitionTypes`: the wall types the partition type sheet lists (read by AI), to describe and check wall types. */
-export type SchematicModel = { levels: SchematicLevel[]; warnings: string[]; builtAt: string; partitionTypes?: PartitionType[]; partitionSheet?: string };
+export type SchematicModel = { levels: SchematicLevel[]; warnings: string[]; builtAt: string; partitionTypes?: PartitionType[]; partitionSheet?: string; floorFinishes?: FloorFinishNote[]; floorDetails?: FloorAssemblyDetail[] };
 
 /** The sheet that schedules the partition (wall) types, by its title; null when the set has none. */
 export function partitionTypeSheet<T extends Pick<RegisterRow, "title" | "discipline">>(register: T[]): T | null {
@@ -154,38 +175,71 @@ const NOT_A_FLOOR_PLAN = /ENLARGED|REFLECTED|CEILING|FINISH|FF&E|COORDINATION|DE
 
 /** The level a plan title names: "LEVEL 01 - FIRST FLOOR PLAN" → 1; "SECOND FLOOR PLAN" → 2; null when none. */
 export function levelOfTitle(title: string): number | null {
+  const compact = compactFloorPlanTitle(title);
+  if (compact) return compact.level;
   const t = title.toUpperCase();
+  const basement = /^(?:BASEMENT\s+|LEVEL\s+)?B([1-9]\d?)(?:\s|$)/.exec(t);
+  if (basement) return -Number(basement[1]);
   const n = t.match(/\bLEVEL\s*0?(\d{1,2})\b/)?.[1] ?? t.match(/\b(\d{1,2})(?:ST|ND|RD|TH)\s+FLOOR\b/)?.[1];
   if (n !== undefined) return Number(n);
   const word = Object.keys(ORDINALS).find(w => new RegExp(`\\b${w}\\s+(FLOOR|LEVEL)\\b`).test(t));
   return word === undefined ? null : ORDINALS[word];
 }
 
-/** One architectural floor plan per level, lowest first (the first such sheet in the set wins). */
-export function levelPlanSheets<T extends Pick<RegisterRow, "sheet" | "title" | "discipline">>(register: T[]): { level: number; row: T }[] {
-  const out = new Map<number, T>();
+/** Multiple area sheets form a single floor. An overview is only used when no detail plan is listed. */
+export function levelPlanSheets<T extends Pick<RegisterRow, "sheet" | "title" | "discipline"> & { viewLevel?: number; typicalView?: boolean }>(register: T[]): { level: number; row: T; areas?: T[] }[] {
+  const byLevel = new Map<number, T[]>();
   for (const row of register) {
-    const t = row.title.toUpperCase();
-    if (row.discipline !== "Architectural" || !/FLOOR PLAN|LEVEL\s*0?\d+\s*-?\s*PLAN/.test(t) || NOT_A_FLOOR_PLAN.test(t)) continue;
-    const level = levelOfTitle(t);
-    if (level !== null && !out.has(level)) out.set(level, row);
+    const title = row.title.toUpperCase();
+    const compact = compactFloorPlanTitle(title);
+    const architectural = row.discipline === "Architectural" || (row.discipline === "Landscape" && compact?.sheet === row.sheet.toUpperCase());
+    if (!architectural || (!compact && !/FLOOR PLAN|AREA PLAN|LEVEL\s*0?\d+\s*-?\s*PLAN/.test(title)) || NOT_A_FLOOR_PLAN.test(title)) continue;
+    if (row.viewLevel === undefined && printedPlanLevels(title).length > 1) continue;
+    const level = row.viewLevel ?? levelOfTitle(title);
+    if (level === null) continue;
+    const rows = byLevel.get(level);
+    if (rows) rows.push(row);
+    else byLevel.set(level, [row]);
   }
-  return [...out.entries()].sort((a, b) => a[0] - b[0]).map(([level, row]) => ({ level, row }));
+  return [...byLevel.entries()].sort((a, b) => a[0] - b[0]).map(([level, rows]) => {
+    const parts = new Map<string, T>();
+    for (const row of rows) {
+      const part = floorPlanArea(row.title);
+      if (part && !parts.has(part)) parts.set(part, row);
+    }
+    const detail = rows.find(row => !row.typicalView && !floorPlanArea(row.title) && !/\bOVERALL\b/i.test(row.title));
+    if (detail) return { level, row: detail };
+    const [row, ...areas] = [...parts.values()];
+    return areas.length ? { level, row, areas } : { level, row: row ?? rows.find(row => !row.typicalView) ?? rows[0] };
+  });
 }
 
-/** The sheet most likely to show level elevations: building sections, then wall sections, then exterior elevations. */
+export function floorPlanArea(title: string): string | null {
+  return /\b(?:AREA|PART)\s+([A-Z]|\d{1,2}|[A-Z]\d{1,2})(?=\s|[-–—]|$)/i.exec(title)?.[1].toUpperCase() ?? null;
+}
+
+export function levelFootprints(level: SchematicLevel): Point[][] {
+  return [level.outline, ...(level.planAreas ?? []).flatMap(area => area.outline ? [area.outline] : [])];
+}
+
+export function planSource(level: SchematicLevel, area = 0): PlanSource {
+  return level.planAreas?.[area]?.source ?? level.source;
+}
+
+/** The current sheets likely to show level elevations, highest priority first. */
+export function heightSheets<T extends Pick<RegisterRow, "title" | "discipline">>(register: T[]): T[] {
+  const candidates = register.filter(row => row.discipline === "Architectural");
+  return [...new Set([/BUILDING SECTION/i, /WALL SECTION/i, /EXTERIOR ELEVATION/i].flatMap(title => candidates.filter(row => title.test(row.title))))];
+}
+
 export function heightSheet<T extends Pick<RegisterRow, "title" | "discipline">>(register: T[]): T | null {
-  for (const re of [/BUILDING SECTION/, /WALL SECTION/, /EXTERIOR ELEVATION/]) {
-    const row = register.find(r => r.discipline === "Architectural" && re.test(r.title.toUpperCase()));
-    if (row) return row;
-  }
-  return null;
+  return heightSheets(register)[0] ?? null;
 }
 
 /** The metric drawing ratios read as scales; other "1:n" (a time, 1:7) are not. */
 const METRIC_RATIOS = new Set([5, 10, 20, 25, 50, 75, 100, 125, 150, 200, 250, 300, 400, 500, 750, 1000, 1250, 1500, 2000, 2500, 5000]);
 const INCH = `(?:"|''|”|″|\\s*IN\\.?)`, FOOT = `(?:'|’|′)`;
-const IMPERIAL = new RegExp(`(\\d+)(?:\\s*\\/\\s*(\\d+))?\\s*${INCH}\\s*=\\s*(\\d+)\\s*${FOOT}(?:\\s*-?\\s*(\\d+)\\s*(?:"|''|”|″))?`, "i");
+const IMPERIAL = new RegExp(`(?<![\\d./])((?:\\d+[ -])?\\d+\\s*\\/\\s*\\d+|\\d+(?:\\.\\d+)?)\\s*${INCH}\\s*=\\s*(\\d+)\\s*${FOOT}(?:\\s*-?\\s*(\\d+)\\s*(?:"|''|”|″))?`, "i");
 
 /**
  * Feet per inch of paper from a printed scale. Architectural: 1/8" = 1'-0" → 8, 3/16" = 1'-0" → 5.333.
@@ -197,9 +251,9 @@ export function feetPerInch(text: string): number | null {
   let ratio: number | null = null;
   const imperial = text.match(IMPERIAL);
   if (imperial) {
-    const inches = imperial[2] ? Number(imperial[1]) / Number(imperial[2]) : Number(imperial[1]);
-    const feet = Number(imperial[3]) + (imperial[4] ? Number(imperial[4]) / 12 : 0);
-    ratio = inches > 0 ? feet / inches : null;
+    const inches = parseInches(imperial[1].replace(/\s*\/\s*/g, "/"));
+    const feet = Number(imperial[2]) + (imperial[3] ? Number(imperial[3]) / 12 : 0);
+    ratio = inches && inches > 0 ? feet / inches : null;
   } else {
     const metric = text.match(/(?<![\d.:])1\s*:\s*(\d{1,4})(?![\d.:])/);
     if (metric && METRIC_RATIOS.has(Number(metric[1]))) ratio = Number(metric[1]) / 12;
@@ -208,6 +262,28 @@ export function feetPerInch(text: string): number | null {
 }
 
 export const polygonArea = (pts: Point[]) => Math.abs(pts.reduce((s, [x, y], i) => { const [nx, ny] = pts[(i + 1) % pts.length]; return s + x * ny - nx * y; }, 0)) / 2;
+
+export function openOutline(points: Point[]): Point[] {
+  const first = points[0], last = points.at(-1);
+  return points.length > 3 && first[0] === last![0] && first[1] === last![1] ? points.slice(0, -1) : points;
+}
+
+export function edgesIntersect(a: Point, b: Point, c: Point, d: Point): boolean {
+  const cross = (p: Point, q: Point, r: Point) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+  const overlap = (axis: 0 | 1) => Math.max(Math.min(a[axis], b[axis]), Math.min(c[axis], d[axis])) <=
+    Math.min(Math.max(a[axis], b[axis]), Math.max(c[axis], d[axis]));
+  return overlap(0) && overlap(1) && cross(a, b, c) * cross(a, b, d) <= 0 && cross(c, d, a) * cross(c, d, b) <= 0;
+}
+export function footprintValid(points: Point[]): boolean {
+  points = openOutline(points);
+  if (points.length < 3 || points.some(p => !p.every(Number.isFinite)) || polygonArea(points) < 1) return false;
+  for (let i = 0; i < points.length; i++) for (let j = i + 1; j < points.length; j++) {
+    if (j === i + 1 || i === 0 && j === points.length - 1) continue;
+    const a = points[i], b = points[(i + 1) % points.length], c = points[j], d = points[(j + 1) % points.length];
+    if (edgesIntersect(a, b, c, d)) return false;
+  }
+  return true;
+}
 
 /**
  * A level's outline and rooms in feet, from 0–1 image positions. With a scale the page size gives
@@ -364,48 +440,66 @@ export function cleanOutline(points: Point[]): { outline: Point[] | null; note: 
     : { outline: sorted, note: "The outline's points were read out of order and were re-ordered around the building's centre; check the shape." };
 }
 
-/**
- * Elevations and floor-to-floor heights by level number, from what was read off a section (levels
- * named "LEVEL 02", "ROOF"…). Missing heights use 14 ft and are listed in the warnings.
- */
-export function levelHeights(levels: number[], read: { name: string; elevation: number }[]): { elevations: Map<number, number>; heights: Map<number, number>; warnings: string[] } {
-  const byLevel = new Map<number, number>();
-  let roof: number | null = null;
+export type LevelVertical = { basis: "printed" | "image" | "estimated" | "adjusted"; datum?: DimensionSource; upper?: DimensionSource };
+
+/** A level marker read off a section. Image positions are normalized to the image the reading came from. */
+export type Marker = { name: string; elevation: number; at?: Point; source?: DimensionSource };
+const markerKey = (name: string): number | null => {
+  const compact = /^(?:LEVEL\s*)?L(\d{1,2})\b/i.exec(name);
+  if (compact) return Number(compact[1]);
+  return levelOfTitle(`${name} FLOOR`) ?? levelOfTitle(name) ?? (/\bROOF\b/i.test(name) ? Infinity : null);
+};
+
+/** Place known levels at their section datums and fill missing heights without overlapping adjacent levels. */
+export function levelHeights(levels: number[], read: Marker[]): { elevations: Map<number, number>; heights: Map<number, number>; vertical: Map<number, LevelVertical>; warnings: string[] } {
+  const byLevel = new Map<number, Marker>();
   for (const r of read) {
     if (!Number.isFinite(r.elevation)) continue;
-    if (/ROOF/i.test(r.name)) roof = roof === null ? r.elevation : Math.min(roof, r.elevation);
-    else { const n = levelOfTitle(`${r.name} FLOOR`) ?? levelOfTitle(r.name); if (n !== null && !byLevel.has(n)) byLevel.set(n, r.elevation); }
+    const key = /\bROOF\b/i.test(r.name) ? Infinity : markerKey(r.name);
+    if (key === null) continue;
+    const previous = byLevel.get(key);
+    if (!previous || (key === Infinity && previous.elevation > r.elevation)) byLevel.set(key, r);
   }
+  const elevations = new Map<number, number>(), heights = new Map<number, number>(), vertical = new Map<number, LevelVertical>();
   const warnings: string[] = [];
-  const known = [...byLevel.entries()].sort((a, b) => a[0] - b[0]);
-  // Every marker read, lowest first: the next one above a floor ends that floor's height.
-  const markers = [...known.map(([, e]) => e), ...(roof === null ? [] : [roof])].sort((a, b) => a - b);
-  let base = 0;
-  if (byLevel.has(levels[0])) base = byLevel.get(levels[0])!;
-  else if (known.length) {
-    const [n0, e0] = known[0];
-    base = e0 - 14 * Math.max(0, n0 - levels[0]);
-    warnings.push(`${levelName(levels[0])}'s elevation was not read; it is taken as 14 ft per level below ${levelName(n0)}.`);
+  if (!levels.length) return { elevations, heights, vertical, warnings };
+  const anchors: { index: number; marker: Marker }[] = [];
+  const keys = [...levels, ...[...byLevel.keys()].filter(key => key > levels.at(-1)!).sort((a, b) => a - b).slice(0, 1)];
+  for (const [index, key] of keys.entries()) {
+    const marker = byLevel.get(key), prior = anchors.at(-1);
+    if (!marker) continue;
+    const rise = prior ? (marker.elevation - prior.marker.elevation) / (index - prior.index) : 14;
+    if (rise < 6 || rise > 60) {
+      warnings.push(`${marker.name} has an elevation inconsistent with the adjacent levels. Review its source.`);
+      continue;
+    }
+    anchors.push({ index, marker });
   }
-  const elevations = new Map<number, number>(), heights = new Map<number, number>();
-  let assumed = 0, previous = base, previousHeight = 0;
-  levels.forEach((level, i) => {
-    const abs = byLevel.get(level) ?? (i === 0 ? base : previous + previousHeight);
-    const above = markers.find(m => m > abs + 0.5);
-    if (above === undefined) assumed++;
-    const height = Math.round((above === undefined ? 14 : above - abs) * 100) / 100;
-    elevations.set(level, Math.round((abs - base) * 100) / 100);
-    heights.set(level, height);
-    previous = abs; previousHeight = height;
-  });
-  if (assumed) warnings.push(`${assumed} floor-to-floor height${assumed === 1 ? " was" : "s were"} not read and use${assumed === 1 ? "s" : ""} 14 ft.`);
-  return { elevations, heights, warnings };
+  const at = new Map(anchors.map(anchor => [anchor.index, anchor.marker]));
+  const position = (i: number) => {
+    const exact = at.get(i);
+    if (exact) return exact.elevation;
+    const lower = anchors.findLast(anchor => anchor.index < i), upper = anchors.find(anchor => anchor.index > i);
+    if (lower && upper) {
+      const span = (upper.marker.elevation - lower.marker.elevation) / (upper.index - lower.index);
+      return lower.marker.elevation + (i - lower.index) * span;
+    }
+    const nearest = lower ?? upper;
+    return nearest ? nearest.marker.elevation + (i - nearest.index) * 14 : i * 14;
+  };
+  const base = position(0), rounded = (n: number) => Math.round(n * 1000) / 1000;
+  if (!at.has(0) && anchors.length) warnings.push(`${levelName(levels[0])}'s elevation was not read. The model uses an estimated base elevation.`);
+  let assumed = 0;
+  for (const [index, level] of levels.entries()) {
+    const here = at.get(index), next = at.get(index + 1);
+    if (!here || !next) assumed++;
+    elevations.set(level, rounded(position(index) - base));
+    heights.set(level, rounded(position(index + 1) - position(index)));
+    vertical.set(level, { basis: here && next ? here.source && next.source ? "printed" : "image" : "estimated", datum: here?.source, upper: next?.source });
+  }
+  if (assumed) warnings.push(`${assumed} floor-to-floor height${assumed === 1 ? " was" : "s were"} not read. Missing spans between datums are divided evenly; outside them each level uses 14 ft.`);
+  return { elevations, heights, vertical, warnings };
 }
-
-/** A level marker read off a section; `at` is where its elevation was read, 0–1 in the image it came from. */
-export type Marker = { name: string; elevation: number; at?: Point };
-/** The level a marker names ("LEVEL 03 - LOW ROOF" → 3); an unnumbered roof ("T.O. ROOF") sorts last. */
-const markerKey = (name: string): number | null => levelOfTitle(`${name} FLOOR`) ?? levelOfTitle(name) ?? (/ROOF/i.test(name) ? Infinity : null);
 
 /**
  * One elevation per level from several readings of the same section sheet (the client reads it in
@@ -458,11 +552,23 @@ export function consensusMarkers(readings: Marker[][], weights: number[] = []): 
   return { markers: picked.map(({ name, elevation, votes }) => ({ name, elevation, votes })), disputed, warnings };
 }
 
-export function levelName(level: number): string { return level === 0 ? "Basement" : `Level ${String(level).padStart(2, "0")}`; }
+export function levelName(level: number): string {
+  if (level < 0) return "Basement B" + -level;
+  return level === 0 ? "Basement" : `Level ${String(level).padStart(2, "0")}`;
+}
 
 /** Moves one outline point (a correction); the result keeps every other value. */
-export function moveOutlinePoint(model: SchematicModel, levelId: string, index: number, to: Point): SchematicModel {
-  return { ...model, levels: model.levels.map(l => l.id !== levelId || !l.outline[index] || !to.every(Number.isFinite) ? l : { ...l, outline: l.outline.map((p, i) => i === index ? to : p) }) };
+export function moveOutlinePoint(model: SchematicModel, levelId: string, index: number, to: Point, areaIndex = 0): SchematicModel {
+  if (!to.every(Number.isFinite)) return model;
+  return { ...model, levels: model.levels.map(level => {
+    if (level.id !== levelId) return level;
+    const area = level.planAreas?.[areaIndex];
+    const outline = areaIndex ? area?.outline : level.outline;
+    if (!outline?.[index]) return level;
+    const moved = outline.map((point, i) => i === index ? to : point);
+    if (!areaIndex) return { ...level, outline: moved };
+    return { ...level, planAreas: level.planAreas?.map((area, i) => i === areaIndex ? { ...area, outline: moved } : area) };
+  }) };
 }
 
 /** Sets a level's floor-to-floor height and moves the levels above it. */
@@ -488,7 +594,7 @@ export function editWall(model: SchematicModel, levelId: string, index: number, 
     if (!l.walls?.[index]) throw new Error("That wall is no longer in the model.");
     const t = change.type === undefined ? undefined : change.type.trim().toUpperCase().replace(/\s+/g, "").slice(0, 16);
     return { ...l, walls: l.walls.map((w, i) => i !== index ? w : {
-      ...w, ...(t !== undefined ? { type: t || null, typeSet: false, edited: true } : {}), ...(change.excluded !== undefined ? { excluded: change.excluded } : {}),
+      ...w, ...(t !== undefined ? { type: t || null, typeSet: false, tagRead: undefined, tagReview: undefined, edited: true } : {}), ...(change.excluded !== undefined ? { excluded: change.excluded, outsidePlan: undefined } : {}),
     }) };
   });
 }
@@ -498,7 +604,7 @@ export function editDoorNumber(model: SchematicModel, levelId: string, index: nu
   return editLevel(model, levelId, l => {
     if (!l.doors?.[index]) throw new Error("That door is no longer in the model.");
     const n = number.trim().toUpperCase().slice(0, 12);
-    return { ...l, doors: l.doors.map((d, i) => i === index ? { ...d, number: n || null } : d) };
+    return { ...l, doors: l.doors.map((d, i) => i === index && d.number !== (n || null) ? { ...d, number: n || null, scheduledSize: undefined } : d) };
   });
 }
 
@@ -507,7 +613,7 @@ export function editGlazing(model: SchematicModel, levelId: string, index: numbe
   return editLevel(model, levelId, l => {
     if (!l.glazing?.[index]) throw new Error("That glass is no longer in the model.");
     const t = change.type === undefined ? undefined : change.type.trim().toUpperCase().replace(/\s+/g, "").slice(0, 16);
-    return { ...l, glazing: l.glazing.map((g, i) => i !== index ? g : { ...g, ...(t !== undefined ? { type: t || null } : {}), ...(change.excluded !== undefined ? { excluded: change.excluded } : {}) }) };
+    return { ...l, glazing: l.glazing.map((g, i) => i !== index ? g : { ...g, ...(t !== undefined && g.type !== (t || null) ? { type: t || null, elevationDetail: undefined, dimensions: undefined } : {}), ...(change.excluded !== undefined ? { excluded: change.excluded, outsidePlan: undefined } : {}) }) };
   });
 }
 
@@ -515,7 +621,7 @@ export function editGlazing(model: SchematicModel, levelId: string, index: numbe
 export function editPartition(model: SchematicModel, levelId: string, index: number, excluded: boolean): SchematicModel {
   return editLevel(model, levelId, l => {
     if (!l.partitions?.[index]) throw new Error("That partition is no longer in the model.");
-    return { ...l, partitions: l.partitions.map((p, i) => i === index ? { ...p, excluded } : p) };
+    return { ...l, partitions: l.partitions.map((p, i) => i === index ? { ...p, excluded, outsidePlan: undefined } : p) };
   });
 }
 
@@ -575,7 +681,12 @@ export function setPartitionTypes(model: SchematicModel, partitionTypes: Partiti
 
 export function setLevelHeight(model: SchematicModel, levelId: string, height: number): SchematicModel {
   if (!(Number.isFinite(height) && height >= 6 && height <= 60)) throw new Error("Use a floor-to-floor height between 6 and 60 ft.");
-  const levels = model.levels.map(l => l.id === levelId ? { ...l, height } : l);
-  let elevation = levels[0]?.elevation ?? 0;
-  return { ...model, levels: levels.map((l, i) => { if (i > 0) elevation += levels[i - 1].height; return i === 0 ? l : { ...l, elevation: Math.round(elevation * 100) / 100 }; }) };
+  const index = model.levels.findIndex(level => level.id === levelId);
+  if (index < 0 || model.levels[index].height === height) return model;
+  const delta = height - model.levels[index].height;
+  return { ...model, levels: model.levels.map((level, i) => {
+    if (i < index) return level;
+    if (i === index) return { ...level, height, vertical: { basis: "adjusted", datum: level.vertical?.datum } };
+    return { ...level, elevation: Math.round((level.elevation + delta) * 1000) / 1000, vertical: { basis: "adjusted" } };
+  }) };
 }

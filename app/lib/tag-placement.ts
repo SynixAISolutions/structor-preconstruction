@@ -4,6 +4,7 @@
 // number goes to the nearest door, one number per door. Pure; feet, y down as on the plan.
 
 import type { Curve, Point, Segment } from "./plan-vectors";
+import type { DimensionSource } from "./section-datums";
 import type { WallLayer } from "./wall-assemblies";
 
 export type PlacedTag = { text: string; kind: "wall" | "door" | "glazing" | "room"; at: Point; name?: string };
@@ -100,7 +101,7 @@ export function normalTag(text: string): string {
 export const tagKey = (text: string) => text.toUpperCase().replace(/[\s.\-_]+/g, "");
 
 /** A wall type from the partition type sheet; `layers` from its side the tag is on to the other (lib/wall-assemblies), when read. */
-export type PartitionType = { tag: string; description: string; thickness: string; rating: string; layers?: WallLayer[] };
+export type PartitionType = { tag: string; description: string; thickness: string; rating: string; layers?: WallLayer[]; source?: DimensionSource };
 
 /** Rows of the partition type schedule read on several tiles, one per code: the fullest reading wins. */
 export function mergePartitionTypes(rows: PartitionType[]): PartitionType[] {
@@ -111,7 +112,10 @@ export function mergePartitionTypes(rows: PartitionType[]): PartitionType[] {
 }
 
 /** The schedule row for a wall's type, or null when the schedule doesn't list that code (a misread tag, or no schedule). */
-export const scheduleRow = (type: string, schedule: PartitionType[]) => schedule.find(r => tagKey(r.tag) === tagKey(type)) ?? null;
+export function scheduleRow(type: string, schedule: PartitionType[]) {
+  const key = tagKey(type), rows = schedule.filter(row => tagKey(row.tag) === key);
+  return rows.length === 1 ? rows[0] : null;
+}
 
 /**
  * The same tag read twice (tiles overlap) or a type repeated within 3 ft counts once, at the mean position.

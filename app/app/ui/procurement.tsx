@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
-import { newDirectoryCompany } from "../../lib/directory";
+import { companiesToOffer, newDirectoryCompany } from "../../lib/directory";
 import { RemoveInvitationDialog } from "./remove-company";
 import { TradePackageControls } from "./trade-package-controls";
 import { AskAboutTrade } from "./ask-entry-points";
 import "./project-setup.css";
 import { LinkedProjectContent } from "./project-content-links";
+import { RepeatedLines } from "./repeated-lines";
 import {
   ArrowRight,
   Bell,
@@ -67,7 +68,7 @@ import { inlineDrafts } from "../../lib/scope-review";
 import { ScopeDashboardView } from "./scope-dashboard";
 import { BidThread, PortalLinkDialog, useBidMessages } from "./bid-portal-link";
 import { unreadMessages } from "../../lib/bid-portal";
-import { useActiveProject } from "../../lib/project-scope";
+import { SAMPLE_PROJECT_ID, useActiveProject } from "../../lib/project-scope";
 import { useMemoryLearner } from "../../lib/use-memory-learner";
 import { ScopeMatrixView } from "./scope-matrix";
 import { notOnSheet } from "../../lib/extraction";
@@ -142,6 +143,7 @@ function historyLabel(event: ScopeItem["history"][number], packages: Procurement
   if (event.kind === "applied-to-all") return "Applied to every trade";
   if (event.kind === "quantity") return event.quantity ? `Quantity set to ${event.quantity}` : "Quantity removed";
   if (event.kind === "quantity-checked") return "Quantity checked";
+  if (event.kind === "merged") return event.from ? `The same work found on ${event.from}` : "The same work found again";
   return event.kind === "created" ? "Created" : event.kind === "approved" ? "Approved" : event.kind === "reopened" ? "Reopened for review" : "Edited";
 }
 
@@ -224,7 +226,7 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
           <AskAboutTrade trade={activePackage.name} code={activePackage.code}/>
         </div>
         {packageView === "General scope" ? <GeneralScopePanel key={activePackage.id} projectId={projectId} state={state} pkg={activePackage} run={run} by={CURRENT_USER} notify={notify}/> : <>
-        <div className="ui-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search this bid form…"/><Button onClick={approveAll}><CheckCheck size={15}/>Approve visible form</Button></div>
+        <div className="ui-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search this bid form…"/><RepeatedLines key={activePackage.id} pkg={activePackage} items={form} merge={groups => review.mergeRepeats(groups, CURRENT_USER)} notify={notify}/><Button onClick={approveAll}><CheckCheck size={15}/>Approve visible form</Button></div>
         <PackageDrawingReferences key={activePackage.id} pkg={activePackage} packages={state.packages} colors={sourceColors}/>
         <div className="proc-scope-list"><InlineScopeDrafts key={activePackage.id} review={review} packageId={activePackage.id} query={query} sections={specSections} colors={sourceColors} by={CURRENT_USER} notify={notify} onMove={setPackageId}/>{visible.map((item, index) => <article className={`proc-scope-row ${selected?.id === item.id ? "selected" : ""}`} key={item.id}>
           <button type="button" className={`proc-approval ${item.status}`} aria-label={`${item.status === "approved" ? "Reopen" : "Approve"} ${item.title}`} onClick={() => item.status === "approved" ? runAndNotify(run, current => reopenScope(current, item.id, CURRENT_USER), notify, "Scope item reopened for review.") : notify(review.approveScopeItem(item.id, CURRENT_USER) ?? "Scope item approved.")}>{item.status === "approved" && <Check size={12} strokeWidth={2.4} aria-hidden="true"/>}</button>
@@ -281,10 +283,12 @@ function AddCompanyForm({ trade, directory, startName, onAdd, onCancel }: { trad
   </form>;
 }
 
-function BidderInvite({ state, pkgId, directory, setDirectory, run, notify, onClose }: {
+function BidderInvite({ state, pkgId, directory, sample, setDirectory, run, notify, onClose }: {
   state: Procurement;
   pkgId: string;
   directory: Bidder[];
+  /** The sample project: its placeholder companies are offered too (lib/directory companiesToOffer). */
+  sample: boolean;
   setDirectory: Dispatch<SetStateAction<Bidder[]>>;
   run: ReturnType<typeof useProcurement>["run"];
   notify: ViewProps["notify"];
@@ -293,7 +297,7 @@ function BidderInvite({ state, pkgId, directory, setDirectory, run, notify, onCl
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
   const pkg = state.packages.find(item => item.id === pkgId)!;
-  const candidates = inviteCandidates(state, directory, pkgId, query);
+  const candidates = inviteCandidates(state, companiesToOffer(directory, sample), pkgId, query);
   // A trade usually gets several bidders, so the dialog stays open after each invitation; the invited company leaves the list.
   function addAndInvite(company: Bidder) {
     setDirectory(current => [...current, company]);
@@ -393,7 +397,7 @@ function PackagesWorkspace({ projectName, notify, navigate, onProposals }: ViewP
         </div>}
       </Panel>
     </div>
-    {invitePackage && <BidderInvite state={state} pkgId={invitePackage} directory={directory} setDirectory={setDirectory} run={run} notify={notify} onClose={() => setInvitePackage(null)}/>}
+    {invitePackage && <BidderInvite state={state} pkgId={invitePackage} directory={directory} sample={projectId === SAMPLE_PROJECT_ID} setDirectory={setDirectory} run={run} notify={notify} onClose={() => setInvitePackage(null)}/>}
     {removeFor && (() => {
       const invitation = state.invitations.find(item => item.id === removeFor), bidder = directory.find(item => item.id === invitation?.bidderId), pkg = state.packages.find(item => item.id === invitation?.packageId);
       return invitation ? <RemoveInvitationDialog invitation={invitation} company={bidder?.company ?? "This company"} trade={pkg?.name ?? "this trade"} submissions={submissions} runProcurement={run} runSubmissions={runSubmissions} setMessages={setBidMessages} notify={notify} onClose={() => setRemoveFor(null)}/> : null;

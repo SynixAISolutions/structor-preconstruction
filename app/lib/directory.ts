@@ -32,3 +32,15 @@ export function newDirectoryCompany(directory: Bidder[], input: NewCompany, trad
   if (taken) throw new Error(`${taken.company} is already in your directory, under ${taken.trade}. Search for it above.`);
   return { id, company, name, email, trade, location: input.location.trim(), status: "Review required" };
 }
+
+/** A placeholder company (the starting list's, or a test's): its contact email is on example.com, which no real company uses. */
+export const isPlaceholderCompany = (company: Pick<Bidder, "email">): boolean => /@example\.(?:com|org|net)$/i.test(company.email.trim());
+
+/**
+ * The companies a project offers to pick from (inviting bidders, requesting VE pricing, assigning submittals): all of them
+ * on the sample project (`sample`); on any other project only real ones, so a placeholder with an example.com address
+ * isn't invited to real work (Danial, 25 Nov: "clean up the misleading pages"). `chosen`: companies the project already
+ * works with, offered whatever their address. Every screen still finds a company by its id in the whole directory.
+ */
+export const companiesToOffer = <C extends Pick<Bidder, "id" | "email">>(directory: C[], sample: boolean, chosen: string[] = []): C[] =>
+  sample ? directory : directory.filter(company => !isPlaceholderCompany(company) || chosen.includes(company.id));

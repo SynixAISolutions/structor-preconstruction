@@ -57,6 +57,13 @@ export function layersFit(layers: WallLayer[], printed: string): "fits" | "off" 
   return Math.abs(sum - total) <= LAYERS_FIT_INCHES ? "fits" : "off";
 }
 
+/** Require dimensions for every rendered layer and agreement with the schedule and measured wall. */
+export function dimensionedWallLayers(layers: WallLayer[], printed: string, planFeet: number): WallLayer[] {
+  const scheduled = parseInches(printed);
+  if (scheduled === null || Math.abs(planFeet * 12 - scheduled) > 0.5 || layersFit(layers, printed) !== "fits") return [];
+  return layers.every(layer => layer.inches !== null && layer.inches > 0) ? layers : [];
+}
+
 /** Inches as a drawing prints them, to the nearest sixteenth: 0.625 → 5/8", 3.625 → 3 5/8", 12 → 12". */
 export function inchesLabel(inches: number): string {
   const sixteenths = Math.round(inches * 16), whole = Math.floor(sixteenths / 16);

@@ -30,6 +30,29 @@ export function segmentsFromOperators(ops: { fnArray: number[]; argsArray: unkno
   return vectorsFromOperators(ops, OPS, viewport).segments;
 }
 
+/** PDF clipping closes its straight subpaths before applying the even-odd fill rule. */
+function clipRings(data: ArrayLike<number>, matrix: Matrix): Point[][] {
+  const rings: Point[][] = [];
+  let ring: Point[] = [];
+  const finish = () => {
+    if (ring.length > 2) rings.push(ring);
+    ring = [];
+  };
+  for (let j = 0; j < data.length;) {
+    const code = data[j];
+    if (code === MOVE || code === LINE) {
+      if (code === MOVE) finish();
+      ring.push(apply(matrix, data[j + 1], data[j + 2]));
+      j += 3;
+    } else if (code === CLOSE) {
+      finish();
+      j++;
+    } else return [];
+  }
+  finish();
+  return rings;
+}
+
 /** Filled shapes up to this size (points) with straight sides are kept: arrowheads (a stair's walkline), not hatches or poché. */
 export const SMALL_FILL_PT = 24;
 
@@ -37,10 +60,10 @@ export const SMALL_FILL_PT = 24;
  * Stroked lines and stroked cubic curves (quadratic ones raised to cubic), as segmentsFromOperators; and `fills`, the small
  * filled polygons of 3 to 8 straight sides (SMALL_FILL_PT across at most), such as the solid arrowhead on a stair's walkline.
  */
-export function vectorsFromOperators(ops: { fnArray: number[]; argsArray: unknown[] }, OPS: Record<string, number>, viewport: number[]): { segments: Segment[]; curves: Curve[]; fills: Point[][] } {
+export function vectorsFromOperators(ops: { fnArray: number[]; argsArray: unknown[] }, OPS: Record<string, number>, viewport: number[], readClipRings = false): { segments: Segment[]; curves: Curve[]; fills: Point[][]; clips?: Point[][][] } {
   const strokes = new Set(["stroke", "closeStroke", "fillStroke", "eoFillStroke", "closeFillStroke", "closeEOFillStroke"].map(k => OPS[k]));
   const filled = new Set(["fill", "eoFill", "fillStroke", "eoFillStroke", "closeFillStroke", "closeEOFillStroke"].map(k => OPS[k]));
-  const out: Segment[] = [], curves: Curve[] = [], fills: Point[][] = [];
+  const out: Segment[] = [], curves: Curve[] = [], fills: Point[][] = [], clips: Point[][][] = [];
   const keepFill = (pts: Point[], straight: boolean) => {
     const p = pts.length > 1 && pts[0][0] === pts[pts.length - 1][0] && pts[0][1] === pts[pts.length - 1][1] ? pts.slice(0, -1) : pts;
     if (!straight || p.length < 3 || p.length > 8) return;
@@ -57,7 +80,15 @@ export function vectorsFromOperators(ops: { fnArray: number[]; argsArray: unknow
     else if (fn === OPS.transform) state = { ...state, ctm: multiply(args as Matrix, state.ctm) };
     else if (fn === OPS.setLineWidth) state = { ...state, width: args[0] };
     else if (fn === OPS.setStrokeRGBColor) state = { ...state, color: String(args[0]) };
-    else if (fn === OPS.constructPath && (strokes.has(args[0]) || filled.has(args[0]))) {
+    else if (readClipRings && fn === OPS.constructPath && args[0] === OPS.endPath &&
+      ops.fnArray[i - 1] === OPS.eoClip && ops.fnArray[i + 1] === OPS.constructPath &&
+      (ops.argsArray[i + 1] as unknown[])[0] === OPS.fill) {
+      const data: ArrayLike<number> = Array.isArray(args[1]) ? args[1][0] : args[1];
+      if (data) {
+        const rings = clipRings(data, multiply(state.ctm, view));
+        if (rings.length) clips.push(rings);
+      }
+    } else if (fn === OPS.constructPath && (strokes.has(args[0]) || filled.has(args[0]))) {
       const data: ArrayLike<number> = Array.isArray(args[1]) ? args[1][0] : args[1];
       if (!data) continue;
       const m = multiply(state.ctm, view);
@@ -95,5 +126,5 @@ export function vectorsFromOperators(ops: { fnArray: number[]; argsArray: unknow
       }
     }
   }
-  return { segments: out, curves, fills };
+  return { segments: out, curves, fills, ...(readClipRings ? { clips } : {}) };
 }

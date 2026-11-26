@@ -3,11 +3,13 @@
 import { Fragment, type ComponentType } from "react";
 import { ArrowLeft } from "lucide-react";
 import { SidebarGroup } from "./sidebar-controls";
-import { ARCHITECT_VIEW, PORTAL_PREVIEW_SCREEN, SCREEN_GROUPS, type Screen, type ScreenDef } from "../../lib/screens";
+import { ARCHITECT_VIEW, PORTAL_PREVIEW_SCREEN, SCREEN_GROUPS, screenOffered, type Screen, type ScreenDef } from "../../lib/screens";
 
-export function SidebarNavigation({ screen, projectOpen, navigate, icon: Icon }: {
+export function SidebarNavigation({ screen, projectOpen, sample = false, navigate, icon: Icon }: {
   screen: Screen;
   projectOpen: boolean;
+  /** The open project is the sample project: its sample-only screens are offered. */
+  sample?: boolean;
   navigate: (screen: Screen) => void;
   icon: ComponentType<{ name: string; size: number; id?: Screen }>;
 }) {
@@ -21,7 +23,7 @@ export function SidebarNavigation({ screen, projectOpen, navigate, icon: Icon }:
     {projectOpen && <button className="nav-back" onClick={() => navigate("projects")}><ArrowLeft size={16}/>Back to All projects</button>}
     {SCREEN_GROUPS.filter(group => group.scope === (projectOpen ? "project" : "global")).map(group => {
       const blocks: { section?: string; items: ScreenDef[] }[] = [];
-      for (const item of group.items) {
+      for (const item of group.items.filter(item => screenOffered(item, sample))) {
         const previous = blocks.at(-1);
         if (item.section && previous?.section === item.section) previous.items.push(item);
         else blocks.push({ section: item.section, items: [item] });

@@ -4,8 +4,9 @@ import type { Room } from "../../lib/room-detection";
 type LocatedPick = { levelId: string; index: number };
 export type WallPick = LocatedPick & { kind: "wall"; layer?: number };
 export type DoorPick = LocatedPick & { kind: "door" };
-export type FloorPick = LocatedPick & { kind: "floor" };
-export type SchematicPick = WallPick | DoorPick | FloorPick;
+export type FloorPick = LocatedPick & { kind: "floor"; layer?: number };
+export type GlazingPick = LocatedPick & { kind: "glazing"; part?: number };
+export type SchematicPick = WallPick | DoorPick | FloorPick | GlazingPick;
 
 export const CUTAWAY_HEIGHT = 5;
 
@@ -22,7 +23,11 @@ export function schematicObjectPick(hit: THREE.Intersection): SchematicPick | nu
   const wall = data.walls?.[hit.instanceId];
   if (typeof wall === "number") return { kind: "wall", levelId: data.levelId, index: wall };
   const door = data.doors?.[hit.instanceId];
-  return typeof door === "number" ? { kind: "door", levelId: data.levelId, index: door } : null;
+  if (typeof door === "number") return { kind: "door", levelId: data.levelId, index: door };
+  const glass = data.glazing?.[hit.instanceId];
+  if (typeof glass !== "number") return null;
+  const part = data.glazingParts?.[hit.instanceId];
+  return { kind: "glazing", levelId: data.levelId, index: glass, ...(typeof part === "number" ? { part } : {}) };
 }
 
 /** Fit the projected bounds. A narrow viewer has less horizontal room than the same camera's vertical field of view. */

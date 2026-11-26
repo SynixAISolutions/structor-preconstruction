@@ -1,6 +1,6 @@
 // The drawings-to-3D scoreboard on a real drawing set (lib/model-scoreboard). A local tool, not part of `pnpm check`: it
 // reads client drawings, so nothing it reads or writes belongs in the repository. It calls no AI, so it costs no credits:
-// walls, doors and glass come from the app's own reader, and printed dimensions are read here by Tesseract (the OCR the app
+// walls, doors and glass come from the app's own reader, and dimensions come from PDF text first, with Tesseract as a fallback (the OCR the app
 // already uses; its English model is downloaded once).
 //
 //   pnpm score-model --pdf "C:\path\drawings.pdf" --out "C:\path\outside\the\repo" [--plans A1.1=46,A1.2=47] [--scale 1/8]
@@ -18,6 +18,7 @@ register("./ts-resolver.mjs", import.meta.url);
 const { vectorsFromOperators } = await import("../lib/plan-vectors.ts");
 const { feetPerInch, levelColumns, levelDoors, levelGlazing, levelOpenings, levelFlights, levelPartitions, levelWalls, stairsArriving } = await import("../lib/schematic-model.ts");
 const B = await import("../lib/model-scoreboard.ts");
+const { drawingTextRuns, drawingLengthFeet } = await import("../lib/drawing-dimensions.ts");
 const { hexagonTags } = await import("../lib/wall-detection.ts");
 const { jelleffTruth, JELLEFF_PLAN_SHEETS } = await import("../lib/drawing-score.ts");
 const { doorScheduleRows } = await import("../lib/jelleff-doors.ts");
@@ -46,9 +47,16 @@ pdfjs.GlobalWorkerOptions.workerSrc = import.meta.resolve("pdfjs-dist/legacy/bui
 const { createCanvas } = createRequire(realpathSync(fileURLToPath(pdfUrl)))("@napi-rs/canvas");
 const pdf = await pdfjs.getDocument({ data: new Uint8Array(readFileSync(args.pdf)), verbosity: 0 }).promise;
 
-const { createWorker, PSM } = await import("tesseract.js");
-const worker = await createWorker("eng", 1, { cachePath: out });
-await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE, tessedit_char_whitelist: "0123456789'\"-/ ", debug_file: "/dev/null" });
+let worker;
+async function readStrip(image) {
+  if (!worker) {
+    const { createWorker, PSM } = await import("tesseract.js");
+    worker = await createWorker("eng", 1, { cachePath: out });
+    await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE, tessedit_char_whitelist: "0123456789'\"-/ ", debug_file: "/dev/null" });
+  }
+  const { data } = await worker.recognize(image);
+  return data.text.trim();
+}
 
 const RASTER = 4; // pixels per page point: dimension text is then about 28 px tall.
 
@@ -106,19 +114,22 @@ for (const plan of plans) {
   const wallFeet = Math.round(walls.walls.reduce((t, w) => t + Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), 0));
   console.log(`  read ${walls.walls.length} walls (${wallFeet} ft), ${doors.filter(d => d.kind === "door").length} doors, ${glazing.length} glass runs`);
 
-  // Printed dimensions, read with OCR from the strip above each line.
-  const scale = RASTER;
+  const printed = B.dimensionLabels(spans, drawingTextRuns((await page.getTextContent()).items, vp));
+  const by = printed.map(text => text ? "pdf" : null);
+  const strips = new Map();
+  const needsOcr = !args["skip-ocr"] && printed.some(text => !text);
+  const scale = needsOcr ? RASTER : 1.5;
   const raster = createCanvas(Math.ceil(vp.width * scale), Math.ceil(vp.height * scale)), context = raster.getContext("2d");
   context.fillStyle = "#fff"; context.fillRect(0, 0, raster.width, raster.height);
   await page.render({ canvas: raster, canvasContext: context, viewport: page.getViewport({ scale }) }).promise;
-  const printed = [], strips = [];
-  // --skip-ocr yes leaves the printed values out, for a quick score after a change to the reader.
-  for (let i = 0; i < spans.length && !args["skip-ocr"]; i++) {
-    const image = stripImage(raster, spans[i]);
-    const { data } = await worker.recognize(image);
-    printed.push(data.text.trim());
-    strips.push(image);
-    if ((i + 1) % 25 === 0) console.log(`  read ${i + 1} of ${spans.length} printed values`);
+  if (needsOcr) for (const [i, span] of spans.entries()) {
+    if (printed[i]) continue;
+    const image = stripImage(raster, span);
+    const text = await readStrip(image);
+    printed[i] = text;
+    const feet = drawingLengthFeet(text) ?? B.parseDimension(text);
+    by[i] = feet === null ? null : "ocr";
+    if (i < 200 && (feet === null || Math.abs(feet - span.feet) * 12 > .5)) strips.set(i, image);
   }
 
   // Only the plan: the same extent as the walls, with what the app's margin takes in stripped back to a few feet.
@@ -128,15 +139,19 @@ for (const plan of plans) {
   })() : undefined;
   const inPlan = walls.weight === null ? [] : B.lineRuns(segments, walls.weight, planBox);
   const dimensions = B.scoreDimensions(spans, printed);
-  // The strips OCR couldn't read or that disagree, to see whether the reading or the drawing is at fault.
-  const stripsDir = resolve(out, `${plan.sheet}-strips`);
-  mkdirSync(stripsDir, { recursive: true });
-  if (!args["skip-ocr"]) spans.forEach((span, i) => {
-    const value = B.parseDimension(printed[i]);
-    if (value !== null && Math.abs(value - span.feet) * 12 <= 0.5) return;
-    if (i < 200) writeFileSync(resolve(stripsDir, `${String(i).padStart(3, "0")}-${value === null ? "unread" : "disagree"}-${Math.round(span.feet * 12)}in.png`), strips[i]);
-  });
-  writeFileSync(resolve(out, `${plan.sheet}-printed.json`), JSON.stringify(spans.map((s, i) => ({ measuredInches: Math.round(s.feet * 12 * 100) / 100, printed: printed[i] })), null, 0));
+  const printedSources = { pdf: by.filter(source => source === "pdf").length, ocr: by.filter(source => source === "ocr").length };
+  if (strips.size) {
+    const stripsDir = resolve(out, `${plan.sheet}-strips`);
+    mkdirSync(stripsDir, { recursive: true });
+    for (const [i, image] of strips) {
+      const value = drawingLengthFeet(printed[i]) ?? B.parseDimension(printed[i]);
+      const kind = value === null ? "unread" : "disagree";
+      writeFileSync(resolve(stripsDir, `${String(i).padStart(3, "0")}-${kind}-${Math.round(spans[i].feet * 12)}in.png`), image);
+    }
+  }
+  writeFileSync(resolve(out, `${plan.sheet}-printed.json`), JSON.stringify(spans.map((s, i) => ({
+    measuredInches: Math.round(s.feet * 12 * 100) / 100, printed: printed[i], source: by[i],
+  }))));
   const faces = B.scoreDimensionedFaces(spans, inPlan, walls.walls, pointsPerFoot);
   const lines = B.scoreWallLines(inPlan, walls.walls, pointsPerFoot);
 
@@ -167,7 +182,7 @@ for (const plan of plans) {
     const zones = ceilingZones.filter(z => z.room && z.level === (plan.sheet === "A1.1" ? "L1" : "L2")).map(z => ({ room: z.room, name: z.name, points: z.points.map(toFeet) }));
     roomShapes = B.scoreRoomShapes(zones, faces2(spaceLines));
   }
-  levels.push({ sheet: plan.sheet, walls: { count: walls.walls.length, feet: wallFeet }, wallWeight: walls.weight, dimensions, faces, lines, doors: doorScore, rooms: roomScore, roomShapes, wallFlags, glass, partitions, columns, openings, stairs });
+  levels.push({ sheet: plan.sheet, walls: { count: walls.walls.length, feet: wallFeet }, wallWeight: walls.weight, dimensions, printedSources, faces, lines, doors: doorScore, rooms: roomScore, roomShapes, wallFlags, glass, partitions, columns, openings, stairs });
   writeFileSync(resolve(out, `${plan.sheet}-model.json`), JSON.stringify({ walls: walls.walls, doors, glazing, partitions, columns, openings, stairs }));
 
   // The model over the sheet: walls blue, glass teal, doors green, operable partitions orange, guardrails brown, columns black; red is what the checks say is missing.
@@ -197,7 +212,7 @@ for (const plan of plans) {
   if (roomScore) for (const r of roomScore.rows.filter(x => x.status !== "closed")) { g.fillStyle = r.status === "open" ? "rgba(230,30,30,0.9)" : "rgba(240,140,0,0.9)"; g.beginPath(); g.arc(r.at[0] * px, r.at[1] * px, 1.4 * px, 0, 7); g.fill(); }
   writeFileSync(resolve(out, `${plan.sheet}-overlay.png`), shot.encodeSync("png"));
 }
-await worker.terminate();
+if (worker) await worker.terminate();
 
 function feet2([x, y], frame) { return [x * frame.widthFeet, y * frame.heightFeet]; }
 
