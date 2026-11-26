@@ -48,6 +48,33 @@ assert.deepEqual(M.levelPlanSheets(areaRows).map(({ level, row, areas }) => [lev
   [[1, "A-111A", "A-111B"], [2, "A-112A", "A-112B"]], "Two area plans take priority over the overview and belong to one level");
 
 const line = (a, b, width = .72) => ({ a, b, width, color: "#000000" });
+// Wall layers use exact evidence from the selected drawing detail.
+const { assemblyLabelOptions, assemblyTextMatches, printedSolidWall } = await import("../lib/schematic-assembly-drawings.ts");
+const detailBox = (str, x, y, w) => ({ str, x: x / 400, y: y / 260, w: w / 400, h: 10 / 260 });
+const core = '7 5/8" CMU BLOCK';
+const cmuCaption = { title: 'TYPE 13 - 7 5/8" CMU', box: [0, 0, 1, 1], tags: ["13"], labels: [
+  detailBox('7 5/8"', 70, 20, 25),
+  detailBox(core, 180, 47, 105),
+  detailBox(core, 180, 113, 105),
+  detailBox('3/8" FULL MORTAR JT.', 180, 145, 100),
+] };
+const cmuLeaders = [52, 118, 150].flatMap(y => [line([160, y], [174, y], .24), line([160, y], [112, y + 15], .24)]);
+const readCore = caption => printedSolidWall(caption, cmuLeaders, { width: 400, height: 260 });
+assert.deepEqual(readCore(cmuCaption), { layers: [{ material: core, thickness: '7 5/8"' }], thickness: '7 5/8"' });
+assert.equal(readCore({ ...cmuCaption, title: "TYPE 13 - CMU WITH EIFS" }), undefined);
+assert.equal(printedSolidWall(cmuCaption, cmuLeaders.slice(0, 2), { width: 400, height: 260 }), undefined);
+assert.equal(readCore({ ...cmuCaption, tags: ["13", "13A"] }).thickness, "", "Do not assign one thickness to multiple variants");
+
+const labels = assemblyLabelOptions(cmuCaption);
+const callout = labels.findIndex(label => label.text === core) + 1;
+assert.ok(callout > 0);
+assert.ok(labels.every(label => assemblyTextMatches(label.text, cmuCaption.labels)));
+const detailJob = EXTRA_JOBS["assembly-detail"];
+const detailInput = detailJob.parse({ image: "data:image/jpeg;base64,/9j/A=", kind: "wall", title: cmuCaption.title, tags: ["13"], labels });
+assert.deepEqual(detailJob.screen({ details: [{ tag: "13", layers: [
+  { callout, thickness: '7 5/8"' }, { callout: 1200, material: "Unsupported material" },
+] }] }, detailInput).details[0].layers, [{ material: core, thickness: '7 5/8"' }]);
+
 const planSheet = (sheet, title, other = {}) => ({ sheet, title, discipline: "Architectural", ...other });
 assert.deepEqual(printedPlanLevels("B1 & B2 FLOOR PLANS"), [-2, -1]);
 assert.deepEqual(printedPlanLevels("1ST & 2ND-6TH (TYP.) FLOOR PLANS"), [1, 2, 3, 4, 5, 6]);

@@ -20,7 +20,7 @@ import { vectorsFromOperators, type Point } from "./plan-vectors";
 import { drawingLengthFeet, drawingTextRuns } from "./drawing-dimensions";
 import { isFinishSchedule } from "./finish-schedule";
 import { printedFloorFinishes, printedSlabNotes, slabNoteArea, slabNoteLevel, type FloorAssemblyDetail, type FloorFinishNote } from "./schematic-floor-details";
-import { assemblyCaptions, assemblyTextMatches, assemblyThickness, floorAssemblySheet, floorLeaderLayers, printedFloorDetailReferences, wallAssemblySheet, type AssemblyKind, type AssemblyRead, type FloorDetailReference } from "./schematic-assembly-drawings";
+import { assemblyCaptions, assemblyLabelOptions, assemblyTextMatches, assemblyThickness, floorAssemblySheet, floorLeaderLayers, printedFloorDetailReferences, printedSolidWall, wallAssemblySheet, type AssemblyKind, type AssemblyRead, type FloorDetailReference } from "./schematic-assembly-drawings";
 import { holdOutsidePlanRuns } from "./schematic-plan-review";
 import { matchPrintedWallTags, printedWallTags, typeWallContinuations } from "./schematic-printed-wall-tags";
 import { pageTextBoxes } from "./text-anchor";
@@ -468,10 +468,12 @@ async function readAssemblySheet(row: RegisterRow, kind: AssemblyKind, signal?: 
       let reads: AssemblyRead[] = [];
       // A vector floor section with readable leaders already supplies its printed callouts.
       const native = kind === "floor" ? floorLeaderLayers(caption, drawing.segments, drawing.page, drawing.text) : [];
+      const solidWall = kind === "wall" ? printedSolidWall(caption, drawing.segments, drawing.page) : undefined;
       if (!native.length) {
         try {
           const image = await renderStoredRegion(row.doc, row.page, caption.box, 2000, true);
-          const { details } = await aiJob<{ details: AssemblyRead[] }>("assembly-detail", { image, kind, title: caption.title, tags: caption.tags }, signal);
+          const labels = assemblyLabelOptions(caption);
+          const { details } = await aiJob<{ details: AssemblyRead[] }>("assembly-detail", { image, kind, title: caption.title, tags: caption.tags, labels }, signal);
           reads = details ?? [];
         } catch (error) {
           if (signal?.aborted) throw error;
@@ -484,11 +486,11 @@ async function readAssemblySheet(row: RegisterRow, kind: AssemblyKind, signal?: 
         for (const tag of caption.tags) {
           const matches = reads.filter(candidate => tagKey(candidate.tag) === tagKey(tag));
           const read = matches.length === 1 ? matches[0] : undefined;
-          const layers = checked(read).map(layer => {
+          const layers = (solidWall?.layers ?? checked(read)).map(layer => {
             const feet = assemblyThickness(layer.thickness, layer.material);
             return { material: layer.material, inches: feet === null ? null : feet * 12 };
           });
-          const thickness = read && cited(read.thickness) && drawingLengthFeet(read.thickness) !== null ? read.thickness : "";
+          const thickness = read && cited(read.thickness) && drawingLengthFeet(read.thickness) !== null ? read.thickness : solidWall?.thickness ?? "";
           const rating = read && cited(read.rating) ? read.rating : "";
           wallTypes.push({ tag, description: caption.title, thickness, rating, source, ...(layers.length ? { layers } : {}) });
         }
@@ -516,7 +518,7 @@ async function readModelWallTypes(register: RegisterRow[], warnings: string[], s
       const detail = await readAssemblySheet(row, "wall", signal);
       if (detail.captions) {
         types.push(...detail.wallTypes);
-        if (detail.failed) warnings.push(row.sheet + ": some wall assembly diagrams could not be read.");
+        if (detail.failed || detail.wallTypes.some(type => !type.layers?.length)) warnings.push(row.sheet + ": some wall assembly layers need review.");
       } else {
         const scheduled = await readPartitionTypes(row.doc, row.page, row.sheet, signal);
         types.push(...scheduled.map(type => ({ ...type, source: { documentId: row.doc.id, sheet: row.sheet, page: row.page, quote: type.tag } })));

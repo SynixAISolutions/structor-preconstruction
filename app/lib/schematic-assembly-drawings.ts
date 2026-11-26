@@ -9,6 +9,7 @@ export type AssemblyKind = "wall" | "floor";
 export type AssemblyCaption = {
   title: string; box: PlanBox; tags: string[]; labels: TextBox[]; detail?: string;
 };
+export type AssemblyLabel = { at: [number, number]; text: string };
 export type AssemblyRead = {
   tag: string; thickness: string; rating: string;
   layers: { material: string; thickness: string }[];
@@ -100,6 +101,8 @@ export function assemblyCaptions(boxes: TextBox[], segments: Segment[], page: Pa
   });
 }
 
+const followingLabel = (box: TextBox, labels: TextBox[]) => labels.find(b => b.y > box.y && b.y - box.y < box.h * 1.65 && Math.abs(b.x - box.x) <= .0012);
+
 /** Whitespace, punctuation variants and line wrapping do not change the words printed in the detail. */
 export function assemblyTextMatches(value: string, labels: TextBox[]) {
   const search = normalized(value);
@@ -107,7 +110,7 @@ export function assemblyTextMatches(value: string, labels: TextBox[]) {
   return labels.some(box => {
     const label = normalized(box.str);
     if (label === search) return true;
-    const next = labels.find(b => b.y > box.y && b.y - box.y < box.h * 1.65 && Math.abs(b.x - box.x) <= .0012);
+    const next = followingLabel(box, labels);
     return !!next && normalized(box.str + " " + next.str) === search;
   });
 }
@@ -158,25 +161,76 @@ function floorDimension(label: DrawingTextRun, lines: Segment[], feetPerPaperInc
   return choices.length === 1 ? { ...choices[0], thicknessFeet: thickness, thickness: label.text } : null;
 }
 
+function detailBounds(caption: AssemblyCaption, page: Page) {
+  const [left, top, width, height] = caption.box;
+  return ([x, y]: Segment["a"]) => x >= left * page.width && x <= (left + width) * page.width &&
+    y >= top * page.height && y <= (top + height) * page.height;
+}
+
+/** The horizontal end of a short callout line is beside the label, on exactly one side. */
+function labelLeaders(box: TextBox, lines: Segment[], page: Page, minimumLead = 1.1) {
+  const y = (box.y + box.h / 2) * page.height;
+  const start = box.x * page.width, end = (box.x + box.w) * page.width, size = box.h * page.height;
+  if (size <= 0) return [];
+  return lines.flatMap(line => {
+    const { a, b } = line;
+    if (Math.abs(a[1] - b[1]) > .4 || Math.abs(a[1] - y) > size * .28 || Math.abs(a[0] - b[0]) < size * minimumLead) return [];
+    const min = Math.min(a[0], b[0]), max = Math.max(a[0], b[0]);
+    if (start - max >= size * .18 && start - max <= size * 1.8) return [{ x: min, y: a[1], side: -1, line }];
+    if (min - end >= size * .18 && min - end <= size * 1.8) return [{ x: max, y: a[1], side: 1, line }];
+    return [];
+  });
+}
+
+const leadingDimension = (material: string) =>
+  /^(\d+(?:[ -]\d+\/\d+|\/\d+|\.\d+)?\s*(?:["″”]|MM\b|MIL\b|CM\b))/i.exec(material)?.[1] ?? "";
+
+const masonryCore = /\b(?:CMU|CONCRETE(?:\s+BLOCK)?|MASONRY)\b/i;
+const otherWallMaterial = /\b(?:EIFS|STUDS?|GWB|GYPSUM|FURRING|FINISH(?:ES)?|INSULATION|SHEATHING|BRICK|CLADDING|VENEER|LINER|BARRIER|COATINGS?|COMPOSITE|PANELS?|SIDING)\b|\+/i;
+const wallJoint = /\b(?:DEFLECTION GAP|MORTAR (?:JT\.?|JOINT)|SEALANT)\b/i;
+
+/** A solid wall detail can name its whole core repeatedly, at section and at plan. Follow those printed leaders. */
+export function printedSolidWall(caption: AssemblyCaption, segments: Segment[], page: Page): Pick<AssemblyRead, "layers" | "thickness"> | undefined {
+  if (!masonryCore.test(caption.title) || otherWallMaterial.test(caption.title)) return undefined;
+  const inCrop = detailBounds(caption, page);
+  const lines = segments.filter(line => inCrop(line.a) && inCrop(line.b));
+  const callouts = caption.labels.filter(box => /[A-Z]{2}/i.test(box.str) && labelLeaders(box, lines, page, .8).some(leader => lines.some(line => {
+    if (line.color !== leader.line.color || Math.abs(line.width - leader.line.width) > .05) return false;
+    const near = (p: Segment["a"]) => Math.hypot(p[0] - leader.x, p[1] - leader.y) < .55;
+    const tip = near(line.a) ? line.b : near(line.b) ? line.a : null;
+    return tip && (tip[0] - leader.x) * leader.side > 1 && Math.abs(tip[1] - leader.y) > .55;
+  }))).filter(box => !wallJoint.test(box.str));
+  if (new Set(callouts.map(box => box.y.toFixed(4))).size < 2 || new Set(callouts.map(box => normalized(box.str))).size !== 1) return undefined;
+  const material = callouts[0].str.trim();
+  if (!masonryCore.test(material) || otherWallMaterial.test(material)) return undefined;
+  const thickness = leadingDimension(material);
+  const printedWidth = caption.tags.length === 1 && caption.labels.some(box =>
+    box.y < Math.min(...callouts.map(callout => callout.y)) && normalized(box.str) === normalized(thickness));
+  return { layers: [{ material, thickness }], thickness: printedWidth ? thickness : "" };
+}
+
+/** Give the assembly reader the PDF's exact wording and location so it can identify callouts by number. */
+export function assemblyLabelOptions(caption: AssemblyCaption): AssemblyLabel[] {
+  const [left, top, width, height] = caption.box;
+  return [...caption.labels].sort((a, b) => a.y - b.y || a.x - b.x).flatMap(box => {
+    const x = (box.x + box.w / 2 - left) / width, y = (box.y + box.h / 2 - top) / height;
+    const at: [number, number] = [+x.toFixed(3), +y.toFixed(3)];
+    const next = followingLabel(box, caption.labels);
+    const parts = [box.str, ...(next ? [box.str + " " + next.str] : [])];
+    return parts.map(text => ({ at, text: text.trim() }));
+  });
+}
+
 /** Native callout leaders preserve the drawing's wording when visual extraction cannot read a floor detail. */
 export function floorLeaderLayers(caption: AssemblyCaption, segments: Segment[], page: Page, text: DrawingTextRun[] = []):
   (AssemblyRead["layers"][number] & { thicknessFeet?: number })[] {
-  const [left, top, width, height] = caption.box;
-  const inCrop = ([x, y]: [number, number]) => x >= left * page.width && x <= (left + width) * page.width &&
-    y >= top * page.height && y <= (top + height) * page.height;
+  const inCrop = detailBounds(caption, page);
   const lines = segments.filter(line => inCrop(line.a) && inCrop(line.b));
   const calls = caption.labels.flatMap(box => {
-    const y = (box.y + box.h / 2) * page.height;
     const start = box.x * page.width, end = (box.x + box.w) * page.width, size = box.h * page.height;
     const text = box.str.trim();
-    if (!/[A-Z]{2}/i.test(text) || /\b(?:SCALE|DETAIL NO\.?|ASSEMBLY BELOW)\b/i.test(text) || size <= 0) return [];
-    const leaders = lines.flatMap(({ a, b }) => {
-      if (Math.abs(a[1] - b[1]) > .4 || Math.abs(a[1] - y) > size * .28 || Math.abs(a[0] - b[0]) < size * 1.1) return [];
-      const min = Math.min(a[0], b[0]), max = Math.max(a[0], b[0]);
-      if (start - max >= size * .18 && start - max <= size * 1.8) return [{ x: min, y: a[1], side: -1 }];
-      if (min - end >= size * .18 && min - end <= size * 1.8) return [{ x: max, y: a[1], side: 1 }];
-      return [];
-    });
+    if (!/[A-Z]{2}/i.test(text) || /\b(?:SCALE|DETAIL NO\.?|ASSEMBLY BELOW)\b/i.test(text)) return [];
+    const leaders = labelLeaders(box, lines, page);
     if (!leaders.length || new Set(leaders.map(l => l.side)).size !== 1) return [];
     const leader = leaders.reduce((a, b) => a.side * a.x > b.side * b.x ? a : b);
     // One angled segment from the leader elbow is the link to the profile.
@@ -192,7 +246,7 @@ export function floorLeaderLayers(caption: AssemblyCaption, segments: Segment[],
         Math.abs(a[1] - b[1]) <= .4 && Math.abs(a[1] - (other.y + other.h / 2) * page.height) <= size * .28 &&
         Math.abs((leader.side < 0 ? Math.max(a[0], b[0]) - start : Math.min(a[0], b[0]) - end)) <= size * 1.8));
     const material = continuation ? text + " " + continuation.str.trim() : text;
-    const explicit = /^(\d+(?:[ -]\d+\/\d+|\/\d+|\.\d+)?\s*(?:["″”]|MM\b|MIL\b|CM\b))/i.exec(material)?.[1] ?? "";
+    const explicit = leadingDimension(material);
     const depth = assemblyThickness(explicit, material);
     return [{ material, y: tipY, thickness: depth ? explicit : "", thicknessFeet: depth ?? undefined }];
   }).sort((a, b) => a.y - b.y);
