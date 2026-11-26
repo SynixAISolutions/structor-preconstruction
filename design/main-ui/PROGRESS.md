@@ -75,7 +75,21 @@ Tasks (tick as done):
 - [ ] 5.5 Project screens: B2's top pill nav (one pill per SCREEN_GROUPS group, each with a frosted dropdown) replaces the sidebar; the main page uses A's icon rail.
 - [ ] 5.6 Project landing = B2, the screen a project opens on (currently "Preconstruction to-do"/overview). Build it with the data `project-overview.tsx` and `project-health.tsx` already use.
 - [ ] 5.7 Gate (`pnpm check`, tsc, `pnpm build`), plus desktop and 390px checks in the browser.
-- [ ] 5.8 Commit as `tools@synixsolutions.io` (ask Danial first: the repo config currently shows a GitHub noreply address), push the branch, get the preview URL, and hand it to Danial.
+- [x] 5.8 Committed `e6b1b81` with `git -c user.email=tools@synixsolutions.io commit …` (AGENTS.md requires that author; the repo config was **not** changed and still shows a GitHub noreply address). Pushed `ui/dark-main-ui` to origin, which triggers a Vercel **preview** only, never production. The preview URL is under "Preview link" below.
+
+## Preview link
+
+- Branch preview (commit `e6b1b81`, built OK 2026-11-26): https://structor-preconstruction-cag10198d-tools-3633s-projects.vercel.app
+  Each new push makes a new deployment URL. Find the latest with `gh api "repos/SynixAISolutions/structor-preconstruction/deployments?sha=$(git rev-parse HEAD)"` and then its `/statuses`.
+- It sits behind Vercel Authentication. To share it with Marcel and Rawad, Danial opens the deployment in Vercel and uses **Share** (or adds them to the team). The app's own workspace password still applies after that.
+
+## Not done yet / next
+
+- The **remaining screens** (bid leveling, budget, scopes…) already get the new palette and glass from `structor-dark.css`, but haven't been individually polished. Walk each one in the preview, note anything that looks off, and fix it in that screen's CSS under `html[data-structor-theme="dark"]`.
+- **Real background renders** (Core dev request #1). Today every project shows the Project 1 stand-in.
+- **Confirm with Danial:** opening a project now lands on its home rather than Project information.
+- **Light theme:** still works, but the new screens were designed dark-first. Check it if anyone uses light.
+- **Going live = merging `ui/dark-main-ui` into main**, only when Danial says so, and after the gate passes again on a fresh merge with main.
 - [ ] Step 5: lock in, then implement in `app/` (dark theme for these two screens, rail + dropdown nav, profile menu, Ask box wired to Ask Structor)
 - [ ] Step 6: roll the dark theme out to the remaining screens (separate decision)
 
