@@ -38,9 +38,9 @@ export function setSubLimit(state: LimitsState, companyId: string, input: { sing
 }
 
 /** Records how complete an awarded contract is (0–100), by hand until Textura is connected. */
-export function setPercentComplete(state: LimitsState, awardId: string, percent: number, by: string, at = new Date().toISOString()): LimitsState {
+export function setPercentComplete(state: LimitsState, awardId: string, percent: number, by: string, at = new Date().toISOString(), source: ContractProgress["source"] = "manual"): LimitsState {
   if (!Number.isFinite(percent) || percent < 0 || percent > 100) throw new LimitRuleError({ percent: "Enter a percent complete from 0 to 100." });
-  const entry: ContractProgress = { awardId, percent: Math.round(percent * 10) / 10, source: "manual", updatedBy: by, updatedAt: at };
+  const entry: ContractProgress = { awardId, percent: Math.round(percent * 10) / 10, source, updatedBy: by, updatedAt: at };
   return { ...state, progress: [...state.progress.filter(p => p.awardId !== awardId), entry] };
 }
 
