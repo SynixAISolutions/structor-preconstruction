@@ -14,6 +14,7 @@ import { floorOpenings } from "./floor-openings";
 import { compactFloorPlanTitle, printedPlanLevels } from "./floor-plan-label";
 import type { SourcedDoorSize } from "./door-schedule-dimensions";
 import type { GlazingDimensions } from "./glazing-detail-references";
+import type { StructuralSlab } from "./schematic-structural-slabs";
 import type { FloorDetailReference } from "./schematic-assembly-drawings";
 import type { FloorAssemblyDetail, FloorAssemblyNote, FloorFinishNote } from "./schematic-floor-details";
 import type { DimensionSource } from "./section-datums";
@@ -45,6 +46,7 @@ export type SchematicLevel = {
   alignmentUnverified?: boolean;
   unplacedPlans?: PlanSource[];
   floorAssemblies?: FloorAssemblyNote[];
+  structuralSlab?: StructuralSlab;
   floorReferences?: FloorDetailReference[];
   /** How the size was found: the printed scale, or the building area. */
   sizing: string;
@@ -89,7 +91,7 @@ export type SchematicPartition = SourcedPlanElement & { a: Point; b: Point; thic
 /** A column at `at`, in feet, with its sides and the angle of `width` in radians. */
 export type SchematicColumn = SourcedPlanElement & { at: Point; width: number; depth: number; angle: number; excluded?: boolean };
 /** A wall centerline from a to b with its thickness, in feet; `type` is its partition type from the plan's tags. */
-export type SchematicWall = SourcedPlanElement & { a: Point; b: Point; thickness: number; type?: string | null; tagRead?: { basis: "printed" | "image" }; /** The type was set by the estimator for untagged walls, not read from a tag. */ typeSet?: boolean; /** Corrected by the estimator on this wall. */ edited?: boolean; /** Marked by the estimator as not a wall (kept so it can be restored). */ excluded?: boolean };
+export type SchematicWall = SourcedPlanElement & { a: Point; b: Point; thickness: number; type?: string | null; tagRead?: { basis: "printed" | "image" | "continuation"; at?: Point }; tagReview?: boolean; /** The type was set by the estimator for untagged walls, not read from a tag. */ typeSet?: boolean; /** Corrected by the estimator on this wall. */ edited?: boolean; /** Marked by the estimator as not a wall (kept so it can be restored). */ excluded?: boolean };
 /**
  * A door opening from a to b, its leaves' hinges and where each leaf swings open to, in feet. "compartment"
  * is a toilet stall's door: toilet partitions, not the door schedule. `thickness` is the host wall's, for the
@@ -592,7 +594,7 @@ export function editWall(model: SchematicModel, levelId: string, index: number, 
     if (!l.walls?.[index]) throw new Error("That wall is no longer in the model.");
     const t = change.type === undefined ? undefined : change.type.trim().toUpperCase().replace(/\s+/g, "").slice(0, 16);
     return { ...l, walls: l.walls.map((w, i) => i !== index ? w : {
-      ...w, ...(t !== undefined ? { type: t || null, typeSet: false, tagRead: undefined, edited: true } : {}), ...(change.excluded !== undefined ? { excluded: change.excluded, outsidePlan: undefined } : {}),
+      ...w, ...(t !== undefined ? { type: t || null, typeSet: false, tagRead: undefined, tagReview: undefined, edited: true } : {}), ...(change.excluded !== undefined ? { excluded: change.excluded, outsidePlan: undefined } : {}),
     }) };
   });
 }

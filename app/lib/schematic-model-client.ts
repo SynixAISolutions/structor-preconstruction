@@ -22,12 +22,13 @@ import { isFinishSchedule } from "./finish-schedule";
 import { printedFloorFinishes, printedSlabNotes, slabNoteArea, slabNoteLevel, type FloorAssemblyDetail, type FloorFinishNote } from "./schematic-floor-details";
 import { assemblyCaptions, assemblyTextMatches, assemblyThickness, floorAssemblySheet, floorLeaderLayers, printedFloorDetailReferences, wallAssemblySheet, type AssemblyKind, type AssemblyRead, type FloorDetailReference } from "./schematic-assembly-drawings";
 import { holdOutsidePlanRuns } from "./schematic-plan-review";
-import { matchPrintedWallTags, printedWallTags } from "./schematic-printed-wall-tags";
+import { matchPrintedWallTags, printedWallTags, typeWallContinuations } from "./schematic-printed-wall-tags";
 import { pageTextBoxes } from "./text-anchor";
 import { planRegistration } from "./schematic-plan-alignment";
 import { assembleFloorPlans, type FloorPlanBuild, type ReadFloorPlan } from "./schematic-plan-areas";
 import { clipPlanBox, containsPlanPoint, pointOnPlanSheet, separatedPlanViews, type PlanBox, type PlanView } from "./schematic-plan-views";
 import { alignStackedPlan, printedPlanGrid, type PlanGrid } from "./schematic-stack-grid";
+import { slabDimension, structuralFloorLevels, structuralFloorView, structuralSlabOutline, type StructuralSlab } from "./schematic-structural-slabs";
 import { addTaggedDoorOpenings, printedDoorTags } from "./tagged-door-openings";
 import { consensusMarkers, feetPerInch, floorPlanArea, heightSheets, levelHeights, levelName, contentTiles, levelColumns, levelDoors, levelGlazing, levelOpenings, levelPartitions, levelFlights, levelPlanSheets, levelTags, levelWalls, stairsArriving, type LevelFlights, partitionTypeSheet, tagTiles, toFeet, type Marker, type SchematicLevel, type PlanSource, type SchematicModel, type SchematicRoom } from "./schematic-model";
 import { printedSectionDatums, resolveSectionDatums, sectionDatumLevel, type SourcedDatum } from "./section-datums";
@@ -38,7 +39,7 @@ async function pageSize(doc: StoredDocument, page: number) {
   return { widthIn: viewport.width / 72, heightIn: viewport.height / 72 };
 }
 
-async function readDetailDrawing(doc: StoredDocument, pageNumber: number, signal?: AbortSignal) {
+async function readDetailDrawing(doc: StoredDocument, pageNumber: number, signal?: AbortSignal, readClipRings = false) {
   const [pdfjs, pdf] = await Promise.all([import("pdfjs-dist"), openStoredPdf(doc)]);
   const page: PDFPageProxy = await pdf.getPage(pageNumber);
   const view = page.getViewport({ scale: 1 });
@@ -46,10 +47,13 @@ async function readDetailDrawing(doc: StoredDocument, pageNumber: number, signal
   const words = items.filter(item => "str" in item);
   const operators = await pageTurn(() => page.getOperatorList(), true).catch(() => null);
   signal?.throwIfAborted();
+  const vectors = operators ? vectorsFromOperators(operators, pdfjs.OPS as unknown as Record<string, number>, view.transform, readClipRings) : null;
   return {
     boxes: pageTextBoxes(words, view),
     text: drawingTextRuns(words, view),
-    segments: operators ? vectorsFromOperators(operators, pdfjs.OPS as unknown as Record<string, number>, view.transform).segments : [],
+    segments: vectors?.segments ?? [],
+    curves: vectors?.curves ?? [],
+    clips: vectors?.clips ?? [],
     page: { width: view.width, height: view.height },
   };
 }
@@ -224,6 +228,7 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
   if (new Set(scales.map(o => o.scale)).size > 1) warnings.push(`The floor plans read different scales (${scales.map(o => `${o.row.sheet} ${o.scale} ft per inch`).join(", ")}); check them on the sheets.`);
   const partitionTypes = await readModelWallTypes(register, warnings, args.signal, args.onProgress);
   const floorSheets = register.filter(floorAssemblySheet);
+  const slabPlans = register.filter(row => row.discipline === "Structural" && structuralFloorLevels(row.title).length);
   const floorSheetKeys = new Set(floorSheets.map(row => row.sheet.toUpperCase().replace(/[^A-Z0-9]/g, "")));
   const areasOf = new Map<number, ReadFloorPlan[]>();
   const viewGeometry = new Map<PlanView, Awaited<ReturnType<typeof planVectorWalls>>>();
@@ -233,7 +238,7 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
     else if (!scale) warnings.push(`${row.sheet}: no printed scale was read; ${sized.sizing.toLowerCase()}.`);
     args.onProgress?.(`Finding the walls on ${row.sheet}…`);
     const found = row.view && viewGeometry.get(row.view) || await planVectorWalls(row.doc, row.page, row.sheet, sized.frame, reading.outline,
-      { scaled: !!scale, printedScale: !borrowed && !!scale, alignAreas: splitLevels.has(level), alignStack, view: row.view, partitionTypes, floorSheetKeys, signal: args.signal, onProgress: args.onProgress })
+      { scaled: !!scale, printedScale: !borrowed && !!scale, alignAreas: splitLevels.has(level), alignStack, readSlabGrid: slabPlans.length > 0, view: row.view, partitionTypes, floorSheetKeys, signal: args.signal, onProgress: args.onProgress })
       .catch(error => {
         if (args.signal?.aborted) throw error;
         return { walls: [], doors: [], glazing: [], partitions: [], columns: [], openings: [], flights: { arriving: [], rising: [] } as LevelFlights, rooms: [], floorReferences: [] as FloorDetailReference[], note: "The sheet's lines could not be read for walls.", tagWarning: "", registration: null, grid: [] };
@@ -277,6 +282,7 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
     warnings.push(...built.warnings);
     previous = built.placement;
   }
+  if (slabPlans.length) await readStructuralSlabs(slabPlans, levels, areasOf, warnings, args.signal, args.onProgress);
   // Stairs arrive at a level from the one below; a stair its plan draws without an arrow takes its direction from the plan below.
   const lowest = Math.min(...levels.map(l => l.order));
   for (const l of levels) {
@@ -408,6 +414,48 @@ export async function readWallLayers(documents: StoredDocument[], signal?: Abort
   return { partitionTypes, partitionSheet };
 }
 
+/** Register structural contours in the same coordinate frame as each placed architectural plan. */
+async function readStructuralSlabs(
+  rows: RegisterRow[], levels: SchematicLevel[], areas: ReadonlyMap<number, ReadFloorPlan[]>, warnings: string[],
+  signal?: AbortSignal, progress?: (text: string) => void,
+) {
+  const matches = new Map<string, StructuralSlab[]>();
+  for (const row of rows) {
+    const applicable = levels.filter(level => structuralFloorLevels(row.title).includes(level.order));
+    if (!applicable.length) continue;
+    signal?.throwIfAborted();
+    progress?.("Checking slab edges on " + row.sheet + "…");
+    try {
+      const drawing = await readDetailDrawing(row.doc, row.page, signal, true);
+      const view = structuralFloorView(row.title, drawing.text, drawing.page);
+      if (!view || !drawing.clips.length) continue;
+      const grid = printedPlanGrid(drawing.text, drawing.segments, drawing.curves, view.scale / 72);
+      const source = { documentId: row.doc.id, sheet: row.sheet, page: row.page, quote: view.caption.text };
+      const dimension = slabDimension(drawing.text, view, source);
+      for (const level of applicable) {
+        const area = areas.get(level.order);
+        // An area-only sheet cannot replace the shape of a combined floor.
+        if (level.planAreas && level.planAreas.length !== 1 || area?.length !== 1 || floorPlanArea(row.title)) continue;
+        const offset = alignStackedPlan(area[0].grid, grid);
+        if (!offset) continue;
+        const placed = level.planAreas?.[0]?.offset ?? [0, 0];
+        const shape = structuralSlabOutline(drawing.clips, drawing.segments, view, [offset[0] + placed[0], offset[1] + placed[1]], level.outline);
+        if (shape) matches.set(level.id, [...(matches.get(level.id) ?? []), { ...shape, source, dimension }]);
+      }
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      warnings.push(row.sheet + ": the structural slab could not be read.");
+    }
+  }
+  for (const level of levels) {
+    const candidates = matches.get(level.id) ?? [];
+    if (candidates.length === 1) level.structuralSlab = candidates[0];
+    else if (rows.some(row => structuralFloorLevels(row.title).includes(level.order))) {
+      warnings.push(level.name + ": slab edges need review. Floor surfaces follow the architectural room outlines.");
+    }
+  }
+}
+
 async function readAssemblySheet(row: RegisterRow, kind: AssemblyKind, signal?: AbortSignal) {
   const drawing = await readDetailDrawing(row.doc, row.page, signal);
   const captions = assemblyCaptions(drawing.boxes, drawing.segments, drawing.page, kind);
@@ -513,8 +561,8 @@ async function readPartitionTypes(doc: StoredDocument, pageNumber: number, sheet
  * plan (3 at a time), placed through the plan's own tag ovals and leaders (lib/tag-placement).
  */
 async function planVectorWalls(doc: StoredDocument, pageNumber: number, sheetName: string, frame: { widthFeet: number; heightFeet: number }, outline: Point[],
-  { scaled, printedScale, alignAreas, alignStack, view, partitionTypes, floorSheetKeys, signal, onProgress }: {
-    scaled: boolean; printedScale: boolean; alignAreas: boolean; alignStack: boolean; view?: PlanView; partitionTypes: PartitionType[]; floorSheetKeys: ReadonlySet<string>; signal?: AbortSignal; onProgress?: (text: string) => void;
+  { scaled, printedScale, alignAreas, alignStack, readSlabGrid, view, partitionTypes, floorSheetKeys, signal, onProgress }: {
+    scaled: boolean; printedScale: boolean; alignAreas: boolean; alignStack: boolean; readSlabGrid: boolean; view?: PlanView; partitionTypes: PartitionType[]; floorSheetKeys: ReadonlySet<string>; signal?: AbortSignal; onProgress?: (text: string) => void;
   }) {
   const [pdfjs, pdf] = await Promise.all([import("pdfjs-dist"), openStoredPdf(doc)]);
   const page = await pdf.getPage(pageNumber);
@@ -526,9 +574,9 @@ async function planVectorWalls(doc: StoredDocument, pageNumber: number, sheetNam
   const fills = view ? drawing.fills.filter(fill => fill.every(inView)) : drawing.fills;
   const printed = printedScale || partitionTypes.length || floorSheetKeys.size ? await pageTurn((): Promise<{ items: Parameters<typeof printedDoorTags>[0] }> => page.getTextContent(), true).catch(() => null) : null;
   signal?.throwIfAborted();
-  const text = printed && (alignAreas || alignStack) ? drawingTextRuns(printed.items, viewport).filter(run => inView(run.a) && inView(run.b)) : null;
+  const text = printed && (alignAreas || alignStack || readSlabGrid) ? drawingTextRuns(printed.items, viewport).filter(run => inView(run.a) && inView(run.b)) : null;
   const registration = alignAreas && text ? planRegistration(segments, text, frame.widthFeet * 72 / viewport.width) : null;
-  const grid: PlanGrid = alignStack && text ? printedPlanGrid(text, segments, curves, frame.widthFeet / viewport.width) : [];
+  const grid: PlanGrid = (alignStack || readSlabGrid) && printedScale && text ? printedPlanGrid(text, segments, curves, frame.widthFeet / viewport.width) : [];
   const walls = levelWalls(segments, sheet, frame, outline, scaled);
   const doors = levelDoors(segments, curves, sheet, frame, outline, walls.walls);
   const glazing = levelGlazing(segments, sheet, frame, outline, walls.weight, walls.walls, doors);
@@ -547,14 +595,17 @@ async function planVectorWalls(doc: StoredDocument, pageNumber: number, sheetNam
   });
   const read: { tile: PlanBox; tags: PlanTag[] }[] = [];
   let failed = 0, done = 0;
-  const rows = view ? Map.groupBy(tiles, tile => tile[1]).values() : [tiles];
+  const rows = Map.groupBy(tiles, tile => [tile[1], tile[3]].join(":")).values();
   for (const row of rows) {
+    signal?.throwIfAborted();
+    // Keep the rendering strip bounded separately from the three simultaneous AI requests.
+    const strip = row.length > 1 && row.length <= 6 ? await renderStoredRow(doc, pageNumber, row, 1200, true).catch(() => null) : null;
     for (let i = 0; i < row.length; i += 3) {
       signal?.throwIfAborted();
       const batch = row.slice(i, i + 3);
       done += batch.length;
       onProgress?.(`Reading the door, wall and room tags on ${sheetName} (part ${done} of ${tiles.length})…`);
-      const parts = view && batch.length > 1 ? await renderStoredRow(doc, pageNumber, batch, 1200, true).catch(() => null) : null;
+      const parts = strip ? strip.slice(i, i + batch.length) : batch.length > 1 ? await renderStoredRow(doc, pageNumber, batch, 1200, true).catch(() => null) : null;
       await Promise.all(batch.map(async (tile, index) => {
         try {
           const part = parts?.[index];
@@ -597,7 +648,7 @@ async function planVectorWalls(doc: StoredDocument, pageNumber: number, sheetNam
   const verifiedDoors = addTaggedDoorOpenings(tagged.doors, verifiedWalls, printedTags);
   // Room tags read on the tiles are sharper than the whole-sheet reading's; the level keeps those when there are any.
   const rooms: SchematicRoom[] = tagged.tags.filter(t => t.kind === "room").map(t => ({ name: t.name ?? "", number: t.text, at: t.at }));
-  return { note, walls: verifiedWalls, doors: verifiedDoors, glazing: reviewedGlazing, partitions: reviewedPartitions, columns, openings, flights, rooms, floorReferences, registration, grid, tagWarning: failed ? `${failed} of ${tiles.length} parts of the plan could not be read for door and wall tags; some doors and walls have no number or type.` : "" };
+  return { note, walls: typeWallContinuations(verifiedWalls, verifiedDoors), doors: verifiedDoors, glazing: reviewedGlazing, partitions: reviewedPartitions, columns, openings, flights, rooms, floorReferences, registration, grid, tagWarning: failed ? `${failed} of ${tiles.length} parts of the plan could not be read for door and wall tags; some doors and walls have no number or type.` : "" };
 }
 
 /** The open project's schematic model under "schematic-model"; `run` applies a correction (moveOutlinePoint, setLevelHeight) or a rebuild and returns null or the error. */

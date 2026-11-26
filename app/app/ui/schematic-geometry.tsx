@@ -4,7 +4,7 @@ import { glazingPlacement, placedGlazingElevation } from "../../lib/glazing-deta
 import { edgesIntersect, footprintValid, openOutline, polygonArea, type Point, type SchematicLevel } from "../../lib/schematic-model";
 import { inside, insideRoom, type Room } from "../../lib/room-detection";
 import { stairPieces } from "../../lib/stair-detection";
-import type { FloorAssemblySelection } from "../../lib/schematic-floor-details";
+import type { FloorAssemblySelection, FloorSurface } from "../../lib/schematic-floor-details";
 import { layerColor, layerGap, layerSlabs, openedCenter, type WallLayer } from "../../lib/wall-assemblies";
 
 export { footprintValid, openOutline } from "../../lib/schematic-model";
@@ -269,7 +269,7 @@ export function schematicStairs(level: SchematicLevel, rise: number | null): { m
  * A level's rooms (levelSpaces) as flat floors just above the slab: named rooms warm, unnamed spaces grey. A space open to the
  * level below has no floor. Nested rooms and stair wells cut holes in their surrounding floors.
  */
-export function schematicRoomFloors(rooms: Room[], openings: Point[][] = []): THREE.Group | null {
+export function schematicRoomFloors(rooms: FloorSurface[], openings: Point[][] = []): THREE.Group | null {
   if (rooms.every(room => room.open)) return null;
   const group = new THREE.Group();
   const materials = new Map<string, THREE.MeshStandardMaterial>();
@@ -285,7 +285,7 @@ export function schematicRoomFloors(rooms: Room[], openings: Point[][] = []): TH
     const roomHoles = room.holes ?? [];
     const boundaries = [room.outline, ...roomHoles];
     // Triangulation needs separate rings. Only cut a stair well wholly in the surrounding floor.
-    const stairWells = openings.filter(well => well.every(p => insideRoom(p, room)) &&
+    const stairWells = room.structural ? [] : openings.filter(well => well.every(p => insideRoom(p, room)) &&
       !roomHoles.some(hole => hole.some(p => inside(p, well))) &&
       !boundaries.some(ring => ring.some((a, i) => well.some((c, j) =>
         edgesIntersect(a, ring[(i + 1) % ring.length], c, well[(j + 1) % well.length]),
@@ -296,7 +296,7 @@ export function schematicRoomFloors(rooms: Room[], openings: Point[][] = []): TH
     const geometry = new THREE.ShapeGeometry(shape);
     geometry.rotateX(-Math.PI / 2);
     const floor = new THREE.Mesh(geometry, material);
-    floor.position.y = .05;
+    floor.position.y = room.structural ? .02 : .05;
     floor.userData.floorIndex = index;
     group.add(floor);
   }

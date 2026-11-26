@@ -83,7 +83,8 @@ function translateArea({ plan, offset, limits }: Placed, index: number) {
   return {
     outline: clippedFootprint(level.outline, limits).map(point),
     rooms: byPosition(level.rooms, limits, item => item.at).map(item => ({ ...item, at: point(item.at), planArea: index })),
-    walls: segments(level.walls),
+    walls: segments(level.walls).map(wall => wall.tagRead?.at
+      ? { ...wall, tagRead: { ...wall.tagRead, at: point(wall.tagRead.at) } } : wall),
     glazing: segments(level.glazing),
     doors: byPosition(level.doors, limits, middle).map(item => ({ ...segment(item), hinges: item.hinges.map(point), openTo: item.openTo.map(point) })),
     partitions: segments(level.partitions),

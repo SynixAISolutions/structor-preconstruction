@@ -11,7 +11,7 @@ import { openStoredPdf, renderStoredPage, useProjectDocuments } from "../../lib/
 import { drawingRegister, type StoredDocument } from "../../lib/project-files";
 import type { Project } from "../../lib/projects";
 import { useLocalDraft } from "../../lib/use-local-draft";
-import { floorAssemblyForRoom, floorPlanAreaAt } from "../../lib/schematic-floor-details";
+import { floorAssemblyForSurface, floorPlanAreaAt, floorSurfaces, type FloorSurface } from "../../lib/schematic-floor-details";
 import { AssemblyLayerList, FloorLayersCard } from "./schematic-assembly-card";
 import { floorLayerGroup, alignSheetFrame, footprintValid, openOutline, printedSheetFrame, DEFAULT_DOOR_HEIGHT, wallLayerGroup, schematicColumns, schematicDoors, schematicGeometry, schematicGlazing, schematicGlazingParts, schematicPartitions, schematicRailings, schematicRoomFloors, schematicStairs, schematicWalls, sheetPoint, wallTotals, type SheetFrame } from "./schematic-geometry";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, PreviewNote, type ViewProps } from "./shared";
@@ -68,8 +68,8 @@ type SceneApi = {
   focusFloor: (floor: THREE.Object3D) => void; isolate: (open: boolean) => void;
   labelsTowardCamera: (wall: THREE.Object3D) => void; invalidate: () => void;
 };
-function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, cutaway, showOutline3D, schedule, selection, onPick, camera, onError }: {
-  model: SchematicModel; spacesByLevel: ReadonlyMap<string, Room[]>; visible: string[]; explode: boolean; pins: boolean;
+function SchematicCanvas({ model, spacesByLevel, floorsByLevel, visible, explode, pins, walls, cutaway, showOutline3D, schedule, selection, onPick, camera, onError }: {
+  model: SchematicModel; spacesByLevel: ReadonlyMap<string, Room[]>; floorsByLevel: ReadonlyMap<string, FloorSurface[]>; visible: string[]; explode: boolean; pins: boolean;
   walls: boolean; cutaway: boolean; showOutline3D: boolean; schedule: PartitionType[];
   selection: SchematicPick | null; onPick: (pick: SchematicPick | null) => void;
   camera: React.RefObject<CameraApi | null>; onError: (error: string) => void;
@@ -282,7 +282,7 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
         ]) if (mesh) scope.add(mesh);
         const stairs = walls ? schematicStairs(level, stairRise(model, level)) : null;
         if (stairs) scope.add(stairs.mesh);
-        const floors = walls ? schematicRoomFloors(spaces, stairs?.openings) : null;
+        const floors = walls ? schematicRoomFloors(floorsByLevel.get(level.id) ?? [], stairs?.openings) : null;
         if (floors) {
           floors.children.forEach(floor => { floor.userData.levelId = level.id; });
           scope.add(floors);
@@ -324,7 +324,7 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
       fitted.current = fitKey;
     }
     current.invalidate();
-  }, [model, spacesByLevel, visible, explode, pins, walls, cutaway, showOutline3D]);
+  }, [model, spacesByLevel, floorsByLevel, visible, explode, pins, walls, cutaway, showOutline3D]);
 
   useEffect(() => {
     const current = sceneRef.current;
@@ -371,19 +371,19 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
 
     let opened: THREE.Group | null = null;
     if (pick.kind === "floor") {
-      const room = spacesByLevel.get(level.id)?.[pick.index];
+      const room = floorsByLevel.get(level.id)?.[pick.index];
       const mesh = current.pickables.find(object => object.userData.levelId === level.id && object.userData.floorIndex === pick.index) as
         THREE.Mesh<THREE.ShapeGeometry> | undefined;
       if (mesh && room && !room.open) {
-        opened = floorLayerGroup(mesh.geometry, floorAssemblyForRoom(level, room, model.floorDetails));
+        opened = floorLayerGroup(mesh.geometry, floorAssemblyForSurface(level, room, model.floorDetails));
         opened.position.copy(mesh.position);
       }
     } else {
       const wall = level.walls?.[pick.index];
       if (wall && !wall.excluded) {
-        const row = wall.type && scheduleRow(wall.type, schedule);
+        const row = wall.type && !wall.tagReview ? scheduleRow(wall.type, schedule) : null;
         const layers = row ? row.layers ?? [] : [];
-        const dimensioned = row && wall.tagRead?.basis !== "image" && dimensionedWallLayers(layers, row.thickness, wall.thickness).length > 0;
+        const dimensioned = row && !wall.tagReview && wall.tagRead?.basis !== "image" && dimensionedWallLayers(layers, row.thickness, wall.thickness).length > 0;
         opened = wallLayerGroup(level, pick.index, layers, !dimensioned);
         if (opened) {
           const { length, height, gap } = opened.userData as { length: number; height: number; gap: number };
@@ -438,7 +438,7 @@ function SchematicCanvas({ model, spacesByLevel, visible, explode, pins, walls, 
     }
     shown.current = key;
     current.invalidate();
-  }, [model, visible, explode, pins, walls, cutaway, showOutline3D, schedule, spacesByLevel,
+  }, [model, visible, explode, pins, walls, cutaway, showOutline3D, schedule, floorsByLevel,
     pick?.kind, pick?.levelId, pick?.index, pick?.layer]);
 
   return <div className="sm-canvas" ref={host}/>;
@@ -538,6 +538,8 @@ function OutlineSheet({ focus, onPickWall, level, areaIndex, spaces, doc, frameK
         </g>)}
         {level.walls?.map((w, i) => { if ((w.planArea ?? 0) !== areaIndex) return null; const on = pick?.kind === "wall" && pick.index === i; return <g key={i} onClick={editable && !aligning ? () => { setPick({ kind: "wall", index: i }); if (!w.excluded) onPickWall?.(i); } : undefined} style={{ cursor: editable ? "pointer" : undefined }}>
           <line x1={w.a[0]} y1={w.a[1]} x2={w.b[0]} y2={w.b[1]} stroke={on ? "#7c3aed" : w.excluded ? "#9ca3af" : "#c2410c"} strokeOpacity={.85} strokeDasharray={w.excluded ? `${frame.width / 300}` : undefined} strokeWidth={Math.max(w.thickness, frame.width / (on ? 450 : 900))}/>
+          {on && w.tagRead?.at && <circle cx={w.tagRead.at[0]} cy={w.tagRead.at[1]} r={frame.width / 135}
+            fill="none" stroke="#2563eb" strokeWidth={frame.width / 900} pointerEvents="none" role="img" aria-label="Printed wall type tag"/>}
           <line x1={w.a[0]} y1={w.a[1]} x2={w.b[0]} y2={w.b[1]} stroke="transparent" strokeWidth={frame.width / 150}><title>Wall {i + 1}{w.type ? ` · ${w.type}` : ""}{w.excluded ? " · not a wall" : ""}</title></line></g>; })}
         {level.doors?.map((d, i) => { if ((d.planArea ?? 0) !== areaIndex) return null; const on = pick?.kind === "door" && pick.index === i; return <g key={`d${i}`} onClick={editable && !aligning ? () => setPick({ kind: "door", index: i }) : undefined} style={{ cursor: editable ? "pointer" : undefined }}><line x1={d.a[0]} y1={d.a[1]} x2={d.b[0]} y2={d.b[1]} stroke={on ? "#7c3aed" : "#1d4ed8"} strokeWidth={frame.width / (on ? 300 : 500)}/>{d.hinges.map((h, j) => <line key={j} x1={h[0]} y1={h[1]} x2={d.openTo[j][0]} y2={d.openTo[j][1]} stroke="#15803d" strokeWidth={frame.width / 700}/>)}<line x1={d.a[0]} y1={d.a[1]} x2={d.b[0]} y2={d.b[1]} stroke="transparent" strokeWidth={frame.width / 150}><title>Door{d.number ? ` ${d.number}` : ""}</title></line>{d.number && <text x={(d.a[0] + d.b[0]) / 2} y={(d.a[1] + d.b[1]) / 2 - frame.width / 400} fontSize={frame.width / 260} fill="#1d4ed8" textAnchor="middle" fontWeight="600" pointerEvents="none">{d.number}</text>}</g>; })}
         {level.glazing?.map((g, i) => { if ((g.planArea ?? 0) !== areaIndex) return null; const on = pick?.kind === "glazing" && pick.index === i; return <g key={`g${i}`} onClick={editable && !aligning ? () => setPick({ kind: "glazing", index: i }) : undefined} style={{ cursor: editable ? "pointer" : undefined }}><line x1={g.a[0]} y1={g.a[1]} x2={g.b[0]} y2={g.b[1]} stroke={on ? "#7c3aed" : g.excluded ? "#9ca3af" : "#0d9488"} strokeDasharray={g.excluded ? `${frame.width / 300}` : undefined} strokeWidth={frame.width / (on ? 300 : 550)}/><line x1={g.a[0]} y1={g.a[1]} x2={g.b[0]} y2={g.b[1]} stroke="transparent" strokeWidth={frame.width / 150}><title>Glass{g.type ? ` · ${g.type}` : ""}{g.excluded ? " · not glass" : ""}</title></line>{g.type && !g.excluded && <text x={(g.a[0] + g.b[0]) / 2} y={(g.a[1] + g.b[1]) / 2 - frame.width / 400} fontSize={frame.width / 280} fill="#0f766e" textAnchor="middle" pointerEvents="none">{g.type}</text>}</g>; })}
@@ -589,9 +591,9 @@ function StairsDetails({ level, rise, onExclude }: { level: SchematicLevel; rise
 function WallLayersCard({ level, index, layer, schedule, sheet, reading, onLayer, onClose, onShowPlan, onOpenSheet, onRead }: { level: SchematicLevel; index: number; layer?: number; schedule: PartitionType[]; sheet?: string; reading: boolean; onLayer: (layer: number) => void; onClose: () => void; onShowPlan: () => void; onOpenSheet?: () => void; /** Missing while building, or when the sheet already gave layers. */ onRead?: () => void }) {
   const wall = level.walls?.[index];
   if (!wall) return null;
-  const length = Math.round(Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1]) * 10) / 10, row = wall.type ? scheduleRow(wall.type, schedule) : null;
+  const length = Math.round(Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1]) * 10) / 10, row = wall.type && !wall.tagReview ? scheduleRow(wall.type, schedule) : null;
   const layers = row?.layers ?? [], fit = row ? layersFit(layers, row.thickness) : "unknown";
-  const hasLayerGeometry = !!row && wall.tagRead?.basis !== "image" && dimensionedWallLayers(layers, row.thickness, wall.thickness).length > 0;
+  const hasLayerGeometry = !!row && !wall.tagReview && wall.tagRead?.basis !== "image" && dimensionedWallLayers(layers, row.thickness, wall.thickness).length > 0;
   const measured = Math.round(wall.thickness * 12 * 10) / 10;
   const printed = row ? parseInches(row.thickness) : null;
   const mismatch = printed !== null && Math.abs(measured - printed) > .5;
@@ -603,7 +605,8 @@ function WallLayersCard({ level, index, layer, schedule, sheet, reading, onLayer
       <div><strong>Wall {index + 1}{wall.type ? " · " + wall.type : ""}</strong><span>{level.name} · {length} ft long · {measured}" thick on the plan</span></div>
       <button type="button" className="sm-layers-close" aria-label="Return to model" onClick={onClose}>×</button>
     </header>
-    {wall.type && <p>{wall.tagRead?.basis === "printed" ? "Printed type tag" : wall.typeSet || wall.edited ? "Adjusted type" : "Type tag needs plan review"}</p>}
+    {wall.tagReview ? <p className="sm-layers-warn">Type tags disagree on this wall. Check the printed plan.</p>
+      : wall.type && <p>{wall.tagRead?.basis === "printed" ? "Printed type tag" : wall.tagRead?.basis === "continuation" ? "Continues a wall with a printed tag" : wall.typeSet || wall.edited ? "Adjusted type" : "Type tag needs plan review"}</p>}
     {row && <p>{[row.description, row.thickness && row.thickness + " on the detail", row.rating].filter(Boolean).join(" · ")}</p>}
     {mismatch && <p className="sm-layers-warn">Plan thickness {measured}" differs from the detail's {row!.thickness}. Check the type on the plan.</p>}
     {layers.length ? <>
@@ -636,6 +639,7 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
   const stackLevels = current?.levels.filter(item => !item.alignmentUnverified).map(item => item.id) ?? [];
   const visible = useMemo(() => current?.levels.filter(l => shown ? shown.includes(l.id) : l.id === firstLevelId).map(l => l.id) ?? [], [current, shown, firstLevelId]);
   const spacesByLevel = useMemo(() => new Map(current?.levels.map(item => [item.id, levelSpaces(item)])), [current]);
+  const floorsByLevel = useMemo(() => new Map(current?.levels.map(item => [item.id, floorSurfaces(item, spacesByLevel.get(item.id) ?? [])])), [current, spacesByLevel]);
   const spaces = (level && spacesByLevel.get(level.id)) ?? [];
   const hasPlanDetails = current?.levels.some(item => visible.includes(item.id) && (
     item.walls?.some(wall => !wall.excluded) || item.doors?.some(door => door.kind === "door") ||
@@ -655,9 +659,10 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
   const wallDetail = wallType ? scheduleRow(wallType, schedule)?.source : undefined;
   const floorPick = activePick?.kind === "floor" ? activePick : null;
   const floorLevel = floorPick && current?.levels.find(item => item.id === floorPick.levelId);
-  const floorRoom = floorPick && spacesByLevel.get(floorPick.levelId)?.[floorPick.index];
-  const floorAssembly = floorLevel && floorRoom ? floorAssemblyForRoom(floorLevel, floorRoom, current?.floorDetails) : null;
-  const floorPlan = floorLevel && floorRoom ? planSource(floorLevel, floorPlanAreaAt(floorLevel, floorRoom.at) ?? 0) : null;
+  const floorRoom = floorPick && floorsByLevel.get(floorPick.levelId)?.[floorPick.index];
+  const floorAssembly = floorLevel && floorRoom ? floorAssemblyForSurface(floorLevel, floorRoom, current?.floorDetails) : null;
+  const floorPlan = floorLevel && floorRoom ? (floorRoom.structural ? floorLevel.structuralSlab?.source : undefined) ??
+    planSource(floorLevel, floorPlanAreaAt(floorLevel, floorRoom.at) ?? 0) : null;
   useEffect(() => () => { abort.current?.abort(); layersAbort.current?.abort(); }, []);
   useEffect(() => { setSelection(null); setPlanFocus(null); setPlanChoice(null); }, [current?.builtAt]);
   useEffect(() => { if (planFocus) outlinePanel.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [planFocus]);
@@ -750,7 +755,7 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
           {!!visible.length && !showOutline3D && (!hasPlanDetails || !walls) &&
             <p className="sm-empty-view" role="status">Turn on the 3D outline to see the footprint.</p>}
           <div className="sm-canvas-wrap">
-            <SchematicCanvas model={current} spacesByLevel={spacesByLevel} visible={visible} explode={explode} pins={pins}
+            <SchematicCanvas model={current} spacesByLevel={spacesByLevel} floorsByLevel={floorsByLevel} visible={visible} explode={explode} pins={pins}
               walls={walls} cutaway={cutaway} showOutline3D={showOutline3D} schedule={schedule}
               selection={activePick} onPick={pick => { setSelection(pick); if (pick) setSelected(pick.levelId); }}
               camera={camera} onError={setGraphicsError}/>
@@ -760,7 +765,7 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
               onClose={() => setSelection(null)} onShowPlan={() => showOnPlan(pickLevel.id, "wall", wallPick.index)}
               onOpenSheet={wallDetail ? () => openDimension(wallDetail, "Wall assembly") : typeSheetRow ? () => setSource({ documentId: typeSheetRow.doc.id, sheet: typeSheetRow.sheet, page: typeSheetRow.page, label: "Partition types" }) : undefined}
               onRead={busy || !typeSheet ? undefined : readLayers}/>}
-            {floorPick && floorRoom && floorLevel && <FloorLayersCard room={floorRoom} level={floorLevel.name}
+            {floorPick && floorRoom && floorLevel && <FloorLayersCard room={floorRoom} level={floorLevel.name} structuralSheet={floorRoom.structural ? floorPlan?.sheet : undefined}
               assembly={floorAssembly} active={floorPick.layer} onClose={() => setSelection(null)}
               onLayer={layer => setSelection({ ...floorPick, layer: floorPick.layer === layer ? undefined : layer })}
               onOpen={floorAssembly ? () => openDimension(floorAssembly.source, "Floor assembly") : undefined}
@@ -780,7 +785,7 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
           <small>Drag to orbit · Scroll to zoom · Select an element to inspect</small>
         </div>
         <aside className="sm-levels">
-          <SchematicObjectInspector levels={current.levels} spaces={spacesByLevel} floorFinishes={current.floorFinishes}
+          <SchematicObjectInspector levels={current.levels} spaces={floorsByLevel} floorFinishes={current.floorFinishes}
             pick={activePick?.kind === "wall" ? null : activePick} canOpenPlan={plan => documents.some(document => document.id === plan.documentId)}
             onPick={(pick, isolateLevel) => {
               inspect(pick);

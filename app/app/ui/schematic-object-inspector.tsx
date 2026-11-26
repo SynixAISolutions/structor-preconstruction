@@ -2,7 +2,7 @@ import type { Room } from "../../lib/room-detection";
 import { planSource, type PlanSource, type SchematicLevel } from "../../lib/schematic-model";
 import type { DimensionSource } from "../../lib/section-datums";
 import { glazingPlacement, placedGlazingElevation } from "../../lib/glazing-detail-references";
-import { finishesForRoom, floorPlanAreaAt, type FloorFinishNote } from "../../lib/schematic-floor-details";
+import { finishesForRoom, floorPlanAreaAt, type FloorFinishNote, type FloorSurface } from "../../lib/schematic-floor-details";
 import { Button, Panel } from "./shared";
 import { GlazingElevationInspector } from "./schematic-glazing-elevation";
 import { isSportsFloor, type SchematicPick, type WallPick } from "./schematic-scene";
@@ -16,7 +16,7 @@ const roomLabel = (room: Room, index: number) => [room.number, room.name].filter
 
 export function SchematicObjectInspector({ levels, spaces, floorFinishes, pick, canOpenPlan, onPick, onClose, onPlan, onDimension }: {
   levels: SchematicLevel[];
-  spaces: ReadonlyMap<string, Room[]>;
+  spaces: ReadonlyMap<string, FloorSurface[]>;
   floorFinishes?: FloorFinishNote[];
   pick: ObjectPick | null;
   canOpenPlan: (source: PlanSource) => boolean;
@@ -54,7 +54,7 @@ export function SchematicObjectInspector({ levels, spaces, floorFinishes, pick, 
   const selectedRoom = pick?.kind === "floor" ? spaces.get(pick.levelId)?.[pick.index] : undefined;
   const floor = selectedRoom?.open ? undefined : selectedRoom;
   const floorArea = floor && level ? floorPlanAreaAt(level, floor.at) : null;
-  const source = level && planSource(level, door?.planArea ?? glass?.planArea ?? (floorArea ?? 0));
+  const source = level && ((floor?.structural ? level.structuralSlab?.source : undefined) ?? planSource(level, door?.planArea ?? glass?.planArea ?? (floorArea ?? 0)));
   const slabNotes = floor ? (level?.floorAssemblies ?? []).filter(note => note.planArea === null || note.planArea === (floorArea ?? 0)) : [];
   const finishes = floor ? finishesForRoom(floor, floorFinishes) : [];
 
@@ -111,7 +111,7 @@ export function SchematicObjectInspector({ levels, spaces, floorFinishes, pick, 
           <div><dt>Level</dt><dd>{level.name}</dd></div>
           {door && <div><dt>Opening</dt><dd>{door.width.toLocaleString(undefined, { maximumFractionDigits: 2 })} ft{door.basis !== "tagged-gap" && (door.leaves === 2 ? " · Pair" : " · Single leaf")}</dd></div>}
           {schedule && <div><dt>Scheduled size</dt><dd>{schedule.width.toLocaleString(undefined, { maximumFractionDigits: 3 })} ft wide × {schedule.height.toLocaleString(undefined, { maximumFractionDigits: 3 })} ft high</dd></div>}
-          {floor && <div><dt>Detected room area</dt><dd>{floor.area.toLocaleString()} SF</dd></div>}
+          {floor && <div><dt>{floor.structural ? "Structural slab area" : "Detected room area"}</dt><dd>{floor.area.toLocaleString()} SF</dd></div>}
           {glass && <div><dt>Run on plan</dt><dd>{Math.hypot(glass.b[0] - glass.a[0], glass.b[1] - glass.a[1]).toLocaleString(undefined, { maximumFractionDigits: 2 })} ft</dd></div>}
           {glassSize && <div><dt>{glassSize.kind === "frame" ? "Frame size" : "Scheduled rough opening"}</dt><dd>{glassSize.widthLabel} wide × {glassSize.heightLabel} high</dd></div>}
           {glassSize?.sill && <div><dt>Sill elevation</dt><dd>{glassSize.sill.quote}</dd></div>}

@@ -1,17 +1,18 @@
 import { drawingLengthFeet } from "./drawing-dimensions";
 import type { Segment } from "./plan-vectors";
 import type { RegisterRow } from "./project-files";
-import { floorPlanArea, levelOfTitle, planSource, type SchematicLevel } from "./schematic-model";
+import { edgesIntersect, floorPlanArea, levelOfTitle, planSource, type SchematicLevel } from "./schematic-model";
 import type { DimensionSource } from "./section-datums";
 import type { TextBox } from "./text-anchor";
 import { inside, insideRoom, type Room } from "./room-detection";
+import { structuralSlabSurface } from "./schematic-structural-slabs";
 import { assemblyFloorLevel, type FloorDetailReference } from "./schematic-assembly-drawings";
 
 export type FloorLayer = { material: string; thicknessFeet?: number; label?: string; minimum?: boolean };
 export type FloorAssemblyNote = { source: DimensionSource; layers: FloorLayer[]; planArea: number | null };
 export type FloorFinishNote = { source: DimensionSource; tag: string; material: string; location: string };
 export type FloorAssemblyDetail = { source: DimensionSource; layers: FloorLayer[]; detail?: string };
-export type FloorAssemblySelection = FloorAssemblyDetail & { basis: "matched" | "reference"; matchedBy?: "callout" | "level" };
+export type FloorAssemblySelection = FloorAssemblyDetail & { basis: "matched" | "reference"; matchedBy?: "callout" | "level" | "framing-note" };
 
 export function floorPlanAreaAt(level: SchematicLevel, at: [number, number]) {
   if (!level.planAreas?.length) return 0;
@@ -35,6 +36,29 @@ export function floorAssemblyForRoom(level: SchematicLevel, room: Pick<Room, "at
   const typical = details.filter(detail => /^(?:TYP\.?|TYPICAL)\s+(?:FLOOR|SLAB)\b/i.test(detail.source.quote));
   if (!concrete.length && typical.length === 1) return { ...typical[0], basis: "reference" };
   return null;
+}
+
+export type FloorSurface = Room & { structural?: true };
+
+/** Keep enclosed room finishes where they fit on a read slab. Preserve its printed stair and shaft voids. */
+export function floorSurfaces(level: SchematicLevel, rooms: Room[]): FloorSurface[] {
+  const slab = level.structuralSlab;
+  if (!slab) return rooms;
+  const boundaries = [slab.outline, ...slab.holes];
+  const stable = rooms.filter(room => !room.open && room.outline.every(point => insideRoom(point, slab)) &&
+    !slab.holes.some(hole => hole.some(point => insideRoom(point, room))) &&
+    !boundaries.some(ring => ring.some((a, i) =>
+      room.outline.some((c, j) => edgesIntersect(a, ring[(i + 1) % ring.length], c, room.outline[(j + 1) % room.outline.length])))));
+  return [{ ...structuralSlabSurface(slab), structural: true }, ...stable];
+}
+
+export function floorAssemblyForSurface(level: SchematicLevel, floor: FloorSurface, details?: FloorAssemblyDetail[]): FloorAssemblySelection | null {
+  const dimension = floor.structural ? level.structuralSlab?.dimension : undefined;
+  if (dimension) return {
+    source: dimension.source, layers: [{ material: "Structural slab", thicknessFeet: dimension.feet, label: dimension.label }],
+    basis: "matched", matchedBy: "framing-note",
+  };
+  return floorAssemblyForRoom(level, floor, details);
 }
 
 type Title = Pick<RegisterRow, "discipline" | "title">;

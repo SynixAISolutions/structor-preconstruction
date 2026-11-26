@@ -385,6 +385,60 @@ assert.equal(matchPrintedWallTags(wallsToVerify, realMark, [{ tag: "4", thicknes
 assert.equal(matchPrintedWallTags(wallsToVerify, realMark, [{ tag: "4", thickness: '12"' }])[0].type, undefined);
 assert.equal(holdOutsidePlanRuns(wallsToVerify, wallsToVerify, assemblyRoom.outline)[1].outsidePlan, true);
 
+// A framing-plan boundary uses closed vector geometry and its printed scale and cutouts.
+const { structuralFloorLevels, structuralFloorView, structuralSlabOutline, slabDimension } = await import("../lib/schematic-structural-slabs.ts");
+const { floorSurfaces, floorAssemblyForSurface } = await import("../lib/schematic-floor-details.ts");
+const { typeWallContinuations } = await import("../lib/schematic-printed-wall-tags.ts");
+assert.deepEqual(structuralFloorLevels("2ND–5TH TYPICAL FLOOR FRAMING PLAN"), [2, 3, 4, 5]);
+assert.deepEqual(structuralFloorLevels("B2/FOUNDATION PLAN"), []);
+assert.deepEqual(structuralFloorLevels("9TH FLOOR FRAMING PLAN"), [9]);
+const slabCaption = { text: "LEVEL 02 FLOOR FRAMING PLAN", a: [200, 900], b: [450, 900], height: 20 };
+const slabScale = { text: '1/8" = 1\'-0"', a: [200, 915], b: [225, 915], height: 9 };
+const slabNote = { text: '2) SLAB THICKNESS = 8 1/2".', a: [200, 945], b: [290, 945], height: 9 };
+const framingSheet = { width: 1000, height: 1100 };
+const slabRuns = [slabCaption, slabScale, slabNote];
+const slabView = structuralFloorView(slabCaption.text, slabRuns, framingSheet);
+assert.equal(slabView.scale, 8);
+assert.equal(structuralFloorView("LEVEL 03 FLOOR FRAMING PLAN", slabRuns, framingSheet), null);
+
+const boundary = [[200, 250], [650, 250], [650, 700], [420, 700], [420, 650], [200, 650]];
+const shaft = [[270, 400], [315, 400], [315, 445], [270, 445]];
+const drawnSlab = [boundary, shaft].flatMap(ring => ring.map((point, i) => line(point, ring[(i + 1) % ring.length])));
+const builtSlab = structuralSlabOutline([[boundary, shaft]], drawnSlab, slabView, [0, 0], boundary.map(p => p.map(value => value / 9)));
+assert.deepEqual(builtSlab.outline.map(p => p.map(value => Math.round(value * 9))), boundary);
+assert.deepEqual(builtSlab.holes.map(ring => ring.map(p => p.map(value => Math.round(value * 9)))), [shaft]);
+assert.equal(structuralSlabOutline([[boundary, shaft]], drawnSlab.slice(1), slabView, [0, 0], builtSlab.outline), null, "A background clip cannot supply a missing slab edge");
+assert.equal(structuralSlabOutline([[boundary, shaft]], drawnSlab, slabView, [200, 0], builtSlab.outline), null);
+const slabSource = { documentId: "drawings", sheet: "S0104", page: 8, quote: slabCaption.text };
+const slabThickness = slabDimension(slabRuns, slabView, slabSource);
+assert.equal(slabThickness.feet, 8.5 / 12);
+assert.equal(slabDimension([{...slabNote, text: slabNote.text + " UNLESS NOTED OTHERWISE."}], slabView, slabSource), undefined);
+const levelWithSlab = { structuralSlab: { ...builtSlab, source: slabSource, dimension: slabThickness } };
+const fitFloor = { ...assemblyRoom, at: [26, 31], outline: [[24, 30], [28, 30], [28, 32], [24, 32]] };
+const piercesShaft = { ...assemblyRoom, at: [33, 45], outline: [[28, 40], [38, 40], [38, 52], [28, 52]] };
+const roofSurfaces = floorSurfaces(levelWithSlab, [fitFloor, piercesShaft]);
+assert.equal(roofSurfaces.length, 2);
+assert.equal(roofSurfaces[0].structural, true);
+assert.equal(floorAssemblyForSurface(levelWithSlab, roofSurfaces[0]).matchedBy, "framing-note");
+
+const wallByLeader = [{ a: [0, 1], b: [12, 1], thickness: .5 }, { a: [0, 6], b: [12, 6], thickness: .5 }];
+const leaderMatch = matchPrintedWallTags(wallByLeader, [{ tag: "4", at: [3, 1.5], tips: [[6, 6.2]] }], [{ tag: "4", thickness: '6"' }]);
+assert.equal(leaderMatch[0].type, undefined, "The mark's center can be closer to the wrong wall");
+assert.equal(leaderMatch[1].type, "4");
+assert.deepEqual(leaderMatch[1].tagRead.at, [3, 1.5]);
+const continuous = [
+  { a: [0, 1], b: [6, 1], thickness: .5, type: "4", tagRead: { basis: "printed", at: [3, 1.5] } },
+  { a: [6.12, 1], b: [10, 1], thickness: .5 }, { a: [13, 1], b: [17, 1], thickness: .5 },
+];
+assert.equal(typeWallContinuations(continuous, [])[1].tagRead.basis, "continuation");
+assert.equal(typeWallContinuations(continuous, [])[2].type, undefined, "A gap with no drawn door stays untyped");
+const actualDoor = { kind: "door", a: [10, 1], b: [13, 1] };
+assert.equal(typeWallContinuations(continuous, [actualDoor])[2].type, "4");
+const conflictingTag = [...continuous.slice(0, 2), { ...continuous[2], type: "5", tagRead: { basis: "printed" } }];
+const ambiguous = typeWallContinuations(conflictingTag, [actualDoor]);
+assert.equal(ambiguous[1].type, undefined);
+assert.equal(ambiguous[1].tagReview, true);
+
 // Corrections.
 const model = { levels: [{ id: "L1", name: "Level 01", order: 1, elevation: 0, height: 14, outline: [[0, 0], [10, 0], [10, 10]], rooms: [], source: { documentId: "d", sheet: "A1.1", page: 46 }, sizing: "" }, { id: "L2", name: "Level 02", order: 2, elevation: 14, height: 16, outline: [[0, 0], [10, 0], [10, 10]], rooms: [], source: { documentId: "d", sheet: "A1.2", page: 47 }, sizing: "" }], warnings: [], builtAt: "" };
 assert.deepEqual(M.moveOutlinePoint(model, "L1", 1, [12, 0]).levels[0].outline[1], [12, 0]);
