@@ -97,7 +97,7 @@ export const DEFAULT_DOOR_HEIGHT = 7;
  * Swings get a leaf and a header. Tagged gaps get only a clickable marker at the floor.
  */
 export function schematicDoors(level: SchematicLevel, doorHeight = DEFAULT_DOOR_HEIGHT): THREE.Group | null {
-  const doors = (level.doors ?? []).flatMap((door, index) => door.kind === "door" ? [{ door, index }] : []);
+  const doors = (level.doors ?? []).flatMap((door, index) => door.kind === "door" && !door.excluded ? [{ door, index }] : []);
   if (!doors.length) return null;
   const group = new THREE.Group(), place = new THREE.Object3D();
   const box = (a: Point, b: Point, base: number, height: number, thickness: number) => {
@@ -334,7 +334,7 @@ export function floorLayerGroup(geometry: THREE.ShapeGeometry, assembly: FloorAs
 /** Count and total centerline length of a level's walls; null for a model built before walls were read. */
 export function wallTotals(level: SchematicLevel): { count: number; feet: number; doors: number | null; compartments: number; glassFeet: number | null; partitionFeet: number | null; railingFeet: number | null; columns: number | null; stairs: number | null } | null {
   if (!level.walls) return null;
-  const doors = level.doors ?? null, walls = level.walls.filter(w => !w.excluded);
+  const doors = level.doors?.filter(door => !door.excluded) ?? null, walls = level.walls.filter(w => !w.excluded);
   const run = (lines: { a: Point; b: Point }[]) => Math.round(lines.reduce((sum, l) => sum + Math.hypot(l.b[0] - l.a[0], l.b[1] - l.a[1]), 0));
   return {
     count: walls.length, feet: Math.round(walls.reduce((sum, w) => sum + Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), 0)),

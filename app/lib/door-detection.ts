@@ -40,37 +40,55 @@ export type ArcFit = Swing & { sweep: number };
  */
 export function arcFits(segments: Segment[], curves: Curve[], pointsPerFoot: number): ArcFit[] {
   const ft = (p: Point): Point => [p[0] / pointsPerFoot, p[1] / pointsPerFoot];
-  const pieces: [Point, Point][] = [];
-  for (const s of segments) { const a = ft(s.a), b = ft(s.b), L = dist(a, b); if (L > 0.005 && L <= 1.2) pieces.push([a, b]); }
-  for (const c of curves) { const pts = Array.from({ length: 9 }, (_, i) => ft(bezier(c, i / 8))); for (let i = 0; i < 8; i++) if (dist(pts[i], pts[i + 1]) <= 1.2) pieces.push([pts[i], pts[i + 1]]); }
+  const pen = (width: number, color: string) => Math.round(width * 1000) + ":" + color;
+  const pieces: [Point, Point, string][] = [];
+  const lines: [Point, Point, string][] = [], caps: [Point, Point, string][] = [];
+  for (const s of segments) {
+    const a = ft(s.a), b = ft(s.b), length = dist(a, b), ink = pen(s.width, s.color);
+    if (length > 0.005 && length <= 1.2) pieces.push([a, b, ink]);
+    if (length >= 0.6) lines.push([a, b, ink]);
+    if (length >= .06 && length <= .28) caps.push([a, b, ink]);
+  }
+  for (const c of curves) {
+    const pts = Array.from({ length: 9 }, (_, i) => ft(bezier(c, i / 8)));
+    for (let i = 0; i < 8; i++) if (dist(pts[i], pts[i + 1]) <= 1.2) pieces.push([pts[i], pts[i + 1], pen(c.width, "curve")]);
+  }
 
-  // The open leaf: a straight line from the hinge toward an arc end, covering most of the radius.
-  const lines = segments.map(s => [ft(s.a), ft(s.b)] as [Point, Point]).filter(([a, b]) => dist(a, b) >= 0.6);
-  const hasLeaf = (hinge: Point, end: Point, r: number) => {
+  // A capped leaf beats a single line at the other end, which can be a sill or a door threshold.
+  const leafEvidence = (hinge: Point, end: Point, r: number) => {
     const u: Point = [(end[0] - hinge[0]) / r, (end[1] - hinge[1]) / r];
     let covered = 0;
-    for (const [a, b] of lines) {
+    const tips: { at: Point; ink: string }[] = [];
+    for (const [a, b, ink] of lines) {
       if (Math.min(a[0], b[0]) > Math.max(hinge[0], end[0]) + 0.3 || Math.max(a[0], b[0]) < Math.min(hinge[0], end[0]) - 0.3) continue;
       if (Math.min(a[1], b[1]) > Math.max(hinge[1], end[1]) + 0.3 || Math.max(a[1], b[1]) < Math.min(hinge[1], end[1]) - 0.3) continue;
       const off = (p: Point) => Math.abs((p[0] - hinge[0]) * u[1] - (p[1] - hinge[1]) * u[0]);
       if (off(a) > 0.25 || off(b) > 0.25) continue;
       const t = (p: Point) => (p[0] - hinge[0]) * u[0] + (p[1] - hinge[1]) * u[1];
-      const lo = Math.max(0, Math.min(t(a), t(b))), hi = Math.min(r, Math.max(t(a), t(b)));
-      covered = Math.max(covered, hi - lo);
+      const aAt = t(a), bAt = t(b), lo = Math.min(aAt, bAt), hi = Math.max(aAt, bAt);
+      const overlap = Math.min(r, hi) - Math.max(0, lo);
+      covered = Math.max(covered, overlap);
+      if (overlap >= 0.6 * r && Math.abs(hi - r) <= .2 && lo <= .35) tips.push({ at: aAt > bAt ? a : b, ink });
     }
-    return covered >= 0.6 * r;
+    if (tips.length >= 2 && caps.some(([a, b, ink]) => {
+      if (dist(a, end) > .38 || dist(b, end) > .38) return false;
+      const parallel = Math.abs((b[0] - a[0]) * u[0] + (b[1] - a[1]) * u[1]);
+      const touches = (p: Point) => tips.some(tip => tip.ink === ink && dist(p, tip.at) < .025);
+      return parallel < dist(a, b) * .25 && touches(a) && touches(b);
+    })) return 2;
+    return covered >= 0.6 * r ? 1 : 0;
   };
 
-  // Ends that meet (within 0.01 ft) join pieces into chains; a chain runs through points shared by exactly two pieces.
-  const key = (p: Point) => `${Math.round(p[0] * 100)},${Math.round(p[1] * 100)}`;
+  // Join within the same drawing pen. A heavier jamb or leaf can touch the arc at the same point.
+  const key = (p: Point, ink: string) => ink + ":" + `${Math.round(p[0] * 100)},${Math.round(p[1] * 100)}`;
   // A line drawn twice (overlapping layers) would make every joint a crossing: keep one copy.
   const seen = new Set<string>();
-  const unique = pieces.filter(([a, b]) => { const k = [key(a), key(b)].sort().join("|"); return seen.has(k) ? false : (seen.add(k), true); });
+  const unique = pieces.filter(([a, b, ink]) => { const k = [key(a, ink), key(b, ink)].sort().join("|"); return seen.has(k) ? false : (seen.add(k), true); });
   // Not pushed back with a spread: a dense sheet has more short lines than a call can take arguments (Project 1's A5.2, 170,000 lines).
   pieces.length = 0;
   for (const piece of unique) pieces.push(piece);
   const at = new Map<string, number[]>();
-  pieces.forEach(([a, b], i) => { for (const p of [a, b]) { const k = key(p); at.set(k, [...(at.get(k) ?? []), i]); } });
+  pieces.forEach(([a, b, ink], i) => { for (const p of [a, b]) { const k = key(p, ink); at.set(k, [...(at.get(k) ?? []), i]); } });
   const used = new Array(pieces.length).fill(false);
   const arcs: ArcFit[] = [];
   // A chain also stops at a sharp corner: an arc turns a few degrees per piece, while the two swings of a
@@ -83,22 +101,23 @@ export function arcFits(segments: Segment[], curves: Curve[], pointsPerFoot: num
     const pts: Point[] = [from];
     let i = start, p = from;
     while (i >= 0 && !used[i]) {
-      const [a, b] = pieces[i], next = key(a) === key(p) ? b : a;
+      const [a, b, ink] = pieces[i], next = key(a, ink) === key(p, ink) ? b : a;
       if (pts.length >= 2 && turn(pts[pts.length - 2], p, next) > 35) break;
       used[i] = true;
       pts.push(next); p = next;
-      const there = (at.get(key(next)) ?? []).filter(j => j !== i);
-      i = there.length === 1 && (at.get(key(next)) ?? []).length === 2 ? there[0] : -1;
+      const there = at.get(key(next, ink)) ?? [];
+      i = there.length === 2 ? there[there[0] === i ? 1 : 0] : -1;
     }
     return pts;
   };
   const chains: Point[][] = [];
   // Chains start at loose ends, then at the pieces a sharp corner left over (from either of their ends).
-  for (const [k, list] of at) if (list.length === 1 && !used[list[0]]) { const [a, b] = pieces[list[0]]; chains.push(walk(list[0], key(a) === k ? a : b)); }
+  for (const [k, list] of at) if (list.length === 1 && !used[list[0]]) { const [a, b, ink] = pieces[list[0]]; chains.push(walk(list[0], key(a, ink) === k ? a : b)); }
   for (let i = 0; i < pieces.length; i++) if (!used[i]) {
     const forward = walk(i, pieces[i][0]);
     // Walked from one end only: extend backwards from the start through the pieces still unused.
-    const back = (at.get(key(pieces[i][0])) ?? []).find(j => !used[j]);
+    const [first, , ink] = pieces[i];
+    const back = (at.get(key(first, ink)) ?? []).find(j => !used[j]);
     chains.push(back === undefined ? forward : [...walk(back, pieces[i][0]).reverse(), ...forward.slice(1)]);
   }
 
@@ -110,8 +129,9 @@ export function arcFits(segments: Segment[], curves: Curve[], pointsPerFoot: num
     const u = [pts[0][0] - fit.c[0], pts[0][1] - fit.c[1]], v = [pts[pts.length - 1][0] - fit.c[0], pts[pts.length - 1][1] - fit.c[1]];
     const sweep = Math.acos(Math.max(-1, Math.min(1, (u[0] * v[0] + u[1] * v[1]) / (fit.r * fit.r)))) * 180 / Math.PI;
     const ends: [Point, Point] = [pts[0], pts[pts.length - 1]];
-    const leafAt = ends.map(e => hasLeaf(fit.c, e, fit.r));
-    arcs.push({ hinge: fit.c, radius: fit.r, ends, open: leafAt[0] !== leafAt[1] ? (leafAt[0] ? 0 : 1) : null, sweep });
+    const leafAt = ends.map(e => leafEvidence(fit.c, e, fit.r));
+    const open = leafAt[0] === leafAt[1] ? null : leafAt[0] > leafAt[1] ? 0 : 1;
+    arcs.push({ hinge: fit.c, radius: fit.r, ends, open, sweep });
   }
   return arcs;
 }
@@ -125,7 +145,13 @@ export function swingArcs(segments: Segment[], curves: Curve[], pointsPerFoot: n
   const swings = arcFits(segments, curves, pointsPerFoot)
     .filter(a => (a.sweep >= 70 && a.sweep <= 110) || (a.open !== null && a.radius >= 2.4 && a.sweep >= 35))
     .map(({ sweep: _, ...s }) => s);
-  return swings.filter((s, i) => !swings.slice(0, i).some(t => dist(s.hinge, t.hinge) < 0.3 && Math.abs(s.radius - t.radius) < 0.2));
+  const unique: Swing[] = [];
+  for (const swing of swings) {
+    const duplicate = unique.findIndex(other => dist(swing.hinge, other.hinge) < .3 && Math.abs(swing.radius - other.radius) < .2);
+    if (duplicate < 0) unique.push(swing);
+    else if (unique[duplicate].open === null && swing.open !== null) unique[duplicate] = swing;
+  }
+  return unique;
 }
 
 /** Distance from p to the infinite line through a wall's centerline, and whether direction d runs along it. */

@@ -48,6 +48,33 @@ assert.deepEqual(M.levelPlanSheets(areaRows).map(({ level, row, areas }) => [lev
   [[1, "A-111A", "A-111B"], [2, "A-112A", "A-112B"]], "Two area plans take priority over the overview and belong to one level");
 
 const line = (a, b, width = .72) => ({ a, b, width, color: "#000000" });
+// Wall layers use exact evidence from the selected drawing detail.
+const { assemblyLabelOptions, assemblyTextMatches, printedSolidWall } = await import("../lib/schematic-assembly-drawings.ts");
+const detailBox = (str, x, y, w) => ({ str, x: x / 400, y: y / 260, w: w / 400, h: 10 / 260 });
+const core = '7 5/8" CMU BLOCK';
+const cmuCaption = { title: 'TYPE 13 - 7 5/8" CMU', box: [0, 0, 1, 1], tags: ["13"], labels: [
+  detailBox('7 5/8"', 70, 20, 25),
+  detailBox(core, 180, 47, 105),
+  detailBox(core, 180, 113, 105),
+  detailBox('3/8" FULL MORTAR JT.', 180, 145, 100),
+] };
+const cmuLeaders = [52, 118, 150].flatMap(y => [line([160, y], [174, y], .24), line([160, y], [112, y + 15], .24)]);
+const readCore = caption => printedSolidWall(caption, cmuLeaders, { width: 400, height: 260 });
+assert.deepEqual(readCore(cmuCaption), { layers: [{ material: core, thickness: '7 5/8"' }], thickness: '7 5/8"' });
+assert.equal(readCore({ ...cmuCaption, title: "TYPE 13 - CMU WITH EIFS" }), undefined);
+assert.equal(printedSolidWall(cmuCaption, cmuLeaders.slice(0, 2), { width: 400, height: 260 }), undefined);
+assert.equal(readCore({ ...cmuCaption, tags: ["13", "13A"] }).thickness, "", "Do not assign one thickness to multiple variants");
+
+const labels = assemblyLabelOptions(cmuCaption);
+const callout = labels.findIndex(label => label.text === core) + 1;
+assert.ok(callout > 0);
+assert.ok(labels.every(label => assemblyTextMatches(label.text, cmuCaption.labels)));
+const detailJob = EXTRA_JOBS["assembly-detail"];
+const detailInput = detailJob.parse({ image: "data:image/jpeg;base64,/9j/A=", kind: "wall", title: cmuCaption.title, tags: ["13"], labels });
+assert.deepEqual(detailJob.screen({ details: [{ tag: "13", layers: [
+  { callout, thickness: '7 5/8"' }, { callout: 1200, material: "Unsupported material" },
+] }] }, detailInput).details[0].layers, [{ material: core, thickness: '7 5/8"' }]);
+
 const planSheet = (sheet, title, other = {}) => ({ sheet, title, discipline: "Architectural", ...other });
 assert.deepEqual(printedPlanLevels("B1 & B2 FLOOR PLANS"), [-2, -1]);
 assert.deepEqual(printedPlanLevels("1ST & 2ND-6TH (TYP.) FLOOR PLANS"), [1, 2, 3, 4, 5, 6]);
@@ -358,7 +385,7 @@ assert.equal(finishesForRoom({ name: "Gym storage", number: "103" }, finishes).l
 const assemblyCaptionTest = await import("../lib/schematic-assembly-drawings.ts");
 const { floorAssemblyForRoom } = await import("../lib/schematic-floor-details.ts");
 const { printedWallTags, matchPrintedWallTags } = await import("../lib/schematic-printed-wall-tags.ts");
-const { holdOutsidePlanRuns } = await import("../lib/schematic-plan-review.ts");
+const { detachedTraceCount, holdOutsidePlanRuns, reviewSchematicPlacement } = await import("../lib/schematic-plan-review.ts");
 assert.equal(M.feetPerInch('1 1/2" = 1\'-0"'), .667);
 assert.equal(assemblyCaptionTest.assemblyFloorLevel("SLAB ON GRADE @ B2 LEVEL"), -2);
 assert.equal(assemblyCaptionTest.assemblyFloorLevel("TYPICAL FLOOR ASSEMBLY @ LEVEL 2"), null);
@@ -384,6 +411,38 @@ assert.equal(realMark.length, 1);
 assert.equal(matchPrintedWallTags(wallsToVerify, realMark, [{ tag: "4", thickness: '6"' }])[0].tagRead.basis, "printed");
 assert.equal(matchPrintedWallTags(wallsToVerify, realMark, [{ tag: "4", thickness: '12"' }])[0].type, undefined);
 assert.equal(holdOutsidePlanRuns(wallsToVerify, wallsToVerify, assemblyRoom.outline)[1].outsidePlan, true);
+
+// The same placement review runs on new conversions and on previously stored models.
+const trace = (a, b) => ({ a, b });
+const anchorWall = { ...trace([5, 0], [10, 0]), thickness: .5 };
+const placedDoor = { ...trace([10, 0], [13, 0]), width: 3, leaves: 1, hinges: [[10, 0]], openTo: [[10, -3]], kind: "door", thickness: .5 };
+const symbolDoor = { ...placedDoor, ...trace([40, 20], [43, 20]), number: "8" };
+const sourceLevel = {
+  id: "test", order: 2, sizing: "Printed scale, 8 ft per inch", source: { sheet: "A103", page: 1 },
+  outline: [[0, 0], [20, 0], [20, 20], [0, 20]],
+  structuralSlab: { outline: [[0, 0], [20, 0], [20, 20], [0, 20]], holes: [[[6, 7], [13, 7], [13, 12], [6, 12]]] },
+  walls: [anchorWall, { ...trace([8, -20], [10, -20]), thickness: .5 }],
+  doors: [placedDoor, symbolDoor, { ...symbolDoor, excluded: false }],
+  glazing: [trace([-8, 15], [26, 15]), trace([30, -6], [45, -6])],
+  partitions: [{ ...trace([0, 17], [0, 21]), thickness: .2, kind: "railing" }, { ...trace([32, -6], [42, -6]), thickness: .2 }],
+  columns: [{ at: [4, 4] }, { at: [41, -6] }],
+  stairs: [{ flights: [trace([8, 8], [8, 11])] }, { flights: [trace([37, -8], [37, -5])] }],
+};
+const [reviewedLevel] = reviewSchematicPlacement([sourceLevel]);
+assert.deepEqual(reviewedLevel.doors.map(door => [door.excluded, door.outsidePlan]), [[undefined, undefined], [true, true], [false, undefined]]);
+assert.equal(reviewedLevel.doors[1].a, symbolDoor.a, "Preserves the source location and door index");
+assert.equal(symbolDoor.excluded, undefined, "Opening an older model never rewrites it");
+for (const group of ["walls", "glazing", "partitions", "columns", "stairs"]) {
+  assert.equal(reviewedLevel[group][0].excluded, undefined, `Keeps anchored ${group}`);
+  assert.equal(reviewedLevel[group][1].outsidePlan, true, `Holds detached ${group}`);
+}
+assert.equal(detachedTraceCount(reviewedLevel), 6);
+const alreadyReviewed = [reviewedLevel];
+assert.equal(reviewSchematicPlacement(alreadyReviewed), alreadyReviewed, "Placement is idempotent");
+const withoutScale = { ...sourceLevel, sizing: "Proportional only", structuralSlab: undefined };
+assert.equal(reviewSchematicPlacement([withoutScale])[0], withoutScale);
+const correctedOutline = { ...reviewedLevel, outline: [[0, 0], [45, 0], [45, 25], [0, 25]] };
+assert.equal(reviewSchematicPlacement([correctedOutline])[0].doors[1].outsidePlan, undefined);
 
 // A framing-plan boundary uses closed vector geometry and its printed scale and cutouts.
 const { structuralFloorLevels, structuralFloorView, structuralSlabOutline, slabDimension } = await import("../lib/schematic-structural-slabs.ts");

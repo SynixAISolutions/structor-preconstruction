@@ -1,0 +1,30 @@
+/* Takeoff by trade (app/ui/takeoff-by-trade.tsx): a trade's bid-form lines with quantity, unit price and extended. */
+.tbt{display:grid;min-width:0}
+.tbt .ui-stats{margin:4px 0 14px}
+.tbt-note{margin:0 0 14px;color:#7d8b91;font-size:11px;line-height:1.55;max-width:880px}
+.tbt-toolbar{border:1px solid #e1e6e2;border-bottom:0;border-radius:12px 12px 0 0;background:#fff}
+.tbt .ui-table-wrap{border:1px solid #e1e6e2;border-radius:0 0 12px 12px;background:#fff}
+.product-app .tbt-table{min-width:880px}
+.product-app .tbt-table td{vertical-align:top;height:auto;padding-top:13px;padding-bottom:13px}
+.product-app .tbt-table th:nth-child(n+3),.product-app .tbt-table td:nth-child(n+3){white-space:nowrap}
+.tbt-num{width:36px;font-variant-numeric:tabular-nums;color:#9aa5a9!important}
+.tbt-line{min-width:320px;max-width:560px}
+.tbt-line>strong{display:block;line-height:1.45;white-space:normal}
+.tbt-line>span{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.tbt-qty-button{border:0;background:none;padding:0;cursor:pointer}
+.tbt-qty-button .proc-qty{font-size:11px;padding:4px 8px}
+.tbt-price{display:grid;gap:5px;justify-items:start}
+.tbt-price-input{display:inline-flex;align-items:center;gap:5px;border:1px solid #dde4df;border-radius:7px;background:#fff;padding:0 8px;height:32px}
+.tbt-price-input:focus-within{border-color:#e9703e;box-shadow:0 0 0 3px #e9703e1f}
+.tbt-price-input>span,.tbt-price-input>small{color:#8d999e;font-size:10px}
+.product-app .tbt-table .tbt-price-input input{border:0;outline:0;background:none;width:86px;min-width:0;height:28px;padding:0;text-align:right;font-variant-numeric:tabular-nums;color:#354d58}
+.tbt-basis{color:#9aa5a9;font-size:9px}
+.tbt-suggestion{border:1px dashed #cfd9d4;background:#f6f9f7;color:#4b6a5b;border-radius:6px;padding:3px 7px;font-size:9px;cursor:pointer;text-align:left;white-space:normal;max-width:230px}
+.tbt-suggestion:hover{border-style:solid;background:#eef5f0}
+.tbt-money{text-align:right;font-variant-numeric:tabular-nums}
+.tbt-money small{color:#b0874f}
+.product-app .tbt-table tfoot th,.product-app .tbt-table tfoot td{height:48px;padding:12px 19px;border-top:1px solid #e1e6e2;background:#f9faf8;text-align:left;color:#3e525d;font-size:11px}
+.product-app .tbt-table tfoot td.tbt-money{text-align:right}
+.tbt-muted{color:#9aa5a9;font-size:10px}
+.tbt-none{padding:16px 20px}
+@media(max-width:700px){.tbt .ui-stats{grid-template-columns:1fr 1fr}.tbt-line{min-width:220px}}

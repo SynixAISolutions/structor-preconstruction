@@ -17,7 +17,7 @@ export type RepeatsJob = { trade: string; code: string; lines: RepeatLine[] };
 type Dropped = { what: string; reason: string };
 
 /** Lines an estimator hasn't touched, whose repeats can be merged away: the AI's drafts, with no quantity. */
-export const mergeable = (item: ScopeItem): boolean => item.origin === "ai" && item.status === "draft" && !item.allTrades && !item.quantity && item.history.every(h => h.kind === "created" || h.kind === "merged");
+export const mergeable = (item: ScopeItem): boolean => item.origin === "ai" && item.status === "draft" && !item.allTrades && !item.quantity && !item.unitPrice && item.history.every(h => h.kind === "created" || h.kind === "merged");
 
 /** The trade's lines for one request, the alike ones near each other, at most REPEAT_LIMITS.lines per request. */
 export function repeatBatches(items: ScopeItem[]): RepeatLine[][] {
