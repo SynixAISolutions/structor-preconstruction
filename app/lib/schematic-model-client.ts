@@ -21,7 +21,7 @@ import { drawingLengthFeet, drawingTextRuns } from "./drawing-dimensions";
 import { isFinishSchedule } from "./finish-schedule";
 import { printedFloorFinishes, printedSlabNotes, slabNoteArea, slabNoteLevel, type FloorAssemblyDetail, type FloorFinishNote } from "./schematic-floor-details";
 import { assemblyCaptions, assemblyLabelOptions, assemblyTextMatches, assemblyThickness, floorAssemblySheet, floorLeaderLayers, printedFloorDetailReferences, printedSolidWall, wallAssemblySheet, type AssemblyKind, type AssemblyRead, type FloorDetailReference } from "./schematic-assembly-drawings";
-import { holdOutsidePlanRuns } from "./schematic-plan-review";
+import { holdOutsidePlanRuns, reviewSchematicPlacement } from "./schematic-plan-review";
 import { matchPrintedWallTags, printedWallTags, typeWallContinuations } from "./schematic-printed-wall-tags";
 import { pageTextBoxes } from "./text-anchor";
 import { planRegistration } from "./schematic-plan-alignment";
@@ -264,7 +264,7 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
     if (other) other.push(area);
     else areasOf.set(level, [area]);
   }
-  const levels: SchematicLevel[] = [], flightsOf = new Map<number, LevelFlights>();
+  const placedLevels: SchematicLevel[] = [], flightsOf = new Map<number, LevelFlights>();
   const gridCandidates = [areasOf.get(1)?.[0], ...[...areasOf.values()].map(areas => areas[0])];
   const anchorGrid = alignStack ? gridCandidates.find(plan => plan && alignStackedPlan(plan.grid, plan.grid))?.grid : undefined;
   let previous: FloorPlanBuild["placement"] | undefined;
@@ -277,23 +277,24 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
     }
     const unread = unreadPlans.get(order);
     if (unread?.length) built.level.unplacedPlans = [...(built.level.unplacedPlans ?? []), ...unread];
-    levels.push(built.level);
+    placedLevels.push(built.level);
     flightsOf.set(order, built.flights);
     warnings.push(...built.warnings);
     previous = built.placement;
   }
-  if (slabPlans.length) await readStructuralSlabs(slabPlans, levels, areasOf, warnings, args.signal, args.onProgress);
+  if (slabPlans.length) await readStructuralSlabs(slabPlans, placedLevels, areasOf, warnings, args.signal, args.onProgress);
   // Stairs arrive at a level from the one below; a stair its plan draws without an arrow takes its direction from the plan below.
-  const lowest = Math.min(...levels.map(l => l.order));
-  for (const l of levels) {
+  const lowest = Math.min(...placedLevels.map(l => l.order));
+  for (const l of placedLevels) {
     const below = [...flightsOf.keys()].filter(k => k < l.order).sort((p, q) => q - p)[0];
-    const alignedBelow = below !== undefined && !l.alignmentUnverified && !levels.find(level => level.order === below)?.alignmentUnverified;
+    const alignedBelow = below !== undefined && !l.alignmentUnverified && !placedLevels.find(level => level.order === below)?.alignmentUnverified;
     l.stairs = l.order === lowest ? [] : stairsArriving(flightsOf.get(l.order) ?? { arriving: [], rising: [] },
       alignedBelow ? flightsOf.get(below) ?? null : null);
   }
+  const levels = reviewSchematicPlacement(placedLevels);
   // A schedule supplies the door size independently of the plan. Match only doors on scaled plans.
   const scaledLevels = new Set(plansRead.filter(plan => plan.scale && !plan.borrowed).map(plan => plan.level));
-  if (levels.some(level => scaledLevels.has(level.order) && level.doors?.some(door => door.kind === "door" && door.number))) {
+  if (levels.some(level => scaledLevels.has(level.order) && level.doors?.some(door => door.kind === "door" && !door.excluded && door.number))) {
     const sizes: SourcedDoorSize[] = [];
     for (const row of doorScheduleSheets(register)) {
       args.signal?.throwIfAborted();
@@ -308,7 +309,7 @@ export async function buildSchematicModel(args: { documents: StoredDocument[]; p
         warnings.push(`${row.sheet}: could not read the door schedule.`);
       }
     }
-    const numbers = levels.flatMap(level => (level.doors ?? []).flatMap(door => door.kind === "door" && door.number ? [doorNumber(door.number)] : []));
+    const numbers = levels.flatMap(level => (level.doors ?? []).flatMap(door => door.kind === "door" && !door.excluded && door.number ? [doorNumber(door.number)] : []));
     const uniqueMarks = new Set([...Map.groupBy(numbers, number => number)].filter(([, marks]) => marks.length === 1).map(([number]) => number));
     const conflicts = new Set<string>();
     for (const level of levels) {
@@ -645,12 +646,10 @@ async function planVectorWalls(doc: StoredDocument, pageNumber: number, sheetNam
   const verifiedWalls = holdOutsidePlanRuns(tagged.walls, tagged.walls, footprint);
   const reviewedGlazing = holdOutsidePlanRuns(tagged.glazing, verifiedWalls, footprint);
   const reviewedPartitions = holdOutsidePlanRuns(partitions, verifiedWalls, footprint);
-  const held = [...verifiedWalls, ...reviewedGlazing, ...reviewedPartitions].filter(run => run.outsidePlan).length;
-  const note = walls.note + (held ? " " + held + " detached exterior traces held for review on the source plan." : "");
   const verifiedDoors = addTaggedDoorOpenings(tagged.doors, verifiedWalls, printedTags);
   // Room tags read on the tiles are sharper than the whole-sheet reading's; the level keeps those when there are any.
   const rooms: SchematicRoom[] = tagged.tags.filter(t => t.kind === "room").map(t => ({ name: t.name ?? "", number: t.text, at: t.at }));
-  return { note, walls: typeWallContinuations(verifiedWalls, verifiedDoors), doors: verifiedDoors, glazing: reviewedGlazing, partitions: reviewedPartitions, columns, openings, flights, rooms, floorReferences, registration, grid, tagWarning: failed ? `${failed} of ${tiles.length} parts of the plan could not be read for door and wall tags; some doors and walls have no number or type.` : "" };
+  return { note: walls.note, walls: typeWallContinuations(verifiedWalls, verifiedDoors), doors: verifiedDoors, glazing: reviewedGlazing, partitions: reviewedPartitions, columns, openings, flights, rooms, floorReferences, registration, grid, tagWarning: failed ? `${failed} of ${tiles.length} parts of the plan could not be read for door and wall tags; some doors and walls have no number or type.` : "" };
 }
 
 /** The open project's schematic model under "schematic-model"; `run` applies a correction (moveOutlinePoint, setLevelHeight) or a rebuild and returns null or the error. */

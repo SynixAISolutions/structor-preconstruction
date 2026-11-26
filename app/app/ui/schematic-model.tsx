@@ -18,6 +18,7 @@ import { Badge, Button, Empty, Modal, PageHeader, Panel, PreviewNote, type ViewP
 import { SchematicObjectInspector } from "./schematic-object-inspector";
 import { SchematicHeightEvidence } from "./schematic-height-evidence";
 import type { DimensionSource } from "../../lib/section-datums";
+import { detachedTraceCount, reviewSchematicPlacement } from "../../lib/schematic-plan-review";
 import { CUTAWAY_HEIGHT, isSportsFloor, schematicCameraFit, schematicObjectPick, type FloorPick, type SchematicPick, type WallPick } from "./schematic-scene";
 import { StoredDocumentViewer } from "./project-file-viewer";
 import { inside, type Room } from "../../lib/room-detection";
@@ -458,14 +459,14 @@ function PickEditor({ level, pick, types, onWall, onDoor, onGlazing, onPartition
     <Button onClick={onClose}>Close</Button>
   </div>; }
   if (column) return <div className="sm-pick" role="group" aria-label={`Column ${pick.index + 1}`}>
-    <p><strong>Column {pick.index + 1}</strong> · {Math.round(column.width * 12)}" x {Math.round(column.depth * 12)}"{column.excluded ? " · marked not a column" : ""}</p>
+    <p><strong>Column {pick.index + 1}</strong> · {Math.round(column.width * 12)}" x {Math.round(column.depth * 12)}"{column.outsidePlan ? " · Detached trace · review" : column.excluded ? " · marked not a column" : ""}</p>
     <Button onClick={() => onColumn(!column.excluded)}>{column.excluded ? "Restore this column" : "Not a column"}</Button>
     <Button onClick={onClose}>Close</Button>
   </div>;
   return <form className="sm-pick" aria-label={wall ? `Wall ${pick.index + 1}` : glass ? `Glass ${pick.index + 1}` : `Door ${door?.number ?? pick.index + 1}`} onSubmit={e => { e.preventDefault(); if (wall) onWall({ type: value }); else if (glass) onGlazing({ type: value }); else onDoor(value); }}>
     {wall ? <p><strong>Wall {pick.index + 1}</strong> · {length} ft · {Math.round(wall.thickness * 12 * 10) / 10}" thick · {wall.outsidePlan ? "Detached trace · review" : wall.excluded ? "marked not a wall" : wall.type ? `${wall.type} ${wall.edited ? "(set by you)" : wall.typeSet ? "(set for untagged walls)" : "(from the plan's tag)"}` : "no type"}</p>
       : glass ? <p><strong>Glass {pick.index + 1}</strong> · {length} ft · {glass.outsidePlan ? "Detached trace · review" : glass.excluded ? "marked not glass" : glass.type ?? "no storefront or window type"}</p>
-      : <p><strong>Door{door?.number ? ` ${door.number}` : ""}</strong> · {door?.basis === "tagged-gap" ? "tagged opening" : door?.leaves === 2 ? "pair" : "single"} · {door?.width} ft wide</p>}
+      : <p><strong>Door{door?.number ? ` ${door.number}` : ""}</strong> · {door?.basis === "tagged-gap" ? "tagged opening" : door?.leaves === 2 ? "pair" : "single"} · {door?.width} ft wide{door?.outsidePlan ? " · Detached trace · review" : ""}</p>}
     <label className="ui-field">{wall ? "Wall type" : glass ? "Storefront or window type" : "Door number"}<input autoFocus maxLength={16} value={value} onChange={e => setValue(e.target.value)} list={wall ? "sm-wall-types" : undefined}/></label>
     {wall && <datalist id="sm-wall-types">{types.map(t => <option key={t} value={t}/>)}</datalist>}
     <Button type="submit" variant="primary">{wall ? "Save wall type" : glass ? "Save glass type" : "Save door number"}</Button>
@@ -541,7 +542,7 @@ function OutlineSheet({ focus, onPickWall, level, areaIndex, spaces, doc, frameK
           {on && w.tagRead?.at && <circle cx={w.tagRead.at[0]} cy={w.tagRead.at[1]} r={frame.width / 135}
             fill="none" stroke="#2563eb" strokeWidth={frame.width / 900} pointerEvents="none" role="img" aria-label="Printed wall type tag"/>}
           <line x1={w.a[0]} y1={w.a[1]} x2={w.b[0]} y2={w.b[1]} stroke="transparent" strokeWidth={frame.width / 150}><title>Wall {i + 1}{w.type ? ` · ${w.type}` : ""}{w.excluded ? " · not a wall" : ""}</title></line></g>; })}
-        {level.doors?.map((d, i) => { if ((d.planArea ?? 0) !== areaIndex) return null; const on = pick?.kind === "door" && pick.index === i; return <g key={`d${i}`} onClick={editable && !aligning ? () => setPick({ kind: "door", index: i }) : undefined} style={{ cursor: editable ? "pointer" : undefined }}><line x1={d.a[0]} y1={d.a[1]} x2={d.b[0]} y2={d.b[1]} stroke={on ? "#7c3aed" : "#1d4ed8"} strokeWidth={frame.width / (on ? 300 : 500)}/>{d.hinges.map((h, j) => <line key={j} x1={h[0]} y1={h[1]} x2={d.openTo[j][0]} y2={d.openTo[j][1]} stroke="#15803d" strokeWidth={frame.width / 700}/>)}<line x1={d.a[0]} y1={d.a[1]} x2={d.b[0]} y2={d.b[1]} stroke="transparent" strokeWidth={frame.width / 150}><title>Door{d.number ? ` ${d.number}` : ""}</title></line>{d.number && <text x={(d.a[0] + d.b[0]) / 2} y={(d.a[1] + d.b[1]) / 2 - frame.width / 400} fontSize={frame.width / 260} fill="#1d4ed8" textAnchor="middle" fontWeight="600" pointerEvents="none">{d.number}</text>}</g>; })}
+        {level.doors?.map((d, i) => { if ((d.planArea ?? 0) !== areaIndex) return null; const on = pick?.kind === "door" && pick.index === i; return <g key={`d${i}`} onClick={editable && !aligning ? () => setPick({ kind: "door", index: i }) : undefined} style={{ cursor: editable ? "pointer" : undefined }}><line x1={d.a[0]} y1={d.a[1]} x2={d.b[0]} y2={d.b[1]} stroke={on ? "#7c3aed" : d.excluded ? "#9ca3af" : "#1d4ed8"} strokeDasharray={d.excluded ? `${frame.width / 300}` : undefined} strokeWidth={frame.width / (on ? 300 : 500)}/>{d.hinges.map((h, j) => <line key={j} x1={h[0]} y1={h[1]} x2={d.openTo[j][0]} y2={d.openTo[j][1]} stroke={d.excluded ? "#9ca3af" : "#15803d"} strokeWidth={frame.width / 700}/>)}<line x1={d.a[0]} y1={d.a[1]} x2={d.b[0]} y2={d.b[1]} stroke="transparent" strokeWidth={frame.width / 150}><title>Door{d.number ? ` ${d.number}` : ` ${i + 1}`}{d.outsidePlan ? " · Detached trace" : ""}</title></line>{d.number && <text x={(d.a[0] + d.b[0]) / 2} y={(d.a[1] + d.b[1]) / 2 - frame.width / 400} fontSize={frame.width / 260} fill="#1d4ed8" textAnchor="middle" fontWeight="600" pointerEvents="none">{d.number}</text>}</g>; })}
         {level.glazing?.map((g, i) => { if ((g.planArea ?? 0) !== areaIndex) return null; const on = pick?.kind === "glazing" && pick.index === i; return <g key={`g${i}`} onClick={editable && !aligning ? () => setPick({ kind: "glazing", index: i }) : undefined} style={{ cursor: editable ? "pointer" : undefined }}><line x1={g.a[0]} y1={g.a[1]} x2={g.b[0]} y2={g.b[1]} stroke={on ? "#7c3aed" : g.excluded ? "#9ca3af" : "#0d9488"} strokeDasharray={g.excluded ? `${frame.width / 300}` : undefined} strokeWidth={frame.width / (on ? 300 : 550)}/><line x1={g.a[0]} y1={g.a[1]} x2={g.b[0]} y2={g.b[1]} stroke="transparent" strokeWidth={frame.width / 150}><title>Glass{g.type ? ` · ${g.type}` : ""}{g.excluded ? " · not glass" : ""}</title></line>{g.type && !g.excluded && <text x={(g.a[0] + g.b[0]) / 2} y={(g.a[1] + g.b[1]) / 2 - frame.width / 400} fontSize={frame.width / 280} fill="#0f766e" textAnchor="middle" pointerEvents="none">{g.type}</text>}</g>; })}
         {level.partitions?.map((p, i) => { if ((p.planArea ?? 0) !== areaIndex) return null; const on = pick?.kind === "partition" && pick.index === i; return <g key={`p${i}`} onClick={editable && !aligning ? () => setPick({ kind: "partition", index: i }) : undefined} style={{ cursor: editable ? "pointer" : undefined }}><line x1={p.a[0]} y1={p.a[1]} x2={p.b[0]} y2={p.b[1]} stroke={on ? "#7c3aed" : p.excluded ? "#9ca3af" : p.kind === "railing" ? "#78350f" : "#a21caf"} strokeDasharray={p.excluded ? `${frame.width / 300}` : undefined} strokeWidth={frame.width / (on ? 300 : 550)}/><line x1={p.a[0]} y1={p.a[1]} x2={p.b[0]} y2={p.b[1]} stroke="transparent" strokeWidth={frame.width / 150}><title>{p.kind === "railing" ? "Guardrail" : "Operable partition"}{p.excluded ? " · not one" : ""}</title></line></g>; })}
         {level.columns?.map((c, i) => { if ((c.planArea ?? 0) !== areaIndex) return null; const on = pick?.kind === "column" && pick.index === i; return <g key={`c${i}`} transform={`translate(${c.at[0]} ${c.at[1]}) rotate(${c.angle * 180 / Math.PI})`} onClick={editable && !aligning ? () => setPick({ kind: "column", index: i }) : undefined} style={{ cursor: editable ? "pointer" : undefined }}><rect x={-c.width / 2} y={-c.depth / 2} width={c.width} height={c.depth} fill={on ? "#7c3aed" : c.excluded ? "#9ca3af" : "#1f2937"} fillOpacity={c.excluded ? .5 : .85}/><rect x={-1.2} y={-1.2} width={2.4} height={2.4} fill="transparent"><title>Column{c.excluded ? " · not a column" : ""}</title></rect></g>; })}
@@ -634,7 +635,12 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
   const [height, setHeight] = useState("14"), [frames, setFrames] = useLocalDraft<Record<string, SheetFrame>>("schematic-sheet-frames", {});
   const [selection, setSelection] = useState<SchematicPick | null>(null), [planFocus, setPlanFocus] = useState<PlanFocus | null>(null), [readingLayers, setReadingLayers] = useState(false);
   const abort = useRef<AbortController | null>(null), layersAbort = useRef<AbortController | null>(null), camera = useRef<CameraApi | null>(null), viewer = useRef<HTMLDivElement>(null), outlinePanel = useRef<HTMLDivElement>(null);
-  const current = pending ?? model;
+  const loaded = pending ?? model;
+  const current = useMemo(() => {
+    if (!loaded) return loaded;
+    const levels = reviewSchematicPlacement(loaded.levels);
+    return levels === loaded.levels ? loaded : { ...loaded, levels };
+  }, [loaded]);
   const firstLevelId = current?.levels[0]?.id;
   const stackLevels = current?.levels.filter(item => !item.alignmentUnverified).map(item => item.id) ?? [];
   const visible = useMemo(() => current?.levels.filter(l => shown ? shown.includes(l.id) : l.id === firstLevelId).map(l => l.id) ?? [], [current, shown, firstLevelId]);
@@ -643,13 +649,18 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
   const spacesByLevel = useMemo(() => new Map(current?.levels.map(item => [item.id, levelSpaces(item)])), [current]);
   const floorsByLevel = useMemo(() => new Map(current?.levels.map(item => [item.id, floorSurfaces(item, spacesByLevel.get(item.id) ?? [])])), [current, spacesByLevel]);
   const spaces = (level && spacesByLevel.get(level.id)) ?? [];
+  const detached = level ? detachedTraceCount(level) : 0;
   const hasPlanDetails = current?.levels.some(item => visible.includes(item.id) && (
-    item.walls?.some(wall => !wall.excluded) || item.doors?.some(door => door.kind === "door") ||
+    item.walls?.some(wall => !wall.excluded) || item.doors?.some(door => door.kind === "door" && !door.excluded) ||
     [item.glazing, item.partitions, item.columns, item.stairs].some(parts => parts?.some(part => !part.excluded))
   ));
   // Older readings with just a footprint open with it visible, until the user chooses otherwise.
   const showOutline3D = outlinePreference ?? !hasPlanDetails;
-  const activePick = walls && selection && visible.includes(selection.levelId) ? selection : null;
+  const pickedLevel = selection && current?.levels.find(item => item.id === selection.levelId);
+  const heldPick = selection?.kind === "door" ? pickedLevel?.doors?.[selection.index]?.excluded :
+    selection?.kind === "glazing" ? pickedLevel?.glazing?.[selection.index]?.excluded :
+    selection?.kind === "wall" ? pickedLevel?.walls?.[selection.index]?.excluded : false;
+  const activePick = walls && selection && !heldPick && visible.includes(selection.levelId) ? selection : null;
   const wallPick = activePick?.kind === "wall" ? activePick : null;
   const [planChoice, setPlanChoice] = useState<{ levelId: string; area: number } | null>(null);
   const areaIndex = planChoice?.levelId === level?.id ? planChoice?.area ?? 0 : 0;
@@ -803,6 +814,7 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
           <Panel title="Levels and sources" subtitle={current.levels.length + (current.levels.length === 1 ? " level" : " levels")} action={stackLevels.length > 1 && stackLevels.some(id => !visible.includes(id)) ? <Button onClick={() => setShown(stackLevels)}>{stackLevels.length === current.levels.length ? "Show all" : "Show aligned levels"}</Button> : undefined}>{current.levels.map((l, i) => <article key={l.id} className={level?.id === l.id ? "active" : ""}><div className="sm-level-heading"><input type="checkbox" aria-label={"Show " + l.name} checked={visible.includes(l.id)} onChange={e => toggleLevel(l, e.target.checked)}/><span aria-hidden="true" style={{ background: colors[i % colors.length] }}/><button type="button" onClick={() => { setSelected(l.id); setShown([l.id]); setExplode(false); setSelection(null); setPlanFocus(null); }}>{l.name}</button></div>{l.alignmentUnverified && <p>View separately · alignment needs review</p>}<p>Elevation {l.elevation} ft · Height {l.height} ft<br/>{Math.round(levelFootprints(l).reduce((area, outline) => area + polygonArea(outline), 0)).toLocaleString()} SF footprint · {l.rooms.length} rooms<br/>{(t => t ? `${t.count.toLocaleString()} walls · ${t.feet.toLocaleString()} ft of wall${t.doors === null ? "" : ` · ${t.doors} doors${t.compartments ? ` (+${t.compartments} toilet-stall doors)` : ""}`}${t.glassFeet === null ? "" : ` · ${t.glassFeet.toLocaleString()} ft of glass`}${t.partitionFeet ? ` · ${t.partitionFeet.toLocaleString()} ft of operable partition` : ""}${t.railingFeet ? ` · ${t.railingFeet.toLocaleString()} ft of guardrail` : ""}${t.columns ? ` · ${t.columns} columns` : ""}${t.stairs ? ` · ${t.stairs} ${t.stairs === 1 ? "stair" : "stairs"} up from the level below` : ""}` : "Rebuild to read walls from the plan's lines")(wallTotals(l))}</p><p>{l.sizing}</p>{(l.planAreas?.map(area => area.source) ?? [l.source]).map(plan => <button key={plan.sheet} className="sm-source-link" onClick={() => { setSelected(l.id); setSource({ ...plan, label: l.name }); }}>{plan.sheet} · PDF page {plan.page}{plan.quote && " · " + plan.quote}</button>)}{l.unplacedPlans?.map(plan => <button key={plan.sheet} className="sm-source-link" onClick={() => setSource({ ...plan, label: l.name })}>{plan.sheet} · Alignment needed</button>)}</article>)}</Panel>
       {level && <Panel title={`${level.name} corrections`}>
         <SchematicHeightEvidence level={level} onOpen={openDimension}/>
+        {detached > 0 && <p>{detached} detached {detached === 1 ? "trace stays" : "traces stay"} off the 3D model. Open the source plan to review.</p>}
         <form onSubmit={event => { event.preventDefault(); change(m => setLevelHeight(m, level.id, Number(height))); }}>
           <label className="ui-field">Floor-to-floor height · ft<input disabled={busy} type="number" min="6" max="60" step=".001" required value={height} onChange={event => setHeight(event.target.value)}/></label>
           <Button disabled={busy} type="submit">Apply height</Button>
