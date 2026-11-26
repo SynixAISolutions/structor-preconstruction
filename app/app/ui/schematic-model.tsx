@@ -634,10 +634,12 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
   const [height, setHeight] = useState("14"), [frames, setFrames] = useLocalDraft<Record<string, SheetFrame>>("schematic-sheet-frames", {});
   const [selection, setSelection] = useState<SchematicPick | null>(null), [planFocus, setPlanFocus] = useState<PlanFocus | null>(null), [readingLayers, setReadingLayers] = useState(false);
   const abort = useRef<AbortController | null>(null), layersAbort = useRef<AbortController | null>(null), camera = useRef<CameraApi | null>(null), viewer = useRef<HTMLDivElement>(null), outlinePanel = useRef<HTMLDivElement>(null);
-  const current = pending ?? model, level = current?.levels.find(l => l.id === selected) ?? current?.levels[0];
+  const current = pending ?? model;
   const firstLevelId = current?.levels[0]?.id;
   const stackLevels = current?.levels.filter(item => !item.alignmentUnverified).map(item => item.id) ?? [];
   const visible = useMemo(() => current?.levels.filter(l => shown ? shown.includes(l.id) : l.id === firstLevelId).map(l => l.id) ?? [], [current, shown, firstLevelId]);
+  const level = current?.levels.find(l => l.id === selected && (!visible.length || visible.includes(l.id))) ??
+    current?.levels.find(l => visible.includes(l.id)) ?? current?.levels[0];
   const spacesByLevel = useMemo(() => new Map(current?.levels.map(item => [item.id, levelSpaces(item)])), [current]);
   const floorsByLevel = useMemo(() => new Map(current?.levels.map(item => [item.id, floorSurfaces(item, spacesByLevel.get(item.id) ?? [])])), [current, spacesByLevel]);
   const spaces = (level && spacesByLevel.get(level.id)) ?? [];

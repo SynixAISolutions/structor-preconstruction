@@ -60,6 +60,24 @@ for (const sweep of [45, 169]) {
 }
 assert.deepEqual(D.swingArcs([...arc([10, 0], 1.8, 0, 45, 24), ...leaf([10, 0], at([10, 0], 1.8, 45))], [], PPF), [], "Too small to be a door at that angle");
 assert.equal(D.arcFits(arc([0, 50], 3, 0, 180, 32), [], PPF)[0].sweep > 170, true, "The arc itself is measured whatever its sweep");
+
+const leafLines = leaf([10, 0], at([10, 0], 3, 45)).map(line => ({ ...line, width: .58, color: "#aaaaaa" }));
+const angledDoor = [
+  ...arc([10, 0], 3, 0, 45, 5).map(line => ({ ...line, color: "#aaaaaa" })),
+  seg([13, 0], [13, -.46], .86),
+  seg([10, 0], [13, 0], .36),
+  ...leafLines,
+  { a: leafLines[0].b, b: leafLines[1].b, width: .58, color: "#aaaaaa" },
+];
+const [angledSwing] = D.swingArcs(angledDoor, [], PPF);
+assert.ok(angledSwing);
+assert.deepEqual(r2(angledSwing.ends[1 - angledSwing.open]), [13, 0], "A crossing jamb and a threshold do not change the drawn opening");
+const doorSheet = { widthPt: 180, heightPt: 180 }, doorFrame = { widthFeet: 20, heightFeet: 20 };
+const panes = [seg([14, .5], [18, .5], .36), seg([14, .6], [18, .6], .36)];
+const details = [...angledDoor, ...panes], foundDoors = S.levelDoors(details, [], doorSheet, doorFrame, [], walls);
+assert.deepEqual(foundDoors.map(({ a, b }) => [a, b]), [[[10, 0], [13, 0]]]);
+assert.deepEqual(S.levelGlazing(details, doorSheet, doorFrame, [], .86, walls, foundDoors),
+  [{ a: [14, .6], b: [18, .6] }], "Keep the real pane next to the wall while excluding the open leaf");
 // Two door-sized swings closing onto each other are a pair wherever they stand: a curtain wall has no wall to confirm them.
 const curtain = D.doorsFromSwings(D.swingArcs([...arc([40, 40], 3, 0, 90), ...arc([46, 40], 3, 180, 90)], [], PPF), []);
 assert.deepEqual(curtain.map(d => [r2(d.a), r2(d.b), Math.round(d.width * 100) / 100, d.leaves, d.host, d.kind]), [[[40, 40], [46, 40], 6, 2, null, "door"]], "A pair in a curtain wall");
