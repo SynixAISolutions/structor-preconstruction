@@ -14,6 +14,7 @@ import type { Screen } from "../../lib/screens";
 import { useModelReview } from "../../lib/use-model-review";
 import { usePreparedModel } from "../../lib/use-prepared-model";
 import { Modal } from "./shared";
+import { SiteContext } from "./site-context";
 import { WalkthroughControls, type WalkDirection } from "./walkthrough-controls";
 import { doorLeafGeometry } from "./door-geometry";
 import { DoorRecordCard, DoorSchedulePanel } from "./door-panels";
@@ -285,7 +286,9 @@ function RoomFinishPanel({ objects, bases, records, onSource, onInspect, onInspe
 }
 
 export default function ModelStudio(props: StudioProps) {
-  return props.projectId === SAMPLE_PROJECT_ID ? <SampleProjectStudio {...props}/> : <SchematicModelStudio key={props.projectId} project={props.project} navigate={props.navigate} notify={props.notify}/>;
+  const studio = props.projectId === SAMPLE_PROJECT_ID ? <SampleProjectStudio {...props}/> : <SchematicModelStudio key={props.projectId} project={props.project} navigate={props.navigate} notify={props.notify}/>;
+  // Marcel's Features item 19: the exterior model with the site's real surroundings (Google's photorealistic 3D map).
+  return props.view === "exterior" ? <>{studio}<SiteContext key={props.projectId} project={props.project} sample={props.projectId === SAMPLE_PROJECT_ID}/></> : studio;
 }
 
 /** Remembers which model this browser last looked at on Project 1. Storage can be unavailable; the prepared model is then shown. */
