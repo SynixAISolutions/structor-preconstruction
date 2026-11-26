@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project landing · three variations · Structor mockup</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  body { background: radial-gradient(90% 60% at 50% 0%, rgba(236,116,68,.14), transparent 60%), var(--bg); }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 40px 24px 60px; }
+  h1 { margin: 10px 0 6px; font-size: 30px; font-weight: 600; letter-spacing: -.02em; }
+  .lede { margin: 0; color: var(--ink-2); font-size: 14px; max-width: 760px; line-height: 1.55; }
+  .rules { margin: 14px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 8px; }
+  .rules li { font-size: 12px; color: var(--ink-2); padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line-2); }
+  .opts { display: grid; gap: 18px; margin-top: 28px; }
+  .opt { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 22px; align-items: center; padding: 18px; }
+  .opt img { width: 100%; border-radius: 14px; border: 1px solid var(--line); display: block; }
+  .opt h2 { margin: 0; font-size: 20px; font-weight: 600; } .opt h2 span { color: var(--orange); }
+  .opt p { margin: 8px 0 14px; color: var(--ink-2); font-size: 13px; line-height: 1.55; }
+  .opt .pill { text-decoration: none; }
+  @media (max-width: 760px) { .opt { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="wordmark"><span class="logomark"><i></i><i></i><i></i></span>structor<em>.</em></span>
+  <h1>Project landing: three directions</h1>
+  <p class="lede">Each option takes one reference from Danial's brief. They all show the same project and the same numbers (sample data for Project 1),
+    so only the layout and treatment change. Pick one, or say what to borrow from another, and we'll iterate on it. No app code changes until a design is locked in.</p>
+  <ul class="rules"><li>Dark, translucent cards over the project image</li><li>"Hey, need help?" + a real Ask box</li><li>Project name + type top-left</li><li>Nav groups open a frosted dropdown</li><li>Profile menu top-right</li><li>Background: a stand-in drawing sheet until we have renders</li></ul>
+  <div class="card opt" style="margin-top:22px;grid-template-columns:1fr 1fr">
+    <div><h2><span>Chosen</span> · Main page (All projects)</h2><p>Design A's layout, with your projects to pick from.</p><a class="pill is-primary" href="../projects/index.html">Open main page<i data-lucide="arrow-right"></i></a></div>
+    <div><h2><span>Chosen</span> · Each project's landing page</h2><p>Design B2: B's layout with the image behind the whole page.</p><a class="pill is-primary" href="b2.html">Open project landing<i data-lucide="arrow-right"></i></a></div>
+  </div>
+  <div class="opts">
+    <article class="card opt"><img src="../references/ref1-fitness-dashboard.png" alt="Reference 1: fitness dashboard">
+      <div><h2><span>A</span> · Ref 1, copied closely</h2><p>Icon rail on the left, the Ask box centred over the image, and a 3 + 2 + tall-gauge card grid along the bottom, as you asked ("copy the UI exactly"). Scroll down for next moves, issues and the team. The image moves slower than the cards (parallax).</p>
+        <a class="pill is-primary" href="a.html">Open A<i data-lucide="arrow-right"></i></a></div></article>
+    <article class="card opt"><img src="../references/ref2-zoya-home.png" alt="Reference 2: Zoya home dashboard">
+      <div><h2><span>B</span> · Refs 2 and 3, render plus table</h2><p>Top pill nav, a serif project title, stacked cards on the left, a large render on the right, and the trade packages as a table underneath. Better if you want bid data visible at a glance.</p>
+        <a class="pill is-primary" href="b.html">Open B<i data-lucide="arrow-right"></i></a></div></article>
+    <article class="card opt"><img src="../references/ref2-zoya-home.png" alt="Reference 2: Zoya home dashboard">
+      <div><h2><span>B2</span> · round 2: B with the image behind the whole page</h2><p>Danial's note: the background should run behind the whole page, with every element translucent so it shows through. B's layout is unchanged; the image is now the fixed page background (with parallax), and the cards, table, Ask box and nav are all glass over it.</p>
+        <a class="pill is-primary" href="b2.html">Open B2<i data-lucide="arrow-right"></i></a></div></article>
+    <article class="card opt"><img src="../references/ref4-nestiq.png" alt="Reference 4: NestIQ dashboard">
+      <div><h2><span>C</span> · Ref 4, image panel plus side column</h2><p>Top pill nav with your name, the Ask box over a big image panel, a dial and budget bars overlapping the image, and a right column for the deadline, bids and package pulse.</p>
+        <a class="pill is-primary" href="c.html">Open C<i data-lucide="arrow-right"></i></a></div></article>
+  </div>
+</div>
+<script src="https://unpkg.com/lucide@0.454.0/dist/umd/lucide.min.js"></script>
+<script src="mock.js"></script>
+</body>
+</html>

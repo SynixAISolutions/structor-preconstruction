@@ -7,16 +7,17 @@ import { Moon, Sun } from "lucide-react";
 const THEME_KEY = "structor-color-theme";
 type Theme = "light" | "dark";
 
+// Dark is the default look (Danial, 26 Nov 2026: "the whole website has a dark clean aesthetic"); light stays one click away.
 function savedTheme(): Theme {
   try {
-    return localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
+    return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
   } catch {
-    return "light";
+    return "dark";
   }
 }
 
 export function ThemeToggle({ reduced }: { reduced: boolean }) {
-  const [theme, setTheme] = useState<Theme>("light");
+  const [theme, setTheme] = useState<Theme>("dark");
 
   useLayoutEffect(() => {
     const saved = savedTheme();

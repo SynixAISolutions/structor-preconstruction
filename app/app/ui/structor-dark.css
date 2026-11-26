@@ -1,0 +1,80 @@
+/* Structor dark: the main UI rebuild (Danial, 26 Nov 2026). Retunes the existing dark theme in new-look.css
+   ([data-structor-theme="dark"]) to the approved mockups in design/main-ui/ (projects/index.html = main page,
+   project-landing/b2.html = project landing): warm near-black, Structor orange actions, and translucent glass over the
+   project image so the image shows through every panel. Loaded after new-look.css; changes no markup.
+   The token block uses the same selector as new-look.css's dark block (html.new-look[…] .new-look), so loading later wins. */
+
+html.new-look[data-structor-theme="dark"] .new-look,
+html[data-structor-theme="dark"] .new-look {
+  --nl-canvas: #0b0a09;
+  --nl-surface: rgba(30, 27, 24, 0.66);
+  --nl-surface-quiet: rgba(255, 255, 255, 0.05);
+  --nl-line: rgba(255, 255, 255, 0.11);
+  --nl-ink: #f5f0e9;
+  --nl-muted: #b9b1a7;
+  --nl-cobalt: #ec7444;
+  --nl-cobalt-hover: #f28a5e;
+  --nl-action: #ec7444;
+  --nl-action-hover: #f28a5e;
+  --nl-action-border: #ec7444;
+  --nl-on-action: #1a0d06;
+  --nl-action-shadow: 0 8px 22px -8px rgba(236, 116, 68, 0.55);
+  --nl-accent-text: #ffb48f;
+  --nl-accent-wash: rgba(236, 116, 68, 0.16);
+  --nl-lime: #cfe35e;
+  --nl-positive: #c9df6a;
+  --nl-positive-surface: rgba(207, 227, 94, 0.1);
+  --nl-positive-hover: rgba(207, 227, 94, 0.16);
+  --nl-caution: #f3b23a;
+  --nl-caution-surface: rgba(243, 178, 58, 0.12);
+  --nl-danger: #ff9d90;
+  --nl-danger-surface: rgba(255, 120, 100, 0.12);
+  --nl-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 24px 48px -22px rgba(0, 0, 0, 0.75);
+  --nl-shadow-hover: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 28px 56px -20px rgba(0, 0, 0, 0.85);
+  --sd-glass-blur: blur(18px) saturate(140%);
+  --sd-glass-strong: rgba(22, 20, 18, 0.92);
+}
+
+/* The project image sits behind the whole app. The stand-in is Project 1's sheet A2.1, until Core dev's per-project renders exist. */
+[data-structor-theme="dark"] .product-app.new-look {
+  background:
+    radial-gradient(ellipse 62% 58% at 62% 26%, rgba(11, 10, 9, 0.1) 0%, rgba(11, 10, 9, 0.55) 60%, rgba(11, 10, 9, 0.9) 100%),
+    linear-gradient(180deg, rgba(11, 10, 9, 0.2) 0%, rgba(11, 10, 9, 0) 30%, rgba(11, 10, 9, 0.6) 100%),
+    url("/backgrounds/project-standin.jpg") 58% 24% / cover no-repeat fixed,
+    #0b0a09;
+}
+[data-structor-theme="dark"] .new-look :is(.product-main, .product-content, .product-footer) { background: transparent; }
+
+/* Glass: panels, stats, the top bar and the sidebar blur whatever is behind them. */
+[data-structor-theme="dark"] .new-look :is(.ui-panel, .ui-stat, .ui-stats, .ui-empty, .ui-source) {
+  -webkit-backdrop-filter: var(--sd-glass-blur);
+  backdrop-filter: var(--sd-glass-blur);
+}
+[data-structor-theme="dark"] .new-look .product-topbar {
+  background: rgba(11, 10, 9, 0.35);
+  -webkit-backdrop-filter: var(--sd-glass-blur);
+  backdrop-filter: var(--sd-glass-blur);
+  border-color: var(--nl-line);
+}
+[data-structor-theme="dark"] .new-look .product-sidebar {
+  background: rgba(14, 13, 12, 0.72);
+  -webkit-backdrop-filter: var(--sd-glass-blur);
+  backdrop-filter: var(--sd-glass-blur);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Things that float over content stay readable: dialogs, menus and popovers are nearly opaque. */
+[data-structor-theme="dark"] .ui-modal,
+[data-structor-theme="dark"] .new-look :is(.command-list, .ask-panel) {
+  background: var(--sd-glass-strong);
+  -webkit-backdrop-filter: blur(26px) saturate(150%);
+  backdrop-filter: blur(26px) saturate(150%);
+}
+
+/* Big working tables stay calm: a quieter surface so rows read cleanly over the image. */
+[data-structor-theme="dark"] .new-look :is(.ui-table, .legacy-leveling) { background: rgba(20, 18, 16, 0.72); }
+
+@media (prefers-reduced-transparency: reduce) {
+  [data-structor-theme="dark"] .new-look { --nl-surface: #1c1a17; }
+  [data-structor-theme="dark"] .product-app.new-look { background: #0b0a09; }
+}

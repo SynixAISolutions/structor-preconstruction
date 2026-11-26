@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B · Project landing (Ref 2/3) · Structor mockup</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  /* Variation B: Refs 2 and 3 (Zoya). Top pill nav, serif title, stacked cards on the left, big render on the right, package table below it. */
+  body { background: radial-gradient(120% 80% at 100% 100%, rgba(236,116,68,.32), transparent 55%), radial-gradient(90% 70% at 0% 0%, rgba(236,116,68,.14), transparent 50%), var(--bg); }
+  .b-wrap { position: relative; z-index: 1; max-width: 1480px; margin: 0 auto; padding: 22px 28px 36px; }
+  .b-top { display: flex; align-items: center; gap: 22px; }
+  .b-nav { display: flex; gap: 6px; flex-wrap: wrap; }
+  .b-nav .pill { height: 36px; padding: 0 13px; font-size: 12px; color: var(--ink-2); background: rgba(255,255,255,.04); }
+  .b-nav .pill.is-on { color: var(--ink); background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.22); }
+  .b-top .right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+  .b-grid { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(0, 2.2fr); gap: 16px; margin-top: 26px; }
+  .b-grid > * { min-width: 0; } /* lets the package table scroll inside its card instead of widening the page */
+  .b-left { display: grid; gap: 12px; align-content: start; }
+  .b-hello small { display: block; font-size: 13px; color: var(--ink-3); }
+  .b-hello h1 { margin: 4px 0 0; font-family: var(--serif); font-weight: 400; font-size: 40px; letter-spacing: -.01em; }
+  .b-ask { margin: 14px 0 8px; display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 16px; border-radius: 999px; background: rgba(255,255,255,.06); border: 1px solid var(--line-2); }
+  .b-ask .orb { flex: none; }
+  .b-ask input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; font-size: 15px; color: var(--ink); caret-color: var(--orange); }
+  .b-ask input::placeholder { color: var(--ink-2); }
+  .b-ask .circle { width: 36px; height: 36px; background: var(--orange); border-color: var(--orange); color: #1a0d06; }
+  .b-ask-label { font-size: 12px; color: var(--ink-2); margin: 0; }
+  .gauge-card .gauge-wrap { position: relative; max-width: 260px; margin: 6px auto 0; }
+  .gauge-card .gauge-num { position: absolute; inset: 52% 0 auto; text-align: center; font-size: 30px; font-weight: 600; }
+  .gauge-card p { text-align: center; margin: 8px 0 0; font-size: 11.5px; color: var(--ink-3); }
+  .b-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .mini .stat { font-size: 30px; font-weight: 300; margin-top: 14px; }
+  .mini .stat-label { justify-content: flex-start; }
+  .render { position: relative; border-radius: 26px; overflow: hidden; min-height: 430px; border: 1px solid var(--line); isolation: isolate; background: #0d0b0a; }
+  .render::before { content: ""; position: absolute; inset: 0; z-index: -2; background: url("../../../app/public/models/jelleff/a2-1.png") 64% 86% / 190% auto no-repeat;
+    filter: invert(1) sepia(1) saturate(2.4) hue-rotate(-14deg) brightness(.6) contrast(1.5); }
+  .render::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, rgba(11,10,9,.85), rgba(11,10,9,.05) 45%), linear-gradient(0deg, rgba(11,10,9,.92), rgba(11,10,9,0) 45%); }
+  .render-title { position: absolute; left: 26px; bottom: 24px; }
+  .render-title h2 { margin: 0; font-size: 28px; font-weight: 400; line-height: 1.15; }
+  .render-title small { display: block; margin-top: 8px; font-size: 12px; color: var(--ink-2); }
+  .render-chips { position: absolute; right: 22px; bottom: 26px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .table-card { margin-top: 14px; padding: 18px 22px 10px; }
+  .table-card h3 { margin: 0 0 6px; font-size: 15px; font-weight: 500; } .table-card h3 span { color: var(--ink-3); }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; font-weight: 400; color: var(--ink-3); font-size: 11.5px; padding: 10px 8px; }
+  td { padding: 12px 8px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  td:first-child { display: flex; gap: 10px; align-items: center; }
+  td .tile { width: 28px; height: 28px; border-radius: 8px; } td .tile svg.lucide { width: 14px; height: 14px; }
+  .b-bottom { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 14px; }
+  .team { display: flex; gap: 12px; margin-top: 14px; } .team div { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+  .team small { display: block; color: var(--ink-3); font-size: 11px; } .team .avatar { width: 34px; height: 34px; font-size: 12px; }
+  @media (max-width: 1100px) { .b-grid { grid-template-columns: 1fr; } .b-bottom { grid-template-columns: 1fr; } }
+  @media (max-width: 720px) { .b-nav { display: none; } .b-two { grid-template-columns: 1fr; } .table-card { overflow-x: auto; } .render { min-height: 320px; } }
+</style>
+</head>
+<body>
+<div class="b-wrap">
+  <header class="b-top">
+    <a class="wordmark" href="index.html" style="text-decoration:none"><span class="logomark"><i></i><i></i><i></i></span><span>structor<em>.</em></span></a>
+    <nav class="b-nav" aria-label="Main">
+      <button class="pill is-on" aria-current="page"><i data-lucide="house"></i>Home</button>
+      <button class="pill" data-menu="workspace"><i data-lucide="folder-open"></i>Workspace</button>
+      <button class="pill" data-menu="preconstruction"><i data-lucide="clipboard-check"></i>Preconstruction</button>
+      <button class="pill" data-menu="contracts"><i data-lucide="file-check-2"></i>Contracts &amp; procurement</button>
+      <button class="pill" data-menu="operations"><i data-lucide="calendar-days"></i>Operations</button>
+    </nav>
+    <div class="right">
+      <button class="circle" aria-label="Search screens" data-toast="Quick find: search every screen"><i data-lucide="search"></i></button>
+      <button class="circle" aria-label="Notifications, 3 new" data-toast="3 new: 2 bids received, 1 RFI answered"><i data-lucide="bell"></i></button>
+      <button class="profile" data-menu="profile" data-align="end"><span class="avatar">MK</span></button>
+    </div>
+  </header>
+
+  <div class="b-grid">
+    <div class="b-left">
+      <div class="b-hello"><small>Preconstruction · Community &amp; recreation</small><h1>Project 1</h1></div>
+      <p class="b-ask-label">Hey, need help?</p>
+      <form class="ask-form b-ask"><span class="orb" aria-hidden="true"></span><label class="sr-only" for="ask-b">Ask Structor</label><input id="ask-b" autocomplete="off" placeholder="Just ask me anything"><button class="circle" aria-label="Ask"><i data-lucide="arrow-up"></i></button></form>
+
+      <article class="card gauge-card">
+        <div class="card-head"><span class="card-title">Readiness</span><span class="card-meta">Preconstruction to-do</span></div>
+        <div class="gauge-wrap"><div data-chart="gauge" data-pct="62"></div><div class="gauge-num">62%</div></div>
+        <p>On track for bid day · 14 open tasks · 3 waiting on others</p>
+      </article>
+      <div class="b-two">
+        <article class="card mini">
+          <div class="card-head"><span class="card-title">Bid deadline</span></div>
+          <div class="stat">2 <small>Feb</small></div><div class="stat-label"><i data-lucide="flag"></i>Bid day · RFIs close 20 Jan</div>
+        </article>
+        <article class="card mini">
+          <div class="card-head"><span class="card-title">Bids received</span></div>
+          <div class="stat">18 <small>/ 24</small></div><div class="stat-label"><i data-lucide="trending-up"></i>+4 since Monday</div>
+        </article>
+      </div>
+      <article class="card">
+        <div class="card-head"><span class="card-title">Budget vs planning value</span><span class="card-meta">$31.9M · −$1.43M</span></div>
+        <div data-chart="bars" style="margin-top:10px"></div>
+        <div class="foot3" style="margin-top:6px"><div><small>Direct cost</small><b>$27.6M</b></div><span></span><div><small>Contingency</small><b>4.5%</b></div></div>
+      </article>
+    </div>
+
+    <div>
+      <section class="render" aria-label="Project render (stand-in: drawing sheet A2.1)">
+        <div class="render-title"><h2>Project 1<br>Preconstruction overview</h2><small>26,500 sq ft · Washington, DC · CM at-risk</small></div>
+        <div class="render-chips">
+          <button class="pill" data-toast="Bid day: Mon 2 Feb 2026"><i data-lucide="calendar"></i>Bids due 2 Feb</button>
+          <span class="pill"><i data-lucide="wallet"></i>$33.3M planning</span>
+          <button class="pill is-primary" data-toast="Invite bidders"><i data-lucide="plus"></i>Invite bidders</button>
+        </div>
+      </section>
+
+      <article class="card table-card">
+        <h3>Trade packages <span>/ 6 out to bid · 9 of 12 bid forms published</span></h3>
+        <table>
+          <thead><tr><th>Trade</th><th>Status</th><th>Bids</th><th>Apparent low</th><th>Bid forms</th><th></th></tr></thead>
+          <tbody>
+            <tr><td><span class="tile"><i data-lucide="box"></i></span>Concrete</td><td><span class="status is-orange">Leveling</span></td><td>4</td><td>$3.12M</td><td>5 / 5</td><td><button class="pill" data-toast="Opens Bid leveling">Level</button></td></tr>
+            <tr><td><span class="tile"><i data-lucide="layers-3"></i></span>Drywall</td><td><span class="status is-orange">Leveling</span></td><td>3</td><td>$1.86M</td><td>4 / 5</td><td><button class="pill" data-toast="Opens Bid leveling">Level</button></td></tr>
+            <tr><td><span class="tile"><i data-lucide="fan"></i></span>Mechanical</td><td><span class="status">Out to bid</span></td><td>2</td><td>—</td><td>4 / 5</td><td><button class="pill" data-toast="Opens Bid packages">Open</button></td></tr>
+            <tr><td><span class="tile"><i data-lucide="zap"></i></span>Electrical</td><td><span class="status">Invited</span></td><td>0</td><td>—</td><td>2 / 5</td><td><button class="pill" data-toast="Invite bidders">Invite</button></td></tr>
+            <tr><td><span class="tile"><i data-lucide="hammer"></i></span>Demolition</td><td><span class="status is-lime">Awarded</span></td><td>3</td><td>$0.48M</td><td>4 / 4</td><td><button class="pill" data-toast="Opens Scope review &amp; buyout">Buyout</button></td></tr>
+          </tbody>
+        </table>
+      </article>
+    </div>
+  </div>
+
+  <section class="b-bottom">
+    <article class="card"><div class="card-head"><span class="tile"><i data-lucide="sparkles"></i></span><span class="card-title">Your next moves</span></div>
+      <ul class="list"><li><span class="dot"></span>Compare incoming bids for Concrete<small>Bid leveling</small></li><li><span class="dot is-amber"></span>Review 4 scope drafts<small>Scopes</small></li><li><span class="dot is-lime"></span>Answer 2 document issues<small>Structor Check</small></li></ul></article>
+    <article class="card"><div class="card-head"><span class="tile"><i data-lucide="shield-check"></i></span><span class="card-title">Open issues &amp; RFIs</span><span class="card-meta">5 open</span></div>
+      <ul class="list"><li><span class="dot"></span>Locker room bench spec missing<small>A2.1</small></li><li><span class="dot is-amber"></span>Pool deck drain detail unclear<small>A5.1</small></li><li><span class="dot is-dim"></span>Toilet accessory schedule<small>A10.3</small></li></ul></article>
+    <article class="card"><div class="card-head"><span class="tile"><i data-lucide="users"></i></span><span class="card-title">Project team</span><span class="card-meta">2 trades awarded</span></div>
+      <div class="team"><div><span class="avatar">MK</span><span>Marcel Khoury<small>Estimator</small></span></div><div><span class="avatar">CT</span><span>Chris Taylor<small>Project executive</small></span></div></div></article>
+  </section>
+</div>
+<div class="mock-note">Mockup B: Refs 2/3 · sample data · <a href="index.html">all variations</a></div>
+<script src="https://unpkg.com/lucide@0.454.0/dist/umd/lucide.min.js"></script>
+<script src="mock.js"></script>
+</body>
+</html>

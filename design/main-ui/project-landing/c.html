@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C · Project landing (Ref 4) · Structor mockup</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  /* Variation C: Ref 4 (NestIQ). Top pill nav with name, image panel on the left with the Ask box over it, right column of frosted cards, dial + bars row overlapping the image. */
+  body { background: #0e0d0c; }
+  .c-wrap { position: relative; z-index: 1; max-width: 1480px; margin: 0 auto; padding: 22px 28px 36px; }
+  .c-top { display: flex; align-items: center; gap: 24px; }
+  .c-nav { display: flex; gap: 6px; flex-wrap: wrap; }
+  .c-nav .pill { height: 38px; padding: 0 18px; font-size: 12.5px; color: var(--ink-2); background: rgba(255,255,255,.05); border-color: transparent; }
+  .c-nav .pill.is-on { background: rgba(255,255,255,.13); color: var(--ink); box-shadow: inset 0 1px 0 rgba(255,255,255,.12); }
+  .c-top .right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+  .c-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); gap: 16px; margin-top: 22px; }
+  .c-main { position: relative; }
+  .photo { position: relative; border-radius: 30px; overflow: hidden; min-height: 470px; isolation: isolate; border: 1px solid var(--line); }
+  .photo::before { content: ""; position: absolute; inset: 0; z-index: -2; background: url("../../../app/public/models/jelleff/a2-1.png") 60% 84% / 175% auto no-repeat;
+    filter: invert(1) sepia(1) saturate(2.4) hue-rotate(-14deg) brightness(.62) contrast(1.5); }
+  .photo::after { content: ""; position: absolute; inset: 0; z-index: -1; background: radial-gradient(80% 70% at 30% 20%, rgba(11,10,9,.65), rgba(11,10,9,.15) 60%), linear-gradient(0deg, rgba(14,13,12,.95), rgba(14,13,12,0) 50%); }
+  .photo-top { padding: 30px 32px; max-width: 560px; }
+  .photo-top .proj { display: inline-flex; gap: 8px; align-items: center; font-size: 12px; color: var(--ink-2); padding: 6px 12px; border-radius: 999px; background: rgba(0,0,0,.35); border: 1px solid var(--line); }
+  .photo-top h1 { margin: 16px 0 2px; font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 9px; }
+  .photo-top input { width: 100%; background: transparent; border: 0; outline: 0; font-size: 34px; font-weight: 300; letter-spacing: -.02em; color: var(--ink); caret-color: var(--orange); padding: 2px 0 6px; border-bottom: 1px solid rgba(255,255,255,.16); }
+  .photo-top input::placeholder { color: rgba(245,240,233,.62); }
+  .photo-top input:focus { border-bottom-color: var(--orange); }
+  .c-row { display: grid; grid-template-columns: minmax(240px, .8fr) minmax(0, 1.5fr); gap: 14px; margin-top: -150px; padding: 0 14px; position: relative; }
+  .dial { text-align: center; }
+  .dial .gauge-wrap { position: relative; max-width: 230px; margin: 4px auto 0; }
+  .dial .gauge-num { position: absolute; inset: 48% 0 auto; font-size: 32px; font-weight: 600; }
+  .dial .gauge-num small { display: block; font-size: 11px; font-weight: 400; color: var(--ink-3); margin-top: 2px; }
+  .dial p { margin: 8px 0 0; font-size: 11.5px; color: var(--ink-3); }
+  .budget-head { display: flex; align-items: flex-start; gap: 10px; }
+  .budget-head .big { font-size: 22px; font-weight: 600; } .budget-head small { font-size: 11px; color: var(--ink-3); }
+  .budget-head .pill { margin-left: auto; height: 34px; }
+  .c-side { display: grid; gap: 14px; align-content: start; }
+  .deadline h2 { margin: 8px 0 0; font-size: 48px; font-weight: 300; letter-spacing: -.03em; display: flex; align-items: center; gap: 14px; }
+  .deadline h2 small { font-size: 13px; color: var(--ink-3); font-weight: 400; letter-spacing: 0; }
+  .ms { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+  .ms div { padding: 10px 11px; border-radius: 14px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); }
+  .ms small { display: block; font-size: 10.5px; color: var(--ink-3); } .ms b { display: block; margin-top: 4px; font-size: 15px; font-weight: 500; }
+  .ms .is-next { background: rgba(236,116,68,.16); border-color: rgba(236,116,68,.45); }
+  .progress { position: relative; height: 6px; border-radius: 99px; background: rgba(255,255,255,.12); margin: 18px 0 8px; }
+  .progress i { position: absolute; inset: 0 25% 0 0; border-radius: 99px; background: var(--orange); }
+  .progress b { position: absolute; left: 75%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: #fff; border: 4px solid var(--orange); }
+  .row-between { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-3); }
+  .seg { display: grid; gap: 9px; margin-top: 12px; }
+  .seg div { display: grid; grid-template-columns: 82px 1fr 26px; align-items: center; gap: 10px; font-size: 12px; }
+  .seg span { height: 10px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; } .seg span i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #ff9a6e, var(--orange)); }
+  .seg b { font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; }
+  .c-bottom { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 14px; }
+  .team { display: flex; gap: 12px; margin-top: 14px; } .team div { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+  .team small { display: block; color: var(--ink-3); font-size: 11px; } .team .avatar { width: 34px; height: 34px; font-size: 12px; }
+  @media (max-width: 1100px) { .c-grid { grid-template-columns: 1fr; } .c-bottom { grid-template-columns: 1fr; } }
+  @media (max-width: 720px) { .c-nav, .profile span:last-child { display: none; } .c-row { grid-template-columns: 1fr; margin-top: -60px; } .photo-top input { font-size: 24px; } }
+</style>
+</head>
+<body>
+<div class="c-wrap">
+  <header class="c-top">
+    <a class="wordmark" href="index.html" style="text-decoration:none"><span class="logomark"><i></i><i></i><i></i></span><span>structor<em>.</em></span></a>
+    <nav class="c-nav" aria-label="Main">
+      <button class="pill is-on" aria-current="page">Overview</button>
+      <button class="pill" data-menu="preconstruction">Preconstruction</button>
+      <button class="pill" data-menu="contracts">Contracts</button>
+      <button class="pill" data-menu="operations">Operations</button>
+      <button class="pill" data-menu="workspace">Workspace</button>
+    </nav>
+    <div class="right">
+      <button class="circle" aria-label="Search screens" data-toast="Quick find: search every screen"><i data-lucide="search"></i></button>
+      <button class="circle" aria-label="Reduce animation" data-toast="Reduce animation"><i data-lucide="moon"></i></button>
+      <button class="circle" aria-label="Notifications, 3 new" data-toast="3 new: 2 bids received, 1 RFI answered"><i data-lucide="bell"></i></button>
+      <button class="profile" data-menu="profile" data-align="end"><span class="avatar">MK</span><span><b>Marcel Khoury</b><small>Estimator</small></span></button>
+    </div>
+  </header>
+
+  <div class="c-grid">
+    <div class="c-main">
+      <section class="photo" aria-label="Project render (stand-in: drawing sheet A2.1)">
+        <div class="photo-top">
+          <span class="proj"><i data-lucide="building-2"></i>Project 1 · Preconstruction · Community &amp; recreation</span>
+          <h1>Hey, need help? <span class="orb" aria-hidden="true"></span></h1>
+          <form class="ask-form"><label class="sr-only" for="ask-c">Ask Structor</label><input id="ask-c" autocomplete="off" placeholder="Just ask me anything"></form>
+        </div>
+      </section>
+      <div class="c-row">
+        <article class="card dial">
+          <div class="card-head"><span class="card-title">Readiness</span><span class="card-meta">To-do</span></div>
+          <div class="gauge-wrap"><div data-chart="gauge" data-pct="62"></div><div class="gauge-num">62%<small>On track for bid day</small></div></div>
+          <p>14 open tasks · 3 waiting on others</p>
+        </article>
+        <article class="card">
+          <div class="budget-head"><div><span class="card-title">Budget vs planning value</span><div class="big">$31.9M <small>−$1.43M under $33.3M</small></div></div>
+            <button class="pill" data-toast="Budget versions">By estimate stage<i data-lucide="chevron-down"></i></button></div>
+          <div data-chart="bars" style="margin-top:10px"></div>
+          <div class="foot3" style="margin-top:4px"><div><small>Direct cost</small><b>$27.6M</b></div><span></span><div><small>Contingency</small><b>4.5%</b></div></div>
+        </article>
+      </div>
+    </div>
+
+    <aside class="c-side">
+      <article class="card deadline">
+        <div class="card-head"><span class="tile is-orange"><i data-lucide="calendar-clock"></i></span><span class="card-title">Bid deadline</span><span class="card-meta">Washington, DC</span></div>
+        <h2>2 Feb <small>Bid day<br>Mon 2026</small></h2>
+        <div class="ms">
+          <div><small>RFIs close</small><b>20 Jan</b></div><div><small>Drawing Flip</small><b>20 Jan</b></div><div><small>Scopes due</small><b>26 Jan</b></div>
+          <div><small>RFI answers</small><b>27 Jan</b></div><div class="is-next"><small>Bid day</small><b>2 Feb</b></div><div><small>Award</small><b>TBD</b></div>
+        </div>
+      </article>
+      <article class="card">
+        <div class="card-head"><span class="tile"><i data-lucide="inbox"></i></span><span class="card-title">Bids received</span><span class="card-meta" style="color:var(--orange-2)">+4 since Monday</span></div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-top:12px"><span class="stat">18</span><span class="stat-label" style="margin:0">of 24 invited · 6 trades</span></div>
+        <div class="progress" aria-hidden="true"><i></i><b></b></div>
+        <div class="row-between"><span>0</span><span>75%</span><span>24</span></div>
+      </article>
+      <article class="card">
+        <div class="card-head"><span class="tile"><i data-lucide="box"></i></span><span class="card-title">Trade package pulse</span><span class="card-meta">6 out to bid</span></div>
+        <div class="seg">
+          <div>Bid forms<span><i style="width:75%"></i></span><b>9/12</b></div>
+          <div>Leveling<span><i style="width:50%"></i></span><b>3</b></div>
+          <div>Awarded<span><i style="width:17%"></i></span><b>2</b></div>
+          <div>Bought out<span><i style="width:17%"></i></span><b>2/12</b></div>
+        </div>
+        <div class="foot3" style="margin-top:14px"><div><small>Avg bids per trade</small><b>2.8</b></div><span></span><div><small>Scope items</small><b>24</b></div></div>
+      </article>
+    </aside>
+  </div>
+
+  <section class="c-bottom">
+    <article class="card"><div class="card-head"><span class="tile"><i data-lucide="sparkles"></i></span><span class="card-title">Your next moves</span></div>
+      <ul class="list"><li><span class="dot"></span>Compare incoming bids for Concrete<small>Bid leveling</small></li><li><span class="dot is-amber"></span>Review 4 scope drafts<small>Scopes</small></li><li><span class="dot is-lime"></span>Answer 2 document issues<small>Structor Check</small></li></ul></article>
+    <article class="card"><div class="card-head"><span class="tile"><i data-lucide="shield-check"></i></span><span class="card-title">Open issues &amp; RFIs</span><span class="card-meta">5 open</span></div>
+      <ul class="list"><li><span class="dot"></span>Locker room bench spec missing<small>A2.1</small></li><li><span class="dot is-amber"></span>Pool deck drain detail unclear<small>A5.1</small></li><li><span class="dot is-dim"></span>Toilet accessory schedule<small>A10.3</small></li></ul></article>
+    <article class="card"><div class="card-head"><span class="tile"><i data-lucide="users"></i></span><span class="card-title">Project team</span><span class="card-meta">CM at-risk · 26,500 sq ft</span></div>
+      <div class="team"><div><span class="avatar">MK</span><span>Marcel Khoury<small>Estimator</small></span></div><div><span class="avatar">CT</span><span>Chris Taylor<small>Project executive</small></span></div></div></article>
+  </section>
+</div>
+<div class="mock-note">Mockup C: Ref 4 · sample data · <a href="index.html">all variations</a></div>
+<script src="https://unpkg.com/lucide@0.454.0/dist/umd/lucide.min.js"></script>
+<script src="mock.js"></script>
+</body>
+</html>
