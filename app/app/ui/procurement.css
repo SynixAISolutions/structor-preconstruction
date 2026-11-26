@@ -85,3 +85,8 @@
 .proc-takeoff-choices small{color:#98a2a9;font-size:11px}
 .proc-takeoff-choices b{color:#3f5260;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
 @media(max-width:760px){.proc-quantity-fields{grid-template-columns:1fr}.proc-takeoff-choices article{grid-template-columns:1fr auto}.proc-takeoff-choices article .ui-btn{grid-column:1/-1;justify-self:start}}
+
+/* Invite bidders: why a company is suggested (Marcel's Features item 5: project type and required certifications). */
+.proc-fit { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.proc-fit em { font-style: normal; font-size: 10.5px; line-height: 1; padding: 3px 7px; border-radius: 999px; color: #9a4a1f; background: #fdeee6; border: 1px solid #f6cdb7; }
+html[data-structor-theme="dark"] .proc-fit em { color: #ffb48f; background: rgba(236, 116, 68, 0.14); border-color: rgba(236, 116, 68, 0.35); }
