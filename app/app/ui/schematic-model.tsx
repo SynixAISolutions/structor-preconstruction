@@ -13,7 +13,7 @@ import type { Project } from "../../lib/projects";
 import { useLocalDraft } from "../../lib/use-local-draft";
 import { floorAssemblyForSurface, floorPlanAreaAt, floorSurfaces, type FloorSurface } from "../../lib/schematic-floor-details";
 import { AssemblyLayerList, FloorLayersCard } from "./schematic-assembly-card";
-import { floorLayerGroup, alignSheetFrame, footprintValid, openOutline, printedSheetFrame, DEFAULT_DOOR_HEIGHT, wallLayerGroup, schematicColumns, schematicDoors, schematicGeometry, schematicGlazing, schematicGlazingParts, schematicPartitions, schematicRailings, schematicRoomFloors, schematicStairs, schematicWalls, sheetPoint, wallTotals, type SheetFrame } from "./schematic-geometry";
+import { addSchematicPlanGeometry, disposeSchematicGroup as disposeGroup, floorLayerGroup, alignSheetFrame, footprintValid, openOutline, printedSheetFrame, wallLayerGroup, schematicGeometry, sheetPoint, wallTotals, type SheetFrame } from "./schematic-geometry";
 import { Badge, Button, Empty, Modal, PageHeader, Panel, PreviewNote, type ViewProps } from "./shared";
 import { SchematicObjectInspector } from "./schematic-object-inspector";
 import { SchematicHeightEvidence } from "./schematic-height-evidence";
@@ -23,19 +23,12 @@ import { CUTAWAY_HEIGHT, isSportsFloor, schematicCameraFit, schematicObjectPick,
 import { StoredDocumentViewer } from "./project-file-viewer";
 import { inside, type Room } from "../../lib/room-detection";
 import { stairPieces } from "../../lib/stair-detection";
+import { SiteContext, type SiteLocationDraft } from "./site-context";
+import { SchematicSiteRender } from "./schematic-site-render";
 import "./schematic-model.css";
 
 const colors = ["#6d9e9a", "#a193b8", "#d4a66c", "#8fa7c0", "#98ad80"];
 type CameraApi = { home: () => void; top: () => void; zoom: (factor: number) => void };
-function disposeGroup(group: THREE.Group) {
-  group.traverse(object => {
-    const drawable = object as THREE.Mesh;
-    drawable.geometry?.dispose();
-    const materials = drawable.material ? Array.isArray(drawable.material) ? drawable.material : [drawable.material] : [];
-    materials.forEach(material => { (material as THREE.MeshBasicMaterial).map?.dispose(); material.dispose(); });
-  });
-  group.clear();
-}
 function roomLabel(text: string) {
   const canvas = document.createElement("canvas"); canvas.width = 512; canvas.height = 72;
   const ctx = canvas.getContext("2d")!;
@@ -272,22 +265,7 @@ function SchematicCanvas({ model, spacesByLevel, floorsByLevel, visible, explode
       try {
         const display = cutaway ? { ...level, height: Math.min(level.height, CUTAWAY_HEIGHT) } : level;
         const spaces = spacesByLevel.get(level.id) ?? [];
-        const wallMesh = walls ? schematicWalls(display) : null;
-        if (wallMesh) { wallMesh.userData.levelId = level.id; scope.add(wallMesh); }
-        const doorMesh = walls ? schematicDoors(display, Math.min(display.height, DEFAULT_DOOR_HEIGHT)) : null;
-        const glazingLimit = cutaway ? CUTAWAY_HEIGHT : undefined;
-        for (const mesh of [
-          doorMesh, walls ? schematicGlazing(level, glazingLimit) : null,
-          ...(walls ? schematicGlazingParts(level, glazingLimit) : []), walls ? schematicPartitions(display) : null,
-          walls ? schematicRailings(display) : null, walls ? schematicColumns(display) : null,
-        ]) if (mesh) scope.add(mesh);
-        const stairs = walls ? schematicStairs(level, stairRise(model, level)) : null;
-        if (stairs) scope.add(stairs.mesh);
-        const floors = walls ? schematicRoomFloors(floorsByLevel.get(level.id) ?? [], stairs?.openings) : null;
-        if (floors) {
-          floors.children.forEach(floor => { floor.userData.levelId = level.id; });
-          scope.add(floors);
-        }
+        if (walls) addSchematicPlanGeometry(scope, level, floorsByLevel.get(level.id) ?? [], stairRise(model, level), cutaway ? CUTAWAY_HEIGHT : undefined);
 
         if (showOutline3D) for (const outline of levelFootprints(level)) {
           const geometry = schematicGeometry({ ...level, outline });
@@ -626,7 +604,7 @@ function WallLayersCard({ level, index, layer, schedule, sheet, reading, onLayer
 
 }
 
-export function SchematicModelStudio({ project, navigate, notify }: { project: Project } & Pick<ViewProps, "navigate" | "notify">) {
+export function SchematicModelStudio({ project, navigate, notify, site }: { project: Project; site: SiteLocationDraft } & Pick<ViewProps, "navigate" | "notify">) {
   const { model, run } = useSchematicModel(), { documents, ready } = useProjectDocuments();
   const [pending, setPending] = useState<SchematicModel | null>(null), [busy, setBusy] = useState(false), [progress, setProgress] = useState(""), [error, setError] = useState(""), [graphicsError, setGraphicsError] = useState("");
   const [selected, setSelected] = useState(""), [shown, setShown] = useState<string[] | null>(null), [explode, setExplode] = useState(false), [pins, setPins] = useState(false), [walls, setWalls] = useState(true), [showOutlineEditor, setShowOutlineEditor] = useState(false), [source, setSource] = useState<{ documentId: string; sheet: string; page: number; label: string; quote?: string } | null>(null);
@@ -648,6 +626,12 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
     current?.levels.find(l => visible.includes(l.id)) ?? current?.levels[0];
   const spacesByLevel = useMemo(() => new Map(current?.levels.map(item => [item.id, levelSpaces(item)])), [current]);
   const floorsByLevel = useMemo(() => new Map(current?.levels.map(item => [item.id, floorSurfaces(item, spacesByLevel.get(item.id) ?? [])])), [current, spacesByLevel]);
+  const buildSiteModel = useMemo(() => current?.levels.length ? async () => {
+    const { schematicSiteGlb } = await import("./schematic-site-model");
+    return schematicSiteGlb(current, floorsByLevel);
+  } : undefined, [current, floorsByLevel]);
+  const sitePanel = useRef<HTMLDivElement>(null);
+  const [siteRender, setSiteRender] = useState(false);
   const spaces = (level && spacesByLevel.get(level.id)) ?? [];
   const detached = level ? detachedTraceCount(level) : 0;
   const hasPlanDetails = current?.levels.some(item => visible.includes(item.id) && (
@@ -751,7 +735,16 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
     {(busy || progress) && <p role="status">{progress}</p>}{error && <p role="alert">{error}</p>}
     {pending && <div className="sm-review"><Badge tone="amber">AI preview · Not saved</Badge><Button disabled={busy} variant="primary" onClick={() => { if (pending.levels.some(l => levelFootprints(l).some(outline => !footprintValid(outline)) || !Number.isFinite(l.height) || l.height < 6 || l.height > 60)) { setError("Correct crossing or collapsed outlines and heights outside 6 to 60 ft before saving."); return; } const message = run(() => pending); if (message) setError(message); else { setPending(null); setProgress(""); notify("Schematic saved. Check its source sheets and correct the outline or heights as needed."); } }}>Use this schematic model</Button><Button onClick={() => { setPending(null); setProgress(""); }}>Discard preview</Button></div>}
     {!current ? <Panel><Empty title={documents.length ? "Ready to read your floor plans" : "Upload floor plans and building sections"} description="Architectural floor-plan titles identify levels. A section or elevation sheet provides floor heights. Missing scales or heights are labelled as assumptions." action={<Button onClick={() => navigate("documents")}>Open project files</Button>}/></Panel> : <>
-      <div className="sm-workspace">
+      <div className="ms-source-switch">
+        <div role="group" aria-label="Schematic model view">
+          <button type="button" aria-pressed={!siteRender} className={!siteRender ? "active" : ""} onClick={() => setSiteRender(false)}>Drawing model</button>
+          <button type="button" aria-pressed={siteRender} className={siteRender ? "active" : ""} onClick={() => setSiteRender(true)}>Site render</button>
+        </div>
+      </div>
+      {siteRender && buildSiteModel ? <SchematicSiteRender site={site[0]} projectAddress={project.location} buildModel={buildSiteModel} onSiteAddress={() => {
+        sitePanel.current?.scrollIntoView({ block: "start" });
+        sitePanel.current?.focus({ preventScroll: true });
+      }}/> : <div className="sm-workspace">
         <div className="sm-viewer" ref={viewer}>
           <div className="sm-toolbar">
             <span className="sm-view-caption">{visible.length === 1 ? current.levels.find(item => item.id === visible[0])?.name : "Drawing model"}</span>
@@ -831,10 +824,11 @@ export function SchematicModelStudio({ project, navigate, notify }: { project: P
         {!!level.glazing?.filter(g => !g.excluded).length && <p>Glass: {glazingTotals(level.glazing.filter(g => !g.excluded)).map(t => `${t.type} ${t.feet.toLocaleString()} ft`).join(" · ")}</p>}
         <p>Types come from the partition tags on the plan{current.partitionSheet ? `; what each one is, from the partition schedule on ${current.partitionSheet}` : ""}. Typical partitions are often not tagged; set them below once you have checked the general notes.</p>
         <form onSubmit={e => { e.preventDefault(); change(m => setUntaggedWallType(m, level.id, untaggedType)); }}><label className="ui-field">Set untagged walls to<input disabled={busy} maxLength={16} value={untaggedType} onChange={e => setUntaggedType(e.target.value)} placeholder="e.g. SA3.10"/></label><Button disabled={busy} type="submit">{untaggedType.trim() ? "Apply to untagged walls" : "Clear the type I set"}</Button></form>
-      </details>}<StairsDetails level={level} rise={stairRise(current, level)} onExclude={busy ? undefined : (index, excluded) => change(m => editStair(m, level.id, index, excluded))}/><RoomsDetails level={level} spaces={spaces} onOpen={busy || level.order === Math.min(...current.levels.map(l => l.order)) ? undefined : (space, open) => change(m => setOpenToBelow(m, level.id, space, open))}/></Panel>}</aside></div>
+      </details>}<StairsDetails level={level} rise={stairRise(current, level)} onExclude={busy ? undefined : (index, excluded) => change(m => editStair(m, level.id, index, excluded))}/><RoomsDetails level={level} spaces={spaces} onOpen={busy || level.order === Math.min(...current.levels.map(l => l.order)) ? undefined : (space, open) => change(m => setOpenToBelow(m, level.id, space, open))}/></Panel>}</aside></div>}
       {current.warnings.length > 0 && <Panel title="Sizing and reading warnings"><ul>{current.warnings.map((warning, i) => <li key={i}>{warning}</li>)}</ul></Panel>}
       {showOutlineEditor && level && <div ref={outlinePanel} className="sm-outline-panel"><Panel title={`${level.name} outline correction`} subtitle="Uses the original stored plan. Printed scale or your explicit alignment fixes the image-to-feet conversion.">{level.planAreas && level.planAreas.length > 1 && <label className="ui-field">Area plan<select value={areaIndex} onChange={event => { setPlanChoice({ levelId: level.id, area: Number(event.target.value) }); setPlanFocus(null); }}>{level.planAreas.map((area, index) => <option key={area.source.sheet} value={index}>{area.source.sheet}</option>)}</select></label>}{doc ? <OutlineSheet key={`${current.builtAt}:${level.id}:${areaIndex}`} areaIndex={areaIndex} focus={planFocus?.levelId === level.id ? planFocus : null} onPickWall={index => inspect({ kind: "wall", levelId: level.id, index })} level={level} spaces={spaces} doc={doc} frameKey={[current.builtAt, level.id, ...(level.planAreas?.length ? [areaIndex] : [])].join(":")} frames={frames} saveFrame={(key, frame) => setFrames(values => ({ ...values, [key]: frame }))} editable={!busy} types={[...new Set([...current.levels.flatMap(l => (l.walls ?? []).map(w => w.type).filter((t): t is string => !!t)), ...(current.partitionTypes ?? []).map(t => t.tag)])].sort()} onEditWall={(index, edit) => change(m => editWall(m, level.id, index, edit))} onEditDoor={(index, number) => change(m => editDoorNumber(m, level.id, index, number))} onEditGlazing={(index, edit) => change(m => editGlazing(m, level.id, index, edit))} onEditPartition={(index, excluded) => change(m => editPartition(m, level.id, index, excluded))} onEditColumn={(index, excluded) => change(m => editColumn(m, level.id, index, excluded))} onMove={(index, point) => change(m => { const original = m.levels.find(l => l.id === level.id)!; const outline = original.planAreas?.[areaIndex]?.outline ?? original.outline; const moved = moveOutlinePoint(m, level.id, index, point, areaIndex); return index === 0 && openOutline(outline).length !== outline.length ? moveOutlinePoint(moved, level.id, outline.length - 1, point, areaIndex) : moved; })}/> : <p role="alert">The original source document is unavailable. Restore it in Project files to correct this outline.</p>}</Panel></div>}
     </>}
+    <div ref={sitePanel} className="sm-site-panel" tabIndex={-1}><SiteContext project={project} draft={site}/></div>
     {source && <Modal wide title={`${source.sheet} source drawing`} subtitle={`${source.label} · PDF page ${source.page}`} onClose={() => setSource(null)}>{sourceDoc ? <StoredDocumentViewer doc={sourceDoc} page={source.page} onPageChange={() => {}} range={{ first: source.page, last: source.page }} highlight={source.quote}/> : <p role="alert">This source document is unavailable. Open Project files to restore it.</p>}</Modal>}
   </div>;
 }

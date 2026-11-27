@@ -9,6 +9,36 @@ import { layerColor, layerGap, layerSlabs, openedCenter, type WallLayer } from "
 
 export { footprintValid, openOutline } from "../../lib/schematic-model";
 
+/** The drawing objects shared by the inspector and the site preview. */
+export function addSchematicPlanGeometry(scope: THREE.Group, level: SchematicLevel, floors: FloorSurface[], stairHeight: number | null, viewLimit?: number) {
+  const display = viewLimit === undefined ? level : { ...level, height: Math.min(level.height, viewLimit) };
+  const walls = schematicWalls(display);
+  if (walls) { walls.userData.levelId = level.id; scope.add(walls); }
+  for (const object of [
+    schematicDoors(display, Math.min(display.height, DEFAULT_DOOR_HEIGHT)),
+    schematicGlazing(level, viewLimit), ...schematicGlazingParts(level, viewLimit),
+    schematicPartitions(display), schematicRailings(display), schematicColumns(display),
+  ]) if (object) scope.add(object);
+  const stairs = schematicStairs(level, stairHeight);
+  if (stairs) scope.add(stairs.mesh);
+  const floorGroup = schematicRoomFloors(floors, stairs?.openings);
+  if (floorGroup) {
+    floorGroup.children.forEach(floor => { floor.userData.levelId = level.id; });
+    scope.add(floorGroup);
+  }
+}
+
+export function disposeSchematicGroup(group: THREE.Group) {
+  group.traverse(object => {
+    if (object instanceof THREE.InstancedMesh) object.dispose();
+    const drawable = object as THREE.Mesh;
+    drawable.geometry?.dispose();
+    const materials = drawable.material ? Array.isArray(drawable.material) ? drawable.material : [drawable.material] : [];
+    materials.forEach(material => { (material as THREE.MeshBasicMaterial).map?.dispose(); material.dispose(); });
+  });
+  group.clear();
+}
+
 export type SheetFrame = { width: number; height: number };
 export function printedSheetFrame(sizing: string, widthIn: number, heightIn: number): SheetFrame | null {
   const scale = Number(sizing.match(/^Printed scale, ([\d.]+) ft per inch$/)?.[1]);

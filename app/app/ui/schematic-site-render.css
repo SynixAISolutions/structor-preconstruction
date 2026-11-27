@@ -1,0 +1,16 @@
+.sm-site-panel { scroll-margin-top: 84px; }
+.sm-site-render .site-map { height: clamp(340px, 60vh, 640px); }
+.sm-site-status, .sm-site-empty { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.sm-site-status { justify-content: space-between; margin-bottom: 12px; }
+.sm-site-status p { flex: 1 1 260px; }
+.sm-site-loading, .sm-site-render .site-error { margin-top: 10px; }
+.sm-site-placement { margin-top: 14px; }
+.sm-site-placement summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+.sm-site-placement form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  align-items: end;
+  gap: 12px;
+  margin-top: 12px;
+}
+.sm-site-placement button { justify-self: start; }

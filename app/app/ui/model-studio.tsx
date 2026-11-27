@@ -14,7 +14,7 @@ import type { Screen } from "../../lib/screens";
 import { useModelReview } from "../../lib/use-model-review";
 import { usePreparedModel } from "../../lib/use-prepared-model";
 import { Modal } from "./shared";
-import { SiteContext } from "./site-context";
+import { SiteContext, useSiteLocation, type SiteLocationDraft } from "./site-context";
 import { WalkthroughControls, type WalkDirection } from "./walkthrough-controls";
 import { doorLeafGeometry } from "./door-geometry";
 import { DoorRecordCard, DoorSchedulePanel } from "./door-panels";
@@ -287,10 +287,9 @@ function RoomFinishPanel({ objects, bases, records, onSource, onInspect, onInspe
 
 export default function ModelStudio(props: StudioProps) {
   const sample = props.projectId === SAMPLE_PROJECT_ID;
-  const studio = sample ? <SampleProjectStudio {...props}/> : <SchematicModelStudio key={props.projectId} project={props.project} navigate={props.navigate} notify={props.notify}/>;
-  // Marcel's Features item 19: the building with its site's real surroundings (Google's photorealistic 3D map), under
-  // Project 1's exterior model and under a real project's model, which is its only model page (lib/screens.ts).
-  return props.view === "exterior" || !sample ? <>{studio}<SiteContext key={`site-${props.projectId}`} project={props.project} sample={sample}/></> : studio;
+  const site = useSiteLocation(props.project, sample);
+  return sample ? <SampleProjectStudio {...props} site={site}/> :
+    <SchematicModelStudio key={props.projectId} project={props.project} navigate={props.navigate} notify={props.notify} site={site}/>;
 }
 
 /** Remembers which model this browser last looked at on Project 1. Storage can be unavailable; the prepared model is then shown. */
@@ -301,7 +300,7 @@ type ModelSourceChoice = "prepared" | "drawings";
  * Project 1 has a prepared model, and its drawings too, so the two can be compared: the prepared model, or the one the app
  * builds from those drawings (lib/schematic-model). Other projects only ever have the second.
  */
-function SampleProjectStudio(props: StudioProps) {
+function SampleProjectStudio(props: StudioProps & { site: SiteLocationDraft }) {
   const [source, setSource] = useState<ModelSourceChoice>("prepared");
   useEffect(() => { try { if (localStorage.getItem(MODEL_SOURCE_KEY) === "drawings") setSource("drawings"); } catch { /* Stays on the prepared model. */ } }, []);
   // A quantity or a takeoff line opening a modelled object asks for the prepared model, the only one with those objects.
@@ -316,7 +315,8 @@ function SampleProjectStudio(props: StudioProps) {
       <div role="group" aria-label="Which model to show">{option("prepared", "Prepared model")}{option("drawings", "From the drawings")}</div>
       <p>{source === "prepared" ? "The prepared model of this project, with its finishes, schedules and quantities." : "Built by the app from this project's floor plans. Building or rebuilding it uses AI credits."}</p>
     </div>
-    {source === "prepared" ? <PreparedModelStudio {...props}/> : <SchematicModelStudio key={props.projectId} project={props.project} navigate={props.navigate} notify={props.notify}/>}
+    {source === "prepared" ? <><PreparedModelStudio {...props}/>{props.view === "exterior" && <SiteContext project={props.project} draft={props.site}/>}</> :
+      <SchematicModelStudio key={props.projectId} project={props.project} navigate={props.navigate} notify={props.notify} site={props.site}/>}
   </>;
 }
 
