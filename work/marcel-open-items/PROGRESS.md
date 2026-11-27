@@ -15,6 +15,7 @@ Rules (memory): test on Project 1's real data, put related work in one PR, ask o
 - [x] Standard scope reads every page of the memory (500 a page) until a short page, not just the first 500 entries (bid-sheet imports share `origin: import`).
 - [x] Browser checks on the local dev server (port 3012, no database env, so a local store, not live): #5 dialog ranking and chips; directory project types; #17 tab (empty locally, as the local memory is empty); #28 a simulated Textura CSV (title row, two SOV lines for one sub, an unknown sub, a total row) → preview "2 contracts matched, 1 row not matched", Capitol 39.8% from dollars, District 25%; Apply → open value $1,306,500 and $609,465, toast shown; #19 panel under the exterior model with the setup card, no overlap.
 - Gate: `pnpm check`, `tsc --noEmit`, `pnpm build` all green on 26 Nov (rebased onto main @ 8d3cbac first).
+- 27 Nov: main had moved (bb9715d, PR #170 takeoff by trade), so PR #169 conflicted. Merged origin/main into the branch (cb85cdc): only `app/package.json`'s check list conflicted (kept main's `check-takeoff-by-trade.mjs` and this branch's three checks). Gate green again.
 - Tip: don't run `pnpm build` while this worktree's dev server runs; it broke the dev server's compiled page (500, "Cannot use import statement outside a module"). Restarting the dev server fixed it.
 
 ## Next
