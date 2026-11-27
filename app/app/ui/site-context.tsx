@@ -54,7 +54,8 @@ export function SiteContext({ project, sample }: { project: Project; sample: boo
       .then(lib => {
         if (!live) return;
         const Map3D = lib.Map3DElement as new (options: Record<string, unknown>) => HTMLElement;
-        const map = new Map3D({ center: { lat: site.lat, lng: site.lng, altitude: 0 }, range: 520, tilt: 62, heading: 25 });
+        // "HYBRID" is the photorealistic imagery with labels; Google's default ("ROADMAP") is a flat-coloured 3D map.
+        const map = new Map3D({ center: { lat: site.lat, lng: site.lng, altitude: 0 }, range: 520, tilt: 62, heading: 25, mode: "HYBRID" });
         map.className = "site-map-3d";
         box.replaceChildren(map);
       })
@@ -83,7 +84,7 @@ export function SiteContext({ project, sample }: { project: Project; sample: boo
 
   return <Panel title="Site and surroundings" subtitle="The building's real neighbourhood in Google's photorealistic 3D map: drag to orbit, scroll to zoom."><div className="site-body">
     <form className="site-form" onSubmit={locate}>
-      <label className="site-field"><MapPin size={15}/><span className="mu-sr">Site address</span><input value={address} onChange={e => setAddress(e.target.value)} placeholder="Site street address, e.g. 3265 S St NW, Washington, DC"/></label>
+      <label className="site-field"><MapPin size={15}/><span className="mu-sr">Site address</span><input value={address} onChange={e => setAddress(e.target.value)} placeholder="Site street address, e.g. 123 Main St NW, Washington, DC"/></label>
       <Button type="submit" disabled={busy}>{busy ? "Finding…" : "Show site"}</Button>
     </form>
     {error && <p className="site-error" role="alert">{error}</p>}
