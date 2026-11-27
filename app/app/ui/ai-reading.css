@@ -11,6 +11,7 @@
 .ai-section-list span { min-width:0; overflow-wrap:anywhere; }
 .ai-section-list small { display:block; color:#7e8e9b; }
 .ai-reader .ai-privacy { font-size:11px; color:#738693; }
+.ai-reader .ai-drawings-toggle { display:block; margin:6px 0; }
 .ai-run-result { margin-top:14px; padding:12px; background:#f4f7f9; border-radius:7px; overflow-wrap:anywhere; }
 .ai-run-result summary { cursor:pointer; }
 .ai-run-result ul { padding-left:18px; }

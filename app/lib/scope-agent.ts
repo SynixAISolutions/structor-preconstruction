@@ -120,7 +120,6 @@ export const SCOPE_AGENT_TOOLS: AgentTool[] = [
   { name: "finish", description: "Call when every section and sheet for this trade is read and the contractor's usual lines are checked. Structor then checks your lines and may send back items to look at; deal with them and call finish again.",
     input_schema: { type: "object", properties: { summary: text("What you read and wrote, in one or two sentences.") }, required: ["summary"], additionalProperties: false } },
 ];
-const TOOL_NAMES = new Set<string>(SCOPE_AGENT_TOOLS.map(t => t.name));
 
 /** The instructions, the same for every trade and project so they stay cached; the trade comes in the brief. */
 export function agentSystemPrompt(): string {
@@ -158,7 +157,9 @@ function assistantBlock(raw: unknown): AgentBlock {
   if (b.type === "redacted_thinking") return { type: "redacted_thinking", data: typeof b.data === "string" ? b.data : fail("A redacted thinking block has no data.") };
   if (b.type === "tool_use") {
     if (typeof b.id !== "string" || !b.id || b.id.length > 200) fail("A tool call has no id.");
-    if (typeof b.name !== "string" || !TOOL_NAMES.has(b.name)) fail("A tool call names a tool this reading doesn't have.");
+    // Any name Claude wrote: it may call a tool that doesn't exist (2626 Drywall, 27 Nov: "read_sheets_placeholder").
+    // The browser answers that call with an error, and the reply has to go back as Claude sent it.
+    if (typeof b.name !== "string" || !b.name || b.name.length > 200) fail("A tool call has no name.");
     if (!b.input || typeof b.input !== "object" || Array.isArray(b.input)) fail("A tool call's input isn't an object.");
     return { type: "tool_use", id: b.id as string, name: b.name as string, input: b.input };
   }
@@ -477,9 +478,10 @@ export async function runToolReading(args: ToolReadingArgs, io: AgentIo): Promis
 
   /** One tool call answered. A tool that fails answers with the error, so the AI can go on. */
   async function answer(call: Extract<AgentBlock, { type: "tool_use" }>): Promise<ResultBlock> {
-    const tool = tools[call.name as AgentToolName];
+    // Only this reading's own tools: a made-up name ("read_sheets_placeholder", or "toString") gets the list back.
+    const tool = Object.hasOwn(tools, call.name) ? tools[call.name as AgentToolName] : null;
     const input = call.input && typeof call.input === "object" && !Array.isArray(call.input) ? call.input as Record<string, unknown> : {};
-    if (!tool) return { type: "tool_result", tool_use_id: call.id, content: `There is no tool ${call.name}.`, is_error: true };
+    if (!tool) return { type: "tool_result", tool_use_id: call.id, content: `There is no tool ${call.name.slice(0, 80)}. The tools are ${SCOPE_AGENT_TOOLS.map(t => t.name).join(", ")}.`, is_error: true };
     try { return { type: "tool_result", tool_use_id: call.id, content: await tool(input) }; }
     catch (error) { return { type: "tool_result", tool_use_id: call.id, content: `That failed: ${error instanceof Error ? error.message : String(error)}`, is_error: true }; }
   }

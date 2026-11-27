@@ -147,13 +147,28 @@ for (const [bad, why] of [
   [{}, "no conversation"],
   [{ messages: [ok.messages[1], ok.messages[2]] }, "starting with Claude's turn"],
   [{ messages: ok.messages.slice(0, 2) }, "ending with Claude's turn"],
-  [{ messages: [ok.messages[0], { role: "assistant", content: [use("t1", "delete_project", {})] }, ok.messages[2]] }, "a tool the reading doesn't have"],
   [{ messages: [ok.messages[0], ok.messages[1], { role: "user", content: [{ type: "text", text: "no result" }] }] }, "an unanswered tool call"],
   [{ messages: [ok.messages[0], { role: "assistant", content: [{ type: "thinking", thinking: "" }] }, ok.messages[2]] }, "a thinking block without its signature"],
   [{ messages: [{ role: "user", content: [{ type: "image", source: {} }] }] }, "a block the reading doesn't use"],
   [{ messages: [{ role: "user", content: Array.from({ length: 4 }, () => ({ type: "text", text: "x".repeat(200_000) })) }] }, "more text than a reading ever sends"],
 ]) assert.throws(() => A.parseAgentJob(bad), J.AiJobError, `Refused: ${why}`);
 assert.deepEqual(A.parseAgentJob({ messages: [ok.messages[0], { role: "assistant", content: [{ type: "text", text: "" }, ...ok.messages[1].content] }, ok.messages[2]] }).messages[1].content, ok.messages[1].content, "An empty text block is left out of what goes to Claude");
+const madeUp = { messages: [ok.messages[0], { role: "assistant", content: [use("t1", "read_sheets_placeholder", {})] }, ok.messages[2]] };
+assert.deepEqual(A.parseAgentJob(madeUp).messages, madeUp.messages, "A call to a tool that doesn't exist goes back as Claude wrote it (2626 Drywall, 27 Nov)");
+
+// ── A made-up tool is answered with the real ones, and the reading goes on ──
+const madeUpRequests = [];
+await A.runToolReading(base({ sections: [], usualLines: [] }), scripted([
+  reply([use("m1", "read_sheets_placeholder", {}), use("m2", "toString", {}), use("m3", "list_sections", { filter: "09 51" })]),
+  reply([use("m4", "finish", { summary: "Nothing to add." })]),
+  reply([use("m5", "finish", { summary: "Nothing to add." })]),
+], madeUpRequests));
+const answers = madeUpRequests[1].messages.at(-1).content;
+assert.deepEqual(answers.map(b => [b.tool_use_id, !!b.is_error]), [["m1", true], ["m2", true], ["m3", false]], "Each call is answered; the made-up ones as errors");
+assert.match(answers[0].content, /^There is no tool read_sheets_placeholder\. The tools are list_sheets, list_sections, search,/);
+assert.match(answers[1].content, /^There is no tool toString\./, "A name that is a built-in of every object isn't run");
+assert.match(answers[2].content, /09 51 00 Acoustical Ceilings · D2 p3–4/);
+assert.doesNotThrow(() => A.parseAgentJob(madeUpRequests[1]), "and the next request passes the server's check");
 
 // ── One turn through the SDK, against a fake API ──
 const sse = events => events.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join("");
