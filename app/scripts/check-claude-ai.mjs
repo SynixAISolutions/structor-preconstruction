@@ -190,7 +190,7 @@ assert.equal(K.costOf("claude-opus-5-5", { input: 1_000_000, output: 100_000 }),
 assert.equal(K.costOf("claude-sonnet-5-5", { input: 1_000_000, output: 100_000 }), 3);
 assert.equal(K.costOf("deepseek-flash", { input: 1, output: 1 }), null, "DeepSeek's cost isn't tracked");
 assert.ok(Math.abs(K.costOf("claude-opus-5-5", { input: 0, output: 0, cacheWrite: 1_000_000, cacheRead: 1_000_000 }) - 5.2) < 1e-9, "Opus: cache writes at 1.25x, reads at 0.05x");
-assert.ok(Math.abs(K.costOf("claude-haiku-5-5", { input: 0, output: 0, cacheWrite: 1_000_000, cacheRead: 1_000_000 }) - 0.135) < 1e-9, "Haiku: cache writes at 1.25x, reads at 0.1x");
+assert.ok(Math.abs(K.costOf("claude-haiku-5-5", { input: 0, output: 0, cacheWrite: 40_000, cacheRead: 50_000 }) - 0.0055) < 1e-12, "Haiku: cache writes at 1.25x, reads at 0.1x (a prompt of 100K tokens or fewer; past that the long-prompt rate, scripts/check-scope-agent)");
 const est = K.estimateCost("claude-opus-5-5", { requests: 40, chars: 1_400_000 });
 assert.ok(est > 3 && est < 4, `205 drawing sheets' text in 40 requests is a few dollars (${est})`);
 assert.equal(K.estimateCost("claude-opus-5-5", { requests: 0, chars: 0 }), 0);

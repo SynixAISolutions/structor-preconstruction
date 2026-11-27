@@ -12,11 +12,13 @@ import { bidPackagesJob } from "../../../lib/bid-package-ai";
 import { sheetReferencesJob } from "../../../lib/sheet-reference-ai";
 import { OpenAiError } from "../../../lib/openai";
 import { CLAUDE_PRICES } from "../../../lib/ai-cost";
+import { scopeAgentJob } from "../../../lib/scope-agent-server";
 
 // Structor's AI: one fixed job per request (scope from specification pages, or a proposal reading),
-// never free-form prompts. Ask Structor ("assistant-agent") is the one conversation: a question, then
-// rounds of project tools the browser runs (reads, and changes it only proposes for the user to
-// apply). The demo password (proxy.ts) guards this route like every page. Claude (lib/claude) thinks before it
+// never free-form prompts. Two jobs are conversations: Ask Structor ("assistant-agent"), a question then
+// rounds of project tools the browser runs (reads, and changes it only proposes for the user to apply), and
+// a reading with tools ("scope-agent", lib/scope-agent), whose tools read the project's documents and
+// write a trade's bid-form lines for review; the server sets the instructions and tools of both. The demo password (proxy.ts) guards this route like every page. Claude (lib/claude) thinks before it
 // answers, so a job may take a few minutes.
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -58,6 +60,8 @@ export async function POST(request: Request) {
       if (!key) return json({ error: "Ask Structor still runs on DeepSeek: DEEPSEEK_API_KEY is missing on this server." }, 503);
       return json(await assistantStep(body.input, key, request.signal));
     }
+    // A reading with tools (lib/scope-agent): one turn of its conversation per request.
+    if (body.job === "scope-agent") return await scopeAgentJob(body.input, request.signal, env);
     if (body.job === "bid-packages") return await bidPackagesJob(body.input, key, request.signal, env);
     if (body.job === "sheet-references") return await sheetReferencesJob(body.input, key, request.signal, env);
     if (body.job === "contract-scope") return await contractScopeJob(body.input, key, request.signal);

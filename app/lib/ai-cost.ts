@@ -8,17 +8,20 @@
  * model really cost on Project 1 (28 Oct): Haiku's newer tokenizer counts about 30% more tokens and it writes longer
  * answers, so it cost about a twentieth of Opus on the same readings, not the fortieth its prices suggest.
  */
-export const CLAUDE_PRICES: Record<string, { input: number; output: number; cacheRead: number; measured?: number }> = {
+export const CLAUDE_PRICES: Record<string, { input: number; output: number; cacheRead: number; measured?: number; longPrompt?: { over: number; input: number; output: number } }> = {
   "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.05 },
   "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.05 },
-  "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheRead: 0.1, measured: 2 },
+  // A Haiku 5.5 prompt over 100K tokens (cache reads and writes included) is billed at five times the rate.
+  "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheRead: 0.1, measured: 2, longPrompt: { over: 100_000, input: 0.5, output: 2.5 } },
 };
 export type TokenUsage = { input: number; output: number; cacheWrite?: number; cacheRead?: number };
 
 /** A request's cost in dollars from its usage, or null for a model without a listed price. */
 export function costOf(model: string, usage: TokenUsage | undefined): number | null {
-  const price = CLAUDE_PRICES[model];
-  if (!price || !usage) return null;
+  const listed = CLAUDE_PRICES[model];
+  if (!listed || !usage) return null;
+  const prompt = usage.input + (usage.cacheWrite ?? 0) + (usage.cacheRead ?? 0);
+  const price = listed.longPrompt && prompt > listed.longPrompt.over ? { ...listed, ...listed.longPrompt } : listed;
   return (usage.input * price.input + (usage.cacheWrite ?? 0) * price.input * 1.25 + (usage.cacheRead ?? 0) * price.input * price.cacheRead + usage.output * price.output) / 1e6;
 }
 

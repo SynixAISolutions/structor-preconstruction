@@ -20,6 +20,8 @@ import { useLocalDraft } from "../../lib/use-local-draft";
 import { memoryForScan, useScanMemory } from "../../lib/memory-client";
 import { tradeLines } from "../../lib/memory-check";
 import { readTradeScope } from "../../lib/scope-reading";
+import { AGENT_LIMITS } from "../../lib/scope-agent";
+import { readTradeWithTools } from "../../lib/scope-agent-client";
 import { getActiveProjectId, useActiveProject } from "../../lib/project-scope";
 import type { useExtraction } from "../../lib/use-extraction";
 import { Button, Modal } from "./shared";
@@ -74,6 +76,10 @@ export function AiScopeWriter({ review, notify, onOpenFiles, onReview }: { revie
     notify(`Bid packages set by the AI: ${added} new, ${plan.packages.length - added} updated with their sections and sheets.`);
   }
   const [withDrawings, setWithDrawings] = useState(true);
+  // Reading with tools (lib/scope-agent; Danial, 27 Nov): the AI looks up what each trade needs instead of reading set
+  // pages, and checks its own lines. Claude only, and a test for now: off unless the estimator ticks it.
+  const [withTools, setWithTools] = useState(false);
+  const toolsOn = withTools && reader?.reader === "claude";
   // A trade's approved exclusions can hand its drawing sheets to the trade that carries the work (site demolition to Earthwork).
   const sheetSplit = useMemo(() => sheetsByTrade(register, packages, p => leftOut(remembered, p, activeProject ?? "")), [register, packages, remembered, activeProject]);
   const sheetsFor = (id: string) => withDrawings ? sheetSplit.sheets.get(id) ?? [] : [];
@@ -122,12 +128,17 @@ export function AiScopeWriter({ review, notify, onOpenFiles, onReview }: { revie
   async function readTrade(id: string, signal: AbortSignal, memory: MemoryEntry[], projectId: string, tags: { borrowed: Set<string>; printed?: Set<string> }) {
     const pkg = packages.find(p => p.id === id)!;
     update(id, { status: "reading" });
-    const outcome = await readTradeScope({
-      pkg, sections: assigned.get(id) ?? [], sheets: sheetsFor(id), notes: notesFor(id), partOnly: split.partial.get(id) ?? [], signal, memory: tradeMemory(memory, pkg, projectId, assigned.get(id) ?? [], readers, split.partial.get(id), withDrawings ? sheetSplit.handed.get(id) : []),
-      owners, leavesOut: leftOut(memory, pkg, projectId), ...tags, memoryLines: tradeLines(memory, pkg, projectId),
-      onProgress: p => update(id, { status: "reading", done: p.done, total: p.total, note: p.note }),
-      addFlipPages: pages => { const errors = latest.current.runFlip(current => pages.reduce((state, page) => state.pages.some(x => x.sheet === page.sheet) ? state : addPage(state, page), current)); return errors ? Object.values(errors)[0] ?? "A sheet could not be added to Drawing Flip." : null; },
-    });
+    const sections = assigned.get(id) ?? [];
+    const tradeText = tradeMemory(memory, pkg, projectId, sections, readers, split.partial.get(id), withDrawings ? sheetSplit.handed.get(id) : []);
+    const onProgress = (p: { done: number; total: number; note: string }) => update(id, { status: "reading", done: p.done, total: p.total, note: p.note });
+    const outcome = toolsOn
+      // The AI finds and reads what the trade needs itself, one request a turn, and checks its lines (lib/scope-agent).
+      ? await readTradeWithTools({ pkg, projectId, documents, sections, partOnly: split.partial.get(id) ?? [], readers, sheets: sheetsFor(id), register, specs, memory: tradeText, usualLines: tradeLines(memory, pkg, projectId), leavesOut: leftOut(memory, pkg, projectId), signal, onProgress })
+      : await readTradeScope({
+        pkg, sections, sheets: sheetsFor(id), notes: notesFor(id), partOnly: split.partial.get(id) ?? [], signal, memory: tradeText,
+        owners, leavesOut: leftOut(memory, pkg, projectId), ...tags, memoryLines: tradeLines(memory, pkg, projectId), onProgress,
+        addFlipPages: pages => { const errors = latest.current.runFlip(current => pages.reduce((state, page) => state.pages.some(x => x.sheet === page.sheet) ? state : addPage(state, page), current)); return errors ? Object.values(errors)[0] ?? "A sheet could not be added to Drawing Flip." : null; },
+      });
     const message = record(outcome);
     if (message) throw new Error(message);
     const held = outcome.input.drafts.filter(d => d.kind === "scope" && notOnSheet(d)).length;
@@ -170,12 +181,16 @@ export function AiScopeWriter({ review, notify, onOpenFiles, onReview }: { revie
   // Claude costs money per page: the estimate shows before the reading starts (Danial, 28 Oct). A manual page holds
   // about 3,500 characters; a sheet sends its image and its text; notes go as text, a few dozen sheets per request.
   const estimate = reader?.reader === "claude" ? estimateCost(reader.model, { requests: Math.ceil(totalPages / 5) + totalSheets + Math.ceil(chosenNotes.length / 25), chars: totalPages * 3_500 + totalSheets * 4_000 + noteChars * 2, images: totalSheets }) : null;
+  // With tools the AI decides how much to read, so the cost shown is each trade's limit: the most it can spend.
+  const cost = toolsOn ? chosen.length * AGENT_LIMITS.costCap : estimate;
+  const about = toolsOn ? "up to" : "about";
   return <>
     <Button onClick={() => setOpen(true)}><Sparkles size={15}/>Write scopes with AI</Button>
     {open && <Modal title="Write scopes with AI" subtitle="The AI reads the project manual and the drawing sheets in Project files and proposes bid-form lines for each trade. You accept, reject, move or delete every line." wide onClose={() => { if (!busy) setOpen(false); }}>
       {!ready ? <p role="status">Looking for the project manual and drawings in Project files…</p> : !volumes.length && !register.length ? <div className="ai-reader"><p>No project manual is stored for this project yet.</p><Button variant="primary" onClick={() => { setOpen(false); onOpenFiles(); }}>Upload it in Project files</Button></div> : <div className="ai-reader">
         <p>{volumes.length ? <><strong>{volumes.map(v => v.name).join(", ")}</strong> · {volumes.reduce((n, v) => n + v.pageCount, 0)} pages · {specs.length} specification sections{volumes.length > 1 ? `, read from all ${volumes.length} volumes` : ""}. Division 01 general requirements stay in the General section.</> :"No project manual is stored, so the drawings alone will be read. Scopes from drawings can miss specification requirements: upload the manual when you have it."}</p>
         {register.length > 0 && <label className="ai-drawings-toggle"><input type="checkbox" checked={withDrawings} disabled={busy} onChange={e => setWithDrawings(e.target.checked)}/> Also read the drawings ({register.length} sheets stored): each trade's plans and schedules as images, up to six, {notesCurrent ? "and its notes on every other sheet, from the read of every sheet" : "and, once every sheet is read, its notes on every other sheet"}. Highlights go to Drawing Flip.</label>}
+        {reader?.reader === "claude" && <label className="ai-drawings-toggle"><input type="checkbox" checked={withTools} disabled={busy} onChange={e => setWithTools(e.target.checked)}/> Read with tools (test): instead of reading set pages, the AI lists the sheets and sections, searches, reads what each trade needs and checks your usual lines for it, one request a turn for as long as it takes. Every line's quote is checked on its page, and Structor checks the lines before the trade finishes. Up to {dollars(AGENT_LIMITS.costCap)} a trade.</label>}
         {register.length > 0 && withDrawings && !notesCurrent && <div className="ai-every-sheet"><p>The sheets haven't been read one by one for these drawings yet, so each trade would see only its six sheets. Reading every sheet first sorts every note on every sheet to its trade (about a dollar for a large set).</p><Button disabled={busy || readingSheets} onClick={() => void readEverySheet()}>{readingSheets ? "Reading every sheet…" : "Read every sheet first"}</Button></div>}
         <div className="ai-section-actions"><Button disabled={busy} onClick={() => setChosen(packages.filter(p => pages(p.id) > 0 || sheetsFor(p.id).length > 0).map(p => p.id))}>Select every trade</Button><Button disabled={busy} onClick={() => setChosen([])}>Clear</Button></div>
         <div className="ai-section-list">{packages.map(pkg => {
@@ -204,10 +219,10 @@ export function AiScopeWriter({ review, notify, onOpenFiles, onReview }: { revie
           {planning.error && <p role="alert">{planning.error}</p>}
         </div>
         {uncovered.length > 0 && <details><summary>{uncovered.length} section{uncovered.length === 1 ? "" : "s"} have no trade package yet</summary><p>{uncovered.map(s => `${s.section} ${s.title}`).join(" · ")}</p></details>}
-        <p className="ai-privacy">Selected section text goes to Structor's AI (Claude when it is set up on the server), about five pages per request ({Math.ceil(totalPages / 5)} requests for {totalPages} pages){totalSheets ? `, and ${totalSheets} drawing sheets, one image each` : ""}. Every proposal keeps its page and the exact words it relied on.{estimate !== null && <> <strong>Estimated cost with {reader!.model}: about {dollars(estimate)}.</strong> Pick fewer trades to spend less.</>}</p>
-        <div className="proc-form-actions">{busy ? <Button onClick={() => controller.current?.abort()}>Stop and keep finished trades</Button> : <Button onClick={() => setOpen(false)}>Close</Button>}{!busy && finished.length > 0 && <Button disabled={!chosen.length || confirming} onClick={() => { if (estimate !== null && estimate > CONFIRM_ABOVE) setConfirming(true); else void start(); }}>{`Read again${estimate !== null ? ` · about ${dollars(estimate)}` : ""}`}</Button>}<Button variant="primary" disabled={busy || !chosen.length || confirming} onClick={() => { if (!busy && finished.length && onReview) { openTrade(finished[0]); return; } if (estimate !== null && estimate > CONFIRM_ABOVE) setConfirming(true); else void start(); }}>{busy ? "Reading…" : finished.length && onReview ? `Review ${proposals} proposal${proposals === 1 ? "" : "s"}` : `Read ${chosen.length} trade${chosen.length === 1 ? "" : "s"}${estimate !== null ? ` · about ${dollars(estimate)}` : ""}`}</Button></div>
+        <p className="ai-privacy">Selected section text goes to Structor's AI (Claude when it is set up on the server), about five pages per request ({Math.ceil(totalPages / 5)} requests for {totalPages} pages){totalSheets ? `, and ${totalSheets} drawing sheets, one image each` : ""}. Every proposal keeps its page and the exact words it relied on.{toolsOn && " With tools, the AI asks for the pages it needs, one request a turn."}{cost !== null && <> <strong>{toolsOn ? `Reading with tools with ${reader!.model}: up to ${dollars(AGENT_LIMITS.costCap)} a trade, up to ${dollars(cost)} in all.` : `Estimated cost with ${reader!.model}: about ${dollars(cost)}.`}</strong> Pick fewer trades to spend less.</>}</p>
+        <div className="proc-form-actions">{busy ? <Button onClick={() => controller.current?.abort()}>Stop and keep finished trades</Button> : <Button onClick={() => setOpen(false)}>Close</Button>}{!busy && finished.length > 0 && <Button disabled={!chosen.length || confirming} onClick={() => { if (cost !== null && cost > CONFIRM_ABOVE) setConfirming(true); else void start(); }}>{`Read again${cost !== null ? ` · ${about} ${dollars(cost)}` : ""}`}</Button>}<Button variant="primary" disabled={busy || !chosen.length || confirming} onClick={() => { if (!busy && finished.length && onReview) { openTrade(finished[0]); return; } if (cost !== null && cost > CONFIRM_ABOVE) setConfirming(true); else void start(); }}>{busy ? "Reading…" : finished.length && onReview ? `Review ${proposals} proposal${proposals === 1 ? "" : "s"}` : `Read ${chosen.length} trade${chosen.length === 1 ? "" : "s"}${cost !== null ? ` · ${about} ${dollars(cost)}` : ""}`}</Button></div>
         {confirming && !busy && <div className="ai-cost-confirm" role="alertdialog" aria-label="Confirm the AI reading">
-          <p><strong>This reading costs about {dollars(estimate ?? 0)} of Claude credits</strong> for {chosen.length} trade{chosen.length === 1 ? "" : "s"}. Read them?</p>
+          <p><strong>This reading costs {about} {dollars(cost ?? 0)} of Claude credits</strong> for {chosen.length} trade{chosen.length === 1 ? "" : "s"}. Read them?</p>
           <div className="proc-form-actions"><Button onClick={() => setConfirming(false)}>Cancel</Button><Button variant="primary" onClick={() => { setConfirming(false); void start(); }}>Yes, read them</Button></div>
         </div>}
       </div>}

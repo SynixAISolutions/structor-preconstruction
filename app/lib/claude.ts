@@ -61,6 +61,50 @@ export function claudeRequest(messages: ChatMessage[]): { system?: Anthropic.Tex
   return { system, messages: turns };
 }
 
+/** A failed request as the error a reading shows: `busy` for the ones worth trying again later. */
+function failure(error: unknown, canceled: boolean, timedOut: boolean): unknown {
+  if (canceled) return new ClaudeError("Reading canceled.");
+  if (timedOut || error instanceof Anthropic.APIConnectionTimeoutError) return new ClaudeError("Claude timed out. Try again later or read fewer pages.", true);
+  if (error instanceof Anthropic.AuthenticationError) return new ClaudeError("Claude refused the API key: check ANTHROPIC_API_KEY on the server.");
+  if (error instanceof Anthropic.RateLimitError) return new ClaudeError("Claude is rate limited right now. Try again in a minute.", true);
+  if (error instanceof Anthropic.APIConnectionError) return new ClaudeError("Claude could not be reached.", true);
+  if (error instanceof Anthropic.APIError) return new ClaudeError(`Claude answered ${error.status ?? "an error"}: ${error.message.slice(0, 200)}`, (error.status ?? 0) >= 500);
+  return error;
+}
+
+/**
+ * One turn of a reading with tools (lib/scope-agent): the conversation so far in, Claude's reply out, its blocks as
+ * Claude sent them (its thinking blocks go back unchanged with the tool results, or the next turn is refused). The
+ * instructions and tools are the same on every turn and carry a cache breakpoint; so does the conversation's newest
+ * block, so each turn reads everything before it from the cache at a tenth of the price. The conversation is only
+ * ever added to, never edited, which keeps both the cache and Claude's thinking blocks valid.
+ */
+export async function claudeToolTurn(key: string, request: { system: string; tools: Anthropic.Tool[]; messages: Anthropic.MessageParam[] }, options: { model: string; maxTokens: number; budgetMs: number; effort?: ClaudeEffort; fetchImpl?: typeof fetch; signal?: AbortSignal }): Promise<{ content: Anthropic.ContentBlock[]; stopReason: Anthropic.StopReason | null; usage: TokenUsage }> {
+  const client = new Anthropic({ apiKey: key, maxRetries: 2, ...(options.fetchImpl ? { fetch: options.fetchImpl } : {}) });
+  const deadline = AbortSignal.timeout(options.budgetMs);
+  const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+  const messages = request.messages.map((m, i): Anthropic.MessageParam => {
+    if (i !== request.messages.length - 1 || typeof m.content === "string" || !m.content.length) return m;
+    const content = [...m.content] as Anthropic.ContentBlockParam[];
+    content[content.length - 1] = { ...content[content.length - 1], cache_control: { type: "ephemeral" } } as Anthropic.ContentBlockParam;
+    return { ...m, content } as Anthropic.MessageParam;
+  });
+  let message: Anthropic.Message;
+  try {
+    message = await client.messages.stream({
+      model: options.model, max_tokens: options.maxTokens + THINKING_ROOM,
+      system: [{ type: "text", text: request.system, cache_control: { type: "ephemeral" } }],
+      tools: request.tools, messages, output_config: { effort: options.effort ?? "medium" },
+    }, { signal, timeout: options.budgetMs }).finalMessage();
+  } catch (error) {
+    throw failure(error, !!options.signal?.aborted, deadline.aborted);
+  }
+  return {
+    content: message.content, stopReason: message.stop_reason,
+    usage: { input: message.usage.input_tokens, output: message.usage.output_tokens, cacheWrite: message.usage.cache_creation_input_tokens ?? 0, cacheRead: message.usage.cache_read_input_tokens ?? 0 },
+  };
+}
+
 /** Claude's JSON answer and the tokens every attempt used (what the reading cost, lib/ai-cost). */
 export async function claudeJson(key: string, messages: ChatMessage[], options: { model: string; maxTokens: number; budgetMs: number; effort?: ClaudeEffort; fetchImpl?: typeof fetch; signal?: AbortSignal }): Promise<{ output: unknown; usage: TokenUsage }> {
   const deadline = Date.now() + options.budgetMs;
@@ -80,13 +124,7 @@ export async function claudeJson(key: string, messages: ChatMessage[], options: 
         output_config: { effort: options.effort ?? "low" },
       }, { signal, timeout: left }).finalMessage();
     } catch (error) {
-      if (options.signal?.aborted) throw new ClaudeError("Reading canceled.");
-      if (signal.aborted || error instanceof Anthropic.APIConnectionTimeoutError) throw new ClaudeError("Claude timed out. Try again later or read fewer pages.", true);
-      if (error instanceof Anthropic.AuthenticationError) throw new ClaudeError("Claude refused the API key: check ANTHROPIC_API_KEY on the server.");
-      if (error instanceof Anthropic.RateLimitError) throw new ClaudeError("Claude is rate limited right now. Try again in a minute.", true);
-      if (error instanceof Anthropic.APIConnectionError) throw new ClaudeError("Claude could not be reached.", true);
-      if (error instanceof Anthropic.APIError) throw new ClaudeError(`Claude answered ${error.status ?? "an error"}: ${error.message.slice(0, 200)}`, (error.status ?? 0) >= 500);
-      throw error;
+      throw failure(error, !!options.signal?.aborted, signal.aborted);
     }
     usage.input += message.usage.input_tokens; usage.output += message.usage.output_tokens;
     usage.cacheWrite += message.usage.cache_creation_input_tokens ?? 0; usage.cacheRead += message.usage.cache_read_input_tokens ?? 0;
