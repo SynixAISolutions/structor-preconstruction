@@ -93,10 +93,12 @@ html[data-structor-theme="dark"] .proc-fit em { color: #ffb48f; background: rgba
 
 /* Standard scope tab (Marcel's issues log, item 17): the trade's scope checklist, carried on every project. */
 .std-scope { display: grid; gap: 14px; }
-.std-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 14px 16px; border: 1px solid #e4e7e7; border-radius: 14px; }
+/* The buttons wrap under the text when the panel is narrow (the package list sits beside it), instead of squeezing it. */
+.std-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; padding: 14px 16px; border: 1px solid #e4e7e7; border-radius: 14px; }
+.std-head > div:first-of-type { flex: 1 1 340px; min-width: 0; }
 .std-icon { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; color: #fff; background: linear-gradient(145deg, #ff9a6e, #c2481c); }
 .std-head h3 { margin: 0; font-size: 15px; } .std-head p { margin: 4px 0 0; font-size: 12.5px; color: #64727a; line-height: 1.45; }
-.std-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.std-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-left: auto; }
 .std-group h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: #5d6b72; }
 .std-group h4 small { font-size: 11px; color: #8a959b; }
 .std-group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
@@ -111,7 +113,7 @@ html[data-structor-theme="dark"] .proc-fit em { color: #ffb48f; background: rgba
 .std-checklist-head input { width: 16px; height: 16px; margin: 0; accent-color: #2f7d55; cursor: pointer; }
 .std-checklist-head strong { display: block; font-size: 13.5px; font-weight: 600; }
 .std-checklist-head small { display: block; margin-top: 2px; font-size: 11.5px; color: #6b7880; }
-@media (max-width: 720px) { .std-head { grid-template-columns: auto minmax(0, 1fr); } .std-actions { grid-column: 1 / -1; justify-content: flex-start; } }
+@media (max-width: 720px) { .std-actions { margin-left: 0; justify-content: flex-start; } }
 html[data-structor-theme="dark"] :is(.std-head, .std-group li) { border-color: var(--nl-line); background: var(--nl-surface-quiet); }
 html[data-structor-theme="dark"] :is(.std-head p, .std-group h4, .std-group li small, .std-note) { color: var(--nl-muted); }
 html[data-structor-theme="dark"] .std-group li.on .std-mark { background: #4f9b6f; border-color: #4f9b6f; }
