@@ -3,8 +3,8 @@
 // The exterior model's surroundings (Marcel's Software Features list, item 19: "Exterior Model - shows the building from the
 // outside, maybe we can link it to google maps 3D api to mimic the exterior surroundings"). Google's photorealistic 3D map
 // of the site, from the Maps JavaScript API's 3D maps (Map3DElement), centred on the project's site address, which is
-// geocoded once and kept per project. It needs a Google Maps Platform key with billing, the Maps JavaScript API and the
-// Map Tiles API; NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is added in Vercel (never typed in by an agent). Until then the panel
+// geocoded once and kept per project. It needs a Google Maps Platform key with billing, the Maps JavaScript API, the
+// Map Tiles API (the 3D tiles) and the Geocoding API (the browser's Geocoder needs it); NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is added in Vercel (never typed in by an agent). Until then the panel
 // says how to switch it on. Site context is UI work (AGENTS.md); the model itself is untouched.
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -49,7 +49,7 @@ export function SiteContext({ project, sample }: { project: Project; sample: boo
   useEffect(() => {
     if (!KEY || site.lat === null || site.lng === null || !holder.current) return;
     let live = true; const box = holder.current;
-    loadGoogleMaps(KEY, () => live && setError("Google refused the Maps key. Check that the Maps JavaScript API and Map Tiles API are on for it, and that this site's address is allowed."))
+    loadGoogleMaps(KEY, () => live && setError("Google refused the Maps key. Check that the Maps JavaScript API, Map Tiles API and Geocoding API are on for it, and that this site's address is allowed."))
       .then(maps => maps.importLibrary("maps3d"))
       .then(lib => {
         if (!live) return;
@@ -91,8 +91,8 @@ export function SiteContext({ project, sample }: { project: Project; sample: boo
       ? <details className="site-setup">
           <summary><Mountain size={18}/><span><strong>The 3D surroundings are off</strong><small>They switch on once Structor's Google Maps key is added. The address above is kept for this project. <em>How to add the key</em></small></span></summary>
           <ol>
-            <li>In Google Cloud, on a project with billing, turn on the <b>Maps JavaScript API</b> and the <b>Map Tiles API</b>.</li>
-            <li>Create an API key limited to those two APIs and to Structor's web addresses (your live domain and <code>*.vercel.app</code>).</li>
+            <li>In Google Cloud, on a project with billing, turn on the <b>Maps JavaScript API</b>, the <b>Map Tiles API</b> and the <b>Geocoding API</b> (it finds the address).</li>
+            <li>Create an API key limited to those three APIs and to Structor's web addresses (the live site and the previews you test on).</li>
             <li>In Vercel → Settings → Environment Variables, add <code>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> for Production and Preview, then redeploy.</li>
           </ol>
         </details>
