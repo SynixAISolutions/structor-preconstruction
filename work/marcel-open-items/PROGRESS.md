@@ -18,7 +18,15 @@ Rules (memory): test on Project 1's real data, put related work in one PR, ask o
 - 27 Nov: main had moved (bb9715d, PR #170 takeoff by trade), so PR #169 conflicted. Merged origin/main into the branch (cb85cdc): only `app/package.json`'s check list conflicted (kept main's `check-takeoff-by-trade.mjs` and this branch's three checks). Gate green again.
 - Tip: don't run `pnpm build` while this worktree's dev server runs; it broke the dev server's compiled page (500, "Cannot use import statement outside a module"). Restarting the dev server fixed it.
 
+## Map test, 27 Nov (first real run of #19)
+- Danial made the key (Google Cloud "My First Project"): Maps JavaScript API, Map Tiles API and Geocoding API on; website restrictions `https://structor-preconstruction.vercel.app/*` and this PR's preview host; `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` in Vercel as a Config variable for Production and Preview. An empty commit (467d119) rebuilt the preview with it.
+- The preview sits behind Vercel's login; Danial signed in to Vercel in the in-app browser pane.
+- Project 1 → Exterior model: Google's script loaded (Maps JS 3.67 beta) and `gmp-map-3d` drew, but in Google's default mode `ROADMAP`, a flat-coloured 3D map. Setting `mode: "HYBRID"` gave the photorealistic view (real buildings and trees; the Jelleff Rec Center field shows near the sample site). Fixed in 4a5e968. Modes offered: HYBRID, SATELLITE, ROADMAP.
+- The Geocoder (behind Show site) answered from the preview host, tested from the console so nothing was saved to the live database.
+- Other preview hosts aren't on the key's website list: Google refuses the key there and the panel shows its refused-key message.
+- After the fix rebuilt (4a5e968): Project 1's exterior model opens straight into the photorealistic 3D view (`mode` HYBRID), no errors, the new neutral example address in the box. Not tried on a real project's model page on the preview: there the map only appears after Show site, which saves the address to the live database (the same panel was checked locally on Project 2).
+
 ## Next
-1. Done 26 Nov: pushed, **PR #169** opened and bound; Vercel checks green, mergeable. Preview: https://structor-preconstruction-git-core-m-a328d9-tools-3633s-projects.vercel.app (the in-app browser refused to open it, so step 2 hasn't been done).
+1. Done 26 Nov: pushed, **PR #169** opened and bound; Vercel checks green, mergeable. Preview: https://structor-preconstruction-git-core-m-a328d9-tools-3633s-projects.vercel.app (needs a Vercel sign-in in the browser pane).
 2. On the PR's Vercel preview (LIVE database: look, don't write): Project 1 → a trade → Standard scope tab should list the trade's approved checklist lines (1,417 checklist entries were approved 24 Nov); Invite bidders shows the ranking. Don't press Add or Apply there without Danial's OK.
 3. Ask Danial once to merge, together with PR #146 after its live test.
