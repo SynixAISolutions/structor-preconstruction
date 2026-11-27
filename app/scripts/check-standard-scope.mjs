@@ -48,14 +48,19 @@ assert.deepEqual(S.standardScopeFor({ code: "08 71 00", name: "Door hardware" },
 
 // The trade's own checklist. The import also tags a division's other checklists with its trade (27 Nov, preview: Concrete
 // matched 03A plus both 03B precast checklists and 03E playground surfacing; Masonry matched cast stone and pavers).
-const ownOf = (trade, names) => [...S.ownChecklists(trade, names)];
-assert.deepEqual(ownOf("Concrete", ["03A Concrete", "03B Architectural Precast Concrete", "03B Precast Conc", "03E Playground Solid Surfacing"]), ["03A Concrete"]);
-assert.deepEqual(ownOf("Masonry", ["04A Unit Masonry", "04B Cast Stone PO", "04E Brick and Stone Pavers", "04J Masonry Cleaning and Restoration"]), ["04A Unit Masonry", "04J Masonry Cleaning and Restoration"]);
-assert.deepEqual(ownOf("Drywall", ["09A Drywall and ACT"]), ["09A Drywall and ACT"]);
-assert.deepEqual(ownOf("Doors, frames & hardware", ["08A Doors Frames Hardware"]), ["08A Doors Frames Hardware"], "\"&\", \"and\" and punctuation don't count");
-assert.deepEqual(ownOf("Waterproofing, air barrier & joint sealants", ["07D Waterproofing", "07E Caulking"]), ["07D Waterproofing"]);
-assert.deepEqual(ownOf("Structural steel", ["05A Structural Steel", "05C Miscellaneous Metals", "05J Expansion Joint Systems"]), ["05A Structural Steel"]);
-assert.deepEqual(ownOf("Site concrete", ["02F Curbs, Gutters and Walks"]), ["02F Curbs, Gutters and Walks"], "When no name says which, all of them");
+// Packages and checklist names as on Project 1 and the live memory.
+const ownOf = (code, name, names) => [...S.ownChecklists({ code, name }, names)];
+assert.deepEqual(ownOf("03 30 00", "Concrete", ["03A Concrete", "03B Architectural Precast Concrete", "03B Precast Conc", "03E Playground Solid Surfacing"]), ["03A Concrete"]);
+assert.deepEqual(ownOf("04 22 00", "Masonry", ["04A Unit Masonry", "04B Cast Stone PO", "04E Brick and Stone Pavers", "04J Masonry Cleaning and Restoration"]), ["04A Unit Masonry"], "The first checklist narrower than the trade");
+assert.deepEqual(ownOf("09 65 19", "Flooring", ["09C Carpet and Resilient Flooring", "09I Raised Access Flooring", "09J Rubber Athletic Flr", "09K Epoxy Flooring"]), ["09C Carpet and Resilient Flooring"]);
+assert.deepEqual(ownOf("09 29 00", "Drywall", ["09A Drywall and ACT"]), ["09A Drywall and ACT"]);
+assert.deepEqual(ownOf("08 11 13", "Doors, frames & hardware", ["08A Doors Frames Hardware"]), ["08A Doors Frames Hardware"], "\"&\", \"and\" and punctuation don't count");
+assert.deepEqual(ownOf("07 10 00", "Waterproofing, air barrier & joint sealants", ["07D Waterproofing", "07E Caulking"]), ["07D Waterproofing"], "The ones the package's name names");
+assert.deepEqual(ownOf("05 12 00", "Structural steel", ["05A Structural Steel", "05C Miscellaneous Metals", "05J Expansion Joint Systems"]), ["05A Structural Steel"]);
+assert.deepEqual(ownOf("05 12 00", "Structural steel and miscellaneous metals", ["05A Structural Steel", "05C Miscellaneous Metals", "05J Expansion Joint Systems"]), ["05A Structural Steel", "05C Miscellaneous Metals"]);
+assert.deepEqual(ownOf("10 00 00", "Specialties", ["10A Toilet Partitions", "10H Toilet Accessories", "10K Postal Specialties"]), ["10A Toilet Partitions", "10H Toilet Accessories", "10K Postal Specialties"], "A whole-division package takes its division's checklists, not just Postal Specialties");
+assert.deepEqual(ownOf("11 00 00", "Equipment", ["11A Audiovisual", "11G Playground Equipment"]), ["11A Audiovisual", "11G Playground Equipment"]);
+assert.deepEqual(ownOf("32 13 13", "Site concrete", ["02F Curbs, Gutters and Walks"]), ["02F Curbs, Gutters and Walks"], "When no name says which, all of them");
 // Through the real import: 03E comes first in the memory and repeats one of 03A's lines word for word.
 const playground = C.readChecklists(["03E – PLAYGROUND SOLID SURFACING", "Poured rubber surfacing at play areas", "Formwork for all cast-in-place concrete"].join("\n"), "03E - Playground Solid Surfacing.doc")[0];
 assert.deepEqual(C.checklistEntries(playground, playground.standard)[0].trades, ["03 30 00", "concrete", "playground solid surfacing"], "tagged with the division's trade, as on the live memory");
@@ -67,6 +72,15 @@ assert.deepEqual(concreteLines.map(l => [l.checklist, l.own, l.title]), [
 ], "The trade's own checklist first, a repeated line kept under it, the other checklist offered after");
 assert.deepEqual(S.checklistGroups(concreteLines).map(g => [g.checklist, g.own, g.lines.length]), [["03A Concrete", true, 2], ["03E Playground Solid Surfacing", false, 1]]);
 assert.deepEqual(S.defaultStandard(concreteLines).map(l => l.title), ["Formwork for all cast-in-place concrete", "Excluded: Reinforcing steel."], "By default only the trade's own checklist");
+// A bid sheet line the checklist repeats keeps the bid sheet as its source (as 3 live entries do); it's named after its checklist.
+const from03A = C.checklistEntries(concrete, concrete.standard)[0].events.find(x => x.startsWith("checklist:")).split(":").slice(0, 3).join(":");
+const sheetLine = entry({ kind: "example", origin: "import", trades: ["03 30 00", "concrete"], text: "Fine grading for the Work from +/- 0.2' of design subgrade.",
+  events: ["import:jelleff rec live bid sheet xlsx:Conc:line:10", `${from03A}:includes:5`], source: { file: "Jelleff Rec Live Bid sheet.xlsx", tab: "Conc", trade: "Concrete" } });
+assert.deepEqual(S.standardScopeFor({ code: "03 30 00", name: "Concrete" }, [sheetLine, ...entries]).map(l => [l.checklist, l.own, l.title]), [
+  ["03A Concrete", true, "Formwork for all cast-in-place concrete"],
+  ["03A Concrete", true, "Fine grading for the Work from +/- 0.2' of design subgrade."],
+  ["03A Concrete", true, "Excluded: Reinforcing steel."],
+]);
 
 // On the bid form: a line already there in the same words is skipped; checklist wording is approved, a fill-in stays a draft.
 const base = { packages: [pkg, { ...P.STANDARD_TRADES.find(t => t.id === "concrete"), owner: "", due: "" }], scopes: [
