@@ -11,6 +11,15 @@ type BuildModel = () => Promise<ArrayBuffer>;
 type Placement = Coordinates & { heading: number; heightFt: number };
 type SavedPlacement = { site: string; position: Placement };
 
+function modelDataUrl(binary: ArrayBuffer): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("The drawing model couldn't be read."));
+    reader.onerror = () => reject(new Error("The drawing model couldn't be read."));
+    reader.readAsDataURL(new Blob([binary], { type: "model/gltf-binary" }));
+  });
+}
+
 export function SchematicSiteRender({ site, projectAddress, buildModel, onSiteAddress }: {
   site: SiteLocation; projectAddress: string; buildModel: BuildModel; onSiteAddress: () => void;
 }) {
@@ -47,11 +56,12 @@ function SiteRenderFromAddress({ address, buildModel, onSiteAddress }: {
 function LocatedSiteRender({ site, buildModel }: { site: Coordinates; buildModel: BuildModel }) {
   const siteKey = `${site.lat},${site.lng}`;
   const [saved, save] = useLocalDraft<SavedPlacement | null>("site-model-placement", null);
+  const [preview, setPreview] = useState<Placement | null>(null);
   const [scene, setScene] = useState<GoogleScene | null>(null);
   const [building, setBuilding] = useState<{ build: BuildModel; url?: string; error?: string } | null>(null);
   const [modelError, setModelError] = useState("");
   const model = useRef<InstanceType<GoogleScene["Model3D"]> | null>(null);
-  const placement = saved?.site === siteKey ? saved.position : { ...site, heading: 0, heightFt: 0 };
+  const placement = preview ?? (saved?.site === siteKey ? saved.position : { ...site, heading: 0, heightFt: 0 });
   const { lat, lng, heading, heightFt } = placement;
   const url = building?.build === buildModel ? building.url : undefined;
   const buildError = building?.build === buildModel ? building.error : undefined;
@@ -60,18 +70,12 @@ function LocatedSiteRender({ site, buildModel }: { site: Coordinates; buildModel
   useEffect(() => {
     if (!sceneReady) return;
     let live = true;
-    let objectUrl: string | undefined;
-    buildModel().then(binary => {
-      if (!live) return;
-      objectUrl = URL.createObjectURL(new Blob([binary], { type: "model/gltf-binary" }));
-      setBuilding({ build: buildModel, url: objectUrl });
+    buildModel().then(modelDataUrl).then(src => {
+      if (live) setBuilding({ build: buildModel, url: src });
     }).catch(error => {
       if (live) setBuilding({ build: buildModel, error: error instanceof Error ? error.message : "The drawing model couldn't be prepared." });
     });
-    return () => {
-      live = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
+    return () => { live = false; };
   }, [buildModel, sceneReady]);
 
   useEffect(() => {
@@ -79,9 +83,9 @@ function LocatedSiteRender({ site, buildModel }: { site: Coordinates; buildModel
     setModelError("");
     try {
       model.current = new scene.Model3D({
-        src: url, altitudeMode: "RELATIVE_TO_GROUND",
+        src: url, altitudeMode: "CLAMP_TO_GROUND",
         position: { lat: site.lat, lng: site.lng, altitude: 0 },
-        orientation: { heading: 0 },
+        orientation: { heading: 0, tilt: 270 },
       });
     } catch {
       setModelError("Google Maps couldn't display the building.");
@@ -92,8 +96,10 @@ function LocatedSiteRender({ site, buildModel }: { site: Coordinates; buildModel
   useEffect(() => {
     const object = model.current;
     if (!scene || !object) return;
+    object.altitudeMode = heightFt ? "RELATIVE_TO_GROUND" : "CLAMP_TO_GROUND";
     object.position = { lat, lng, altitude: .3048 * heightFt };
-    object.orientation = { heading };
+    // As in Google’s glTF example, rotate the model’s Y-up axes into the map’s Z-up frame.
+    object.orientation = { heading, tilt: 270 };
     if (!object.parentNode) {
       scene.map.append(object);
       if (lat !== site.lat || lng !== site.lng) scene.map.center = { lat, lng, altitude: 0 };
@@ -116,13 +122,17 @@ function LocatedSiteRender({ site, buildModel }: { site: Coordinates; buildModel
       heading: Number(values.get("heading")) % 360, heightFt: Number(values.get("height")),
     };
     if (Object.values(position).some(value => !Number.isFinite(value))) return;
-    save({ site: siteKey, position });
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    if (submitter?.getAttribute("value") === "save") {
+      save({ site: siteKey, position });
+      setPreview(null);
+    } else setPreview(position);
     centerOnBuilding(position);
   }
 
   return <>
     <div className="sm-site-status">
-      <p className="site-note">{saved?.site === siteKey
+      <p className="site-note">{preview ? "Placement preview. Save it to use these settings next time." : saved?.site === siteKey
         ? "Saved site placement. Check it against the site survey."
         : "Approximate placement from the site address. Align the building against the site plan or survey."}</p>
       {url && <Button onClick={() => centerOnBuilding()}>Center on building</Button>}
@@ -137,7 +147,10 @@ function LocatedSiteRender({ site, buildModel }: { site: Coordinates; buildModel
         <label className="ui-field">Longitude of ground-floor center<input key={lng} name="longitude" type="number" min="-180" max="180" step="any" required defaultValue={lng}/></label>
         <label className="ui-field">Clockwise rotation from north (°)<input key={heading} name="heading" type="number" min="0" max="360" step="any" required defaultValue={heading}/></label>
         <label className="ui-field">Ground-floor offset above terrain (ft)<input key={heightFt} name="height" type="number" step="any" required defaultValue={heightFt}/></label>
-        <Button type="submit">Save placement</Button>
+        <div className="sm-site-placement-actions">
+          <button type="submit" className="ui-btn secondary" value="preview">Preview placement</button>
+          <button type="submit" className="ui-btn secondary" value="save">Save placement</button>
+        </div>
       </form>
     </details>}
   </>;

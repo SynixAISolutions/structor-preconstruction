@@ -13,4 +13,4 @@
   gap: 12px;
   margin-top: 12px;
 }
-.sm-site-placement button { justify-self: start; }
+.sm-site-placement-actions { display: flex; flex-wrap: wrap; gap: 8px; grid-column: 1 / -1; }

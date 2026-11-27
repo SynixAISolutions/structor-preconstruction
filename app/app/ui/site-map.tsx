@@ -7,14 +7,15 @@ const KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
 
 export type Coordinates = { lat: number; lng: number };
 type MapPosition = Coordinates & { altitude: number };
-type ModelOrientation = { heading: number };
+type ModelOrientation = { heading: number; tilt: number };
+type AltitudeMode = "CLAMP_TO_GROUND" | "RELATIVE_TO_GROUND";
 type ModelOptions = {
   src: string;
-  altitudeMode: "RELATIVE_TO_GROUND";
+  altitudeMode: AltitudeMode;
   position: MapPosition;
   orientation: ModelOrientation;
 };
-type BuildingElement = HTMLElement & { position: MapPosition; orientation: ModelOrientation };
+type BuildingElement = HTMLElement & { position: MapPosition; orientation: ModelOrientation; altitudeMode: AltitudeMode };
 type MapElement = HTMLElement & {
   center: MapPosition;
   range: number;

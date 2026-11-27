@@ -1,11 +1,11 @@
 import * as THREE from "three";
 import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
-import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { mergeGeometries, mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 import type { FloorSurface } from "../../lib/schematic-floor-details";
 import { footprintValid, levelFootprints, stairRise, type SchematicModel } from "../../lib/schematic-model";
 import { addSchematicPlanGeometry, disposeSchematicGroup, schematicGeometry } from "./schematic-geometry";
 
-export const METRES_PER_FOOT = .3048;
+const METRES_PER_FOOT = .3048;
 
 /** Bake the plan's reflected Z convention into core glTF primitives. Google Maps does not load instancing extensions. */
 function bakeMesh(mesh: THREE.Mesh, toMeters: THREE.Matrix4, buckets: Map<string, { material: THREE.MeshStandardMaterial; parts: THREE.BufferGeometry[] }>) {
@@ -80,7 +80,9 @@ export async function schematicSiteGlb(model: SchematicModel, floors: ReadonlyMa
     for (const { material, parts } of buckets.values()) {
       const geometry = mergeGeometries(parts);
       if (!geometry) throw new Error("The drawing model could not be prepared for the site map.");
-      result.add(new THREE.Mesh(geometry, material));
+      const indexed = mergeVertices(geometry, 1e-6);
+      geometry.dispose();
+      result.add(new THREE.Mesh(indexed, material));
     }
     if (!result.children.length) throw new Error("Build a drawing model to show the building on the map.");
     const glb = await new GLTFExporter().parseAsync(result, { binary: true });
