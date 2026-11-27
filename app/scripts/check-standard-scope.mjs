@@ -42,9 +42,31 @@ assert.deepEqual(lines.map(l => [l.section, l.title, l.fillIn]), [
   ["excludes", "Excluded: Painting of gypsum board.", false],
   ["excludes", "Excluded: Acoustical insulation in exterior walls.", false],
 ], "The checklist as printed and in order, exclusions last; only approved, company-wide checklist lines for this trade; a bracketed note is filled in per project, as the import reads it");
-assert.ok(lines.every(l => l.checklist === "09A Drywall and ACT"));
+assert.ok(lines.every(l => l.checklist === "09A Drywall and ACT" && l.own));
 assert.deepEqual(S.standardScopeFor({ code: "03 30 00", name: "Concrete" }, entries).map(l => l.title), ["Formwork for all cast-in-place concrete", "Excluded: Reinforcing steel."]);
 assert.deepEqual(S.standardScopeFor({ code: "08 71 00", name: "Door hardware" }, entries), [], "A trade with no checklist has no standard scope");
+
+// The trade's own checklist. The import also tags a division's other checklists with its trade (27 Nov, preview: Concrete
+// matched 03A plus both 03B precast checklists and 03E playground surfacing; Masonry matched cast stone and pavers).
+const ownOf = (trade, names) => [...S.ownChecklists(trade, names)];
+assert.deepEqual(ownOf("Concrete", ["03A Concrete", "03B Architectural Precast Concrete", "03B Precast Conc", "03E Playground Solid Surfacing"]), ["03A Concrete"]);
+assert.deepEqual(ownOf("Masonry", ["04A Unit Masonry", "04B Cast Stone PO", "04E Brick and Stone Pavers", "04J Masonry Cleaning and Restoration"]), ["04A Unit Masonry", "04J Masonry Cleaning and Restoration"]);
+assert.deepEqual(ownOf("Drywall", ["09A Drywall and ACT"]), ["09A Drywall and ACT"]);
+assert.deepEqual(ownOf("Doors, frames & hardware", ["08A Doors Frames Hardware"]), ["08A Doors Frames Hardware"], "\"&\", \"and\" and punctuation don't count");
+assert.deepEqual(ownOf("Waterproofing, air barrier & joint sealants", ["07D Waterproofing", "07E Caulking"]), ["07D Waterproofing"]);
+assert.deepEqual(ownOf("Structural steel", ["05A Structural Steel", "05C Miscellaneous Metals", "05J Expansion Joint Systems"]), ["05A Structural Steel"]);
+assert.deepEqual(ownOf("Site concrete", ["02F Curbs, Gutters and Walks"]), ["02F Curbs, Gutters and Walks"], "When no name says which, all of them");
+// Through the real import: 03E comes first in the memory and repeats one of 03A's lines word for word.
+const playground = C.readChecklists(["03E – PLAYGROUND SOLID SURFACING", "Poured rubber surfacing at play areas", "Formwork for all cast-in-place concrete"].join("\n"), "03E - Playground Solid Surfacing.doc")[0];
+assert.deepEqual(C.checklistEntries(playground, playground.standard)[0].trades, ["03 30 00", "concrete", "playground solid surfacing"], "tagged with the division's trade, as on the live memory");
+const concreteLines = S.standardScopeFor({ code: "03 30 00", name: "Concrete" }, [...C.checklistEntries(playground, playground.standard).map(i => entry(i)), ...entries]);
+assert.deepEqual(concreteLines.map(l => [l.checklist, l.own, l.title]), [
+  ["03A Concrete", true, "Formwork for all cast-in-place concrete"],
+  ["03A Concrete", true, "Excluded: Reinforcing steel."],
+  ["03E Playground Solid Surfacing", false, "Poured rubber surfacing at play areas"],
+], "The trade's own checklist first, a repeated line kept under it, the other checklist offered after");
+assert.deepEqual(S.checklistGroups(concreteLines).map(g => [g.checklist, g.own, g.lines.length]), [["03A Concrete", true, 2], ["03E Playground Solid Surfacing", false, 1]]);
+assert.deepEqual(S.defaultStandard(concreteLines).map(l => l.title), ["Formwork for all cast-in-place concrete", "Excluded: Reinforcing steel."], "By default only the trade's own checklist");
 
 // On the bid form: a line already there in the same words is skipped; checklist wording is approved, a fill-in stays a draft.
 const base = { packages: [pkg, { ...P.STANDARD_TRADES.find(t => t.id === "concrete"), owner: "", due: "" }], scopes: [
@@ -66,4 +88,4 @@ const form = P.bidForm(state, "drywall").map(s => s.title);
 assert.equal(form[0], "Provide all permits.");
 assert.ok(form.includes("Excluded: Painting of gypsum board."));
 
-console.log("Standard scope checked: Marcel's Drywall checklist as printed (approved, company-wide, this trade only), exclusions, fill-ins, lines already there, again-safe, on the bid form.");
+console.log("Standard scope checked: Marcel's Drywall checklist as printed (approved, company-wide, this trade only), the trade's own checklist ahead of its division's others (Concrete, Masonry, Waterproofing, Site concrete), exclusions, fill-ins, lines already there, again-safe, on the bid form.");
