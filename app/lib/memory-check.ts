@@ -89,7 +89,7 @@ const EXISTING_PER_REQUEST = 40;
  * with the lines pointing at them and the lines the bid form already has for those pages. `unplaced`: lines no page shares enough words with, so nothing on
  * this project's pages calls for them.
  */
-export function planLineCheck(lines: MemoryLine[], pages: CheckPage[], existing: ExistingLine[]): { requests: LineCheckRequest[]; checked: number; covered: number; unplaced: MemoryLine[] } {
+export function planLineCheck(lines: MemoryLine[], pages: CheckPage[], existing: ExistingLine[]): { requests: LineCheckRequest[]; checked: number; covered: number; unplaced: MemoryLine[]; pagesOf: Map<string, CheckPage[]> } {
   const counts = pages.map(p => wordCounts(p.text));
   const words = counts.map(c => new Set(c.keys()));
   // A word on few pages says more than one on most ("parapet" over "gypsum"): each shared word counts by its rarity.
@@ -98,6 +98,8 @@ export function planLineCheck(lines: MemoryLine[], pages: CheckPage[], existing:
   const weight = (x: string) => Math.log((pages.length + 1) / ((df.get(x) ?? 0) + 1)) + 0.1;
   const written = existing.map(e => e.text);
   const placed = new Map<number, MemoryLine[]>();
+  // The pages each line went with (at most CHECK_LIMITS.pagesPerLine), by line id: a request groups several lines' pages.
+  const pagesOf = new Map<string, CheckPage[]>();
   const unplaced: MemoryLine[] = [];
   let covered = 0;
   for (const line of lines) {
@@ -115,6 +117,7 @@ export function planLineCheck(lines: MemoryLine[], pages: CheckPage[], existing:
     }).filter(s => s.count >= need).sort((a, b) => b.score - a.score || a.i - b.i).slice(0, CHECK_LIMITS.pagesPerLine);
     if (!best.length) { unplaced.push(line); continue; }
     for (const { i } of best) placed.set(i, [...(placed.get(i) ?? []), line]);
+    pagesOf.set(line.id, best.map(({ i }) => pages[i]));
   }
   const requests: LineCheckRequest[] = [];
   const order = [...placed.keys()].sort((a, b) => pages[a].document.localeCompare(pages[b].document) || pages[a].page - pages[b].page);
@@ -136,7 +139,7 @@ export function planLineCheck(lines: MemoryLine[], pages: CheckPage[], existing:
     group.push(i); chars += size;
   }
   flush();
-  return { requests, checked: lines.length - covered - unplaced.length, covered, unplaced };
+  return { requests, checked: lines.length - covered - unplaced.length, covered, unplaced, pagesOf };
 }
 
 /**

@@ -30,10 +30,19 @@ import { coverage, words } from "./scope-score";
 export const AGENT_LIMITS = {
   /** Turns one trade's reading may take, over all its conversations. */
   turns: 80,
-  /** A conversation whose last request passed this many tokens starts again with a note of where the reading is. */
-  chapterTokens: 70_000,
-  /** Dollars one trade's reading may spend: told to finish at 80%, stopped at 100%. */
+  /**
+   * A conversation whose next request would pass this many tokens starts again with a note of where the reading is:
+   * under Haiku 5.5's 100K long-prompt rate. (At 70K, 2626 Drywall's first reading restarted 8 times in 46 turns.)
+   */
+  chapterTokens: 85_000,
+  /** Dollars one trade's reading may spend: told to finish at 80%, stopped at 100% (agentCostCap for larger models). */
   costCap: 1,
+  /**
+   * Page or section reads, and searches, answered in one turn; further ones wait for the next. 2626's first reading
+   * asked for 4 to 6 at a time and wrote nothing from them before its conversation restarted and dropped them.
+   */
+  readsPerTurn: 4,
+  searchesPerTurn: 4,
   linesPerCall: 12,
   citationsPerLine: 4,
   /** Characters of a page in one read_page answer, and of a section's pages in one read_section answer. */
@@ -46,10 +55,12 @@ export const AGENT_LIMITS = {
   usualInBrief: 150,
   usualPerPart: 80,
   notesChars: 2_500,
-  /** Times Structor checks the lines before the reading may end. */
-  checkRounds: 1,
-  /** Usual lines one check lists. */
-  checkLines: 40,
+  /**
+   * Times Structor checks the lines before the reading may end, and the usual lines one check sends back: 2626's first
+   * check sent 136 at once and the AI acted on none, so they come a batch at a time, the next batch in the next check.
+   */
+  checkRounds: 3,
+  checkLines: 25,
   /** Messages one request may carry; a conversation near it starts again. */
   messages: 240,
   /**
@@ -65,6 +76,10 @@ export const AGENT_LIMITS = {
 
 export type AgentEffort = "low" | "medium" | "high";
 const EFFORTS: AgentEffort[] = ["low", "medium", "high"];
+/** How hard the AI thinks each turn: Anthropic's advice for longer agent tasks on Haiku 5.5 (low and medium stop early or skip checks more). */
+export const AGENT_EFFORT: AgentEffort = "high";
+/** A trade's limit by model: a larger model costs more for the same turns (lib/ai-cost). */
+export const agentCostCap = (model: string | undefined): number => ({ "claude-sonnet-5-5": 2, "claude-opus-5-5": 4 } as Record<string, number>)[model ?? ""] ?? AGENT_LIMITS.costCap;
 
 // ── The conversation, as the browser keeps it and the server checks it ─────────
 
@@ -128,11 +143,12 @@ export function agentSystemPrompt(): string {
     "",
     "How to work:",
     "1. Read the brief: the trade, the sections and sheets Structor gives it, the contractor's memory (which trade carries what on its bid forms) and the contractor's usual lines for this trade.",
-    "2. Find everything that shows this trade's work. List the sheets and sections and search. Read every section the trade carries in full (read_section, every part), and the sheets that show its work: assembly or partition types, wall and building sections, ceiling plans and their legends, finish schedules, interior details, general and keyed notes.",
-    "3. Check the contractor's usual lines against this project. Search for the ones the pages you have read don't settle, and write a line only where a page calls for the work, with that page's words.",
-    "4. Write lines as you go (add_lines), one per thing the subcontractor prices. Name products, types and tags as printed (ACT-1, Type 6A, UL U419), with ratings, locations and heights where the documents give them. Follow the contractor's split: leave work it gives other trades to them, and in a section the trade carries only in part write only that part.",
-    "5. Keep short notes (note) of what is left, so a restart loses nothing.",
-    "6. When everything is read and checked, call finish. Answer Structor's check, then call finish again.",
+    "2. Find everything that shows this trade's work. List the sheets and sections and search. Read every section the trade carries in full (read_section, every part), and the sheets that show its work: assembly or partition types, wall and building sections, ceiling plans and their legends, finish schedules, interior details, general and keyed notes. Read a few pages at a time (at most 4 reads a turn).",
+    "3. Write the lines each page or section calls for in your very next turn (add_lines), before you read more. The conversation is restarted when it grows long, and a restart keeps only your lines and notes, never the pages you read.",
+    "4. Write one line for each thing the subcontractor prices, the way the contractor's usual lines are written: each wall, partition or assembly type with its rating; each board, sheathing and backer and where it goes; each insulation and where; each ceiling type and its product; each finish level; framing at soffits, bulkheads, shafts and exterior walls; each item installed for others. A broad line such as \"gypsum board at all partitions\" doesn't replace these. Name products, types and tags as printed (ACT-1, Type 6A, UL U419), with ratings, locations and heights where the documents give them. Follow the contractor's split: leave work it gives other trades to them, and in a section the trade carries only in part write only that part.",
+    "5. Check the contractor's usual lines against this project: for each one, find whether a page calls for that work (search for it when the pages you read don't settle it), and where one does, write the line with this project's specifics and that page's words.",
+    "6. Keep short notes (note) of what is read and what is left.",
+    "7. When everything is read and checked, call finish. Answer each of Structor's checks, then call finish again.",
     "",
     "Rules:",
     "- Every line cites a page and quotes 8 to 40 words copied exactly from it. Structor refuses a line whose quote isn't on that page: read the page and copy the words again.",
@@ -234,6 +250,8 @@ export type ToolReadingArgs = {
   leavesOut: string[];
   signal: AbortSignal;
   onProgress: (progress: { note: string; done: number; total: number; counts: TradeCounts }) => void;
+  /** The Claude model the server reads with for this reading (lib/ai-cost CLAUDE_PRICES); the server's own when left out. */
+  model?: string;
   costCap?: number;
   effort?: AgentEffort;
 };
@@ -273,24 +291,19 @@ export function pageRuns(pages: { alias: string; page: number }[]): string {
  * pages, from lib/memory-check planLineCheck), the trade's sections no line cites, and lines that match what the
  * trade leaves to others. Null when there is nothing to look at again.
  */
-export function finalCheck(args: { lines: AgentLine[]; usual: MemoryLine[]; read: CheckPage[]; refOf: (docId: string, page: number) => string; sections: { section: string; title: string; doc: StoredDocument; first: number; last: number }[]; leavesOut: string[]; refRange: (doc: StoredDocument, first: number, last: number) => string }): string | null {
+export function finalCheck(args: { lines: AgentLine[]; usual: MemoryLine[]; read: CheckPage[]; refOf: (docId: string, page: number) => string; sections: { section: string; title: string; doc: StoredDocument; first: number; last: number }[]; leavesOut: string[]; refRange: (doc: StoredDocument, first: number, last: number) => string; sent?: Set<string> }): string | null {
   const live = args.lines.filter(l => !l.removed);
   // Pages go by file id (`read`'s document is the id): a sheet's current version may be in an older revision of the same name.
   const existing = live.map(l => ({ text: `${l.title} ${l.detail}`, source: l.source, cites: l.citations.map(c => `${c.doc.id}#${c.page}`) }));
   const plan = planLineCheck(args.usual, args.read, existing);
-  const where = new Map<string, Set<string>>();
-  for (const request of plan.requests) for (const line of request.lines) {
-    const refs = where.get(line.id) ?? new Set<string>();
-    for (const p of request.pages) refs.add(args.refOf(p.document, p.page));
-    where.set(line.id, refs);
-  }
-  const named = args.usual.filter(u => where.has(u.id));
+  // Each usual line with the pages it went with; the ones an earlier check sent back aren't sent again.
+  const named = args.usual.filter(u => plan.pagesOf.has(u.id) && !args.sent?.has(u.id));
   const parts: string[] = [];
   if (named.length) {
     const shown = named.slice(0, AGENT_LIMITS.checkLines);
-    parts.push(`- ${plural(named.length, "of the contractor's usual lines")} for this trade ${named.length === 1 ? "has" : "have"} no line yet, and pages you read mention ${named.length === 1 ? "it" : "them"}. Read those pages again: where a page calls for the work, add the line with its quote; where it doesn't, leave it.`,
-      ...shown.map(u => `  ${u.id} ${u.text.slice(0, 160)} — see ${[...where.get(u.id)!].join(", ")}`),
-      ...(named.length > shown.length ? [`  (${named.length - shown.length} more like these: search for any you expect on this project.)`] : []));
+    shown.forEach(u => args.sent?.add(u.id));
+    parts.push(`- ${named.length} of the contractor's usual line${named.length === 1 ? "" : "s"} for this trade ${named.length === 1 ? "has" : "have"} no line yet, and pages you read mention ${named.length === 1 ? "it" : "them"}${named.length > shown.length ? `; here are ${shown.length}, the next ones come with the next check` : ""}. Read each one's pages: where a page calls for the work, add the line with this project's specifics and the page's words; where it doesn't, leave it.`,
+      ...shown.map(u => `  ${u.id} ${u.text.slice(0, 160)} — see ${[...new Set(plan.pagesOf.get(u.id)!.map(p => args.refOf(p.document, p.page)))].join(", ")}`));
   }
   const unread = args.sections.filter(s => !live.some(l => l.citations.some(c => c.doc.id === s.doc.id && c.page >= s.first && c.page <= s.last)));
   if (unread.length) parts.push(`- No line cites ${unread.length === 1 ? "this section" : "these sections"} Structor gives the trade. Read ${unread.length === 1 ? "it" : "each"} in full and write its lines, or leave it if it holds nothing this trade prices: ${unread.map(s => `${s.section} ${s.title} (${args.refRange(s.doc, s.first, s.last)})`).join("; ")}.`);
@@ -310,7 +323,7 @@ const KIND = { drawings: "drawings", manual: "specifications", other: "other" } 
  */
 export async function runToolReading(args: ToolReadingArgs, io: AgentIo): Promise<ScopeRunResult> {
   const startedAt = new Date().toISOString();
-  const cap = args.costCap ?? AGENT_LIMITS.costCap;
+  const cap = args.costCap ?? agentCostCap(args.model);
   // The newest revision of every file, and any older one a sheet or section is still current in.
   const docs = [...new Map([...latestDocuments(args.documents), ...args.register.map(r => r.doc), ...args.specs.map(s => s.doc)].filter(d => d.textChunks > 0).map(d => [d.id, d] as const)).values()];
   const aliasOf = new Map(docs.map((d, i) => [d.id, `D${i + 1}`]));
@@ -328,7 +341,9 @@ export async function runToolReading(args: ToolReadingArgs, io: AgentIo): Promis
   const lines: AgentLine[] = [];
   const read: { doc: StoredDocument; page: number }[] = [];
   const searches: string[] = [];
-  let notes = "", turns = 0, cost = 0, model = "", refused = 0, checked = 0, finished = false, stop = "", conversations = 1;
+  let notes = "", turns = 0, cost = 0, model = "", refused = 0, checked = 0, finished = false, stop = "", conversations = 1, turnReads = 0, turnSearches = 0;
+  /** Usual lines Structor's checks have sent back, so each check sends the next ones; and every check's report. */
+  const sent = new Set<string>(), checkReports: string[] = [];
   let checkReport = "";
   const errors: string[] = [];
 
@@ -468,8 +483,8 @@ export async function runToolReading(args: ToolReadingArgs, io: AgentIo): Promis
       if (checked < AGENT_LIMITS.checkRounds) {
         checked++;
         const pages = await Promise.all(read.map(async r => ({ document: r.doc.id, page: r.page, text: await textOf(r.doc, r.page), where: pageWhere(r.doc, r.page), sheet: r.doc.sheets.find(s => s.page === r.page)?.sheet ?? null })));
-        const report = finalCheck({ lines, usual: args.usualLines, read: pages.filter(p => p.text.trim()), refOf: (id, page) => `${aliasOf.get(id) ?? "D?"} p${page}`, sections: args.sections.filter(s => aliasOf.has(s.doc.id)), leavesOut: args.leavesOut, refRange });
-        if (report) { checkReport = report; return report; }
+        const report = finalCheck({ lines, usual: args.usualLines, read: pages.filter(p => p.text.trim()), refOf: (id, page) => `${aliasOf.get(id) ?? "D?"} p${page}`, sections: args.sections.filter(s => aliasOf.has(s.doc.id)), leavesOut: args.leavesOut, refRange, sent });
+        if (report) { checkReport = report; checkReports.push(report); return report; }
       }
       finished = true;
       return "Finished.";
@@ -482,6 +497,11 @@ export async function runToolReading(args: ToolReadingArgs, io: AgentIo): Promis
     const tool = Object.hasOwn(tools, call.name) ? tools[call.name as AgentToolName] : null;
     const input = call.input && typeof call.input === "object" && !Array.isArray(call.input) ? call.input as Record<string, unknown> : {};
     if (!tool) return { type: "tool_result", tool_use_id: call.id, content: `There is no tool ${call.name.slice(0, 80)}. The tools are ${SCOPE_AGENT_TOOLS.map(t => t.name).join(", ")}.`, is_error: true };
+    // A few reads and searches a turn, so the lines from them are written before the conversation grows past a restart.
+    if ((call.name === "read_page" || call.name === "read_section") && ++turnReads > AGENT_LIMITS.readsPerTurn)
+      return { type: "tool_result", tool_use_id: call.id, content: `Not read: at most ${AGENT_LIMITS.readsPerTurn} pages or sections a turn. Write the lines from what you have read first, then ask again.` };
+    if (call.name === "search" && ++turnSearches > AGENT_LIMITS.searchesPerTurn)
+      return { type: "tool_result", tool_use_id: call.id, content: `Not searched: at most ${AGENT_LIMITS.searchesPerTurn} searches a turn. Ask again next turn.` };
     try { return { type: "tool_result", tool_use_id: call.id, content: await tool(input) }; }
     catch (error) { return { type: "tool_result", tool_use_id: call.id, content: `That failed: ${error instanceof Error ? error.message : String(error)}`, is_error: true }; }
   }
@@ -531,7 +551,7 @@ export async function runToolReading(args: ToolReadingArgs, io: AgentIo): Promis
     return [
       "(Structor) This conversation was restarted to save room. Where the reading is:",
       `- Turns so far: ${turns}.`,
-      read.length ? `- Pages you read: ${pageRuns(read.map(r => ({ alias: aliasOf.get(r.doc.id) ?? "D?", page: r.page })))}. The last ones: ${read.slice(-4).map(r => ref(r.doc, r.page)).join(", ")}; read them again if you need them.` : "- No pages read yet.",
+      read.length ? `- Pages you read: ${pageRuns(read.map(r => ({ alias: aliasOf.get(r.doc.id) ?? "D?", page: r.page })))}. Their text is gone from this conversation: read again only what you still need to write lines from, and write them as you go.` : "- No pages read yet.",
       searches.length ? `- Searches: ${[...new Set(searches)].slice(-40).map(q => `"${q}"`).join(", ")}.` : "",
       shown.length ? `- Lines you added (they are kept; don't add them again):\n${shown.map(l => `  ${l.id} ${l.title.slice(0, 140)} · ${l.source}`).join("\n")}` : "- No lines added yet.",
       checkReport ? `- Structor already checked your lines once:\n${checkReport}` : "",
@@ -551,7 +571,7 @@ export async function runToolReading(args: ToolReadingArgs, io: AgentIo): Promis
     if (turns >= AGENT_LIMITS.turns) { stop = `Stopped after ${AGENT_LIMITS.turns} turns before it finished.`; break; }
     let reply: AgentReply;
     try {
-      reply = await io.turn({ messages, effort: args.effort ?? "medium" }, args.signal);
+      reply = await io.turn({ messages, effort: args.effort ?? AGENT_EFFORT }, args.signal);
       failedInRow = 0;
     } catch (error) {
       if (args.signal.aborted) { stop = "Stopped before it finished."; break; }
@@ -577,6 +597,7 @@ export async function runToolReading(args: ToolReadingArgs, io: AgentIo): Promis
     messages.push({ role: "assistant", content: content.length ? content : [{ type: "text", text: "(no reply)" }] });
     const calls = content.filter((b): b is Extract<AgentBlock, { type: "tool_use" }> => b.type === "tool_use");
     const results: ResultBlock[] = [];
+    turnReads = 0; turnSearches = 0;
     for (const call of calls) results.push(await answer(call));
     if (calls.length) idle = 0;
     else if (++idle <= AGENT_LIMITS.idleReplies) {
@@ -615,7 +636,7 @@ export async function runToolReading(args: ToolReadingArgs, io: AgentIo): Promis
     citations: l.citations.map(c => ({ document: c.doc.name, page: c.page, sheet: sheetOf(c.doc, c.page), quote: c.quote })),
   }));
   const dropped: Dropped[] = [{ what: "Reading with tools", reason: `${plural(turns, "turn")}${conversations > 1 ? ` over ${conversations} conversations` : ""}: ${plural(read.length, "page")} read, ${searches.length} search${searches.length === 1 ? "" : "es"}, ${plural(kept.length, "line")} written${refused ? `, ${refused} refused by the quote and repeat checks` : ""}${lines.length > kept.length ? `, ${lines.length - kept.length} removed by the AI` : ""}; ${dollars(cost)} with ${model || "Claude"}.${stop ? ` ${stop}` : ""}` }];
-  if (checkReport) dropped.push({ what: "Structor's check", reason: `Before the reading ended, Structor sent back: ${checkReport.replace(/^Structor's check before you finish:\n/, "").replace(/\nThen call finish again\.$/, "").replace(/\n\s*/g, " ").slice(0, 2500)}` });
+  if (checkReports.length) dropped.push({ what: "Structor's check", reason: `Structor checked the lines ${plural(checkReports.length, "time")} before the reading ended${sent.size ? ` and sent back ${sent.size} of the contractor's usual lines that pages read mention` : ""}. The last check: ${checkReport.replace(/^Structor's check before you finish:\n/, "").replace(/\nThen call finish again\.$/, "").replace(/\n\s*/g, " ").slice(0, 2500)}` });
   for (const l of lines.filter(x => x.removed)) dropped.push({ what: l.title.slice(0, 120), reason: `Removed by the AI: ${l.removed}` });
   const partScope = keepToPart(drafts, args.pkg, args.partOnly);
   drafts = partScope.drafts;

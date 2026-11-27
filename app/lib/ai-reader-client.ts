@@ -5,7 +5,8 @@
 
 import { useEffect, useState } from "react";
 
-export type AiReader = { reader: "claude" | "deepseek"; model: string; autoScopes: boolean };
+/** `models`: the Claude models a request may name (lib/ai-cost CLAUDE_PRICES), empty on DeepSeek. */
+export type AiReader = { reader: "claude" | "deepseek"; model: string; autoScopes: boolean; models?: string[] };
 let asked: Promise<AiReader> | null = null;
 
 export function aiReader(): Promise<AiReader> {

@@ -111,7 +111,7 @@ assert.doesNotThrow(() => A.parseAgentJob(requests.at(-1)), "The browser's conve
 const longRequests = [];
 const good = { title: "Provide 5/8 inch Type X gypsum board.", detail: "", source: "09 21 16 · §2.3", citations: [{ page: "D2 p1", quote: "Type X, 5/8 inch thick, complying with ASTM C1396" }] };
 const capped = await A.runToolReading(base({ costCap: 0.05 }), scripted([
-  reply([use("a1", "add_lines", { lines: [good] }), use("a0", "note", { text: "Left: 09 51 00." })], { usage: { input: 80_000, output: 100, cacheRead: 0, cacheWrite: 0 }, cost: 0.02 }),
+  reply([use("a1", "add_lines", { lines: [good] }), use("a0", "note", { text: "Left: 09 51 00." })], { usage: { input: 90_000, output: 100, cacheRead: 0, cacheWrite: 0 }, cost: 0.02 }),
   reply([use("a2", "add_lines", { lines: [] })], { stopReason: "max_tokens", cost: 0.02 }),
   reply([use("a3", "read_page", { page: "A0701" })], { cost: 0.02 }),
 ], longRequests));
@@ -133,6 +133,30 @@ assert.match(idleRequests[1].messages.at(-1).content[0].text, /^\(Structor\) Use
 assert.deepEqual(idleRequests[1].messages[1].content, [{ type: "text", text: "First I will list the sheets." }], "An empty text block from Claude isn't sent back (the API refuses one)");
 assert.equal(empty.input.error, "The reading wrote no lines it could cite.");
 assert.equal(X.recordRun(X.EMPTY_EXTRACTION, sampleProcurement, empty.input).runs[0].status, "failed");
+
+// ── At most 4 reads a turn; Structor's check sends the usual lines back 25 at a time (2626's first check sent 136) ──
+const extra = doc("d-extra", "Notes.pdf", "other", 1);
+TEXT["d-extra:1"] = `GENERAL NOTES. Framing at ${Array.from({ length: 30 }, (_, i) => `zorb${i + 1}`).join(", ")}.`;
+const many = Array.from({ length: 30 }, (_, i) => ({ id: `L${i + 1}`, text: `Provide zorb${i + 1} framing`, detail: "" }));
+const batchRequests = [];
+await A.runToolReading(base({ documents: [arch, manual, extra], sections: [], usualLines: many }), scripted([
+  reply(Array.from({ length: 5 }, (_, i) => use(`r${i}`, "read_page", { page: "D3 p1" }))),
+  reply([use("f1", "finish", { summary: "Read the notes." })]),
+  reply([use("f2", "finish", { summary: "Checked." })]),
+  reply([use("f3", "finish", { summary: "Checked." })]),
+], batchRequests));
+const reads = batchRequests[1].messages.at(-1).content;
+assert.match(reads[3].content, /^\[\[D3 p1\]\]/, "Four reads a turn are answered");
+assert.match(reads[4].content, /^Not read: at most 4 pages or sections a turn/, "the fifth waits for the next turn");
+const firstBatch = resultOf(batchRequests[2], "f1"), secondBatch = resultOf(batchRequests[3], "f2");
+assert.match(firstBatch, /- 30 of the contractor's usual lines for this trade have no line yet, and pages you read mention them; here are 25, the next ones come with the next check\./);
+assert.equal((firstBatch.match(/^ {2}L\d+ /gm) ?? []).length, 25, "The first check sends 25");
+assert.match(firstBatch, /^ {2}L1 Provide zorb1 framing — see D3 p1$/m, "each with its own page");
+assert.match(secondBatch, /- 5 of the contractor's usual lines/, "The next check sends the other 5");
+assert.match(secondBatch, /^ {2}L26 Provide zorb26 framing — see D3 p1$/m);
+assert.equal(batchRequests.length, 4, "A third check with nothing new ends the reading");
+assert.deepEqual([A.agentCostCap("claude-haiku-5-5"), A.agentCostCap("claude-sonnet-5-5"), A.agentCostCap("claude-opus-5-5"), A.agentCostCap(undefined)], [1, 2, 4, 1], "A larger model's reading has a higher limit");
+assert.equal(batchRequests[0].effort, "high", "The AI thinks at high effort, as Anthropic advises for longer agent tasks on Haiku 5.5");
 
 // ── Pure helpers ──
 assert.deepEqual([A.sectionCode("092116"), A.sectionCode("09-21-16"), A.sectionCode("07 42 13.13"), A.sectionCode("Division 9")], ["09 21 16", "09 21 16", "07 42 13.13", "Division 9"]);
