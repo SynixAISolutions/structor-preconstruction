@@ -80,7 +80,7 @@ export type SchematicLevel = {
  * A stair's flights as the plan of the level it arrives at shows them (lib/stair-detection), in feet: each from a to b along
  * the middle of its first and last tread lines, `arrow` the end its walkline arrow points to (down, on this plan).
  */
-export type SchematicStair = { flights: { a: Point; b: Point; width: number; risers: number; arrow: "a" | "b" | null }[]; excluded?: boolean };
+export type SchematicStair = { flights: { a: Point; b: Point; width: number; risers: number; arrow: "a" | "b" | null }[]; excluded?: boolean; outsidePlan?: boolean };
 /** A run of glass from a to b, in feet; `type` from the plan's storefront/window tags (SF-10). */
 export type SchematicGlazing = SourcedPlanElement & { a: Point; b: Point; type?: string | null; excluded?: boolean; elevationDetail?: DimensionSource; dimensions?: GlazingDimensions };
 /**
@@ -97,7 +97,7 @@ export type SchematicWall = SourcedPlanElement & { a: Point; b: Point; thickness
  * is a toilet stall's door: toilet partitions, not the door schedule. `thickness` is the host wall's, for the
  * header above the opening.
  */
-export type SchematicDoor = SourcedPlanElement & { a: Point; b: Point; width: number; leaves: number; hinges: Point[]; openTo: Point[]; kind: "door" | "compartment"; thickness: number; number?: string | null; basis?: "tagged-gap"; scheduledSize?: SourcedDoorSize };
+export type SchematicDoor = SourcedPlanElement & { a: Point; b: Point; width: number; leaves: number; hinges: Point[]; openTo: Point[]; kind: "door" | "compartment"; thickness: number; number?: string | null; excluded?: boolean; basis?: "tagged-gap"; scheduledSize?: SourcedDoorSize };
 
 /**
  * Tiles over a plan's area for reading its tags: about `paperPt` points square on the sheet (small enough
@@ -148,7 +148,7 @@ export function levelTags(read: { tile: [number, number, number, number]; tags: 
  */
 export function levelSpaces(level: Pick<SchematicLevel, "walls" | "doors" | "glazing" | "partitions" | "rooms" | "openings">): Room[] {
   if (!level.walls?.length) return [];
-  return levelRooms({ walls: [...level.walls, ...(level.partitions ?? [])].filter(w => !w.excluded), doors: (level.doors ?? []).filter(d => d.kind === "door"), glazing: (level.glazing ?? []).filter(g => !g.excluded), tags: level.rooms, openings: level.openings });
+  return levelRooms({ walls: [...level.walls, ...(level.partitions ?? [])].filter(w => !w.excluded), doors: (level.doors ?? []).filter(d => d.kind === "door" && !d.excluded), glazing: (level.glazing ?? []).filter(g => !g.excluded), tags: level.rooms, openings: level.openings });
 }
 
 /** `partitionTypes`: the wall types the partition type sheet lists (read by AI), to describe and check wall types. */
@@ -629,7 +629,7 @@ export function editPartition(model: SchematicModel, levelId: string, index: num
 export function editColumn(model: SchematicModel, levelId: string, index: number, excluded: boolean): SchematicModel {
   return editLevel(model, levelId, l => {
     if (!l.columns?.[index]) throw new Error("That column is no longer in the model.");
-    return { ...l, columns: l.columns.map((c, i) => i === index ? { ...c, excluded } : c) };
+    return { ...l, columns: l.columns.map((c, i) => i === index ? { ...c, excluded, outsidePlan: undefined } : c) };
   });
 }
 
@@ -637,7 +637,7 @@ export function editColumn(model: SchematicModel, levelId: string, index: number
 export function editStair(model: SchematicModel, levelId: string, index: number, excluded: boolean): SchematicModel {
   return editLevel(model, levelId, l => {
     if (!l.stairs?.[index]) throw new Error("That stair is no longer in the model.");
-    return { ...l, stairs: l.stairs.map((s, i) => i === index ? { ...s, excluded } : s) };
+    return { ...l, stairs: l.stairs.map((s, i) => i === index ? { ...s, excluded, outsidePlan: undefined } : s) };
   });
 }
 

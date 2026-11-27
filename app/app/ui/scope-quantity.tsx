@@ -56,7 +56,7 @@ export function ScopeQuantityPanel({ item, packageId, run, notify, by }: { item:
   </div>;
 }
 
-function QuantityEditor({ item, onClose, save }: { item: ScopeItem; onClose: () => void; save: (input: { value: number; unit: string; basis: string }) => string | null }) {
+export function QuantityEditor({ item, onClose, save }: { item: ScopeItem; onClose: () => void; save: (input: { value: number; unit: string; basis: string }) => string | null }) {
   const q = item.quantity;
   const [value, setValue] = useState(q ? String(q.value) : "");
   const [unit, setUnit] = useState(q?.unit ?? "SF");

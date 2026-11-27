@@ -71,7 +71,7 @@ export function matchDoorSizes(doors: SchematicDoor[], sizes: SourcedDoorSize[],
   const byNumber = Map.groupBy(sizes, size => size.number);
   const conflicts = new Set<string>();
   const matched = doors.map(door => {
-    if (door.kind !== "door" || !door.number) return door;
+    if (door.kind !== "door" || door.excluded || !door.number) return door;
     const number = doorNumber(door.number), rows = byNumber.get(number);
     if (!rows?.length) return door;
     const size = rows[0];

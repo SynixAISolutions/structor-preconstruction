@@ -9,6 +9,16 @@ import { estimateMoney } from "./estimate-format";
 import "./workflow-features.css";
 import { aiJob } from "../../lib/ai-more-client";
 import type { GapCostSuggestion } from "../../lib/gap-cost-ai";
+import { linePlug, type LinePlug } from "../../lib/takeoff-by-trade";
+
+/**
+ * The plug from the excluded line's own takeoff (Marcel's issues log, item 16): its quantity, and its unit price when
+ * the detailed takeoff has one, with no AI matching. Leveling's lines are the published bid form's, by id.
+ */
+export function OwnTakeoffPlug({ plug, onUse }: { plug: LinePlug; onUse: () => void }) {
+  const amount = plug.rate !== null ? Math.round(plug.quantity * plug.rate * 100) / 100 : null;
+  return <section className="contract-file-row own-takeoff-plug"><strong>This line's takeoff</strong><p><strong>{plug.quantity.toLocaleString()} {plug.unit}</strong>{plug.rate !== null ? <> × {estimateMoney(plug.rate)} / {plug.unit} = <strong>{estimateMoney(amount!)}</strong></> : ". No unit price yet: enter one below."}</p>{!plug.checked && <small>The quantity isn't checked yet. Check it before applying.</small>}<Button onClick={onUse}>Plug it</Button></section>;
+}
 
 type Item = { id: string; description: string; includeInTotal?: boolean };
 type Bidder = { id: string; name: string; responses: Record<string, GapResponse> };
@@ -37,6 +47,10 @@ export function BidGapCostDialog({ items, bidders, initialItemId, initialBidderI
   const gaps = items.filter(i => i.includeInTotal !== false && ["N", "P"].includes(bidder?.responses[i.id]?.status ?? ""));
   const item = gaps.find(i => i.id === itemId) ?? gaps[0];
   const target = item ? bidder?.responses[item.id] : undefined;
+  const ownPlug = item ? linePlug(estimate.procurement.scopes.find(s => s.id === item.id)) : null;
+  // With the line's own takeoff there is nothing for the AI to match: it isn't asked unless someone asks.
+  const hasOwn = useRef(false);
+  hasOwn.current = !!ownPlug;
   const estimateRows = takeoffReferences(estimate.rows.map(row => ({ ...row, packageId: row.packageId ?? undefined })), tradeId);
   const basis = { quantity: quantity.trim() ? Number(quantity) : NaN, rate: rate.trim() ? Number(rate) : NaN, unit, source };
   let amount: number | null = null;
@@ -66,6 +80,10 @@ export function BidGapCostDialog({ items, bidders, initialItemId, initialBidderI
     setAccepted(true); requestAnimationFrame(() => rateInput.current?.focus());
     setSource(`AI matched takeoff reference: ${s.item} · ${s.source}. ${s.explanation}`); reset();
   }
+  function plugOwn(p: LinePlug) {
+    setEstimateId(""); setQuantity(String(p.quantity)); setUnit(p.unit); setRate(p.rate !== null ? String(p.rate) : ""); setSource(p.source);
+    setAccepted(true); reset(); requestAnimationFrame(() => rateInput.current?.focus());
+  }
   function selectEstimate(id: string) {
     setEstimateId(id); reset(); const row = estimateRows.find(r => r.id === id);
     if (!row) { setQuantity(""); setRate(""); setUnit(""); setSource(""); return; }
@@ -80,13 +98,13 @@ export function BidGapCostDialog({ items, bidders, initialItemId, initialBidderI
   suggestCurrent.current = () => void suggest(true);
   useEffect(() => {
     if (!autoSuggest) return;
-    const timer = window.setTimeout(() => suggestCurrent.current(), 0);
+    const timer = window.setTimeout(() => { if (!hasOwn.current) suggestCurrent.current(); }, 0);
     return () => { clearTimeout(timer); request.current?.abort(); };
   }, [autoSuggest]);
   return <Modal title={autoSuggest ? "Plug missing scope" : "Cost suggestions"} subtitle="Review the missing scope and its quantity/rate basis, then apply an approved adjustment to this bid." wide onClose={onClose}><form className="workflow-cost-form" onSubmit={apply}>
     <div className="ui-form-grid"><label className="ui-field">Bidder<select value={bidderId} onChange={e => { clearSuggestions(); setBidderId(e.target.value); setItemId(""); selectEstimate(""); }}>{bidders.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label><label className="ui-field">Excluded or partial scope<select value={item?.id ?? ""} onChange={e => { clearSuggestions(); setItemId(e.target.value); selectEstimate(""); }}><option value="" disabled>Choose a scope gap</option>{gaps.map(i => <option key={i.id} value={i.id}>{i.description}</option>)}</select></label></div>
     {!gaps.length && <p className="cost-source-note">This bidder has no excluded or partial rows available for a cost adjustment.</p>}
-    {item && <><div className="proc-form-actions"><Button disabled={busy} onClick={() => void suggest(autoSuggest)}>{busy ? "Checking the quantity takeoff…" : autoSuggest ? "Check this quantity takeoff" : "Suggest plug costs with AI"}</Button></div>
+    {item && <>{ownPlug && <OwnTakeoffPlug plug={ownPlug} onUse={() => plugOwn(ownPlug)}/>}<div className="proc-form-actions"><Button disabled={busy} onClick={() => void suggest(autoSuggest)}>{busy ? "Checking the quantity takeoff…" : ownPlug ? "Match other takeoff lines with AI" : autoSuggest ? "Check this quantity takeoff" : "Suggest plug costs with AI"}</Button></div>
       {busy && <p role="status">Checking the quantity takeoff…</p>}
       {read && gaps.filter(g => requestedIds.includes(g.id)).map(g => <GapQuantityProposal key={g.id} item={g} suggestion={suggestions.find(s => s.gapId === g.id)} onUse={useSuggestion}/>)}
       {!accepted && !busy && <Button onClick={() => { setAccepted(true); requestAnimationFrame(() => rateInput.current?.focus()); }}>Enter a plug manually</Button>}

@@ -27,7 +27,7 @@ export function SchematicObjectInspector({ levels, spaces, floorFinishes, pick, 
 }) {
   const doors = levels.map(level => ({
     level,
-    picks: (level.doors ?? []).flatMap((door, index) => door.kind === "door" ? [{ kind: "door" as const, levelId: level.id, index }] : []),
+    picks: (level.doors ?? []).flatMap((door, index) => door.kind === "door" && !door.excluded ? [{ kind: "door" as const, levelId: level.id, index }] : []),
   })).filter(group => group.picks.length);
   const glazing = levels.map(level => ({
     level,
@@ -43,7 +43,8 @@ export function SchematicObjectInspector({ levels, spaces, floorFinishes, pick, 
   if (!doors.length && !floors.length && !glazing.length) return null;
 
   const level = pick ? levels.find(item => item.id === pick.levelId) : undefined;
-  const door = pick?.kind === "door" ? level?.doors?.[pick.index] : undefined;
+  const selectedDoor = pick?.kind === "door" ? level?.doors?.[pick.index] : undefined;
+  const door = selectedDoor?.excluded ? undefined : selectedDoor;
   const schedule = door?.scheduledSize;
   const selectedGlass = pick?.kind === "glazing" ? level?.glazing?.[pick.index] : undefined;
   const glass = selectedGlass?.excluded ? undefined : selectedGlass;

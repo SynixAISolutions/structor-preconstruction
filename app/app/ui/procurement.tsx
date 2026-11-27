@@ -146,6 +146,7 @@ function historyLabel(event: ScopeItem["history"][number], packages: Procurement
   if (event.kind === "applied-to-all") return "Applied to every trade";
   if (event.kind === "quantity") return event.quantity ? `Quantity set to ${event.quantity}` : "Quantity removed";
   if (event.kind === "quantity-checked") return "Quantity checked";
+  if (event.kind === "unit-price") return event.price ? `Unit price set to ${event.price}` : "Unit price removed";
   if (event.kind === "merged") return event.from ? `The same work found on ${event.from}` : "The same work found again";
   return event.kind === "created" ? "Created" : event.kind === "approved" ? "Approved" : event.kind === "reopened" ? "Reopened for review" : "Edited";
 }
