@@ -14,6 +14,7 @@ import type { Screen } from "../../lib/screens";
 import { useModelReview } from "../../lib/use-model-review";
 import { usePreparedModel } from "../../lib/use-prepared-model";
 import { Modal } from "./shared";
+import { SiteContext } from "./site-context";
 import { WalkthroughControls, type WalkDirection } from "./walkthrough-controls";
 import { doorLeafGeometry } from "./door-geometry";
 import { DoorRecordCard, DoorSchedulePanel } from "./door-panels";
@@ -285,7 +286,11 @@ function RoomFinishPanel({ objects, bases, records, onSource, onInspect, onInspe
 }
 
 export default function ModelStudio(props: StudioProps) {
-  return props.projectId === SAMPLE_PROJECT_ID ? <SampleProjectStudio {...props}/> : <SchematicModelStudio key={props.projectId} project={props.project} navigate={props.navigate} notify={props.notify}/>;
+  const sample = props.projectId === SAMPLE_PROJECT_ID;
+  const studio = sample ? <SampleProjectStudio {...props}/> : <SchematicModelStudio key={props.projectId} project={props.project} navigate={props.navigate} notify={props.notify}/>;
+  // Marcel's Features item 19: the building with its site's real surroundings (Google's photorealistic 3D map), under
+  // Project 1's exterior model and under a real project's model, which is its only model page (lib/screens.ts).
+  return props.view === "exterior" || !sample ? <>{studio}<SiteContext key={`site-${props.projectId}`} project={props.project} sample={sample}/></> : studio;
 }
 
 /** Remembers which model this browser last looked at on Project 1. Storage can be unavailable; the prepared model is then shown. */

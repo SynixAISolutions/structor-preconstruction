@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
-import { ListChecks, Pencil, Plus } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { ListChecks, Pencil, Plus, Upload } from "lucide-react";
 import { exposures, LimitRuleError, NO_LIMITS, setPercentComplete, setSubLimit, type Exposure, type ExposureInput, type LimitErrors, type LimitsState } from "../../lib/aggregate-limits";
 import type { AwardState } from "../../lib/award";
 import { parseAmount } from "../../lib/budget";
@@ -11,6 +11,7 @@ import { sampleAwards } from "../../lib/data/sample-award";
 import type { Procurement } from "../../lib/procurement";
 import { loadProjects, sampleProjectRecords } from "../../lib/projects";
 import { screenLabel } from "../../lib/screens";
+import { matchTextura, parseCsv, readTexturaTable, type TexturaMatch, type TexturaMiss } from "../../lib/textura-import";
 import { readDraft, useLocalDraft } from "../../lib/use-local-draft";
 import { Badge, Button, Empty, ExportButton, Modal, PageHeader, Panel, PreviewNote, Stats, exportRows, usd, type ViewProps } from "./shared";
 
@@ -36,7 +37,7 @@ function useAllProjectAwards(): ExposureInput["projects"] {
  * Subcontractor aggregate limits (Marcel, 24 Oct: renamed from prequalification): the contracts team's limits for
  * each subcontractor beside the open value of its contracts on every project.
  */
-export function AggregateLimitsView({ navigate }: ViewProps) {
+export function AggregateLimitsView({ navigate, notify }: ViewProps) {
   const [directory] = useLocalDraft("directory", initialBidders);
   const [state, setState] = useLocalDraft<LimitsState>("subcontractor-limits", NO_LIMITS);
   const projects = useAllProjectAwards();
@@ -47,6 +48,31 @@ export function AggregateLimitsView({ navigate }: ViewProps) {
   const over = rows.filter(r => r.overAggregate || r.overSingle);
   const shown = contracts ? rows.find(r => r.companyId === contracts) ?? null : null;
   const editing = edit && edit !== "new" ? rows.find(r => r.companyId === edit.companyId) ?? null : null;
+  // Marcel's Features item 28: percent complete from Textura's payment report (lib/textura-import), previewed before it applies.
+  const [textura, setTextura] = useState<{ file: string; matches: TexturaMatch[]; misses: TexturaMiss[] } | null>(null);
+  const texturaFile = useRef<HTMLInputElement>(null);
+  async function importTextura(file: File) {
+    try {
+      let table: unknown[][];
+      if (/.csv$/i.test(file.name)) table = parseCsv(await file.text());
+      else {
+        const XLSX = await import("xlsx");
+        const book = XLSX.read(await file.arrayBuffer(), { type: "array" });
+        table = XLSX.utils.sheet_to_json<unknown[]>(book.Sheets[book.SheetNames[0]], { header: 1, raw: true, defval: "" });
+      }
+      const found = matchTextura(readTexturaTable(table), rows);
+      if (!found.matches.length && !found.misses.length) { notify("The file has no subcontractor rows with a percent complete."); return; }
+      setTextura({ file: file.name, ...found });
+    } catch (error) { notify(error instanceof Error ? error.message : "The Textura export couldn't be read."); }
+  }
+  function applyTextura() {
+    if (!textura) return;
+    const at = new Date().toISOString();
+    if (apply(current => textura.matches.reduce((next, m) => setPercentComplete(next, m.awardId, m.percent, actor, at, "textura"), current))) {
+      notify(`Percent complete updated from Textura for ${textura.matches.length} contract${textura.matches.length === 1 ? "" : "s"}.`);
+      setTextura(null);
+    }
+  }
 
   function apply(action: (current: LimitsState) => LimitsState): boolean {
     try { setState(action(state)); setErrors({}); return true; }
@@ -68,9 +94,11 @@ export function AggregateLimitsView({ navigate }: ViewProps) {
   return <div className="cm-view">
     <PageHeader eyebrow="PARTNER NETWORK" title={screenLabel("prequalification")} description="Each subcontractor's single-project and aggregate limits, set by the contracts team, against the open value of its contracts on every project." actions={<>
       <ExportButton onClick={() => exportRows("subcontractor-aggregate-limits.csv", [["Subcontractor", "Single-project limit", "Aggregate limit", "Open contract value", "Largest project", "Largest project open", "Headroom", "Status", "Note"], ...rows.map(r => [r.company, r.limit?.singleProject ?? "", r.limit?.aggregate ?? "", r.open, r.largest?.projectName ?? "", r.largest?.open ?? "", r.headroom ?? "", status(r).label, r.limit?.note ?? ""])])}/>
+      <Button onClick={() => texturaFile.current?.click()}><Upload size={16}/>Import from Textura</Button>
+      <input ref={texturaFile} type="file" accept=".xlsx,.xls,.csv" hidden onChange={e => { const file = e.target.files?.[0]; e.target.value = ""; if (file) void importTextura(file); }}/>
       <Button variant="primary" onClick={() => { setEdit("new"); setErrors({}); }}><Plus size={16}/>Set limits</Button>
     </>}/>
-    <PreviewNote>Textura isn't connected yet, so percent complete is typed for each contract here. A contract with no percent recorded counts as 0% complete: its full amount is open.</PreviewNote>
+    <PreviewNote>Percent complete comes from Textura: export its payment or draw report (Excel or CSV) and choose Import from Textura, or type it per contract. A live Textura connection needs MCN's Textura API access. A contract with no percent recorded counts as 0% complete: its full amount is open.</PreviewNote>
     <Stats items={[
       { label: "Subcontractors", value: rows.length, detail: `${rows.filter(r => r.limit).length} with limits set` },
       { label: "Over a limit", value: over.length, detail: over.length ? over.map(r => r.company).join(", ") : "Everyone is within their limits", tone: over.length ? "red" : "green" },
@@ -105,6 +133,15 @@ export function AggregateLimitsView({ navigate }: ViewProps) {
         <td><form className="cm-limit-percent" onSubmit={event => savePercent(event, c.awardId)}><input name="percent" inputMode="decimal" aria-label={`Percent complete, ${c.projectName} ${c.trade}`} defaultValue={c.percent ?? ""} placeholder="0"/>%<Button type="submit">Save</Button></form>{c.percent === null && <small className="cm-cell-note">Not recorded · counted as 0%</small>}</td>
         <td className="cm-money"><strong>{usd(c.open)}</strong></td>
       </tr>)}</tbody></table></div> : <p className="cm-muted">No awarded contracts on any project yet.</p>}
+      <FieldError error={errors.percent}/>
+    </Modal>}
+    {textura && <Modal title="Percent complete from Textura" subtitle={`${textura.file} · ${textura.matches.length} contract${textura.matches.length === 1 ? "" : "s"} matched${textura.misses.length ? `, ${textura.misses.length} row${textura.misses.length === 1 ? "" : "s"} not matched` : ""}. Nothing changes until you apply.`} wide onClose={() => setTextura(null)}>
+      {textura.matches.length > 0 && <div className="ui-table-wrap"><table className="ui-table"><thead><tr><th>Subcontractor</th><th>Project</th><th>Trade</th><th>Now</th><th>From Textura</th></tr></thead><tbody>{textura.matches.map(m => <tr key={m.awardId}>
+        <td>{m.company}{m.row.company !== m.company && <small className="cm-cell-note">In Textura: {m.row.company}</small>}</td><td>{m.projectName}</td><td>{m.trade}</td>
+        <td>{m.was === null ? "Not recorded" : `${m.was}%`}</td><td><strong>{m.percent}%</strong>{m.row.completed !== null && m.row.value !== null && <small className="cm-cell-note">{usd(m.row.completed)} of {usd(m.row.value)}</small>}</td>
+      </tr>)}</tbody></table></div>}
+      {textura.misses.length > 0 && <div className="cm-textura-misses"><h4>Not matched</h4><ul>{textura.misses.map((m, i) => <li key={i}><strong>{m.row.company}{m.row.project ? ` · ${m.row.project}` : ""}</strong><span>{m.reason}</span></li>)}</ul></div>}
+      <div className="ui-form-actions"><Button onClick={() => setTextura(null)}>Cancel</Button><Button variant="primary" disabled={!textura.matches.length} onClick={applyTextura}><Upload size={15}/>Apply {textura.matches.length} from Textura</Button></div>
       <FieldError error={errors.percent}/>
     </Modal>}
   </div>;

@@ -2,12 +2,15 @@
 
 import { useMemo, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import { companiesToOffer, newDirectoryCompany } from "../../lib/directory";
+import { rankBidders } from "../../lib/bidder-suggestions";
+import type { Project } from "../../lib/projects";
 import { RemoveInvitationDialog } from "./remove-company";
 import { TradePackageControls } from "./trade-package-controls";
 import { AskAboutTrade } from "./ask-entry-points";
 import "./project-setup.css";
 import { LinkedProjectContent } from "./project-content-links";
 import { RepeatedLines } from "./repeated-lines";
+import { StandardScopePanel } from "./standard-scope";
 import {
   ArrowRight,
   Bell,
@@ -223,10 +226,10 @@ export function ProcurementScopesView({ projectName, notify, navigate }: ViewPro
       {generalOpen ? <GeneralScopes review={review} by={CURRENT_USER} notify={notify} onEdit={item => setEditor({...item})} onAdd={() => setEditor({packageId:activePackage.id,title:"",detail:"",source:"",origin:"estimator"})}/> : <>
       <Panel title={activePackage.name} subtitle={`${activePackage.code} · ${activePackage.owner ? `Owner: ${activePackage.owner}` : "No owner yet"} · Due ${displayDate(activePackage.due)}`} action={<Badge tone={statusTone(packageState)}>{statusLabels[packageState]}{activePackage.published ? ` · v${activePackage.published.version}` : ""}</Badge>} className="proc-scope-panel">
         <div className="general-scope-tabs trade-ask-toolbar">
-          <Tabs tabs={["General scope", "Detailed scope"]} value={packageView} onChange={setPackageView}/>
+          <Tabs tabs={["General scope", "Detailed scope", "Standard scope"]} value={packageView} onChange={setPackageView}/>
           <AskAboutTrade trade={activePackage.name} code={activePackage.code}/>
         </div>
-        {packageView === "General scope" ? <GeneralScopePanel key={activePackage.id} projectId={projectId} state={state} pkg={activePackage} run={run} by={CURRENT_USER} notify={notify}/> : <>
+        {packageView === "General scope" ? <GeneralScopePanel key={activePackage.id} projectId={projectId} state={state} pkg={activePackage} run={run} by={CURRENT_USER} notify={notify}/> : packageView === "Standard scope" ? <StandardScopePanel key={activePackage.id} state={state} pkg={activePackage} run={run} notify={notify} by={CURRENT_USER}/> : <>
         <div className="ui-toolbar"><SearchBox value={query} onChange={setQuery} placeholder="Search this bid form…"/><RepeatedLines key={activePackage.id} pkg={activePackage} items={form} merge={groups => review.mergeRepeats(groups, CURRENT_USER)} notify={notify}/><Button onClick={approveAll}><CheckCheck size={15}/>Approve visible form</Button></div>
         <PackageDrawingReferences key={activePackage.id} pkg={activePackage} packages={state.packages} colors={sourceColors}/>
         <div className="proc-scope-list"><InlineScopeDrafts key={activePackage.id} review={review} packageId={activePackage.id} query={query} sections={specSections} colors={sourceColors} by={CURRENT_USER} notify={notify} onMove={setPackageId}/>{visible.map((item, index) => <article className={`proc-scope-row ${selected?.id === item.id ? "selected" : ""}`} key={item.id}>
@@ -284,10 +287,12 @@ function AddCompanyForm({ trade, directory, startName, onAdd, onCancel }: { trad
   </form>;
 }
 
-function BidderInvite({ state, pkgId, directory, sample, setDirectory, run, notify, onClose }: {
+function BidderInvite({ state, pkgId, directory, sample, project, setDirectory, run, notify, onClose }: {
   state: Procurement;
   pkgId: string;
   directory: Bidder[];
+  /** The open project: suggestions rank its trade's companies by its required certifications and its type (lib/bidder-suggestions). */
+  project?: Project;
   /** The sample project: its placeholder companies are offered too (lib/directory companiesToOffer). */
   sample: boolean;
   setDirectory: Dispatch<SetStateAction<Bidder[]>>;
@@ -299,15 +304,19 @@ function BidderInvite({ state, pkgId, directory, sample, setDirectory, run, noti
   const [adding, setAdding] = useState(false);
   const pkg = state.packages.find(item => item.id === pkgId)!;
   const candidates = inviteCandidates(state, companiesToOffer(directory, sample), pkgId, query);
+  // Marcel's Features item 5: with no search, the trade's companies come best fit first, each with the reasons it fits.
+  const fit = { type: project?.type ?? "", certifications: project?.certifications ?? [], location: project?.location ?? "" };
+  const ranked = query ? candidates.map(company => ({ company, reasons: [] as string[] })) : rankBidders(candidates, fit);
+  const wants = [...fit.certifications, fit.type].filter(Boolean).join(", ");
   // A trade usually gets several bidders, so the dialog stays open after each invitation; the invited company leaves the list.
   function addAndInvite(company: Bidder) {
     setDirectory(current => [...current, company]);
     if (runAndNotify(run, current => inviteBidder(current, pkgId, company.id, CURRENT_USER), notify, `${company.company} added to your directory and invited. No email was sent.`)) setAdding(false);
   }
   const addButton = <Button onClick={() => setAdding(true)}><Plus size={14}/>Add a company</Button>;
-  return <Modal title={`Invite bidders · ${pkg.name}`} subtitle={query ? "Searching the full company directory" : "Suggested companies match this trade"} onClose={onClose} wide>
+  return <Modal title={`Invite bidders · ${pkg.name}`} subtitle={query ? "Searching the full company directory" : wants ? `Companies in this trade, best fit first for this project (${wants})` : "Suggested companies match this trade"} onClose={onClose} wide>
     <SearchBox value={query} onChange={setQuery} placeholder="Search company, contact, or trade…"/>
-    <div className="proc-candidates">{candidates.map(company => <article key={company.id}><span className="proc-company-mark">{company.company.slice(0, 2).toUpperCase()}</span><span><strong>{company.company}</strong><small>{company.name} · {company.trade}</small></span><Button onClick={() => { runAndNotify(run, current => inviteBidder(current, pkgId, company.id, CURRENT_USER), notify, `Invitation recorded for ${company.company}. No email was sent.`); }}><UserPlus size={14}/>Invite</Button></article>)}</div>
+    <div className="proc-candidates">{ranked.map(({ company, reasons }) => <article key={company.id}><span className="proc-company-mark">{company.company.slice(0, 2).toUpperCase()}</span><span><strong>{company.company}</strong><small>{company.name} · {company.trade}</small>{reasons.length > 0 && <span className="proc-fit" aria-label={`Why suggested: ${reasons.join(", ")}`}>{reasons.map(r => <em key={r}>{r}</em>)}</span>}</span><Button onClick={() => { runAndNotify(run, current => inviteBidder(current, pkgId, company.id, CURRENT_USER), notify, `Invitation recorded for ${company.company}. No email was sent.`); }}><UserPlus size={14}/>Invite</Button></article>)}</div>
     {adding
       ? <AddCompanyForm trade={pkg.name} directory={directory} startName={query.trim()} onAdd={addAndInvite} onCancel={() => setAdding(false)}/>
       : candidates.length
@@ -345,12 +354,12 @@ function OutreachDialog({ state, target, directory, run, notify, onClose, messag
   </Modal>;
 }
 
-export function ProcurementPackagesView(props: ViewProps) {
+export function ProcurementPackagesView(props: ViewProps & { project?: Project }) {
   const [proposalPackage, setProposalPackage] = useState<string | null>(null);
   return proposalPackage ? <ProposalWorkspace {...props} initialPackageId={proposalPackage} onBack={() => setProposalPackage(null)}/> : <PackagesWorkspace {...props} onProposals={setProposalPackage}/>;
 }
 
-function PackagesWorkspace({ projectName, notify, navigate, onProposals }: ViewProps & { onProposals: (packageId: string) => void }) {
+function PackagesWorkspace({ projectName, notify, navigate, onProposals, project }: ViewProps & { onProposals: (packageId: string) => void; project?: Project }) {
   const { procurement: state, runProcurement: run, submissions, run: runSubmissions } = useSubmissions();
   const [directory, setDirectory] = useLocalDraft("directory", initialBidders);
   const [messageDrafts, setMessageDrafts] = useLocalDraft<MessageDraft[]>("messages", []);
@@ -398,7 +407,7 @@ function PackagesWorkspace({ projectName, notify, navigate, onProposals }: ViewP
         </div>}
       </Panel>
     </div>
-    {invitePackage && <BidderInvite state={state} pkgId={invitePackage} directory={directory} sample={projectId === SAMPLE_PROJECT_ID} setDirectory={setDirectory} run={run} notify={notify} onClose={() => setInvitePackage(null)}/>}
+    {invitePackage && <BidderInvite state={state} pkgId={invitePackage} directory={directory} sample={projectId === SAMPLE_PROJECT_ID} project={project} setDirectory={setDirectory} run={run} notify={notify} onClose={() => setInvitePackage(null)}/>}
     {removeFor && (() => {
       const invitation = state.invitations.find(item => item.id === removeFor), bidder = directory.find(item => item.id === invitation?.bidderId), pkg = state.packages.find(item => item.id === invitation?.packageId);
       return invitation ? <RemoveInvitationDialog invitation={invitation} company={bidder?.company ?? "This company"} trade={pkg?.name ?? "this trade"} submissions={submissions} runProcurement={run} runSubmissions={runSubmissions} setMessages={setBidMessages} notify={notify} onClose={() => setRemoveFor(null)}/> : null;
